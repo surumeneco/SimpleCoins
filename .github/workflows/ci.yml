@@ -16,5 +16,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.2.1"
-      - name: Compile and verify
-        run: gradle --no-daemon clean check
+      - name: Compile, test, and package
+        run: gradle --no-daemon clean build
+      - name: Check plugin descriptor in artifact
+        run: |
+          unzip -p build/libs/SimpleCoins-1.0.0.jar plugin.yml | grep 'version:'
+          unzip -p build/libs/SimpleCoins-1.0.0.jar plugin.yml | grep 'api-version:'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SimpleCoins-1.0.0-unreleased
+          path: build/libs/SimpleCoins-1.0.0.jar
+          if-no-files-found: error

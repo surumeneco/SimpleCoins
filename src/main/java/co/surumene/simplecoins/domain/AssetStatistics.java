@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Aggregation over already classified, eligible and registered player balances. */
+/** Pure computation over COMPLETE classified asset snapshots, not a disk scanner. */
 public final class AssetStatistics {
     private AssetStatistics() {}
 
@@ -18,7 +18,9 @@ public final class AssetStatistics {
                            BigInteger dead, BigInteger worldTotal, BigDecimal sharedAverage,
                            BigDecimal personalAverage, BigInteger max, BigInteger min,
                            BigDecimal maxWorldPercent, Integer halfShareSubjects,
-                           BigDecimal halfSharePercent) {}
+                           BigDecimal halfSharePercent, BigDecimal maxMinusShared,
+                           BigDecimal minMinusShared, BigDecimal maxMinusPersonal,
+                           BigDecimal minMinusPersonal) {}
 
     public static Snapshot calculate(Map<UUID, BigInteger> registeredPlayers,
                                      BigInteger free, BigInteger dead) {
@@ -37,7 +39,8 @@ public final class AssetStatistics {
                 divide(max.multiply(BigInteger.valueOf(100)), world);
         Integer k = null;
         BigDecimal rate = null;
-        if (world.signum() > 0) {
+        // N=0 and T=0 make K and the percentage not applicable under 02A.
+        if (n > 0 && world.signum() > 0) {
             List<BigInteger> subjects = new ArrayList<>(registeredPlayers.values());
             subjects.add(free);
             subjects.sort(Comparator.reverseOrder());
@@ -49,16 +52,20 @@ public final class AssetStatistics {
                 if (accumulated.multiply(BigInteger.TWO).compareTo(world) >= 0) break;
             }
             k = count;
-            if (n != 0) rate = divide(BigInteger.valueOf(100L * k), BigInteger.valueOf(n));
+            rate = divide(BigInteger.valueOf(100L * k), BigInteger.valueOf(n));
         }
         return new Snapshot(n, personal, free, dead, world, sharedAverage, personalAverage,
-                max, min, maxWorldPercent, k, rate);
+                max, min, maxWorldPercent, k, rate,
+                delta(max, sharedAverage), delta(min, sharedAverage),
+                delta(max, personalAverage), delta(min, personalAverage));
     }
 
+    private static BigDecimal delta(BigInteger value, BigDecimal average) {
+        return value == null || average == null ? null : new BigDecimal(value).subtract(average);
+    }
     private static void nonNegative(BigInteger v) {
         if (v == null || v.signum() < 0) throw new IllegalArgumentException("Negative or null asset");
     }
-
     private static BigDecimal divide(BigInteger a, BigInteger b) {
         return new BigDecimal(a).divide(new BigDecimal(b), 8, RoundingMode.HALF_UP);
     }
