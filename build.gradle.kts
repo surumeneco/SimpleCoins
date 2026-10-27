@@ -7,6 +7,7 @@ version = "1.0.0"
 
 repositories {
     mavenCentral()
+    maven("https://repo.papermc.io/repository/maven-public/")
 }
 
 java {
@@ -14,6 +15,7 @@ java {
 }
 
 dependencies {
+    compileOnly("io.papermc.paper:paper-api:26.2.build.134-stable")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -25,7 +27,6 @@ tasks.test {
 
 tasks.register<JavaExec>("domainContractCheck") {
     group = "verification"
-    description = "Run assert-enabled, dependency-free Domain contract checks."
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("co.surumene.simplecoins.domain.DomainContractCheck")
