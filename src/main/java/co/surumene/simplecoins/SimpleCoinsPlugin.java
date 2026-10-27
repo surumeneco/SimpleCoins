@@ -15,6 +15,17 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         recipes = new CoinRecipes(this, items);
         walletMenu = new WalletMenu(items, this);
         try {
+            if (Bukkit.getPluginManager().getPlugin("Nexo") == null) {
+                var archive = new JavaPackBuilder(this, items).build();
+                Bukkit.getPluginManager().registerEvents(new PackDelivery(this, archive), this);
+                getLogger().info("Java resource pack generated: " + archive);
+                if (getConfig().getString("resource-pack.public-url", "").isBlank()) {
+                    getLogger().warning("Java pack not distributed: host the ZIP and set resource-pack.public-url.");
+                }
+            } else {
+                getLogger().warning("Nexo detected. SimpleCoins does not send its own Java pack. "
+                    + "Nexo import/mapping must be verified before this build is production ready.");
+            }
             recipes.register();
             Bukkit.getPluginManager().registerEvents(recipes, this);
             Bukkit.getPluginManager().registerEvents(walletMenu, this);
@@ -24,7 +35,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             var admin = new CoinCommand(this, items);
             cmd.setExecutor(admin);
             cmd.setTabCompleter(admin);
-        } catch (RuntimeException failure) {
+        } catch (Exception failure) {
             getLogger().severe("Failed to initialize safely: " + failure.getMessage());
             Bukkit.getPluginManager().disablePlugin(this);
         }

@@ -23,6 +23,9 @@ trader-drops:
     '10': 6
     '50': 2
     '100': 1
+resource-pack:
+  # Set to a publicly served URL for plugins/SimpleCoins/SimpleCoins-java.zip (no Nexo)
+  public-url: ""
 statistics:
   default-enabled: true
   enabled-worlds: []
