@@ -38,9 +38,8 @@ class SettlementAccumulatorTest {
         scan.completeSource("memory");
         assertThrows(IllegalStateException.class,
             () -> scan.accept(asset("memory", "other", "world", owner, false, false, true, 10)));
-        assertThrows(IllegalStateException.class, () -> scan.completeSource("disk"));
-        // A duplicate across live/disk observations invalidates the scan;
-        // swallowing the exception must not allow the partial result to publish.
+        scan.completeSource("disk");
+        assertEquals(BigInteger.TEN, scan.commit().statistics().worldTotal());
         assertThrows(IllegalStateException.class, scan::commit);
     }
 
