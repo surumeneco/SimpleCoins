@@ -2,6 +2,7 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.WalletBalance;
+import co.surumene.simplecoins.domain.WalletDragProtection;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -161,10 +162,12 @@ public final class WalletMenu implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Holder)) return;
-        for (int rawSlot : event.getRawSlots()) if (rawSlot < 9) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
+        if (WalletDragProtection.shouldCancel(event.getRawSlots(),
+                event.getView().getTopInventory().getSize(),
+                event.getView().getTopInventory().getSize() + 27,
+                holder.slot)) {
             event.setCancelled(true);
-            return;
         }
     }
 }
