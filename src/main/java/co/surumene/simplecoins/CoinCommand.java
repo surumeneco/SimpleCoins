@@ -2,6 +2,7 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.CoinMoney;
+import co.surumene.simplecoins.domain.IssuanceBudget;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -36,17 +37,19 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
                 long amount = Long.parseLong(args[2]);
                 Map<CoinDenomination, Long> breakdown = CoinMoney.minimumCoins(amount);
                 long numberOfStacks = 0;
-                for (long n : breakdown.values()) numberOfStacks = Math.addExact(numberOfStacks, Math.addExact(n, 63) / 64);
-                if (numberOfStacks > 1024) throw new IllegalArgumentException("More than 1024 stacks; split the command to avoid tick stalls");
+                for (long n : breakdown.values()) numberOfStacks = Math.addExact(numberOfStacks, IssuanceBudget.coinStacks(n));
+                IssuanceBudget.requireBudget(numberOfStacks, targets.size());
                 for (Player target : targets) for (var entry : breakdown.entrySet()) giveCoins(target, entry.getKey(), entry.getValue());
                 sender.sendMessage("Issued " + amount + items.currency() + " to " + targets.size() + " online player(s).");
             } else if (args.length == 4) {
                 long count = Long.parseLong(args[3]);
                 if (count <= 0 || count > 65536) throw new IllegalArgumentException("Count must be 1..65536 per command");
                 if (args[2].equalsIgnoreCase("wallet")) {
+                    IssuanceBudget.requireBudget(count, targets.size());
                     for (Player target : targets) for (long i=0; i<count; i++) deliver(target, items.newWallet());
                 } else {
                     CoinDenomination denomination = parseDenomination(args[2]);
+                    IssuanceBudget.requireBudget(IssuanceBudget.coinStacks(count), targets.size());
                     for (Player target : targets) giveCoins(target, denomination, count);
                 }
                 sender.sendMessage("Items issued to " + targets.size() + " online player(s).");
