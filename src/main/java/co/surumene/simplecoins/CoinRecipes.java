@@ -2,6 +2,10 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.ExchangeRecipe;
 import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.PaperCurrencyConsumption;
+import io.papermc.paper.event.player.CartographyItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import java.util.ArrayList;
 import java.util.List;
 import org.bukkit.Bukkit;
@@ -123,6 +127,28 @@ public final class CoinRecipes implements Listener {
         ItemStack[] matrix = event.getInventory().getMatrix();
         if ((anyCoin(matrix) && !isExchange(event.getRecipe()))
                 || (walletIn(matrix) != null && !isWalletDye(event.getRecipe()))) {
+            event.setCancelled(true);
+        }
+    }
+
+    // Merchant offers may match normal PAPER solely by material, not SimpleCoins PDC.
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void merchantResult(InventoryClickEvent event) {
+        var inventory = event.getView().getTopInventory();
+        if (inventory.getType() != InventoryType.MERCHANT) return;
+        if (PaperCurrencyConsumption.blocksResult("MERCHANT", event.getRawSlot(),
+                items.denomination(inventory.getItem(0)) != null,
+                items.denomination(inventory.getItem(1)) != null)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void cartographyResult(CartographyItemEvent event) {
+        var inventory = event.getView().getTopInventory();
+        if (PaperCurrencyConsumption.blocksResult("CARTOGRAPHY", event.getRawSlot(),
+                items.denomination(inventory.getItem(0)) != null,
+                items.denomination(inventory.getItem(1)) != null)) {
             event.setCancelled(true);
         }
     }
