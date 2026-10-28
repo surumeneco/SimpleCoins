@@ -1,6 +1,7 @@
 package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.TraderDropChance;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -23,7 +24,7 @@ public final class TraderDrops implements Listener {
         if (event.getEntityType() != EntityType.WANDERING_TRADER ||
                 !plugin.getConfig().getBoolean("trader-drops.enabled", true)) return;
         double chance = plugin.getConfig().getDouble("trader-drops.chance", 0.001);
-        if (chance <= 0 || ThreadLocalRandom.current().nextDouble() >= Math.min(1, chance)) return;
+        if (!TraderDropChance.shouldDrop(chance, ThreadLocalRandom.current().nextDouble())) return;
         ConfigurationSection weights = plugin.getConfig().getConfigurationSection("trader-drops.weights");
         if (weights == null) return;
         List<CoinDenomination> denominations = new ArrayList<>();
