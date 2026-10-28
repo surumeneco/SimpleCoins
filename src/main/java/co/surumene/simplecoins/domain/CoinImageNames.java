@@ -11,7 +11,7 @@ public final class CoinImageNames {
         if (stem == null || stem.isBlank() || stem.contains("/") || stem.contains("\\") || stem.contains("..")) {
             throw new IllegalArgumentException("Invalid image stem");
         }
-        return stem.replaceAll("[ _-]+", "_");
+        return stem.replaceAll("[ _-]", "_");
     }
 
     /** Ambiguous matches are an error rather than choosing a file arbitrarily. */
