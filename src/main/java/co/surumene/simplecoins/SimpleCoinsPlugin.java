@@ -32,12 +32,15 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             Bukkit.getPluginManager().registerEvents(new TraderDrops(this, items), this);
             var cmd = getCommand("simplecoins");
             if (cmd == null) throw new IllegalStateException("Missing plugin.yml command");
-            var admin = new CoinCommand(this, items);
+            var grants = new OfflineGrants(this, items);
+            Bukkit.getPluginManager().registerEvents(grants, this);
+            var admin = new CoinCommand(this, items, grants);
             cmd.setExecutor(admin);
             cmd.setTabCompleter(admin);
         } catch (Exception failure) {
             getLogger().severe("Failed to initialize safely: " + failure.getMessage());
-            Bukkit.getPluginManager().disablePlugin(this);
+            // Disabling only this plugin leaves its money usable without protection.
+            Bukkit.shutdown();
         }
     }
 

@@ -82,6 +82,16 @@ public final class JavaPackBuilder {
             } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
                 Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
             }
+            var images = new java.util.EnumMap<CoinDenomination, byte[]>(CoinDenomination.class);
+            var displayNames = new java.util.EnumMap<CoinDenomination, String>(CoinDenomination.class);
+            for (CoinDenomination d : CoinDenomination.values()) {
+                Path source = imageDir.resolve(CoinImageNames.uniquePng(items.name(d), names));
+                images.put(d, Files.readAllBytes(source));
+                displayNames.put(d, items.name(d));
+            }
+            co.surumene.simplecoins.domain.BedrockPack.write(
+                    folder.resolve("geyser/SimpleCoins.mcpack"),
+                    folder.resolve("geyser/simplecoins.json"), images, displayNames);
             return archive;
         } finally {
             Files.deleteIfExists(temporary);

@@ -85,6 +85,11 @@ public final class CoinRecipes implements Listener {
         NamespacedKey key = keyed.getKey();
         return key.getNamespace().equals(plugin.getName().toLowerCase()) && key.getKey().startsWith("exchange_");
     }
+    private boolean isNewWallet(Recipe recipe) {
+        return recipe instanceof Keyed keyed
+                && keyed.getKey().equals(new NamespacedKey(plugin, "wallet"));
+    }
+
     private boolean isWalletDye(Recipe recipe) {
         if (!(recipe instanceof Keyed keyed)) return false;
         NamespacedKey key = keyed.getKey();
@@ -107,6 +112,7 @@ public final class CoinRecipes implements Listener {
             event.getInventory().setResult(null);
             return;
         }
+        if (isNewWallet(recipe)) event.getInventory().setResult(items.newWallet());
         ItemStack previousWallet = walletIn(matrix);
         if (previousWallet != null) {
             if (!isWalletDye(recipe)) { event.getInventory().setResult(null); return; }
@@ -124,6 +130,12 @@ public final class CoinRecipes implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void craft(CraftItemEvent event) {
+        if (isNewWallet(event.getRecipe())) {
+            // Vanilla bulk crafting clones a single result, including its UUID.
+            // One wallet per craft keeps the persistent identity unique.
+            if (event.isShiftClick()) { event.setCancelled(true); return; }
+            event.setCurrentItem(items.newWallet());
+        }
         ItemStack[] matrix = event.getInventory().getMatrix();
         if ((anyCoin(matrix) && !isExchange(event.getRecipe()))
                 || (walletIn(matrix) != null && !isWalletDye(event.getRecipe()))) {
@@ -157,6 +169,7 @@ public final class CoinRecipes implements Listener {
     public void crafter(CrafterCraftEvent event) {
         if (!(event.getBlock().getState() instanceof Crafter block)) return;
         ItemStack[] matrix = block.getInventory().getContents();
+        if (isNewWallet(event.getRecipe())) event.setResult(items.newWallet());
         if (anyCoin(matrix) && !isExchange(event.getRecipe())) event.setCancelled(true);
         // PDC-bearing wallets must not be recolored by automation until persistence is confirmed.
         if (walletIn(matrix) != null) event.setCancelled(true);

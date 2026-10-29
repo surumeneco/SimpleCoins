@@ -46,6 +46,7 @@ public final class SettlementAccumulator {
     private BigInteger free = BigInteger.ZERO;
     private BigInteger dead = BigInteger.ZERO;
     private boolean committed;
+    private boolean rejectedInput;
 
     public SettlementAccumulator(WorldScope worldScope, Set<String> requiredSources) {
         this.worldScope = Objects.requireNonNull(worldScope);
@@ -58,26 +59,31 @@ public final class SettlementAccumulator {
 
     public void accept(Asset asset) {
         checkOpen();
-        Objects.requireNonNull(asset);
-        verifySource(asset.source());
-        if (completed.contains(asset.source()) || failures.containsKey(asset.source()))
-            throw new IllegalStateException("Source is no longer accepting assets: " + asset.source());
-        // Reject the same physical slot even when exposed by multiple memory/disk adapters.
-        if (!occupiedSlots.add(asset.physicalKey()))
-            throw new IllegalArgumentException("Duplicate physical asset slot: " + asset.physicalKey());
-        if (!worldScope.includes(asset.world())) return;
+        try {
+            Objects.requireNonNull(asset);
+            verifySource(asset.source());
+            if (completed.contains(asset.source()) || failures.containsKey(asset.source()))
+                throw new IllegalStateException("Source is no longer accepting assets: " + asset.source());
+            // Reject the same physical slot even when exposed by multiple memory/disk adapters.
+            if (!occupiedSlots.add(asset.physicalKey()))
+                throw new IllegalArgumentException("Duplicate physical asset slot: " + asset.physicalKey());
+            if (!worldScope.includes(asset.world())) return;
 
-        AssetOwner.Result owner = AssetOwner.resolve(asset.owner(), asset.everyoneProtected(),
-                asset.currentlyBanned(), asset.hasPlayerdata());
-        switch (owner.kind()) {
-            case PERSONAL -> personal.merge(owner.player(), asset.value(), BigInteger::add);
-            case FREE -> free = free.add(asset.value());
-            case DEAD -> {
-                dead = dead.add(asset.value());
-                if (asset.value().signum() > 0)
-                    deadLocations.add(new DeadLocation(owner.player(), owner.reason(),
-                            asset.value(), asset.location()));
+            AssetOwner.Result owner = AssetOwner.resolve(asset.owner(), asset.everyoneProtected(),
+                    asset.currentlyBanned(), asset.hasPlayerdata());
+            switch (owner.kind()) {
+                case PERSONAL -> personal.merge(owner.player(), asset.value(), BigInteger::add);
+                case FREE -> free = free.add(asset.value());
+                case DEAD -> {
+                    dead = dead.add(asset.value());
+                    if (asset.value().signum() > 0)
+                        deadLocations.add(new DeadLocation(owner.player(), owner.reason(),
+                                asset.value(), asset.location()));
+                }
             }
+        } catch (RuntimeException failure) {
+            rejectedInput = true;
+            throw failure;
         }
     }
 
@@ -87,28 +93,40 @@ public final class SettlementAccumulator {
      */
     public void preservePreviouslyRegistered(UUID uuid, boolean currentlyBanned, boolean hasPlayerdata) {
         checkOpen();
-        Objects.requireNonNull(uuid);
+        if (uuid == null) {
+            rejectedInput = true;
+            throw new IllegalArgumentException("Missing registered UUID");
+        }
         if (!currentlyBanned && hasPlayerdata) personal.putIfAbsent(uuid, BigInteger.ZERO);
     }
 
     public void completeSource(String source) {
         checkOpen();
         verifySource(source);
-        if (failures.containsKey(source) || !completed.add(source))
+        if (failures.containsKey(source) || !completed.add(source)) {
+            rejectedInput = true;
             throw new IllegalStateException("Source failed or completed twice: " + source);
+        }
     }
 
     public void failSource(String source, String reason) {
         checkOpen();
         verifySource(source);
-        if (completed.contains(source)) throw new IllegalStateException("Completed source cannot fail");
-        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Missing failure reason");
+        if (completed.contains(source)) {
+            rejectedInput = true;
+            throw new IllegalStateException("Completed source cannot fail");
+        }
+        if (reason == null || reason.isBlank()) {
+            rejectedInput = true;
+            throw new IllegalArgumentException("Missing failure reason");
+        }
         failures.put(source, reason);
     }
 
     /** No partially built totals are visible; failure never yields a Result. */
     public Result commit() {
         checkOpen();
+        if (rejectedInput) throw new IllegalStateException("Settlement rejected an input; discard the transaction");
         if (!failures.isEmpty()) throw new IllegalStateException("Unreliable settlement sources: " + failures);
         if (!completed.containsAll(required))
             throw new IllegalStateException("Incomplete sources: " + missingSources());
@@ -125,7 +143,10 @@ public final class SettlementAccumulator {
     }
 
     private void verifySource(String source) {
-        if (!required.contains(source)) throw new IllegalArgumentException("Unknown settlement source: " + source);
+        if (!required.contains(source)) {
+            rejectedInput = true;
+            throw new IllegalArgumentException("Unknown settlement source: " + source);
+        }
     }
 
     private void checkOpen() {

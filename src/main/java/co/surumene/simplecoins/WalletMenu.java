@@ -12,6 +12,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -46,7 +48,10 @@ public final class WalletMenu implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onUse(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getHand() == EquipmentSlot.OFF_HAND) {
+            if (items.isWallet(event.getPlayer().getInventory().getItemInOffHand())) event.setCancelled(true);
+            return;
+        }
         if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Player player = event.getPlayer();
         ItemStack wallet = player.getInventory().getItemInMainHand();
@@ -82,6 +87,15 @@ public final class WalletMenu implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        // These actions can reach the top inventory or the backing hotbar slot
+        // even when the clicked slot belongs to the bottom inventory.
+        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR
+                || event.getClick() == ClickType.NUMBER_KEY
+                || event.getClick() == ClickType.SWAP_OFFHAND
+                || event.getClick().isCreativeAction()) {
+            event.setCancelled(true);
+            return;
+        }
         ItemStack wallet = current(player, holder);
         if (wallet == null) { event.setCancelled(true); player.closeInventory(); return; }
         boolean top = event.getRawSlot() < 9 && event.getRawSlot() >= 0;
@@ -92,6 +106,8 @@ public final class WalletMenu implements Listener {
                 event.setCancelled(true);
                 return;
             }
+            // Never let vanilla shift-transfer place unrelated items among GUI icons.
+            if (event.isShiftClick()) event.setCancelled(true);
             // Shift-clicking a coin in the player's inventory deposits its whole stack.
             if (event.isShiftClick() && items.denomination(event.getCurrentItem()) != null) {
                 event.setCancelled(true);
@@ -104,7 +120,8 @@ public final class WalletMenu implements Listener {
             return;
         }
         event.setCancelled(true); // GUI icons must never themselves be taken.
-        if (event.getClick().isCreativeAction()) return;
+        if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT
+                && event.getClick() != ClickType.SHIFT_LEFT && event.getClick() != ClickType.SHIFT_RIGHT) return;
         CoinDenomination denomination = CoinDenomination.values()[event.getRawSlot()];
         ItemStack cursor = event.getCursor();
         CoinDenomination fromCursor = items.denomination(cursor);
@@ -158,6 +175,14 @@ public final class WalletMenu implements Listener {
             if (remaining <= 0) return true;
         }
         return false;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void preventNativeBundleUse(InventoryClickEvent event) {
+        if (event.isRightClick()
+                && (items.isWallet(event.getCursor()) || items.isWallet(event.getCurrentItem()))) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

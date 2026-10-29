@@ -39,8 +39,24 @@ class SettlementAccumulatorTest {
         assertThrows(IllegalStateException.class,
             () -> scan.accept(asset("memory", "other", "world", owner, false, false, true, 10)));
         scan.completeSource("disk");
-        assertEquals(BigInteger.TEN, scan.commit().statistics().worldTotal());
         assertThrows(IllegalStateException.class, scan::commit);
+        assertThrows(IllegalStateException.class, scan::commit);
+    }
+
+    @Test void rejectedUnknownSourcePermanentlyPreventsPublication() {
+        var scan = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()), Set.of("disk"));
+        assertThrows(IllegalArgumentException.class,
+            () -> scan.accept(asset("unknown", "slot", "world", null, false, false, false, 10)));
+        scan.completeSource("disk");
+        assertThrows(IllegalStateException.class, scan::commit);
+    }
+
+    @Test void cleanTransactionStillPublishesAndRejectsLateWrites() {
+        var scan = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()), Set.of("disk"));
+        scan.accept(asset("disk", "slot", "world", null, false, false, false, 10));
+        scan.completeSource("disk");
+        assertEquals(BigInteger.TEN, scan.commit().statistics().worldTotal());
+        assertThrows(IllegalStateException.class, () -> scan.completeSource("disk"));
     }
 
     @Test void classifiesDeadAndFreeWithoutInflatingWorldTotal() {

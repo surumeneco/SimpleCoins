@@ -19,29 +19,44 @@ import org.bukkit.inventory.ItemStack;
 public final class CoinCommand implements CommandExecutor, TabCompleter {
     private final SimpleCoinsPlugin plugin;
     private final CoinItems items;
-    public CoinCommand(SimpleCoinsPlugin plugin, CoinItems items) {
-        this.plugin = plugin; this.items = items;
+    private final OfflineGrants grants;
+    public CoinCommand(SimpleCoinsPlugin plugin, CoinItems items, OfflineGrants grants) {
+        this.plugin = plugin; this.items = items; this.grants = grants;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("simplecoins.admin")) { sender.sendMessage("No permission"); return true; }
         if (args.length < 3 || !args[0].equalsIgnoreCase("give")) {
-            sender.sendMessage("Usage: /" + label + " give <online player|selector> <amount|denomination> [count]");
+            sender.sendMessage("Usage: /" + label + " give <known player|online selector> <amount|denomination> [count]");
             return true;
         }
         List<Player> targets = resolve(sender, args[1]);
-        if (targets.isEmpty()) { sender.sendMessage("No online target matched; offline grants are not yet supported."); return true; }
+
         try {
             if (args.length == 3) {
                 long amount = Long.parseLong(args[2]);
                 Map<CoinDenomination, Long> breakdown = CoinMoney.minimumCoins(amount);
                 long numberOfStacks = 0;
                 for (long n : breakdown.values()) numberOfStacks = Math.addExact(numberOfStacks, IssuanceBudget.coinStacks(n));
-                IssuanceBudget.requireBudget(numberOfStacks, targets.size());
-                for (Player target : targets) for (var entry : breakdown.entrySet()) giveCoins(target, entry.getKey(), entry.getValue());
-                sender.sendMessage("Issued " + amount + items.currency() + " to " + targets.size() + " online player(s).");
+                IssuanceBudget.requireBudget(numberOfStacks, Math.max(1, targets.size()));
+                if (args[1].startsWith("@") && targets.isEmpty()) throw new IllegalArgumentException("No online selector target");
+                var recipients = new java.util.LinkedHashMap<java.util.UUID, Player>();
+                for (Player target : targets) recipients.put(target.getUniqueId(), target);
+                if (recipients.isEmpty()) {
+                    var matches = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
+                        .filter(p -> p.hasPlayedBefore() && ((p.getName() != null && p.getName().equalsIgnoreCase(args[1]))
+                            || p.getUniqueId().toString().equalsIgnoreCase(args[1]))).toList();
+                    if (matches.size() != 1) throw new IllegalArgumentException("Unknown or ambiguous offline player");
+                    recipients.put(matches.get(0).getUniqueId(), null);
+                }
+                for (var recipient : recipients.entrySet()) {
+                    var grant = grants.reserve(recipient.getKey(), amount, sender instanceof Player p ? p.getUniqueId().toString() : sender.getName());
+                    sender.sendMessage("Reserved " + amount + items.currency() + " for " + recipient.getKey() + ": " + grant.id());
+                    if (recipient.getValue() != null) grants.schedule(recipient.getValue());
+                }
             } else if (args.length == 4) {
+                if (targets.isEmpty()) throw new IllegalArgumentException("Item issuance requires an online player");
                 long count = Long.parseLong(args[3]);
                 if (count <= 0 || count > 65536) throw new IllegalArgumentException("Count must be 1..65536 per command");
                 if (args[2].equalsIgnoreCase("wallet")) {
@@ -56,6 +71,8 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
             } else {
                 sender.sendMessage("Unexpected arguments");
             }
+        } catch (java.io.IOException failure) {
+            sender.sendMessage("Issuance storage failed; inspect server log before retrying.");
         } catch (IllegalArgumentException | ArithmeticException failure) {
             sender.sendMessage("Invalid issue request: " + failure.getMessage());
         }
@@ -101,7 +118,7 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) return "give".startsWith(args[0].toLowerCase(Locale.ROOT)) ? List.of("give") : List.of();
         if (args.length == 2) {
             List<String> options = new ArrayList<>(List.of("@p", "@a", "@s", "@r"));
-            for (Player p : Bukkit.getOnlinePlayers()) options.add(p.getName());
+            for (var p : Bukkit.getOfflinePlayers()) if (p.getName() != null && (p.isOnline() || p.hasPlayedBefore())) options.add(p.getName());
             return options.stream().filter(s -> s.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
         }
         if (args.length == 3) {
