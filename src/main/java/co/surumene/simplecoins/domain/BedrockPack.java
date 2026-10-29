@@ -25,11 +25,25 @@ public final class BedrockPack {
             StringBuilder textures = new StringBuilder("{\"resource_pack_name\":\"SimpleCoins\",\"texture_name\":\"atlas.items\",\"texture_data\":{");
             StringBuilder definitions = new StringBuilder("{\"format_version\":2,\"items\":{\"minecraft:paper\":[");
             try (var zip = new ZipOutputStream(Files.newOutputStream(temporary))) {
+                // Bedrock caches by UUID/version. Derive identity from the complete
+                // content so replacing a PNG cannot reuse a stale client cache entry.
+                java.security.MessageDigest digest;
+                try { digest = java.security.MessageDigest.getInstance("SHA-256"); }
+                catch (java.security.NoSuchAlgorithmException impossible) { throw new AssertionError(impossible); }
+                for (var d : CoinDenomination.values()) {
+                    byte[] name = names.get(d).getBytes(StandardCharsets.UTF_8);
+                    digest.update(java.nio.ByteBuffer.allocate(12).putInt(d.value()).putInt(name.length).putInt(images.get(d).length).array());
+                    digest.update(name);
+                    digest.update(images.get(d));
+                }
+                String fingerprint = java.util.HexFormat.of().formatHex(digest.digest());
+                String headerId = java.util.UUID.nameUUIDFromBytes(("simplecoins:header:" + fingerprint).getBytes(StandardCharsets.UTF_8)).toString();
+                String moduleId = java.util.UUID.nameUUIDFromBytes(("simplecoins:module:" + fingerprint).getBytes(StandardCharsets.UTF_8)).toString();
                 put(zip, "manifest.json", """
                     {"format_version":2,"header":{"name":"SimpleCoins","description":"SimpleCoins currency textures",
-                    "uuid":"c4207313-06d8-4aa2-8b22-2f8fc83baacd","version":[1,0,0],"min_engine_version":[1,21,0]},
-                    "modules":[{"type":"resources","uuid":"b3f7d8bd-34b3-429b-8cc6-a96c1cac0277","version":[1,0,0]}]}
-                    """.getBytes(StandardCharsets.UTF_8));
+                    "uuid":"%s","version":[1,0,0],"min_engine_version":[1,21,0]},
+                    "modules":[{"type":"resources","uuid":"%s","version":[1,0,0]}]}
+                    """.formatted(headerId, moduleId).getBytes(StandardCharsets.UTF_8));
                 boolean first = true;
                 for (var d : CoinDenomination.values()) {
                     if (!first) { textures.append(','); definitions.append(','); }
