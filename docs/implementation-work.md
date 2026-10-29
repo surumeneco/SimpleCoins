@@ -56,8 +56,20 @@ Paper event behavior, power-loss durability, client rendering or full accounting
   zero-player join gate, commit orchestration and ongoing accounting journal.
 - BlockLocker ownership/Everyone, all current BAN types, WWC/WWW reader adapters.
 - Admin world statistics, arbitrary balance and dead-asset location queries.
-- Automatic Geyser resource installation and Nexo/Scaffolding asset integration.
+- Nexo/Scaffolding asset integration. Geyser-Spigot installation is now implemented;
+  external Geyser deployments still require transfer of generated artifacts.
 
 No release or production readiness claim is made for this branch. Keep main
 unchanged. Geyser export uses the v2 mapping format documented at
 https://geysermc.org/wiki/geyser/custom-items/ ; actual target installation remains unverified.
+
+## Geyser installation design
+
+Geyser source `e963aeca854711b5ba843541f6e03ccfcadd3ef1` creates its core in
+Spigot onLoad, but loads registries in onEnable/start. Generate and install our
+pack/mapping in SimpleCoins onLoad, before any plugin onEnable. The soft dependency
+makes Geyser's data folder available. Only owned, digest-matching files may be
+replaced/removed. When Nexo is present remove only unchanged SimpleCoins-managed
+Geyser outputs, leaving Nexo to own resource distribution. An altered file is an
+explicit error. This does not prove compatibility with older Geyser builds or
+Nexo/Scaffolding, nor enable a disabled Geyser custom-content setting.

@@ -17,7 +17,7 @@ Minecraft Paper 26.2 向けの独自貨幣プラグイン。開発中の **1.0.0
 
 初回起動時 `plugins/SimpleCoins/images/` に9 PNG画像を生成し、`plugins/SimpleCoins/SimpleCoins-java.zip` を生成します。表示名と同名の PNG を差し替えて再起動すると反映します。
 
-**ZIP生成とクライアントへの実配布は別処理です。** Nexo未導入では生成したZIPをHTTP(S)で公開して `resource-pack.public-url` に設定した場合のみ、Javaクライアントへ配布します。Nexoを使用する際はこのパックを二重配布しませんが、Nexo側への画像・モデル取り込みは未接続です。Nexo不在時は `geyser/SimpleCoins.mcpack` とGeyser v2定義マッピング `geyser/simplecoins.json` も生成します。Geyserの `packs/` と `custom_mappings/` への導入、`enable-custom-content` の有効化、再起動と表示確認が必要です。現段階では自動導入しません。
+**ZIP生成とクライアントへの実配布は別処理です。** Nexo未導入では生成したZIPをHTTP(S)で公開して `resource-pack.public-url` に設定した場合のみ、Javaクライアントへ配布します。Nexoを使用する際はこのパックを二重配布しませんが、Nexo側への画像・モデル取り込みは未接続です。Nexo不在時は `geyser/SimpleCoins.mcpack` とGeyser v2定義マッピング `geyser/simplecoins.json` も生成します。同じPaper上のGeyser-Spigotがある場合は、Geyser起動前に `packs/` と `custom_mappings/` へ自動配置します。`enable-custom-content` の有効化と実機表示確認は必要です。変更された管理対象ファイルや同名の無関係なファイルを上書きせず、エラーで停止します。Nexo導入時には自分が配置した未変更ファイルだけを取り除きます。外部Geyserプロキシは生成物の手動配置が必要です。
 
 ## 残るリリースブロッカー
 
