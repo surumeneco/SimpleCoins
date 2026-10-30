@@ -138,4 +138,16 @@ class GrantLedgerTest {
         java.nio.file.Files.write(path.resolve("head"), initialHead);
         assertEquals(grant, new GrantLedger(path).pending(player).getFirst());
     }
+    @Test void symlinkedJournalRecordsAreRejectedRatherThanTrusted() throws Exception {
+        Path journal = directory.resolve("links");
+        var ledger = new GrantLedger(journal);
+        ledger.reserve(UUID.randomUUID(), 100, "console");
+        Path record = journal.resolve("1.grant");
+        Path target = directory.resolve("external-record");
+        java.nio.file.Files.copy(record, target);
+        java.nio.file.Files.delete(record);
+        java.nio.file.Files.createSymbolicLink(record, target.toAbsolutePath());
+        assertThrows(java.io.IOException.class, () -> new GrantLedger(journal));
+    }
+
 }
