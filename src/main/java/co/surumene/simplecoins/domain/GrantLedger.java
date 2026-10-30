@@ -8,12 +8,20 @@ import java.util.*;
 /** Single-writer issuance journal. A reservation is not a physical asset. */
 public final class GrantLedger {
     public record Grant(long sequence, UUID id, UUID player, long amount, String issuer,
-                        long createdMillis, boolean delivered) {
+                        long createdMillis, boolean delivered,
+                        CoinDenomination denomination, long coinCount) {
         public Grant {
             Objects.requireNonNull(id); Objects.requireNonNull(player); Objects.requireNonNull(issuer);
-            if (sequence <= 0 || amount <= 0 || issuer.isBlank() || issuer.length()>1024) throw new IllegalArgumentException("Invalid grant");
+            if (sequence <= 0 || amount <= 0 || issuer.isBlank() || issuer.length() > 1024)
+                throw new IllegalArgumentException("Invalid grant");
+            if (denomination == null) {
+                if (coinCount != 0) throw new IllegalArgumentException("Unspecified denomination has a count");
+            } else if (coinCount <= 0 || Math.multiplyExact(coinCount, denomination.value()) != amount) {
+                throw new IllegalArgumentException("Coin reservation has an inconsistent amount");
+            }
         }
-        Grant completed() { return new Grant(sequence, id, player, amount, issuer, createdMillis, true); }
+        Grant completed() { return new Grant(sequence, id, player, amount, issuer, createdMillis,
+                true, denomination, coinCount); }
     }
     private final Path directory;
     private final TreeMap<Long, Grant> grants = new TreeMap<>();
@@ -55,9 +63,24 @@ public final class GrantLedger {
         DurableFile.write(directory.resolve("head"), java.nio.ByteBuffer.allocate(8).putLong(sequence).array());
     }
     public synchronized Grant reserve(UUID player, long amount, String issuer) throws IOException {
+        return reserveTyped(player, amount, issuer, null, 0);
+    }
+
+    /** Reserve exactly the chosen physical denomination, not its minimum-coin equivalent. */
+    public synchronized Grant reserveCoins(UUID player, CoinDenomination denomination,
+                                          long count, String issuer) throws IOException {
+        Objects.requireNonNull(denomination);
+        if (count <= 0) throw new IllegalArgumentException("Coin count must be positive");
+        return reserveTyped(player, Math.multiplyExact(count, denomination.value()),
+                issuer, denomination, count);
+    }
+
+    private Grant reserveTyped(UUID player, long amount, String issuer,
+                               CoinDenomination denomination, long coinCount) throws IOException {
         checkHealthy();
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
-        Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer, Instant.now().toEpochMilli(), false);
+        Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
+                Instant.now().toEpochMilli(), false, denomination, coinCount);
         persist(grant);
         try { writeHead(next); }
         catch (IOException failure) { failed = true; throw failure; }
@@ -79,8 +102,13 @@ public final class GrantLedger {
                 !grants.get(receipt).player().equals(player))))
             throw new IllegalStateException("Receipt does not belong to this player's journal");
         for (Grant g : grants.values()) {
-            if (g.player().equals(player) && g.delivered() && g.sequence() > receipt)
+            if (!g.player().equals(player)) continue;
+            if (g.delivered() && g.sequence() > receipt)
                 throw new IllegalStateException("Playerdata receipt rolled back behind acknowledged grant");
+            // An undelivered earlier grant cannot be skipped by a later receipt.
+            // The grant at 'receipt' may be awaiting acknowledgement after a crash.
+            if (!g.delivered() && g.sequence() < receipt)
+                throw new IllegalStateException("Playerdata receipt skipped an undelivered grant");
         }
     }
     public synchronized void acknowledge(Grant grant, long savedReceipt) throws IOException {
@@ -103,18 +131,32 @@ public final class GrantLedger {
     private static byte[] encode(Grant grant) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(bytes)) {
-            out.writeInt(0x53434731); out.writeLong(grant.sequence());
+            out.writeInt(0x53434732); out.writeLong(grant.sequence());
             out.writeUTF(grant.id().toString()); out.writeUTF(grant.player().toString());
             out.writeLong(grant.amount()); out.writeUTF(grant.issuer());
             out.writeLong(grant.createdMillis()); out.writeBoolean(grant.delivered());
+            out.writeInt(grant.denomination() == null ? 0 : grant.denomination().value());
+            out.writeLong(grant.coinCount());
         }
         return bytes.toByteArray();
     }
     private static Grant decode(byte[] bytes) throws IOException {
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
-            if (in.readInt() != 0x53434731) throw new IOException("Unknown issuance journal schema");
-            Grant result = new Grant(in.readLong(), UUID.fromString(in.readUTF()), UUID.fromString(in.readUTF()),
-                in.readLong(), in.readUTF(), in.readLong(), in.readBoolean());
+            int schema = in.readInt();
+            if (schema != 0x53434731 && schema != 0x53434732)
+                throw new IOException("Unknown issuance journal schema");
+            long sequence = in.readLong();
+            UUID id = UUID.fromString(in.readUTF()), player = UUID.fromString(in.readUTF());
+            long amount = in.readLong();
+            String issuer = in.readUTF();
+            long createdMillis = in.readLong();
+            boolean delivered = in.readBoolean();
+            int denominationValue = schema == 0x53434732 ? in.readInt() : 0;
+            long coinCount = schema == 0x53434732 ? in.readLong() : 0;
+            CoinDenomination denomination = denominationValue == 0 ? null :
+                    CoinDenomination.fromValue(denominationValue);
+            Grant result = new Grant(sequence, id, player, amount, issuer,
+                    createdMillis, delivered, denomination, coinCount);
             if (in.available() != 0) throw new IOException("Trailing journal data");
             return result;
         } catch (IllegalArgumentException ex) { throw new IOException("Invalid journal", ex); }
