@@ -73,3 +73,41 @@ replaced/removed. When Nexo is present remove only unchanged SimpleCoins-managed
 Geyser outputs, leaving Nexo to own resource distribution. An altered file is an
 explicit error. This does not prove compatibility with older Geyser builds or
 Nexo/Scaffolding, nor enable a disabled Geyser custom-content setting.
+
+## 2026-10-30 continuation: denomination receipts and settlement source discovery
+
+### Durable exact-denomination grants (implemented on this feature branch)
+
+- SCG2 issuance records include the original denomination and coin count for
+  the four-argument online coin give. The prior SCG1 monetary records remain
+  readable, and new monetary grants retain their minimum-coin breakdown.
+- A denomination grant is never silently converted into a different coin
+  denomination during partial inventory delivery or after a restart.
+- The existing receipt/playerdata save-and-acknowledge path is used for
+  denomination grants; unknown earlier undelivered grants cannot be skipped by
+  a later persisted receipt. This remains subject to real-server crash tests.
+- Test evidence: CI failed at commit `5aef993` because the new denomination
+  test could not compile (missing API). The initial implementation commit
+  `a591ca1` passed GitHub Actions workflow `40992641134`. Regression
+  tests for SCG1 compatibility and skipped receipt rejection passed at commit
+  `ec41135` (workflow `40992714884`).
+
+### G0/Phase 5 discovery-only spike (implementation; not full settlement)
+
+- `WorldStorageDiscovery` accepts actual world folders from the caller.
+  It finds `region` / `entities` Anvil candidates in old or 26.x
+  dimension layouts, and modern or legacy playerdata candidates.
+- World-independent playerdata is discovered even if its world is excluded
+  from asset statistics. Duplicate UUID playerdata candidates, missing roots,
+  symlinks, read failures and discovery-budget exhaustion abort discovery.
+- This outputs a **file manifest only**. It cannot be used to publish any
+  economic total. It does not yet establish the authoritative playerdata
+  location, lock/snapshot concurrently changing world files, decode chunk
+  streams, reconcile memory and disk, detect BlockLocker/BAN/Mob ownership,
+  or feed validated input to `SettlementAccumulator`.
+- No tests in this phase imply server join-gate, full-world completeness,
+  startup reconciliation, real Paper 26.2 compatibility or production readiness.
+
+Full 1.0.0 accounting, custom Nexo import, server integration and release
+remain blocked on their explicit acceptance and integration gates. Keep this
+feature PR as draft, `develop` and `main` unchanged.
