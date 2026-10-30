@@ -90,4 +90,23 @@ class WorldStorageDiscoveryTest {
                 Map.of("missing", directory.resolve("missing")),
                 new WorldScope(true, Set.of(), Set.of()), 100));
     }
+    @Test void ignoresBackupFoldersUnderAWorldInsteadOfCountingArchivedAssets() throws Exception {
+        Path world = directory.resolve("world");
+        UUID actualPlayer = UUID.randomUUID();
+        UUID backupPlayer = UUID.randomUUID();
+        Path liveRegion = world.resolve("region/r.0.0.mca");
+        Path backupRegion = world.resolve("backups/region/r.0.0.mca");
+        Path liveData = world.resolve("players/data/" + actualPlayer + ".dat");
+        Path backupData = world.resolve("backups/playerdata/" + backupPlayer + ".dat");
+        for (Path path : new Path[]{liveRegion, backupRegion, liveData, backupData}) {
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, "fixture");
+        }
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", world), new WorldScope(true, Set.of(), Set.of()), 100);
+        assertEquals(1, manifest.worldFiles().size());
+        assertEquals(liveRegion.toAbsolutePath(), manifest.worldFiles().getFirst().path());
+        assertEquals(Map.of(actualPlayer, liveData.toAbsolutePath()), manifest.playerDataFiles());
+    }
+
 }
