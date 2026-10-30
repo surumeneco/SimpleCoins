@@ -53,7 +53,22 @@ class PlayerDataSettlementImportTest {
     }
 
 
-    @Test void savedPlayerWithNoCurrencyRemainsInRegisteredPopulation() throws Exception {
+    @Test void previouslyRegisteredPlayerWithNoCurrencyRemainsRegistered() throws Exception {
+        UUID player = UUID.randomUUID();
+        String source = "playerdata:" + player;
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of(source));
+        // 02A: a zero-balance player is retained only after an earlier asset
+        // transaction registered that UUID. Playerdata alone is not registration.
+        settlement.preservePreviouslyRegistered(player, false, true);
+        PlayerDataSettlementImport.stage(settlement, source, player, false,
+                Map.of("Inventory", List.of(), "EnderItems", List.of()));
+        var snapshot = settlement.commit();
+        assertEquals(Map.of(player, BigInteger.ZERO), snapshot.personalBalances());
+        assertEquals(1, snapshot.statistics().registeredPlayers());
+    }
+
+    @Test void playerdataWithoutPriorAssetTransactionDoesNotRegisterPlayer() throws Exception {
         UUID player = UUID.randomUUID();
         String source = "playerdata:" + player;
         var settlement = new SettlementAccumulator(
@@ -61,8 +76,8 @@ class PlayerDataSettlementImportTest {
         PlayerDataSettlementImport.stage(settlement, source, player, false,
                 Map.of("Inventory", List.of(), "EnderItems", List.of()));
         var snapshot = settlement.commit();
-        assertEquals(Map.of(player, BigInteger.ZERO), snapshot.personalBalances());
-        assertEquals(1, snapshot.statistics().registeredPlayers());
+        assertEquals(Map.of(), snapshot.personalBalances());
+        assertEquals(0, snapshot.statistics().registeredPlayers());
     }
 
     @Test void bannedPlayerWithNoCurrencyIsNotRegistered() throws Exception {
