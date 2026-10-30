@@ -135,4 +135,27 @@ class AnvilRegionReaderTest {
                 () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
     }
 
+    @Test void legacyLevelCoordinatesMustMatchTheirAnvilHeaderSlot() throws Exception {
+        // Older chunk formats keep xPos/zPos inside the Level compound.
+        var nbt = new ByteArrayOutputStream();
+        try (var out = new DataOutputStream(nbt)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(10); out.writeUTF("Level");
+            out.writeByte(3); out.writeUTF("xPos"); out.writeInt(1);
+            out.writeByte(3); out.writeUTF("zPos"); out.writeInt(0);
+            out.writeByte(0); // end Level
+            out.writeByte(0); // end root
+        }
+        byte[] payload = compressed(2, nbt.toByteArray());
+        byte[] bytes = new byte[4096 * 3];
+        ByteBuffer.wrap(bytes).putInt(0, (2 << 8) | 1);
+        ByteBuffer.wrap(bytes).putInt(8192, 1 + payload.length);
+        bytes[8196] = 2;
+        System.arraycopy(payload, 0, bytes, 8197, payload.length);
+        Path file = directory.resolve("r.0.0.mca");
+        Files.write(file, bytes);
+        assertThrows(IOException.class,
+                () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
+    }
+
 }
