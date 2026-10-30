@@ -120,7 +120,8 @@ public final class WorldStorageDiscovery {
                             case "entities" -> Kind.ENTITY;
                             default -> null;
                         };
-                        if (kind != null) worldFiles.add(new SourceFile(worldName, file, kind));
+                        if (kind != null && isExpectedWorldStorage(file, root))
+                            worldFiles.add(new SourceFile(worldName, file, kind));
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -138,13 +139,26 @@ public final class WorldStorageDiscovery {
         return new Manifest(worldFiles, players);
     }
 
+    /**
+     * A world root may contain unrelated backups, exports or caches. Only the
+     * actual vanilla/Paper dimension layout is an authoritative data source.
+     */
+    private static boolean isExpectedWorldStorage(Path file, Path root) {
+        Path relative = root.relativize(file.getParent());
+        int size = relative.getNameCount();
+        if (size == 1) return true; // root/region or root/entities
+        if (size == 2) {
+            String dimension = relative.getName(0).toString();
+            return "DIM-1".equals(dimension) || "DIM1".equals(dimension);
+        }
+        return size == 4 && "dimensions".equals(relative.getName(0).toString())
+                && !relative.getName(1).toString().isBlank()
+                && !relative.getName(2).toString().isBlank();
+    }
+
     private static boolean isPlayerData(Path file, Path root) {
         Path directory = file.getParent();
-        if (directory.equals(root)) return false;
-        String name = directory.getFileName().toString();
-        if ("playerdata".equals(name)) return true;
-        if (!"data".equals(name)) return false;
-        Path grandparent = directory.getParent();
-        return grandparent != null && "players".equals(grandparent.getFileName().toString());
+        return directory.equals(root.resolve("playerdata")) ||
+                directory.equals(root.resolve("players").resolve("data"));
     }
 }
