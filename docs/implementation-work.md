@@ -193,3 +193,26 @@ Consequently, CI Green means the existing **unit/build** checks are passing,
 not that G0/G1/G2/G3, all Phase 0-8 acceptance, or the release gate passed.
 Keep the current branch on Draft PR #2; both `develop` and `main` remain
 unchanged and 1.0.0 remains **unreleased**.
+
+## 2026-10-30 continuation: terrain chunk BlockEntity extraction
+
+- `be507b7` introduced tests for modern `block_entities` entries containing
+  physical `Items` slots; CI run `41013399415` was Red because the
+  extractor did not yet exist.
+- `923bbee` added `StoredBlockEntityAssets`, returning values keyed by
+  absolute block coordinates and inventory slot. It validates coordinates,
+  block identity, duplicate BlockEntity positions, duplicate slots, and
+  recursively decoded item components. CI `41013570804` passed.
+- This only extracts stored block inventories on a known consistent chunk.
+  It does not enumerate all region/entity sources, classify protected
+  BlockLocker ownership or `[Everyone]`, reconcile loaded memory entities,
+  resolve external BAN state or build an atomic world-wide settlement.
+  It must not be used alone to publish a claimed complete world balance.
+
+### Current handoff
+
+- Feature PR #2 remains Draft. Neither `develop` nor `main` is updated.
+- The unit-test/Gradle build gate is Green at `923bbee` and the last code
+  release remains unverified in a real Paper/Geyser/Nexo server.
+- Incomplete Phase 5-8 and G0/G1/G2/G3 gates are blockers to `develop`
+  integration and 1.0.0 release, not reasons to count missing assets as zero.
