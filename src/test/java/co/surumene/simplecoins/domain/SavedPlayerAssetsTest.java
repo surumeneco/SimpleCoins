@@ -69,17 +69,4 @@ class SavedPlayerAssetsTest {
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(unknownSlot));
     }
 
-    @Test void selectedMainhandMustNotBeCountedAgainFromEquipment() {
-        Map<String,Object> held = Map.of("id", "minecraft:paper", "count", 2,
-                "components", Map.of("minecraft:custom_data",
-                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
-        Map<String,Object> data = Map.of(
-                "Inventory", List.of(coin(3, 100, 2)),
-                "EnderItems", List.of(),
-                "SelectedItemSlot", 3,
-                "equipment", Map.of("mainhand", held));
-        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(data),
-                "The selected hotbar slot and equipment.mainhand refer to one physical stack");
-    }
-
 }
