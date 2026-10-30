@@ -111,3 +111,33 @@ Nexo/Scaffolding, nor enable a disabled Geyser custom-content setting.
 Full 1.0.0 accounting, custom Nexo import, server integration and release
 remain blocked on their explicit acceptance and integration gates. Keep this
 feature PR as draft, `develop` and `main` unchanged.
+
+## 2026-10-30 continuation: Anvil G0 adapter (draft PR, not releasable)
+
+- Implemented `AnvilRegionReader.scan` as a read-only, per-chunk bounded
+  reader for sectors, GZIP/Zlib/uncompressed NBT, and header-referenced
+  external `c.x.z.mcc` payloads. Corrupt allocations, overlaps, unsupported
+  codecs (including LZ4), missing external chunks, and exhausted budgets fail.
+- This is a **storage decoding component**, not a complete or time-consistent
+  settlement scanner. It has no automatic world freeze, ownership/BAN/BlockLocker
+  classification, Bukkit memory reconciliation, journal replay, or publish gate.
+- Added tests for normal and external chunks, corrupt headers, unsupported
+  compression and resource limits.
+- Found a concrete bug in `WorldStorageDiscovery`: it incorrectly collects
+  standalone `.mcc` sidecar files in `worldFiles`, even though those bytes
+  are external chunk payloads referenced by `.mca` headers. A regression test
+  `externalChunkSidecarsAreNotStandaloneRegionFiles` reproduces it.
+- Attempted to change the discovery predicate to accept only `.mca` as a
+  region file, but the GitHub update tool returned an **OpenAI safety-check
+  block**. Readback confirmed the source was unchanged. Do not mark this bug
+  fixed, and do not bypass the refusal by using a different write mechanism.
+- CI at commit `4eda1e6` (run `40994018375`) compiled production and tests
+  successfully and passed `domainContractCheck`, then ran 50 tests:
+  49 passed, 1 failed on the known sidecar discovery regression.
+- The `feature/initial-domain-20261027` branch is deliberately left with a
+  failing regression test. Do not merge to `develop` or publish a release
+  until the source is corrected through an authorized write and CI is Green.
+- Additional gate requirements remain: complete 26.x item NBT extraction,
+  BlockLocker and playerdata ownership, WWC/WWW read APIs, consistent snapshot,
+  fail-closed login restriction, economic journal and authoritative reconciliation.
+
