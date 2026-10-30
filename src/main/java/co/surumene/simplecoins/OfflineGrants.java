@@ -34,6 +34,12 @@ public final class OfflineGrants implements Listener {
         try { return ledger.reserve(player,amount,issuer); }
         catch(IOException ex){ fail(ex); throw ex; }
     }
+    public GrantLedger.Grant reserveCoins(UUID player, CoinDenomination denomination,
+                                           long count, String issuer) throws IOException {
+        if (failed) throw new IOException("Issuance is stopped after a persistence failure");
+        try { return ledger.reserveCoins(player, denomination, count, issuer); }
+        catch (IOException ex) { fail(ex); throw ex; }
+    }
     public void schedule(Player player) {
         if(failed || !scheduled.add(player.getUniqueId()))return;
         Bukkit.getScheduler().runTask(plugin,()->{
@@ -65,7 +71,16 @@ public final class OfflineGrants implements Listener {
                 ItemStack[] copy=Arrays.stream(before).map(i->i==null?null:i.clone()).toArray(ItemStack[]::new);
                 inventory.setContents(copy);
                 long inserted=0;
-                for(var entry:CoinMoney.minimumCoins(grant.amount()-already).entrySet()) {
+                long remaining = grant.amount() - already;
+                Map<CoinDenomination, Long> coins;
+                if (grant.denomination() == null) {
+                    coins = CoinMoney.minimumCoins(remaining);
+                } else {
+                    if (remaining % grant.denomination().value() != 0)
+                        throw new IOException("Partial receipt does not align with reserved denomination");
+                    coins = Map.of(grant.denomination(), remaining / grant.denomination().value());
+                }
+                for(var entry:coins.entrySet()) {
                     long count=entry.getValue();
                     // The simulation touches at most the player's 36 storage slots per stack.
                     while(count>0) {
