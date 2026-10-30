@@ -12,7 +12,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -62,6 +61,7 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
                 if (args[2].equalsIgnoreCase("wallet")) {
                     IssuanceBudget.requireBudget(count, targets.size());
                     for (Player target : targets) for (long i=0; i<count; i++) deliver(target, items.newWallet());
+                    sender.sendMessage("Wallets issued to " + targets.size() + " online player(s).");
                 } else {
                     CoinDenomination denomination = parseDenomination(args[2]);
                     IssuanceBudget.requireBudget(IssuanceBudget.coinStacks(count), targets.size());
@@ -70,8 +70,8 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
                         grants.reserveCoins(target.getUniqueId(), denomination, count, issuer);
                         grants.schedule(target);
                     }
+                    sender.sendMessage("Coin delivery reserved for " + targets.size() + " online player(s).");
                 }
-                sender.sendMessage("Issuance queued for " + targets.size() + " online player(s).");
             } else {
                 sender.sendMessage("Unexpected arguments");
             }
@@ -101,14 +101,6 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
         }
         Player player = Bukkit.getPlayerExact(input);
         return player == null ? List.of() : List.of(player);
-    }
-
-    private void giveCoins(Player target, CoinDenomination denomination, long count) {
-        while (count > 0) {
-            int batch = (int) Math.min(64, count);
-            deliver(target, items.coin(denomination, batch));
-            count -= batch;
-        }
     }
 
     private void deliver(Player player, ItemStack item) {
