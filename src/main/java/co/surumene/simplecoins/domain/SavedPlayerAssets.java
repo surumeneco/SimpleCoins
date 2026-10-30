@@ -24,7 +24,44 @@ public final class SavedPlayerAssets {
         Set<String> visitedSlots = new HashSet<>();
         extractInventory(root, "Inventory", "inventory", found, visitedSlots);
         extractInventory(root, "EnderItems", "ender", found, visitedSlots);
+        extractEquipment(root, found, visitedSlots);
         return Map.copyOf(found);
+    }
+
+
+    /**
+     * Minecraft 1.21.5+ saves armor and off-hand contents in equipment.
+     * Old Inventory slot numbers must not be counted again if also present.
+     */
+    private static void extractEquipment(Map<String,Object> root,
+                                         Map<String,BigInteger> found,
+                                         Set<String> visitedSlots) throws IOException {
+        Object raw = root.get("equipment");
+        if (raw == null) return;
+        if (!(raw instanceof Map<?,?> equipment))
+            throw new IOException("Malformed saved player equipment");
+        Map<String,Integer> legacySlots = Map.of(
+                "head", 103, "chest", 102, "legs", 101, "feet", 100,
+                "offhand", -106);
+        Set<String> permitted = Set.of("head", "chest", "legs", "feet",
+                "offhand", "mainhand", "body", "saddle");
+        for (var entry : equipment.entrySet()) {
+            if (!(entry.getKey() instanceof String slot) || !permitted.contains(slot))
+                throw new IOException("Unknown saved equipment slot: " + entry.getKey());
+            if (!(entry.getValue() instanceof Map<?,?> stack) ||
+                    stack.keySet().stream().anyMatch(name -> !(name instanceof String)))
+                throw new IOException("Invalid saved equipment item: " + slot);
+            Integer legacy = legacySlots.get(slot);
+            if (legacy != null && visitedSlots.contains("inventory:" + legacy))
+                throw new IOException("Duplicate legacy inventory/equipment slot: " + slot);
+            String physical = "equipment:" + slot;
+            if (!visitedSlots.add(physical))
+                throw new IOException("Duplicate equipment slot: " + slot);
+            @SuppressWarnings("unchecked")
+            Map<String,Object> item = (Map<String,Object>) stack;
+            BigInteger value = StoredItemValue.value(item);
+            if (value.signum() > 0) found.put(physical, value);
+        }
     }
 
     private static void extractInventory(Map<String, Object> root, String key,
