@@ -32,6 +32,25 @@ public final class StoredBlockEntityAssets {
             if (!positions.add(pos))
                 throw new IOException("Duplicate block entity at " + pos);
 
+            // Decorated pots store one stack in the lowercase "item" tag,
+            // not the conventional "Items" list. Ignoring it would undercount
+            // physical currency and incorrectly publish a partial settlement.
+            if (entity.containsKey("item")) {
+                if (!id.equals("minecraft:decorated_pot") || entity.containsKey("Items"))
+                    throw new IOException("Unsupported or ambiguous single-item block storage at " + pos);
+                Object rawItem = entity.get("item");
+                if (!(rawItem instanceof Map<?,?> stack) ||
+                        stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
+                    throw new IOException("Malformed decorated pot item at " + pos);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> item = (Map<String, Object>) stack;
+                BigInteger amount = StoredItemValue.value(item);
+                if (amount.signum() > 0) found.put(pos + ":0", amount);
+                continue;
+            }
+            if (id.equals("minecraft:decorated_pot") && entity.containsKey("Items"))
+                throw new IOException("Unexpected decorated pot inventory format at " + pos);
+
             Object rawInventory = entity.get("Items");
             if (rawInventory == null) continue;
             if (!(rawInventory instanceof List<?> inventory))
