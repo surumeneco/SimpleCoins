@@ -70,6 +70,45 @@ class GrantLedgerTest {
         assertThrows(IllegalStateException.class,()->ledger.validateReceipt(player,0));
     }
 
+    @Test void aLaterReceiptCannotSkipAnEarlierUndeliveredGrant() throws Exception {
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(directory.resolve("ordered"));
+        var first = ledger.reserve(player, 100, "console");
+        var second = ledger.reserveCoins(player, CoinDenomination.FIVE, 3, "console");
+        assertThrows(IllegalStateException.class, () -> ledger.validateReceipt(player, second.sequence()));
+        assertThrows(IllegalStateException.class, () -> ledger.acknowledge(first, second.sequence()));
+        assertEquals(2, ledger.pending(player).size());
+        ledger.acknowledge(first, first.sequence());
+        assertTrue(ledger.wasApplied(second, second.sequence()));
+    }
+
+    @Test void aLegacyMoneyOnlyJournalRemainsReadableAfterSchemaUpgrade() throws Exception {
+        Path folder = directory.resolve("legacy");
+        java.nio.file.Files.createDirectories(folder);
+        UUID id = UUID.randomUUID(), player = UUID.randomUUID();
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var out = new java.io.DataOutputStream(bytes)) {
+            out.writeInt(0x53434731);
+            out.writeLong(1);
+            out.writeUTF(id.toString());
+            out.writeUTF(player.toString());
+            out.writeLong(100);
+            out.writeUTF("console");
+            out.writeLong(12345L);
+            out.writeBoolean(false);
+        }
+        DurableFile.write(folder.resolve("1.grant"), bytes.toByteArray());
+        DurableFile.write(folder.resolve("head"),
+                java.nio.ByteBuffer.allocate(8).putLong(1L).array());
+        var recovered = new GrantLedger(folder);
+        var grant = recovered.pending(player).getFirst();
+        assertEquals(100L, grant.amount());
+        assertNull(grant.denomination());
+        assertEquals(0L, grant.coinCount());
+        recovered.acknowledge(grant, grant.sequence());
+        assertTrue(new GrantLedger(folder).pending(player).isEmpty());
+    }
+
     @Test void corruptOrMissingJournalNeverBecomesAnEmptyReservation() throws Exception {
         Path path=directory.resolve("grants");
         var ledger=new GrantLedger(path);
