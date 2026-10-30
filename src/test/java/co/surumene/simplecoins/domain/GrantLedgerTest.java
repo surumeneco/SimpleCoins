@@ -24,14 +24,14 @@ class GrantLedgerTest {
     @Test void denominationReservationPreservesPhysicalCoinDenominationAcrossRestart() throws Exception {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(directory.resolve("grants"));
-        var grant = ledger.reserveCoins(player, CoinDenomination.C1, 25, "console");
+        var grant = ledger.reserveCoins(player, CoinDenomination.ONE, 25, "console");
         assertEquals(25, grant.amount());
-        assertEquals(CoinDenomination.C1, grant.denomination());
+        assertEquals(CoinDenomination.ONE, grant.denomination());
         assertEquals(25, grant.coinCount());
 
         var recovered = new GrantLedger(directory.resolve("grants"));
         assertEquals(grant, recovered.pending(player).getFirst());
-        assertEquals(CoinDenomination.C1, recovered.pending(player).getFirst().denomination());
+        assertEquals(CoinDenomination.ONE, recovered.pending(player).getFirst().denomination());
         recovered.acknowledge(grant, grant.sequence());
         assertTrue(new GrantLedger(directory.resolve("grants")).pending(player).isEmpty());
     }
