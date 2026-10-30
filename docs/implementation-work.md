@@ -216,3 +216,28 @@ unchanged and 1.0.0 remains **unreleased**.
   release remains unverified in a real Paper/Geyser/Nexo server.
 - Incomplete Phase 5-8 and G0/G1/G2/G3 gates are blockers to `develop`
   integration and 1.0.0 release, not reasons to count missing assets as zero.
+
+## 2026-10-31 continuation: registration contract and decorated-pot inventory
+
+- `5228a4d` corrected the saved-player zero-balance regression tests against
+  02A's registration contract: an existing registered UUID with valid
+  playerdata remains registered at zero, but playerdata presence alone
+  does not register a never-participating UUID. The prior test conflated
+  those cases. CI run `41094567495` passed.
+- `aa6e0d3` introduced three Red tests for a decorated pot's lowercase
+  `item` NBT stack, unsupported single-item storage, and contradictory
+  `item`/`Items` representations. CI `41094819604` failed as expected:
+  83 tests, 3 failures in `StoredBlockEntityAssetsTest`.
+- `7e0a3e1` extended `StoredBlockEntityAssets` to count the stored
+  decorated-pot stack using the existing recursive item value decoder and
+  reject ambiguous or unsupported single-item NBT rather than treating it
+  as an empty container. CI `41094920181` passed (Gradle build,
+  domainContractCheck, JUnit task and plugin descriptor inspection).
+- This is a **partial BlockEntity decoder**, not an all-world settlement.
+  It does not resolve BlockLocker ownership, all other container formats,
+  unloaded/loaded Entity inventory, standard/IP/external BAN, WWC/WWW,
+  consistent snapshots, join gate, journal or atomic statistics publication.
+  Those remain release blockers. No Paper 26.2 real-server or JE/BE/Nexo
+  rendering validation was performed. CAT normative gates were not run.
+
+Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
