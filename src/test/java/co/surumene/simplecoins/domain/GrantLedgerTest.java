@@ -21,6 +21,21 @@ class GrantLedgerTest {
         assertTrue(new GrantLedger(directory.resolve("grants")).pending(player).isEmpty());
     }
 
+    @Test void denominationReservationPreservesPhysicalCoinDenominationAcrossRestart() throws Exception {
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(directory.resolve("grants"));
+        var grant = ledger.reserveCoins(player, CoinDenomination.C1, 25, "console");
+        assertEquals(25, grant.amount());
+        assertEquals(CoinDenomination.C1, grant.denomination());
+        assertEquals(25, grant.coinCount());
+
+        var recovered = new GrantLedger(directory.resolve("grants"));
+        assertEquals(grant, recovered.pending(player).getFirst());
+        assertEquals(CoinDenomination.C1, recovered.pending(player).getFirst().denomination());
+        recovered.acknowledge(grant, grant.sequence());
+        assertTrue(new GrantLedger(directory.resolve("grants")).pending(player).isEmpty());
+    }
+
     @Test void crashAfterPlayerSaveBeforeAcknowledgementDoesNotRequireReissuance() throws Exception {
         UUID player=UUID.randomUUID();
         var path=directory.resolve("grants");
