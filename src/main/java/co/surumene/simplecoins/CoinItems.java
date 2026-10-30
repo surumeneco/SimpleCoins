@@ -46,8 +46,11 @@ public final class CoinItems {
         if (stack == null || stack.getType() != Material.PAPER || !stack.hasItemMeta()) return null;
         Integer value = stack.getItemMeta().getPersistentDataContainer().get(denomKey, PersistentDataType.INTEGER);
         if (value == null) return null;
+        // A tagged but unknown denomination is corrupt currency, never ordinary paper.
         try { return CoinDenomination.fromValue(value); }
-        catch (IllegalArgumentException ignored) { return null; }
+        catch (IllegalArgumentException invalid) {
+            throw new IllegalStateException("Unknown SimpleCoins denomination: " + value, invalid);
+        }
     }
 
     public boolean isWallet(ItemStack stack) {
