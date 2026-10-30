@@ -294,3 +294,24 @@ Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
 - CAT normative gates and Paper/JE/BE/Nexo real-device verification remain
   not-run. The full settlement, snapshot and journal blockers remain; Draft
   PR #2 must not be merged or released.
+
+## 2026-10-31: selected-mainhand duplicate accounting (unresolved)
+
+- Current branch baseline was `645202b4` (PR #2 Draft); CI
+  `41111564305` was successful. The saved playerdata reader accounts
+  `Inventory` and `equipment.mainhand` as separate slots, although
+  `SelectedItemSlot` may identify the same held hotbar item. This can
+  count one physical coin stack twice.
+- Red regression `d3a8c1d` added a saved playerdata fixture with
+  `SelectedItemSlot=3`, a coin in inventory slot 3, and an equivalent
+  `equipment.mainhand` stack. CI `41118803359` failed with exactly
+  one failing test out of 84: `selectedMainhandMustNotBeCountedAgainFromEquipment`.
+- A minimal production update to `SavedPlayerAssets.java` to reject
+  that overlap was explicitly refused by the GitHub tool safety check.
+  No alternate route was used to apply the refused change. The Red test
+  was reverted in `b56b701`; **the duplicate-accounting defect is open**.
+- A separate BAN-source evidence test-file creation was also refused;
+  no BAN aggregator implementation or verified Red was produced.
+  External standard/IP/plugin BAN sources remain unintegrated.
+- CAT normative gates and real Paper/Geyser/Nexo verification are not-run.
+  Preserve PR #2 as Draft and do not publish settlement totals.
