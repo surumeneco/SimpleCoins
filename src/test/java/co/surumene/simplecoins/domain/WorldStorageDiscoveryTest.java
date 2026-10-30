@@ -64,6 +64,17 @@ class WorldStorageDiscoveryTest {
                 Map.of("a", a, "b", b), new WorldScope(true, Set.of(), Set.of()), 100));
     }
 
+    @Test void nestedWorldRootsCannotDoubleCountTheSameRegion() throws Exception {
+        Path outer = directory.resolve("overworld");
+        Path inner = outer.resolve("DIM1");
+        Path region = inner.resolve("region/r.0.0.mca");
+        Files.createDirectories(region.getParent());
+        Files.writeString(region, "fixture");
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("outer", outer, "inner", inner),
+                new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
     @Test void externalChunkSidecarsAreNotStandaloneRegionFiles() throws Exception {
         Path regionDirectory = directory.resolve("world/region");
         Files.createDirectories(regionDirectory);
