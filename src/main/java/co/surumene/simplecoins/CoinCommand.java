@@ -65,9 +65,13 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
                 } else {
                     CoinDenomination denomination = parseDenomination(args[2]);
                     IssuanceBudget.requireBudget(IssuanceBudget.coinStacks(count), targets.size());
-                    for (Player target : targets) giveCoins(target, denomination, count);
+                    String issuer = sender instanceof Player p ? p.getUniqueId().toString() : sender.getName();
+                    for (Player target : targets) {
+                        grants.reserveCoins(target.getUniqueId(), denomination, count, issuer);
+                        grants.schedule(target);
+                    }
                 }
-                sender.sendMessage("Items issued to " + targets.size() + " online player(s).");
+                sender.sendMessage("Issuance queued for " + targets.size() + " online player(s).");
             } else {
                 sender.sendMessage("Unexpected arguments");
             }
