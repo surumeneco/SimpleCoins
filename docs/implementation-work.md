@@ -127,17 +127,69 @@ feature PR as draft, `develop` and `main` unchanged.
   standalone `.mcc` sidecar files in `worldFiles`, even though those bytes
   are external chunk payloads referenced by `.mca` headers. A regression test
   `externalChunkSidecarsAreNotStandaloneRegionFiles` reproduces it.
-- Attempted to change the discovery predicate to accept only `.mca` as a
-  region file, but the GitHub update tool returned an **OpenAI safety-check
-  block**. Readback confirmed the source was unchanged. Do not mark this bug
-  fixed, and do not bypass the refusal by using a different write mechanism.
-- CI at commit `4eda1e6` (run `40994018375`) compiled production and tests
-  successfully and passed `domainContractCheck`, then ran 50 tests:
-  49 passed, 1 failed on the known sidecar discovery regression.
-- The `feature/initial-domain-20261027` branch is deliberately left with a
-  failing regression test. Do not merge to `develop` or publish a release
-  until the source is corrected through an authorized write and CI is Green.
+- The first attempt to fix the discovery predicate was blocked by a tool
+  safety check; readback at that time confirmed no change. A later authorized
+  GitHub update fixed it in `c3b757d`, and CI for `65a9041` passed
+  (run `41008921089`). Historical CI `40994018375` was red before the fix.
+- The feature branch has since regained Green CI, but is still an open Draft
+  PR and is not releasable until the remaining settlement and external gates
+  are satisfied. Do not merge to `develop` or `main` on these partial tests.
 - Additional gate requirements remain: complete 26.x item NBT extraction,
   BlockLocker and playerdata ownership, WWC/WWW read APIs, consistent snapshot,
   fail-closed login restriction, economic journal and authoritative reconciliation.
 
+
+
+## 2026-10-30 continuation: saved-asset decoding and source staging
+
+The following scope was implemented and verified by the GitHub Actions
+runs named below; it does **not** complete 1.0.0's asset accounting.
+
+- `c5f1c0f` (test Red) / `b6f38e5` (Green except the previous MCA bug):
+  issue journals reject symbolic record files through `DurableFile.read`.
+- `c3b757d`: `.mcc` files are external chunk sidecars, not independent
+  `.mca` region manifest entries.
+- `65a9041`: unexpected currency denomination tags do not silently become
+  ordinary paper.
+- `9e59476` (Red) / `a2c6af5` (Green; CI `41011369635`):
+  `PlayerDataReader` decodes an authoritative gzip playerdata file using
+  independent compressed and inflated-byte budgets, rejects missing, corrupt,
+  noncanonical and symbolic inputs.
+- `03b21cd` (Red) / `1596f71` (Green; CI `41011707539`):
+  `StoredItemValue` reads known coin/wallet Bukkit PDC values from stored
+  `minecraft:custom_data`, never confusing vanilla PAPER with currency.
+- `5ac7531` (Red) / `8a1b71f` (Green; CI `41012031191`):
+  bundle and shulker container descendants are recursively included with a
+  finite nesting limit, and corrupt descendants abort.
+- `92286b9` (Red) / `02f4f4d` (Green; CI `41012330529`):
+  `SavedPlayerAssets` separates player inventory / ender chest and rejects
+  duplicate physical slots or missing source sections.
+- `918131c` (Red) / `9cb1a58` (Green; CI `41012684777`):
+  `PlayerDataSettlementImport` stages stored player assets into
+  `SettlementAccumulator`, with world-independent items always included.
+- `20c7f8c` (CI `41012852238`): added passing tests for dead-owned (banned)
+  saved assets and unreadable playerdata preventing transaction commit.
+- `faf17c3` (Red) / `ba98595` (Green; CI `41013156016`):
+  a currency wallet with nonempty nested bundle/container contents aborts
+  rather than silently dropping the nested value.
+
+### Release blockers still present (not test-only gaps)
+
+1. No consistent snapshot or server admission gate, memory/disk reconciliation
+   or all-world settlement orchestration. The readers require a stable source.
+2. Missing full region/block-entity/item-entity inventory enumeration and
+   BlockLocker protected-container ownership, including Everyone and linked
+   double chests; location deduplication beyond player slots is unverified.
+3. Missing authoritative standard/IP/external BAN resolver and unloaded
+   WWC/WWW/WCL inventory/owner snapshot adapters.
+4. Missing complete persistent journal for every live value transfer, generation
+   and consumption; immutable generation swaps and restart recovery not proven.
+5. Missing usable admin statistics / dead-asset location query and verified
+   Nexo/Scaffolding, Geyser/Bedrock/Java client rendering matrix.
+6. No Paper 26.2 real-server tests, load benchmarks, crash-recovery fault
+   injection or normative CAT-TDD conformance pass in this environment.
+
+Consequently, CI Green means the existing **unit/build** checks are passing,
+not that G0/G1/G2/G3, all Phase 0-8 acceptance, or the release gate passed.
+Keep the current branch on Draft PR #2; both `develop` and `main` remain
+unchanged and 1.0.0 remains **unreleased**.
