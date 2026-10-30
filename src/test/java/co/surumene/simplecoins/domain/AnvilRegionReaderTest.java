@@ -113,4 +113,26 @@ class AnvilRegionReaderTest {
         Files.delete(directory.resolve("c.0.0.mcc"));
         assertThrows(IOException.class, () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
     }
+    @Test void chunkCoordinatesMustMatchTheirAnvilHeaderSlot() throws Exception {
+        // The header says (0,0), but the NBT claims (1,0). Publishing the
+        // latter as the former could misattribute assets in a settlement.
+        var nbt = new ByteArrayOutputStream();
+        try (var out = new DataOutputStream(nbt)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(3); out.writeUTF("xPos"); out.writeInt(1);
+            out.writeByte(3); out.writeUTF("zPos"); out.writeInt(0);
+            out.writeByte(0);
+        }
+        byte[] payload = compressed(2, nbt.toByteArray());
+        byte[] bytes = new byte[4096 * 3];
+        ByteBuffer.wrap(bytes).putInt(0, (2 << 8) | 1);
+        ByteBuffer.wrap(bytes).putInt(8192, 1 + payload.length);
+        bytes[8196] = 2;
+        System.arraycopy(payload, 0, bytes, 8197, payload.length);
+        Path file = directory.resolve("r.0.0.mca");
+        Files.write(file, bytes);
+        assertThrows(IOException.class,
+                () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
+    }
+
 }
