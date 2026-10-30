@@ -114,7 +114,7 @@ public final class WorldStorageDiscovery {
                             throw new IOException("Ambiguous playerdata authority for " + uuid + ": " +
                                     previous + " and " + file);
                     } else if (scope.includes(worldName)
-                            && (filename.endsWith(".mca") || filename.endsWith(".mcc"))) {
+                            && filename.endsWith(".mca")) {
                         Kind kind = switch (parent) {
                             case "region" -> Kind.REGION;
                             case "entities" -> Kind.ENTITY;
