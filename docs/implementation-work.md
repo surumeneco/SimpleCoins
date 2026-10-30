@@ -241,3 +241,28 @@ unchanged and 1.0.0 remains **unreleased**.
   rendering validation was performed. CAT normative gates were not run.
 
 Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
+
+
+## 2026-10-31: ownership consistency and dropped-item scan blockers
+
+- Readback confirmed the previous baseline CI at `18a7f107` was Green (workflow
+  `41095126112`). The existing `BlockEntitySettlementImport.stageChunk`
+  invokes its ownership resolver for every nonzero slot, including multiple
+  slots of the same physical block. A resolver observing a changing protection
+  state could assign different owners to one container in a single chunk.
+  The planned fix is one authoritative ownership decision per block per chunk,
+  followed by snapshot-generation validation at the orchestration boundary.
+- A regression test was committed as `b1cbbda`, but the corresponding
+  production-code update was explicitly refused by the GitHub write safety
+  check. An independent dropped-item Entity decoder was likewise planned,
+  with test commit `ae417c5`, but its production-file creation was refused.
+  Neither feature is implemented or verified; do not treat those test-only
+  commits as completed Red/Green cycles.
+- To avoid leaving deliberately uncompilable/Red tests in the shared feature
+  branch, the Entity test was removed in `aa179b7`, and the block ownership
+  test restored to the original contents in `6c22cd2`. These are cleanup
+  commits, not fixes. The feature branch still requires a fresh CI run for
+  its current HEAD. No safety refusal was circumvented.
+- Release blockers remain unchanged: complete Entity and BlockEntity scans,
+  BlockLocker/WWC/WWW/BAN integration, coherent snapshot, join gate, journal,
+  administrative queries, and external JE/BE/Nexo/Paper verification.
