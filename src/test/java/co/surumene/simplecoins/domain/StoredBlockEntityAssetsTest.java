@@ -26,6 +26,31 @@ class StoredBlockEntityAssetsTest {
         assertEquals(BigInteger.valueOf(300), assets.get("24,70,-9:1"));
     }
 
+    @Test void decoratedPotSingleItemStackIsIncludedInPhysicalAssets() throws Exception {
+        Map<String,Object> pot = Map.of(
+                "id", "minecraft:decorated_pot", "x", 5, "y", 70, "z", -2,
+                "item", coin(0, 3));
+        Map<String,BigInteger> assets = StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(pot)));
+        assertEquals(Map.of("5,70,-2:0", BigInteger.valueOf(300)), assets);
+    }
+
+    @Test void unknownSingleItemStorageFailsClosedInsteadOfBeingCountedAsEmpty() {
+        Map<String,Object> unknown = Map.of(
+                "id", "minecraft:unknown_storage", "x", 5, "y", 70, "z", -2,
+                "item", coin(0, 3));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(unknown))));
+    }
+
+    @Test void decoratedPotWithConflictingInventoryFormatsFailsClosed() {
+        Map<String,Object> pot = Map.of(
+                "id", "minecraft:decorated_pot", "x", 5, "y", 70, "z", -2,
+                "item", coin(0, 3), "Items", List.of(coin(0, 2)));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(pot))));
+    }
+
     @Test void unknownOrDuplicatedBlockEntityInventoryCannotBeSilentlyCountedAsZero() {
         Map<String,Object> chest = Map.of(
                 "id", "minecraft:chest", "x", 0, "y", 64, "z", 0,
