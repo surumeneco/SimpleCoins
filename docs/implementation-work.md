@@ -266,3 +266,31 @@ Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
 - Release blockers remain unchanged: complete Entity and BlockEntity scans,
   BlockLocker/WWC/WWW/BAN integration, coherent snapshot, join gate, journal,
   administrative queries, and external JE/BE/Nexo/Paper verification.
+
+## 2026-10-31: additional fail-closed gaps (not implemented)
+
+- At the start of this run, Draft PR #2 HEAD was `12f67fe`; its
+  CI run `41102729840` had completed successfully. The PR diff remained
+  86 commits ahead of `develop` with no merge.
+- A stored currency coin can currently carry a `minecraft:container`
+  component holding another currency item. `StoredItemValue.value` returns
+  the outer denomination immediately, silently omitting the nested value.
+  Regression test `7b1d7fa` produced an observed Red in Actions job
+  `124253354502` (84 tests, one failure). The production fix was explicitly
+  refused by the GitHub tool safety check; the test was removed in `79e92d1`
+  to restore the previous test baseline. **The defect remains open.**
+- `WorldSnapshotTraversal` trusts the declared REGION/ENTITY source kind
+  even when its actual parent folder is `entities`/`region` respectively.
+  A mismatched manifest can therefore misclassify the callback's data source.
+  A targeted Red test was added in `e84588d`; the independent production
+  validation update was also explicitly refused. The test was removed in
+  `c13acf3`; no fix or Green implementation is claimed. Its Actions run
+  `41111425746` was queued when checked.
+- Both refused updates used the existing-file contents API with the current
+  file blob SHA and explicit `feature/initial-domain-20261027` branch.
+  The exact tool response was a safety-check refusal, not an observed 409,
+  malformed request, or missing permission. Readback confirmed neither
+  production file changed. No equivalent write was attempted via another API.
+- CAT normative gates and Paper/JE/BE/Nexo real-device verification remain
+  not-run. The full settlement, snapshot and journal blockers remain; Draft
+  PR #2 must not be merged or released.
