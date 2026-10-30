@@ -46,4 +46,27 @@ class SavedPlayerAssetsTest {
                 Map.of("Inventory", List.of(coin(0, 1, 1), coin(0, 1, 1)),
                         "EnderItems", List.of())));
     }
+    @Test void overlappingModernAndLegacyEquipmentIsRejectedInsteadOfDoubleCounted() {
+        Map<String,Object> item = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> root = Map.of(
+                "Inventory", List.of(coin(-106, 100, 1)),
+                "EnderItems", List.of(),
+                "equipment", Map.of("offhand", item));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(root));
+    }
+
+    @Test void malformedOrUnknownEquipmentDoesNotGetSilentlyIgnored() {
+        Map<String,Object> badKind = Map.of(
+                "Inventory", List.of(), "EnderItems", List.of(),
+                "equipment", List.of("unexpected"));
+        Map<String,Object> unknownSlot = Map.of(
+                "Inventory", List.of(), "EnderItems", List.of(),
+                "equipment", Map.of("unknown_slot", Map.of()));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(badKind));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(unknownSlot));
+    }
+
 }
