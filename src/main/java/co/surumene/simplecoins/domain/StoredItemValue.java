@@ -2,9 +2,11 @@ package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Read-only value extraction for stored 26.x Java item components, including
@@ -51,6 +53,12 @@ public final class StoredItemValue {
         }
 
         if (pdc != null) {
+            // A physical item cannot simultaneously be a coin and a wallet.
+            // Otherwise one of the tagged balances is silently lost.
+            if (pdc.containsKey("simplecoins:denomination") &&
+                    (pdc.containsKey("simplecoins:wallet_id") ||
+                     pdc.containsKey("simplecoins:wallet_balance")))
+                throw new IOException("Conflicting coin and wallet identity tags");
             if (pdc.containsKey("simplecoins:denomination")) {
                 if (!id.equals("minecraft:paper") || quantity > 64 ||
                         !(pdc.get("simplecoins:denomination") instanceof Integer denomination))
@@ -91,9 +99,17 @@ public final class StoredItemValue {
         if (rawContainer != null) {
             if (!(rawContainer instanceof List<?> contents))
                 throw new IOException("Invalid container contents");
+            Set<Integer> occupiedSlots = new HashSet<>();
             for (Object entry : contents) {
                 if (!(entry instanceof Map<?,?> slot) || !slot.containsKey("item"))
                     throw new IOException("Malformed container slot");
+                Object rawSlot = slot.get("slot");
+                if (!(rawSlot instanceof Number number) ||
+                        number instanceof Float || number instanceof Double ||
+                        number.longValue() < 0 || number.longValue() > 255)
+                    throw new IOException("Invalid nested container slot");
+                if (!occupiedSlots.add(number.intValue()))
+                    throw new IOException("Duplicate nested container slot: " + number.intValue());
                 nested = nested.add(value(itemMap(slot.get("item")), depth + 1));
             }
         }
