@@ -118,6 +118,18 @@ public final class AnvilRegionReader {
 
                 try (InputStream stream = decompressor(compression, payload)) {
                     Map<String, Object> nbt = NbtReader.read(stream, maxInflatedBytes);
+                    // The Anvil header locates the physical chunk. If its NBT
+                    // declares coordinates, they must describe that same chunk;
+                    // otherwise settlement could attribute assets to a wrong slot.
+                    Object declaredX = nbt.get("xPos");
+                    Object declaredZ = nbt.get("zPos");
+                    if (declaredX != null || declaredZ != null) {
+                        if (!(declaredX instanceof Integer nbtX) ||
+                                !(declaredZ instanceof Integer nbtZ) ||
+                                nbtX != x || nbtZ != z)
+                            throw new IOException("Chunk NBT coordinates disagree with Anvil header: " +
+                                    regionFile + " at " + x + "," + z);
+                    }
                     callback.accept(new Chunk(x, z, nbt));
                 }
             }
