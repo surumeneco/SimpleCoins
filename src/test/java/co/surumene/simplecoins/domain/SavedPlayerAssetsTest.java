@@ -26,6 +26,19 @@ class SavedPlayerAssetsTest {
         assertEquals(BigInteger.valueOf(100), assets.get("ender:0"));
     }
 
+    @Test void countsModernEquipmentSlotsOutsideLegacyInventory() throws Exception {
+        Map<String,Object> equipmentCoin = Map.of(
+                "id", "minecraft:paper", "count", 2,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 50))));
+        Map<String,Object> data = Map.of(
+                "Inventory", List.of(), "EnderItems", List.of(),
+                "equipment", Map.of("offhand", equipmentCoin));
+        assertEquals(BigInteger.valueOf(100),
+                SavedPlayerAssets.extract(data).get("equipment:offhand"));
+    }
+
     @Test void missingInventoryOrDuplicatePhysicalSlotCannotBeTreatedAsComplete() {
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(
                 Map.of("Inventory", List.of(coin(0, 1, 1)))));
