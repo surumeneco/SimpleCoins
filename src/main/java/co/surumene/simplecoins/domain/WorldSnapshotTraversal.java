@@ -43,7 +43,10 @@ public final class WorldSnapshotTraversal {
             if (!paths.add(path))
                 throw new IOException("Duplicate world data source: " + path);
         }
-        for (Path raw : manifest.playerDataFiles().values()) {
+        for (var entry : manifest.playerDataFiles().entrySet()) {
+            Path raw = entry.getValue();
+            if (!raw.getFileName().toString().equals(entry.getKey() + ".dat"))
+                throw new IOException("Playerdata UUID and filename disagree: " + entry.getKey() + " vs " + raw);
             Path path = raw.toAbsolutePath().normalize();
             if (!paths.add(path))
                 throw new IOException("Duplicate or overlapping playerdata source: " + path);
