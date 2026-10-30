@@ -52,4 +52,28 @@ class PlayerDataSettlementImportTest {
         assertThrows(IllegalStateException.class, settlement::commit);
     }
 
+
+    @Test void savedPlayerWithNoCurrencyRemainsInRegisteredPopulation() throws Exception {
+        UUID player = UUID.randomUUID();
+        String source = "playerdata:" + player;
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of(source));
+        PlayerDataSettlementImport.stage(settlement, source, player, false,
+                Map.of("Inventory", List.of(), "EnderItems", List.of()));
+        var snapshot = settlement.commit();
+        assertEquals(Map.of(player, BigInteger.ZERO), snapshot.personalBalances());
+        assertEquals(1, snapshot.statistics().registeredPlayers());
+    }
+
+    @Test void bannedPlayerWithNoCurrencyIsNotRegistered() throws Exception {
+        UUID player = UUID.randomUUID();
+        String source = "playerdata:" + player;
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of(source));
+        PlayerDataSettlementImport.stage(settlement, source, player, true,
+                Map.of("Inventory", List.of(), "EnderItems", List.of()));
+        var snapshot = settlement.commit();
+        assertEquals(Map.of(), snapshot.personalBalances());
+        assertEquals(0, snapshot.statistics().registeredPlayers());
+    }
 }
