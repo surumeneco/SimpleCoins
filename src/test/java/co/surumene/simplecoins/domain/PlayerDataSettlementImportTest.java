@@ -25,4 +25,31 @@ class PlayerDataSettlementImportTest {
         assertEquals(BigInteger.valueOf(20), result.personalBalances().get(owner));
         assertEquals(BigInteger.ZERO, result.dead());
     }
+    @Test void currentlyBannedPlayerIsExcludedFromWorldTotalAndIndexedAsDead() throws Exception {
+        UUID owner = UUID.randomUUID();
+        String source = "playerdata:" + owner;
+        var settlement = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()),
+                Set.of(source));
+        Map<String,Object> coin = Map.of("Slot", (byte) 0, "id", "minecraft:paper",
+                "count", 3, "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        PlayerDataSettlementImport.stage(settlement, source, owner, true,
+                Map.of("Inventory", List.of(coin), "EnderItems", List.of()));
+        var result = settlement.commit();
+        assertEquals(BigInteger.ZERO, result.statistics().worldTotal());
+        assertEquals(BigInteger.valueOf(300), result.dead());
+        assertEquals(1, result.deadLocations().size());
+        assertTrue(result.deadLocations().getFirst().location().contains("inventory:0"));
+    }
+
+    @Test void unreadableSavedInventoryPreventsSettlementCommit() {
+        UUID owner = UUID.randomUUID();
+        String source = "playerdata:" + owner;
+        var settlement = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()),
+                Set.of(source));
+        assertThrows(java.io.IOException.class, () -> PlayerDataSettlementImport.stage(
+                settlement, source, owner, false, Map.of("Inventory", List.of())));
+        assertThrows(IllegalStateException.class, settlement::commit);
+    }
+
 }
