@@ -40,6 +40,18 @@ class StoredItemValueTest {
         assertEquals(BigInteger.valueOf(31), StoredItemValue.value(shulker));
     }
 
+    @Test void coinWithHiddenContainerContentsMustNotSilentlyLoseAssetValue() {
+        Map<String,Object> hidden = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of(
+                        "minecraft:custom_data", Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 5)),
+                        "minecraft:container", java.util.List.of(
+                                Map.of("slot", 0, "item", hidden))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(coin));
+    }
+
     @Test void walletWithHiddenBundleContentsMustNotSilentlyLoseAssetValue() {
         Map<String,Object> hidden = item("minecraft:paper", 1,
                 Map.of("simplecoins:denomination", 100));
