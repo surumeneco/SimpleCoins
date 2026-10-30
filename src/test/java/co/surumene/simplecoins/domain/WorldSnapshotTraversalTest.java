@@ -117,4 +117,25 @@ class WorldSnapshotTraversalTest {
                     @Override public void player(UUID player, Map<String,Object> data) {}
                 }));
     }
+    @Test void rejectsPlayerdataManifestWithMismatchedUuidBeforeVisitingAssets() throws Exception {
+        UUID actual = UUID.randomUUID();
+        UUID claimed = UUID.randomUUID();
+        Path file = player(actual, 25);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(claimed, file));
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                        new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> data) {
+                        visited.incrementAndGet();
+                    }
+                }));
+        assertEquals(0, visited.get());
+    }
+
 }
