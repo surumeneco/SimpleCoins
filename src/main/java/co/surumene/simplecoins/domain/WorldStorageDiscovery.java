@@ -74,8 +74,11 @@ public final class WorldStorageDiscovery {
             if (worldName == null || worldName.isBlank() || rawRoot == null)
                 throw new IllegalArgumentException("Missing world name or folder");
             Path root = rawRoot.toAbsolutePath().normalize();
-            if (!worldRoots.add(root))
-                throw new IOException("Two world names resolve to the same storage folder: " + root);
+            for (Path existingRoot : worldRoots) {
+                if (root.startsWith(existingRoot) || existingRoot.startsWith(root))
+                    throw new IOException("Overlapping world storage roots: " + existingRoot + " and " + root);
+            }
+            worldRoots.add(root);
             if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("World storage root missing or symbolic: " + root);
 
