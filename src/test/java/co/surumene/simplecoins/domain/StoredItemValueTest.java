@@ -27,4 +27,17 @@ class StoredItemValueTest {
                 Map.of("simplecoins:denomination", 123));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
     }
+    @Test void includesAssetsInNestedBundleAndShulkerContents() throws Exception {
+        Map<String,Object> coin = item("minecraft:paper", 2,
+                Map.of("simplecoins:denomination", 5));
+        Map<String,Object> wallet = item("minecraft:bundle", 1,
+                Map.of("simplecoins:wallet_id", "nested-wallet", "simplecoins:wallet_balance", 21L));
+        Map<String,Object> bundle = Map.of("id", "minecraft:bundle", "count", 1,
+                "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin, wallet)));
+        Map<String,Object> shulker = Map.of("id", "minecraft:shulker_box", "count", 1,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 0, "item", bundle))));
+        assertEquals(BigInteger.valueOf(31), StoredItemValue.value(shulker));
+    }
+
 }
