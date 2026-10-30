@@ -117,6 +117,25 @@ class WorldSnapshotTraversalTest {
                     @Override public void player(UUID player, Map<String,Object> data) {}
                 }));
     }
+    @Test void rejectsMislabeledEntityRegionBeforeVisitingAssets() throws Exception {
+        Path entityFile = region("entities", 10);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", entityFile,
+                        WorldStorageDiscovery.Kind.REGION)), Map.of());
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> data) {
+                        visited.incrementAndGet();
+                    }
+                }));
+        assertEquals(0, visited.get());
+    }
+
     @Test void rejectsPlayerdataManifestWithMismatchedUuidBeforeVisitingAssets() throws Exception {
         UUID actual = UUID.randomUUID();
         UUID claimed = UUID.randomUUID();
