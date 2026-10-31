@@ -341,3 +341,41 @@ Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
 - Green implementation `9edfc5e8` adds physical-file identity checks to `WorldStorageDiscovery` across discovered worlds. When `BasicFileAttributes.fileKey()` is available, a keyed lookup avoids quadratic file comparisons; when it is unavailable, `Files.isSameFile` compares against previously accepted paths. Aliased physical region files now fail discovery rather than being counted twice.
 - GitHub Actions `41157298580` completed successfully (JUnit, domainContractCheck, Gradle build and artifact steps). This is only a storage-manifest integrity guard. It does not provide a consistent live snapshot, loaded/unloaded reconciliation, complete Entity/BlockEntity ownership, BAN/WWC/WWW adapters, journal, join gate or administrative statistics. CAT normative gates and Paper/JE/BE/Nexo real-server checks remain not-run.
 - Keep Draft PR #2 open and unmerged. Neither `develop` nor `main` is ready for this incomplete 1.0.0 release.
+
+
+## 2026-10-31: three fail-closed settlement integrity fixes
+
+- BlockEntity ownership consistency: Red test `3514368f` failed in
+  GitHub Actions `41161808980` (89 tests, one expected failure).
+  Production fix `cb7fe5b9` resolves the authoritative owner only once
+  for each physical block across its nonzero currency slots in a chunk,
+  preventing a single container from being split across changing owners.
+  Actions `41161919898` and `41161917703` both passed.
+- Saved playerdata selected mainhand: Red test `a8328531` failed in
+  Actions `41162003212` (90 tests, one expected failure).
+  Fix `ba4b4558` rejects overlap between `SelectedItemSlot`'s
+  inventory hotbar slot and `equipment.mainhand` rather than counting
+  one physical currency stack twice. Actions `41162091369` and
+  `41162086360` both passed.
+- Anvil source kind: Red test `0868298a` failed in Actions
+  `41162131767` (91 tests, one expected failure).
+  Fix `2a5a1961` rejects a manifest that declares REGION for a
+  file under `entities` or ENTITY under `region`, before any
+  visitor stages assets. Actions `41162224987` and `41162221032`
+  both passed.
+- These supersede the earlier *unresolved* entries for per-container
+  owner consistency, selected-mainhand overlap and declared source kind.
+  The earlier failures and write refusals remain historical evidence,
+  not a statement that the defects remain open.
+- A separate attempt to add a regression for a currency coin carrying
+  a nonempty `minecraft:container` component was rejected by the
+  GitHub tool safety check before commit. Readback confirmed no change
+  to `StoredItemValueTest.java`; the hidden-descendant risk remains
+  unresolved and must not be treated as an implemented fix.
+
+These are Domain/manifest integrity checks only. Complete authoritative
+BlockLocker/WWC/WWW/BAN resolution, Entity coverage, snapshot coherence,
+join gate, ongoing journal, administration, Nexo/Bedrock integration and
+real Paper/JE/BE validation remain release blockers. CAT normative Gate
+was not run because the current Skill listing returned no available
+Skills. Keep PR #2 Draft; do not merge or release.
