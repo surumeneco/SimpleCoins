@@ -89,4 +89,12 @@ class StoredItemValueTest {
                 "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin)));
         assertEquals(BigInteger.valueOf(100), StoredItemValue.value(bundle));
     }
+
+    @Test void overflowingArbitraryNumberMustNotMasqueradeAsOneCoin() {
+        BigInteger overflowing = BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE);
+        Map<String, Object> malformed = Map.of("id", "minecraft:paper", "count", overflowing,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(malformed));
+    }
 }
