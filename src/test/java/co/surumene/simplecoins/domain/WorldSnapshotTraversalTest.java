@@ -138,4 +138,22 @@ class WorldSnapshotTraversalTest {
         assertEquals(0, visited.get());
     }
 
+
+    @Test void declaredRegionKindMustMatchThePhysicalStorageDirectory() throws Exception {
+        Path entities = region("entities", 10);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", entities, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                        new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> data) {}
+                }));
+        assertEquals(0, visited.get(), "Reject a forged manifest before staging assets");
+    }
 }
