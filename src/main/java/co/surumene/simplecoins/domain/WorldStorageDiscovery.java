@@ -66,6 +66,8 @@ public final class WorldStorageDiscovery {
         List<SourceFile> worldFiles = new ArrayList<>();
         Map<UUID, Path> players = new HashMap<>();
         Set<Path> worldRoots = new HashSet<>();
+        Map<Object, Path> regionIdentityByKey = new HashMap<>();
+        List<Path> unkeyedRegionPaths = new ArrayList<>();
         int[] visited = {0};
 
         for (var entry : worldFolders.entrySet()) {
@@ -125,6 +127,8 @@ public final class WorldStorageDiscovery {
                         };
                         if (kind != null && isExpectedWorldStorage(file, root)) {
                             requireCanonicalRegionFilename(filename);
+                            requireUniqueRegionIdentity(file, attrs.fileKey(),
+                                    regionIdentityByKey, unkeyedRegionPaths);
                             worldFiles.add(new SourceFile(worldName, file, kind));
                         }
                     }
@@ -159,6 +163,33 @@ public final class WorldStorageDiscovery {
         return size == 4 && "dimensions".equals(relative.getName(0).toString())
                 && !relative.getName(1).toString().isBlank()
                 && !relative.getName(2).toString().isBlank();
+    }
+
+    /**
+     * A hard link can give one physical region multiple valid coordinate names.
+     * Detect it across all worlds without quadratic comparisons on file systems
+     * that provide stable file keys. Fall back to isSameFile when a key is absent.
+     */
+    private static void requireUniqueRegionIdentity(Path file, Object key,
+                                                    Map<Object, Path> keyed,
+                                                    List<Path> unkeyed) throws IOException {
+        if (key != null) {
+            Path previous = keyed.get(key);
+            if (previous != null)
+                throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+            for (Path previousUnknown : unkeyed)
+                if (Files.isSameFile(previousUnknown, file))
+                    throw new IOException("Aliased physical Anvil region: " + previousUnknown + " and " + file);
+            keyed.put(key, file);
+        } else {
+            for (Path previous : keyed.values())
+                if (Files.isSameFile(previous, file))
+                    throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+            for (Path previous : unkeyed)
+                if (Files.isSameFile(previous, file))
+                    throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+            unkeyed.add(file);
+        }
     }
 
     /**
