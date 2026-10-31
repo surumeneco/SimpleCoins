@@ -1,0 +1,26 @@
+package co.surumene.simplecoins.domain;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+
+class ItemDisplaySettlementImportTest {
+    @Test void itemDisplayCurrencyStagesAsFreeWithoutCompletingEntitySource() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> display = Map.of("id", "minecraft:item_display",
+                "UUID", new int[]{0, 0, 0, 50}, "item", coin);
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        ItemDisplaySettlementImport.stageChunk(settlement, "entities:file", "world",
+                Map.of("Entities", List.of(display)));
+        assertThrows(IllegalStateException.class, settlement::commit);
+        settlement.completeSource("entities:file");
+        assertEquals(BigInteger.valueOf(100), settlement.commit().free());
+    }
+}
