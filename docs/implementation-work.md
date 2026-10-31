@@ -333,3 +333,11 @@ Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
   BlockLocker/WWC/WWW/BAN ownership, or provide the journal, join gate,
   administrative queries and external JE/BE/Nexo/Paper verification.
   CAT normative gates remain not-run. PR #2 remains Draft.
+
+
+## 2026-10-31: reject physical hard-link aliases of Anvil region files
+
+- Red regression `3f85a810` added `hardLinkedRegionFilesMustNotBeCountedAsIndependentSources`: two distinct canonical `.mca` names referencing the same inode must not be accepted as two economic sources. GitHub Actions `41157188587` observed 88 tests, one expected failure.
+- Green implementation `9edfc5e8` adds physical-file identity checks to `WorldStorageDiscovery` across discovered worlds. When `BasicFileAttributes.fileKey()` is available, a keyed lookup avoids quadratic file comparisons; when it is unavailable, `Files.isSameFile` compares against previously accepted paths. Aliased physical region files now fail discovery rather than being counted twice.
+- GitHub Actions `41157298580` completed successfully (JUnit, domainContractCheck, Gradle build and artifact steps). This is only a storage-manifest integrity guard. It does not provide a consistent live snapshot, loaded/unloaded reconciliation, complete Entity/BlockEntity ownership, BAN/WWC/WWW adapters, journal, join gate or administrative statistics. CAT normative gates and Paper/JE/BE/Nexo real-server checks remain not-run.
+- Keep Draft PR #2 open and unmerged. Neither `develop` nor `main` is ready for this incomplete 1.0.0 release.
