@@ -55,7 +55,8 @@ public final class StoredEntityInventoryAssets {
                 if (slotted) {
                     Object rawSlot = stack.get("Slot");
                     if (!(rawSlot instanceof Number slot) ||
-                            slot instanceof Float || slot instanceof Double ||
+                            !(slot instanceof Byte || slot instanceof Short ||
+                              slot instanceof Integer || slot instanceof Long) ||
                             slot.longValue() < 0 || slot.longValue() > 255)
                         throw new IOException("Invalid Entity inventory slot: " + key);
                     index = slot.intValue();
