@@ -90,6 +90,10 @@ public final class SavedPlayerAssets {
                     slot.longValue() < -128 || slot.longValue() > 255)
                 throw new IOException("Missing or invalid playerdata physical slot in " + key);
 
+            // Ender chests have exactly 27 slots (0..26). Unlike the
+            // player inventory, negative legacy equipment slots are invalid.
+            if ("ender".equals(prefix) && (slot.longValue() < 0 || slot.longValue() > 26))
+                throw new IOException("Invalid Ender Chest slot: " + slot.longValue());
             String physical = prefix + ":" + slot.intValue();
             if (!visitedSlots.add(physical))
                 throw new IOException("Duplicate playerdata physical slot: " + physical);
