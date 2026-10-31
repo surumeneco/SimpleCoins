@@ -84,4 +84,11 @@ class SavedPlayerAssetsTest {
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(root),
                 "A selected hotbar slot and equipment.mainhand cannot both be counted");
     }
+
+    @Test void enderChestSlotOutsideItsTwentySevenSlotsMustFailClosed() {
+        Map<String,Object> data = Map.of(
+                "Inventory", List.of(),
+                "EnderItems", List.of(coin(-1, 100, 1)));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(data));
+    }
 }
