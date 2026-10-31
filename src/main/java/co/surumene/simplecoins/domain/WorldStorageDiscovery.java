@@ -123,8 +123,10 @@ public final class WorldStorageDiscovery {
                             case "entities" -> Kind.ENTITY;
                             default -> null;
                         };
-                        if (kind != null && isExpectedWorldStorage(file, root))
+                        if (kind != null && isExpectedWorldStorage(file, root)) {
+                            requireCanonicalRegionFilename(filename);
                             worldFiles.add(new SourceFile(worldName, file, kind));
+                        }
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -157,6 +159,25 @@ public final class WorldStorageDiscovery {
         return size == 4 && "dimensions".equals(relative.getName(0).toString())
                 && !relative.getName(1).toString().isBlank()
                 && !relative.getName(2).toString().isBlank();
+    }
+
+    /**
+     * Noncanonical coordinate spellings such as r.00.0.mca or r.+0.0.mca
+     * identify the same physical chunk slots as r.0.0.mca. Refuse aliases
+     * rather than allowing the same currency to be scanned twice.
+     */
+    private static void requireCanonicalRegionFilename(String filename) throws IOException {
+        String[] parts = filename.split("\\.", -1);
+        if (parts.length != 4 || !"r".equals(parts[0]) || !"mca".equals(parts[3]))
+            throw new IOException("Invalid Anvil region filename: " + filename);
+        try {
+            int x = Integer.parseInt(parts[1]);
+            int z = Integer.parseInt(parts[2]);
+            if (!filename.equals("r." + x + "." + z + ".mca"))
+                throw new IOException("Noncanonical Anvil region filename: " + filename);
+        } catch (NumberFormatException failure) {
+            throw new IOException("Invalid Anvil region coordinates: " + filename, failure);
+        }
     }
 
     private static boolean isPlayerData(Path file, Path root) {
