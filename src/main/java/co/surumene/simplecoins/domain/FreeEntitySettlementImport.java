@@ -13,6 +13,7 @@ public final class FreeEntitySettlementImport {
 
     public static void stageChunk(SettlementAccumulator settlement, String source,
                                   String world, Map<String, Object> chunk) throws IOException {
+        SavedEntityUuidIntegrity.validate(chunk);
         DroppedItemSettlementImport.stageChunk(settlement, source, world, chunk);
         ItemFrameSettlementImport.stageChunk(settlement, source, world, chunk);
         ItemDisplaySettlementImport.stageChunk(settlement, source, world, chunk);
