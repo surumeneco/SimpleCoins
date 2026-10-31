@@ -5,6 +5,7 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -14,6 +15,13 @@ import java.util.UUID;
  * then complete the source only after every chunk has been examined.
  */
 public final class BlockEntitySettlementImport {
+    private static final Set<String> INVENTORY_BLOCK_IDS = Set.of(
+            "minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel",
+            "minecraft:shulker_box", "minecraft:hopper", "minecraft:dispenser",
+            "minecraft:dropper", "minecraft:furnace", "minecraft:blast_furnace",
+            "minecraft:smoker", "minecraft:brewing_stand", "minecraft:crafter",
+            "minecraft:chiseled_bookshelf");
+
     private BlockEntitySettlementImport() {}
 
     public record Ownership(UUID owner, boolean everyoneProtected,
@@ -42,7 +50,9 @@ public final class BlockEntitySettlementImport {
             // across independently staged sources.
             for (Object rawBlock : (List<?>) chunk.get("block_entities")) {
                 Map<?, ?> entity = (Map<?, ?>) rawBlock; // validated by extract()
-                if (!entity.containsKey("Items")) continue;
+                // An empty vanilla container may omit the Items tag entirely.
+                if (!entity.containsKey("Items") &&
+                        !INVENTORY_BLOCK_IDS.contains(entity.get("id"))) continue;
                 String block = entity.get("x") + "," + entity.get("y") + "," + entity.get("z");
                 Ownership ownership = resolver.resolve(block);
                 if (ownership == null)
