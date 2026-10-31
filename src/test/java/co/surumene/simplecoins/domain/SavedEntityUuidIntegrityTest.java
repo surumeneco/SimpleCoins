@@ -15,4 +15,20 @@ class SavedEntityUuidIntegrityTest {
         assertThrows(java.io.IOException.class, () ->
                 SavedEntityUuidIntegrity.validate(Map.of("Entities", List.of(dropped, frame))));
     }
+
+    @Test void distinctUuidsAcrossEntityTypesAreAccepted() {
+        Map<String, Object> dropped = Map.of("id", "minecraft:item",
+                "UUID", new int[]{0, 0, 0, 80});
+        Map<String, Object> frame = Map.of("id", "minecraft:item_frame",
+                "UUID", new int[]{0, 0, 0, 81});
+        assertDoesNotThrow(() ->
+                SavedEntityUuidIntegrity.validate(Map.of("Entities", List.of(dropped, frame))));
+    }
+
+    @Test void malformedUuidOnOtherwiseUnvaluedEntityIsRejected() {
+        Map<String, Object> frame = Map.of("id", "minecraft:item_frame",
+                "UUID", new int[]{0, 0, 80});
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityUuidIntegrity.validate(Map.of("Entities", List.of(frame))));
+    }
 }
