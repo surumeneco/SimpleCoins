@@ -72,4 +72,12 @@ class StoredItemValueTest {
                         Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
         assertEquals(BigInteger.valueOf(100), StoredItemValue.value(singleCoin));
     }
+
+    @Test void impossibleModernStackCountCannotMultiplyNestedCurrency() {
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> impossible = Map.of("id", "minecraft:bundle", "count", 100,
+                "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin)));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(impossible));
+    }
 }
