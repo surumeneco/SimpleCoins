@@ -63,6 +63,12 @@ public final class StoredItemValue {
                 if (!id.equals("minecraft:paper") || quantity > 64 ||
                         !(pdc.get("simplecoins:denomination") instanceof Integer denomination))
                     throw new IOException("Malformed stored coin");
+                // Coin identity is incompatible with nested storage. Otherwise the
+                // early denomination return would silently omit hidden assets.
+                for (String childKey : List.of("minecraft:bundle_contents", "minecraft:container")) {
+                    if (components.containsKey(childKey))
+                        throw new IOException("Coin contains unexpected nested storage: " + childKey);
+                }
                 try {
                     return BigInteger.valueOf(CoinDenomination.fromValue(denomination).value())
                             .multiply(BigInteger.valueOf(quantity));
