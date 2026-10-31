@@ -64,4 +64,12 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(malformedCoin));
     }
 
+
+    @Test void omittedModernItemCountMeansOneNotCorruptOrZero() throws Exception {
+        // The modern item codec omits count for a single-item stack.
+        Map<String,Object> singleCoin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        assertEquals(BigInteger.valueOf(100), StoredItemValue.value(singleCoin));
+    }
 }
