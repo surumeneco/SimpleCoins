@@ -178,4 +178,25 @@ class WorldSnapshotTraversalTest {
                 }));
         assertEquals(0, visited.get(), "Reject aliased physical sources before callbacks");
     }
+
+    @Test void manuallySuppliedHardLinkedPlayerdataCannotRegisterTwoUuids() throws Exception {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        Path original = player(first, 10);
+        Path alias = original.resolveSibling(second + ".dat");
+        Files.createLink(alias, original);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(first, original, second, alias));
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                        new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {}
+                    @Override public void player(UUID player, Map<String,Object> data) {
+                        visited.incrementAndGet();
+                    }
+                }));
+        assertEquals(0, visited.get(), "Reject aliased playerdata before callbacks");
+    }
 }
