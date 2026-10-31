@@ -8,6 +8,7 @@ Status: **Draft / not Confirmed**. Source: SimpleCoins 02B and 05 Phase 5/G0 fai
 - PI-1: a present `count` must be a finite integer NBT scalar (Byte, Short, Integer, or Long), within the existing supported stack range.
 - PI-2: a malformed numeric representation must fail the source; coercing arbitrary `Number.longValue()` can overflow and undercount currency.
 - PI-3: an omitted modern `count` still means one; valid NBT numeric counts preserve current behavior.
+- PI-4: a stored container slot index must also be a finite integer NBT scalar; an overflowing arbitrary Number must not alias a valid slot.
 
 ## TCE
 
@@ -16,5 +17,6 @@ Status: **Draft / not Confirmed**. Source: SimpleCoins 02B and 05 Phase 5/G0 fai
 | NUM-01 | coin with `count = BigInteger(2^64 + 1)` | IOException, not a one-coin value |
 | NUM-02 | coin with `count = 1` as Integer | one coin value |
 | NUM-03 | omitted `count` | one coin value |
+| NUM-04 | block-entity slot with `BigInteger(2^64)` | IOException rather than slot 0 |
 
 Formal CAT process-closure, TestModel, vectors, Queue and implementation-conformance are **not-run**; no Confirmed promotion is implied. Red/Green must be independently verified in feature-branch CI.
