@@ -136,4 +136,16 @@ class WorldStorageDiscoveryTest {
         assertEquals(Map.of(actualPlayer, liveData.toAbsolutePath()), manifest.playerDataFiles());
     }
 
+    @Test void hardLinkedRegionFilesMustNotBeCountedAsIndependentSources() throws Exception {
+        Path regions = directory.resolve("world/region");
+        Files.createDirectories(regions);
+        Path original = regions.resolve("r.0.0.mca");
+        Path alias = regions.resolve("r.1.0.mca");
+        Files.write(original, new byte[8192]);
+        Files.createLink(alias, original);
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", directory.resolve("world")),
+                new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
 }
