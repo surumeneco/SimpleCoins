@@ -30,9 +30,10 @@ public final class StoredItemValue {
         // An explicitly present but malformed count must still fail closed.
         Object rawCount = item.getOrDefault("count", Integer.valueOf(1));
         if (!(rawId instanceof String id) || id.isBlank() ||
-                !(rawCount instanceof Number count) || count.longValue() <= 0 ||
-                count.longValue() > 99 ||
-                count instanceof Float || count instanceof Double)
+                !(rawCount instanceof Number count) ||
+                !(count instanceof Byte || count instanceof Short ||
+                  count instanceof Integer || count instanceof Long) ||
+                count.longValue() <= 0 || count.longValue() > 99)
             throw new IOException("Invalid stored item identity or count");
         long quantity = count.longValue();
 
