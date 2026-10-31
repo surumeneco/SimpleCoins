@@ -98,4 +98,17 @@ class BlockEntitySettlementImportTest {
         assertEquals(1, result.statistics().registeredPlayers());
         assertEquals(BigInteger.ZERO, result.statistics().worldTotal());
     }
+
+    @Test void emptyProtectedChestWithoutItemsTagStillRetainsZeroBalanceOwner() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        Map<String,Object> emptyChest = Map.of(
+                "id", "minecraft:chest", "x", -3, "y", 64, "z", 2);
+        BlockEntitySettlementImport.stageChunk(settlement, "region:file", "world",
+                Map.of("block_entities", List.of(emptyChest)),
+                position -> new BlockEntitySettlementImport.Ownership(owner, false, false, true));
+        settlement.completeSource("region:file");
+        assertEquals(Map.of(owner, BigInteger.ZERO), settlement.commit().personalBalances());
+    }
 }
