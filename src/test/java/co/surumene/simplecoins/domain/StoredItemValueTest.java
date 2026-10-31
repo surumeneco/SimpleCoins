@@ -80,4 +80,13 @@ class StoredItemValueTest {
                 "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin)));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(impossible));
     }
+
+    @Test void defaultCountOneAlsoAppliesToNestedContainerItems() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> bundle = Map.of("id", "minecraft:bundle",
+                "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin)));
+        assertEquals(BigInteger.valueOf(100), StoredItemValue.value(bundle));
+    }
 }
