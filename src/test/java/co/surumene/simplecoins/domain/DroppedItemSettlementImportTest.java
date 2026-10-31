@@ -25,4 +25,22 @@ class DroppedItemSettlementImportTest {
         assertEquals(BigInteger.valueOf(200), result.free());
         assertEquals(BigInteger.valueOf(200), result.statistics().worldTotal());
     }
+
+    @Test void duplicatedDroppedUuidAcrossWorldsCannotBePublishedTwice() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> entity = Map.of("id", "minecraft:item",
+                "UUID", new int[]{0, 0, 0, 7}, "Item", coin);
+        Map<String,Object> chunk = Map.of("Entities", List.of(entity));
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        DroppedItemSettlementImport.stageChunk(settlement, "entities:file", "world-a", chunk);
+        assertThrows(IllegalArgumentException.class, () ->
+                DroppedItemSettlementImport.stageChunk(settlement, "entities:file", "world-b", chunk),
+                "Entity UUID is a physical identity, even when its storage world differs");
+        settlement.completeSource("entities:file");
+        assertThrows(IllegalStateException.class, settlement::commit,
+                "A duplicate Entity UUID must invalidate the entire staged settlement");
+    }
 }
