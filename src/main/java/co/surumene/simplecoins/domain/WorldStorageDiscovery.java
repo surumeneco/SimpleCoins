@@ -68,6 +68,8 @@ public final class WorldStorageDiscovery {
         Set<Path> worldRoots = new HashSet<>();
         Map<Object, Path> regionIdentityByKey = new HashMap<>();
         List<Path> unkeyedRegionPaths = new ArrayList<>();
+        Map<Object, Path> playerIdentityByKey = new HashMap<>();
+        List<Path> unkeyedPlayerPaths = new ArrayList<>();
         int[] visited = {0};
 
         for (var entry : worldFolders.entrySet()) {
@@ -118,6 +120,8 @@ public final class WorldStorageDiscovery {
                         if (previous != null)
                             throw new IOException("Ambiguous playerdata authority for " + uuid + ": " +
                                     previous + " and " + file);
+                        requireUniquePhysicalFile(file, attrs.fileKey(),
+                                playerIdentityByKey, unkeyedPlayerPaths, "playerdata");
                     } else if (scope.includes(worldName)
                             && filename.endsWith(".mca")) {
                         Kind kind = switch (parent) {
@@ -127,8 +131,8 @@ public final class WorldStorageDiscovery {
                         };
                         if (kind != null && isExpectedWorldStorage(file, root)) {
                             requireCanonicalRegionFilename(filename);
-                            requireUniqueRegionIdentity(file, attrs.fileKey(),
-                                    regionIdentityByKey, unkeyedRegionPaths);
+                            requireUniquePhysicalFile(file, attrs.fileKey(),
+                                    regionIdentityByKey, unkeyedRegionPaths, "Anvil region");
                             worldFiles.add(new SourceFile(worldName, file, kind));
                         }
                     }
@@ -170,24 +174,25 @@ public final class WorldStorageDiscovery {
      * Detect it across all worlds without quadratic comparisons on file systems
      * that provide stable file keys. Fall back to isSameFile when a key is absent.
      */
-    private static void requireUniqueRegionIdentity(Path file, Object key,
-                                                    Map<Object, Path> keyed,
-                                                    List<Path> unkeyed) throws IOException {
+    private static void requireUniquePhysicalFile(Path file, Object key,
+                                                  Map<Object, Path> keyed,
+                                                  List<Path> unkeyed,
+                                                  String category) throws IOException {
         if (key != null) {
             Path previous = keyed.get(key);
             if (previous != null)
-                throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+                throw new IOException("Aliased physical " + category + ": " + previous + " and " + file);
             for (Path previousUnknown : unkeyed)
                 if (Files.isSameFile(previousUnknown, file))
-                    throw new IOException("Aliased physical Anvil region: " + previousUnknown + " and " + file);
+                    throw new IOException("Aliased physical " + category + ": " + previousUnknown + " and " + file);
             keyed.put(key, file);
         } else {
             for (Path previous : keyed.values())
                 if (Files.isSameFile(previous, file))
-                    throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+                    throw new IOException("Aliased physical " + category + ": " + previous + " and " + file);
             for (Path previous : unkeyed)
                 if (Files.isSameFile(previous, file))
-                    throw new IOException("Aliased physical Anvil region: " + previous + " and " + file);
+                    throw new IOException("Aliased physical " + category + ": " + previous + " and " + file);
             unkeyed.add(file);
         }
     }
