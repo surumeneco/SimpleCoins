@@ -315,3 +315,21 @@ Keep PR #2 Draft; do not merge to develop/main or release 1.0.0.
   External standard/IP/plugin BAN sources remain unintegrated.
 - CAT normative gates and real Paper/Geyser/Nexo verification are not-run.
   Preserve PR #2 as Draft and do not publish settlement totals.
+
+## 2026-10-31: reject aliased Anvil region filenames
+
+- A region directory could contain both `r.0.0.mca` and aliases such as
+  `r.00.0.mca`, `r.+0.0.mca`, or `r.-0.0.mca`. Integer coordinate parsing
+  resolves each to the same chunk slots, so independently scanning both files
+  could double-count the same physical currency.
+- Red regression `ed549655` added `noncanonicalRegionNamesCannotAliasTheSameChunkCoordinates`.
+  GitHub Actions `41152703643` observed 87 tests, one expected failure.
+- Green fix `039ef72f` validates canonical, 32-bit Anvil region coordinate
+  filenames during authoritative world-file discovery, rejecting aliases and
+  malformed names before manifest publication. GitHub Actions `41152768123`
+  completed successfully.
+- This closes only region filename aliasing. It does not establish a coherent
+  live-world snapshot, enumerate all Entity/BlockEntity assets, resolve
+  BlockLocker/WWC/WWW/BAN ownership, or provide the journal, join gate,
+  administrative queries and external JE/BE/Nexo/Paper verification.
+  CAT normative gates remain not-run. PR #2 remains Draft.
