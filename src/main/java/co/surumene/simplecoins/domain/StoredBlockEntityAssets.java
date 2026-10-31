@@ -71,8 +71,10 @@ public final class StoredBlockEntityAssets {
                 if (!(rawStack instanceof Map<?, ?> stack))
                     throw new IOException("Malformed item in block entity " + pos);
                 Object rawSlot = stack.get("Slot");
-                if (!(rawSlot instanceof Number n) || n instanceof Float ||
-                        n instanceof Double || n.longValue() < 0 || n.longValue() > 255)
+                if (!(rawSlot instanceof Number n) ||
+                        !(n instanceof Byte || n instanceof Short ||
+                          n instanceof Integer || n instanceof Long) ||
+                        n.longValue() < 0 || n.longValue() > 255)
                     throw new IOException("Invalid block entity slot at " + pos);
                 int slot = n.intValue();
                 if (!slots.add(slot))
