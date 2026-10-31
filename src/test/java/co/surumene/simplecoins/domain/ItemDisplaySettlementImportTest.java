@@ -58,4 +58,20 @@ class ItemDisplaySettlementImportTest {
         settlement.completeSource("entities:file");
         assertEquals(BigInteger.valueOf(300), settlement.commit().free());
     }
+
+    @Test void failedFrameAfterStagedDropCannotPublishPartialEntityTotal() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> dropped = Map.of("id", "minecraft:item",
+                "UUID", new int[]{0, 0, 0, 60}, "Item", coin);
+        Map<String, Object> corruptFrame = Map.of("id", "minecraft:item_frame",
+                "UUID", new int[]{0, 0, 0, 61}, "Item", "corrupt");
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        assertThrows(java.io.IOException.class, () ->
+                FreeEntitySettlementImport.stageChunk(settlement, "entities:file", "world",
+                        Map.of("Entities", List.of(dropped, corruptFrame))));
+        assertThrows(IllegalStateException.class, settlement::commit);
+    }
 }
