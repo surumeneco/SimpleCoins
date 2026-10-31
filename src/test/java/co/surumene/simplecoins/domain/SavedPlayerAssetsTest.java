@@ -91,4 +91,11 @@ class SavedPlayerAssetsTest {
                 "EnderItems", List.of(coin(-1, 100, 1)));
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(data));
     }
+
+    @Test void enderChestSlotBeyondTwentySixMustFailClosed() {
+        Map<String,Object> data = Map.of(
+                "Inventory", List.of(),
+                "EnderItems", List.of(coin(27, 100, 1)));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(data));
+    }
 }
