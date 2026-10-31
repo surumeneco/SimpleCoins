@@ -22,8 +22,12 @@ public final class DroppedItemSettlementImport {
             Map<String, BigInteger> assets = StoredDroppedItemAssets.extract(chunk);
             for (var entry : assets.entrySet()) {
                 String location = "world/" + world + "/entity/" + entry.getKey();
+                // Entity UUID is a global physical identity, not a world-local
+                // slot. Including the world in the deduplication key would
+                // silently count a copied/moved entity twice in one settlement.
+                String physicalKey = "entity/" + entry.getKey();
                 settlement.accept(new SettlementAccumulator.Asset(
-                        source, location, world, null, false, false, false,
+                        source, physicalKey, world, null, false, false, false,
                         entry.getValue(), location));
             }
             // Other chunks belong to the same source; completion is external.
