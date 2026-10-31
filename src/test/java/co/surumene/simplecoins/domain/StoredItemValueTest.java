@@ -97,4 +97,13 @@ class StoredItemValueTest {
                         Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(malformed));
     }
+
+    @Test void overflowingNestedContainerSlotMustNotAliasSlotZero() {
+        Map<String, Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String, Object> container = Map.of("id", "minecraft:shulker_box",
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", BigInteger.ONE.shiftLeft(64), "item", coin))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(container));
+    }
 }
