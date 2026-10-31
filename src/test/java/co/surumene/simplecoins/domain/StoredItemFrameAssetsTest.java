@@ -23,4 +23,21 @@ class StoredItemFrameAssetsTest {
                 "00000000-0000-0000-0000-00000000000b", BigInteger.valueOf(100)),
                 StoredItemFrameAssets.extract(Map.of("Entities", List.of(frame, glow, empty))));
     }
+
+    @Test void duplicatedPhysicalFrameUuidMustNotBeCountedTwice() {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> frame = Map.of("id", "minecraft:item_frame",
+                "UUID", new int[]{0, 0, 0, 7}, "Item", coin);
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemFrameAssets.extract(Map.of("Entities", List.of(frame, frame))));
+    }
+
+    @Test void malformedStoredFrameStackMustFailClosed() {
+        Map<String, Object> frame = Map.of("id", "minecraft:glow_item_frame",
+                "UUID", new int[]{0, 0, 0, 7}, "Item", "not-an-item-compound");
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemFrameAssets.extract(Map.of("Entities", List.of(frame))));
+    }
 }
