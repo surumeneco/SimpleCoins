@@ -31,7 +31,7 @@ public final class StoredItemValue {
         Object rawCount = item.getOrDefault("count", Integer.valueOf(1));
         if (!(rawId instanceof String id) || id.isBlank() ||
                 !(rawCount instanceof Number count) || count.longValue() <= 0 ||
-                count.longValue() > Integer.MAX_VALUE ||
+                count.longValue() > 99 ||
                 count instanceof Float || count instanceof Double)
             throw new IOException("Invalid stored item identity or count");
         long quantity = count.longValue();
