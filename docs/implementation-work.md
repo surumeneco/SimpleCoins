@@ -379,3 +379,31 @@ join gate, ongoing journal, administration, Nexo/Bedrock integration and
 real Paper/JE/BE validation remain release blockers. CAT normative Gate
 was not run because the current Skill listing returned no available
 Skills. Keep PR #2 Draft; do not merge or release.
+
+## 2026-10-31: hidden coin storage and saved dropped-item staging
+
+- The earlier hidden-descendant defect in `StoredItemValue` is now fixed:
+  Red test `189f3b4f` observed 92 tests / one failure in Actions
+  `41166044708` (also PR run `41166048048`).
+  Production fix `9cee3b50` rejects coin-tagged items that also carry
+  `minecraft:container` or `minecraft:bundle_contents`, rather than
+  returning only the outer denomination and silently omitting descendants.
+  Actions `41166173688` and `41166176323` passed.
+- The first unloaded dropped-item Entity decoder was introduced:
+  Red `2486a00c` failed at `compileTestJava` because the new class did
+  not exist (Actions `41166280077`); `288f5b3e` added
+  `StoredDroppedItemAssets`. It reads saved `Entities` entries with
+  `id=minecraft:item`, validates their int[4] UUIDs, rejects duplicate
+  UUIDs, and recursively values the saved `Item` stack. Actions
+  `41166366419` and `41166369630` passed.
+- Red `56fe1933` failed at `compileTestJava` for the absent staging
+  adapter (Actions `41166479434`). `05037852` added
+  `DroppedItemSettlementImport` to stage dropped currency as free assets,
+  using world/UUID physical keys, without completing the source prematurely.
+  Actions `41166559621` and `41166562877` passed.
+- These are **partial** Entity processing contracts, not a complete
+  settlement. Item frames, other inventory-bearing mobs (including
+  WWC/WWW), loaded Entity reconciliation, BlockLocker/owner/BAN
+  resolution, a coherent snapshot, journal, join gate and administrative
+  commands remain incomplete. Real Paper/JE/BE/Nexo tests and CAT normative
+  gates were not run. Keep PR #2 Draft; do not merge or release.
