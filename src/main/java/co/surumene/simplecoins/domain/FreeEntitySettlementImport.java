@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Stages the currently supported free-ownership saved Entity holders in one
@@ -13,7 +14,13 @@ public final class FreeEntitySettlementImport {
 
     public static void stageChunk(SettlementAccumulator settlement, String source,
                                   String world, Map<String, Object> chunk) throws IOException {
-        SavedEntityUuidIntegrity.validate(chunk);
+        Objects.requireNonNull(settlement);
+        try {
+            SavedEntityUuidIntegrity.validate(chunk);
+        } catch (IOException failure) {
+            settlement.failSource(source, "Saved Entity identity invalid: " + failure.getMessage());
+            throw failure;
+        }
         DroppedItemSettlementImport.stageChunk(settlement, source, world, chunk);
         ItemFrameSettlementImport.stageChunk(settlement, source, world, chunk);
         ItemDisplaySettlementImport.stageChunk(settlement, source, world, chunk);
