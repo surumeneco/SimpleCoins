@@ -32,15 +32,22 @@ public final class BlockEntitySettlementImport {
             if (world == null || world.isBlank())
                 throw new IOException("A physical world identity is required");
             Map<String, BigInteger> assets = StoredBlockEntityAssets.extract(chunk);
+            // One physical container has one owner in a settlement snapshot,
+            // even when it contains currency in multiple inventory slots.
+            Map<String, Ownership> ownershipByBlock = new java.util.HashMap<>();
             for (var entry : assets.entrySet()) {
                 String slot = entry.getKey();
                 int separator = slot.lastIndexOf(':');
                 if (separator <= 0)
                     throw new IOException("Invalid block inventory slot: " + slot);
                 String block = slot.substring(0, separator);
-                Ownership ownership = resolver.resolve(block);
-                if (ownership == null)
-                    throw new IOException("Ownership unresolved for block " + block);
+                Ownership ownership = ownershipByBlock.get(block);
+                if (ownership == null) {
+                    ownership = resolver.resolve(block);
+                    if (ownership == null)
+                        throw new IOException("Ownership unresolved for block " + block);
+                    ownershipByBlock.put(block, ownership);
+                }
                 String location = "world/" + world + "/" + slot;
                 settlement.accept(new SettlementAccumulator.Asset(
                         source, location, world, ownership.owner(),
