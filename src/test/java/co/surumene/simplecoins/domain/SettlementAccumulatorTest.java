@@ -106,4 +106,14 @@ class SettlementAccumulatorTest {
         assertThrows(IllegalArgumentException.class, () -> scan.completeSource("unknown"));
         assertThrows(IllegalStateException.class, scan::commit);
     }
+    @Test void previouslyRegisteredOwnersCannotBeAddedAfterAllSourcesAreComplete() {
+        var scan = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()),
+                Set.of("players"));
+        scan.completeSource("players");
+        assertThrows(IllegalStateException.class, () ->
+                scan.preservePreviouslyRegistered(UUID.randomUUID(), false, true));
+        assertThrows(IllegalStateException.class, scan::commit,
+                "A rejected late registration must invalidate the entire pending settlement");
+    }
+
 }
