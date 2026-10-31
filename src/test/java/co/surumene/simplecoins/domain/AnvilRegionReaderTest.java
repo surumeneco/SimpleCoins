@@ -168,4 +168,16 @@ class AnvilRegionReaderTest {
                 () -> AnvilRegionReader.scan(alias, 2048, 2048, callbacks::add));
         assertTrue(callbacks.isEmpty());
     }
+
+    @Test void signedAndNegativeZeroRegionAliasesAreRejected() throws Exception {
+        for (String aliasName : List.of("r.+0.0.mca", "r.-0.0.mca", "r.0.0.mca.")) {
+            Path canonical = region(2, 42, false);
+            Path alias = directory.resolve(aliasName);
+            Files.move(canonical, alias);
+            assertThrows(IOException.class,
+                    () -> AnvilRegionReader.scan(alias, 2048, 2048, c -> {}),
+                    aliasName);
+            Files.delete(alias);
+        }
+    }
 }
