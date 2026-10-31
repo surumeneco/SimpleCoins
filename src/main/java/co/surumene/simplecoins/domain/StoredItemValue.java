@@ -26,7 +26,9 @@ public final class StoredItemValue {
         if (depth > MAX_DEPTH)
             throw new IOException("Stored container nesting exceeds " + MAX_DEPTH);
         Object rawId = item.get("id");
-        Object rawCount = item.get("count");
+        // Modern ItemStack NBT omits the count field when it is one.
+        // An explicitly present but malformed count must still fail closed.
+        Object rawCount = item.getOrDefault("count", Integer.valueOf(1));
         if (!(rawId instanceof String id) || id.isBlank() ||
                 !(rawCount instanceof Number count) || count.longValue() <= 0 ||
                 count.longValue() > Integer.MAX_VALUE ||
