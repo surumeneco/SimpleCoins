@@ -64,6 +64,22 @@ class WorldStorageDiscoveryTest {
                 Map.of("a", a, "b", b), new WorldScope(true, Set.of(), Set.of()), 100));
     }
 
+    @Test void noncanonicalRegionNamesCannotAliasTheSameChunkCoordinates() throws Exception {
+        Path regionDir = directory.resolve("world/region");
+        Files.createDirectories(regionDir);
+        Files.writeString(regionDir.resolve("r.0.0.mca"), "fixture");
+        // Integer.parseInt accepts both of these aliases for coordinate zero.
+        // Scanning either alongside r.0.0.mca would count the same chunk twice.
+        for (String alias : new String[]{"r.00.0.mca", "r.+0.0.mca", "r.-0.0.mca"}) {
+            Path extra = regionDir.resolve(alias);
+            Files.writeString(extra, "fixture");
+            assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                    Map.of("world", directory.resolve("world")),
+                    new WorldScope(true, Set.of(), Set.of()), 100), alias);
+            Files.delete(extra);
+        }
+    }
+
     @Test void nestedWorldRootsCannotDoubleCountTheSameRegion() throws Exception {
         Path outer = directory.resolve("overworld");
         Path inner = outer.resolve("DIM1");
