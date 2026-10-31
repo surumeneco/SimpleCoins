@@ -22,6 +22,7 @@ class FreeEntitySettlementImportTest {
         assertThrows(java.io.IOException.class, () ->
                 FreeEntitySettlementImport.stageChunk(settlement, "entities:file", "world",
                         Map.of("Entities", List.of(dropped, emptyFrame))));
+        assertThrows(IllegalStateException.class, () -> settlement.completeSource("entities:file"));
         assertThrows(IllegalStateException.class, settlement::commit);
     }
 }
