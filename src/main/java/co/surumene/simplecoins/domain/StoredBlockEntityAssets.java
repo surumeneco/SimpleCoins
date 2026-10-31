@@ -31,6 +31,16 @@ public final class StoredBlockEntityAssets {
                     "," + coordinate(entity.get("z"));
             if (!positions.add(pos))
                 throw new IOException("Duplicate block entity at " + pos);
+            // A block entity must be located inside its declaring terrain chunk.
+            // Both coordinates must be present together when a chunk declares them.
+            Object chunkX = chunk.get("xPos");
+            Object chunkZ = chunk.get("zPos");
+            if (chunkX != null || chunkZ != null) {
+                if (!(chunkX instanceof Integer cx) || !(chunkZ instanceof Integer cz) ||
+                        Math.floorDiv(coordinate(entity.get("x")), 16) != cx ||
+                        Math.floorDiv(coordinate(entity.get("z")), 16) != cz)
+                    throw new IOException("Block entity outside declaring terrain chunk: " + pos);
+            }
 
             // Decorated pots store one stack in the lowercase "item" tag,
             // not the conventional "Items" list. Ignoring it would undercount
