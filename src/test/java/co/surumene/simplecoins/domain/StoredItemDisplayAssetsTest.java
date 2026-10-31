@@ -21,4 +21,20 @@ class StoredItemDisplayAssetsTest {
                         BigInteger.valueOf(100)),
                 StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display, empty))));
     }
+
+    @Test void duplicatedItemDisplayUuidMustFailClosed() {
+        Map<String, Object> display = Map.of("id", "minecraft:item_display",
+                "UUID", new int[]{0, 0, 0, 50},
+                "item", Map.of("id", "minecraft:air", "count", 0));
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display, display))));
+    }
+
+    @Test void malformedAirDisplayMustNotSilentlyBecomeEmpty() {
+        Map<String, Object> display = Map.of("id", "minecraft:item_display",
+                "UUID", new int[]{0, 0, 0, 50},
+                "item", Map.of("id", "minecraft:air", "count", 1));
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display))));
+    }
 }
