@@ -36,4 +36,19 @@ class ResolvedEntitySettlementImportTest {
         assertEquals(BigInteger.valueOf(100), result.personalBalances().get(owner));
         assertEquals(BigInteger.valueOf(100), result.free());
     }
+
+    @Test void missingEntityOwnershipDecisionMustInvalidateSettlement() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> wolf = Map.of("id", "minecraft:wolf",
+                "UUID", new int[]{0, 0, 0, 70},
+                "equipment", Map.of("mainhand", coin));
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        assertThrows(java.io.IOException.class, () ->
+                ResolvedEntitySettlementImport.stageChunk(settlement, "entities:file", "world",
+                        Map.of("Entities", List.of(wolf)), Map.of()));
+        assertThrows(IllegalStateException.class, settlement::commit);
+    }
 }
