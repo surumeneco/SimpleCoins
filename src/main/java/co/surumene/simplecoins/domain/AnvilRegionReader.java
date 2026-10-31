@@ -130,6 +130,23 @@ public final class AnvilRegionReader {
                             throw new IOException("Chunk NBT coordinates disagree with Anvil header: " +
                                     regionFile + " at " + x + "," + z);
                     }
+                    // Legacy Anvil chunks place the same coordinates inside
+                    // Level. A mismatch is just as unsafe as a modern root
+                    // mismatch and must not reach the settlement visitor.
+                    Object rawLevel = nbt.get("Level");
+                    if (rawLevel != null) {
+                        if (!(rawLevel instanceof Map<?, ?> level))
+                            throw new IOException("Invalid legacy chunk Level compound: " + regionFile);
+                        Object levelX = level.get("xPos");
+                        Object levelZ = level.get("zPos");
+                        if (levelX != null || levelZ != null) {
+                            if (!(levelX instanceof Integer nbtX) ||
+                                    !(levelZ instanceof Integer nbtZ) ||
+                                    nbtX != x || nbtZ != z)
+                                throw new IOException("Legacy chunk coordinates disagree with Anvil header: " +
+                                        regionFile + " at " + x + "," + z);
+                        }
+                    }
                     callback.accept(new Chunk(x, z, nbt));
                 }
             }
