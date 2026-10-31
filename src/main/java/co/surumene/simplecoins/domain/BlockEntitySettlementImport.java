@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -35,6 +36,24 @@ public final class BlockEntitySettlementImport {
             // One physical container has one owner in a settlement snapshot,
             // even when it contains currency in multiple inventory slots.
             Map<String, Ownership> ownershipByBlock = new java.util.HashMap<>();
+            // Empty protected inventories still establish a zero-balance registered
+            // owner. Stage a separate physical container identity even when its
+            // slots contain no currency; this also detects duplicate containers
+            // across independently staged sources.
+            for (Object rawBlock : (List<?>) chunk.get("block_entities")) {
+                Map<?, ?> entity = (Map<?, ?>) rawBlock; // validated by extract()
+                if (!entity.containsKey("Items")) continue;
+                String block = entity.get("x") + "," + entity.get("y") + "," + entity.get("z");
+                Ownership ownership = resolver.resolve(block);
+                if (ownership == null)
+                    throw new IOException("Ownership unresolved for block " + block);
+                ownershipByBlock.put(block, ownership);
+                String marker = "world/" + world + "/" + block + ":container";
+                settlement.accept(new SettlementAccumulator.Asset(
+                        source, marker, world, ownership.owner(),
+                        ownership.everyoneProtected(), ownership.currentlyBanned(),
+                        ownership.hasPlayerdata(), BigInteger.ZERO, marker));
+            }
             for (var entry : assets.entrySet()) {
                 String slot = entry.getKey();
                 int separator = slot.lastIndexOf(':');
