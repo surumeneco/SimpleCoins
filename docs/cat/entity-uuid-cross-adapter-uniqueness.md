@@ -19,6 +19,7 @@ Source: `forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・�
 | EID-01 | Two records with identical UUID; first carries a coin in equipment, second in Items | `stageChunk` fails, and `commit` fails |
 | EID-02 | One record with both equipment and Items; distinct slots | Both values staged once with the same owner decision |
 | EID-03 | Two distinct UUIDs with equipment and Items | Existing staging behavior preserved |
+| EID-04 | One saved dropped coin and one empty item frame reuse a UUID | Combined free-Entity staging fails before counting |
 
 ## Evidence / gates
 
