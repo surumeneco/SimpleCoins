@@ -24,4 +24,11 @@ class SavedEntityOwnerTest {
         assertEquals(Map.of(),
                 SavedEntityOwner.extract(Map.of("Entities", List.of(dropped))));
     }
+
+    @Test void malformedTameOwnerCannotBeSilentlyAssignedToFree() {
+        Map<String, Object> wolf = Map.of("id", "minecraft:wolf",
+                "UUID", new int[]{0, 0, 0, 70}, "Owner", "invalid");
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityOwner.extract(Map.of("Entities", List.of(wolf))));
+    }
 }
