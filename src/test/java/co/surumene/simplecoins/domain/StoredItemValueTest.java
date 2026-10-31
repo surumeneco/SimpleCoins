@@ -52,4 +52,16 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(wallet));
     }
 
+    @Test void coinWithNestedContainerMustNotHideAssets() {
+        Map<String,Object> inner = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> malformedCoin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of(
+                        "minecraft:custom_data", Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 5)),
+                        "minecraft:container", java.util.List.of(
+                                Map.of("slot", 0, "item", inner))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(malformedCoin));
+    }
+
 }
