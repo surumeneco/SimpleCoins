@@ -51,4 +51,16 @@ class StoredEntityInventoryAssetsTest {
                 "00000000-0000-0000-0000-000000000028:inventory:0", BigInteger.valueOf(20)),
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(villager))));
     }
+
+    @Test void ambiguousSlottedAndUnslottedInventoryCannotBeCountedAsIndependent() {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 0,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> entity = Map.of("id", "minecraft:villager",
+                "UUID", new int[]{0, 0, 0, 40},
+                "Items", List.of(coin), "Inventory", List.of(coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(entity))));
+    }
 }
