@@ -20,5 +20,7 @@ Status: **Draft / not Confirmed**. Source: SimpleCoins 02B and 05 Phase 5/G0 fai
 | NUM-04 | block-entity slot with `BigInteger(2^64)` | IOException rather than slot 0 |
 | NUM-05 | Entity inventory slot with `BigInteger(2^64)` | IOException rather than slot 0 |
 | NUM-06 | nested container slot with `BigInteger(2^64)` | IOException rather than slot 0 |
+| NUM-07 | playerdata Inventory slot with `BigInteger(2^64 + 3)` | IOException rather than slot 3 |
+| NUM-08 | playerdata SelectedItemSlot with `BigInteger(2^64 + 2)` | IOException rather than slot 2 |
 
 Formal CAT process-closure, TestModel, vectors, Queue and implementation-conformance are **not-run**; no Confirmed promotion is implied. Red/Green must be independently verified in feature-branch CI.
