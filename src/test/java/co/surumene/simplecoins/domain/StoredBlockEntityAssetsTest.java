@@ -67,4 +67,15 @@ class StoredBlockEntityAssetsTest {
                 Map.of("xPos", 0, "zPos", 0, "block_entities", List.of(outOfChunk))));
     }
 
+
+    @Test void overflowingNonNbtSlotNumberCannotAliasChestSlotZero() {
+        Map<String, Object> malformed = Map.of("Slot", BigInteger.ONE.shiftLeft(64),
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> chest = Map.of("id", "minecraft:chest",
+                "x", 0, "y", 64, "z", 0, "Items", List.of(malformed));
+        assertThrows(IOException.class, () ->
+                StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(chest))));
+    }
 }
