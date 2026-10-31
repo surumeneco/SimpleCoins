@@ -180,4 +180,15 @@ class AnvilRegionReaderTest {
             Files.delete(alias);
         }
     }
+
+    @Test void canonicalNegativeRegionCoordinateRemainsReadable() throws Exception {
+        Path original = region(2, 42, false);
+        Path negative = directory.resolve("r.-1.0.mca");
+        Files.move(original, negative);
+        List<AnvilRegionReader.Chunk> chunks = new ArrayList<>();
+        AnvilRegionReader.scan(negative, 2048, 2048, chunks::add);
+        assertEquals(1, chunks.size());
+        assertEquals(-32, chunks.getFirst().x());
+        assertEquals(0, chunks.getFirst().z());
+    }
 }
