@@ -23,4 +23,19 @@ class StoredEntityEquipmentAssetsTest {
                 "00000000-0000-0000-0000-000000000015:offhand", BigInteger.valueOf(100)),
                 StoredEntityEquipmentAssets.extract(Map.of("Entities", List.of(stand, mob))));
     }
+
+    @Test void malformedEquipmentMustNotBeInterpretedAsEmpty() {
+        Map<String, Object> mob = Map.of("id", "minecraft:armor_stand",
+                "UUID", new int[]{0, 0, 0, 20},
+                "equipment", Map.of("mainhand", "not-an-item"));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityEquipmentAssets.extract(Map.of("Entities", List.of(mob))));
+    }
+
+    @Test void duplicateEquipmentEntityUuidIsAmbiguous() {
+        Map<String, Object> mob = Map.of("id", "minecraft:armor_stand",
+                "UUID", new int[]{0, 0, 0, 20}, "equipment", Map.of());
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityEquipmentAssets.extract(Map.of("Entities", List.of(mob, mob))));
+    }
 }
