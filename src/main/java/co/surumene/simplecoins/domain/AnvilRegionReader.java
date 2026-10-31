@@ -55,6 +55,8 @@ public final class AnvilRegionReader {
         } catch (NumberFormatException failure) {
             throw new IOException("Invalid Anvil region coordinates: " + regionFile, failure);
         }
+        if (!regionFile.getFileName().toString().equals("r." + rx + "." + rz + ".mca"))
+            throw new IOException("Noncanonical Anvil region filename: " + regionFile);
 
         if (!Files.isRegularFile(regionFile, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Region file missing or symbolic: " + regionFile);
