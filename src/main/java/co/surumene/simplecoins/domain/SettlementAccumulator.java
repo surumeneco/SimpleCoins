@@ -93,6 +93,10 @@ public final class SettlementAccumulator {
      */
     public void preservePreviouslyRegistered(UUID uuid, boolean currentlyBanned, boolean hasPlayerdata) {
         checkOpen();
+        if (completed.containsAll(required)) {
+            rejectedInput = true;
+            throw new IllegalStateException("Cannot add registered users after all sources completed");
+        }
         if (uuid == null) {
             rejectedInput = true;
             throw new IllegalArgumentException("Missing registered UUID");
