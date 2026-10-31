@@ -53,6 +53,7 @@ public final class WorldSnapshotTraversal {
             if (path.getParent() == null ||
                     !expectedDirectory.equals(path.getParent().getFileName().toString()))
                 throw new IOException("World source kind disagrees with storage directory: " + path);
+            requireCanonicalRegionName(path.getFileName().toString());
             if (!paths.add(path))
                 throw new IOException("Duplicate world data source: " + path);
             requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
@@ -119,6 +120,21 @@ public final class WorldSnapshotTraversal {
                 if (Files.isSameFile(other, path))
                     throw new IOException("Aliased physical snapshot source: " + other + " and " + path);
             unkeyed.add(path);
+        }
+    }
+
+    /** Reject coordinate aliases even when a caller bypasses discovery. */
+    private static void requireCanonicalRegionName(String filename) throws IOException {
+        String[] parts = filename.split("\\.", -1);
+        if (parts.length != 4 || !"r".equals(parts[0]) || !"mca".equals(parts[3]))
+            throw new IOException("Invalid snapshot Anvil filename: " + filename);
+        try {
+            int x = Integer.parseInt(parts[1]);
+            int z = Integer.parseInt(parts[2]);
+            if (!filename.equals("r." + x + "." + z + ".mca"))
+                throw new IOException("Noncanonical snapshot Anvil filename: " + filename);
+        } catch (NumberFormatException failure) {
+            throw new IOException("Invalid snapshot Anvil coordinates: " + filename, failure);
         }
     }
 }
