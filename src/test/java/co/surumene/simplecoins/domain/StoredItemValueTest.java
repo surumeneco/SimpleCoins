@@ -106,4 +106,11 @@ class StoredItemValueTest {
                         Map.of("slot", BigInteger.ONE.shiftLeft(64), "item", coin))));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(container));
     }
+
+    @Test void validNbtByteCountStillPreservesCurrencyValue() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", (byte) 3,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        assertEquals(BigInteger.valueOf(300), StoredItemValue.value(coin));
+    }
 }
