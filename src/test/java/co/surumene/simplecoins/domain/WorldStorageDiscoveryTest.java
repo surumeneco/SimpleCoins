@@ -148,4 +148,16 @@ class WorldStorageDiscoveryTest {
                 new WorldScope(true, Set.of(), Set.of()), 100));
     }
 
+
+    @Test void noncanonicalPlayerdataUuidFilenameMustNotBeAcceptedAsAuthoritative() throws Exception {
+        Path world = directory.resolve("world");
+        Path playerdata = world.resolve("playerdata/1-1-1-1-1.dat");
+        Files.createDirectories(playerdata.getParent());
+        Files.writeString(playerdata, "fixture");
+        // UUID.fromString accepts abbreviated groups and silently pads them.
+        // The server's canonical playerdata path does not use that spelling.
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", world),
+                new WorldScope(true, Set.of(), Set.of()), 100));
+    }
 }
