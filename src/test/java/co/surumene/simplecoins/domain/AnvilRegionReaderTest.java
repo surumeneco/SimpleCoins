@@ -158,4 +158,14 @@ class AnvilRegionReaderTest {
                 () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
     }
 
+
+    @Test void noncanonicalRegionFilenameMustNotAliasPhysicalChunks() throws Exception {
+        Path canonical = region(2, 42, false);
+        Path alias = directory.resolve("r.00.0.mca");
+        Files.move(canonical, alias);
+        List<AnvilRegionReader.Chunk> callbacks = new ArrayList<>();
+        assertThrows(IOException.class,
+                () -> AnvilRegionReader.scan(alias, 2048, 2048, callbacks::add));
+        assertTrue(callbacks.isEmpty());
+    }
 }
