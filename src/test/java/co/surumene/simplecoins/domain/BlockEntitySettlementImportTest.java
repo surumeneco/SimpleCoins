@@ -81,4 +81,21 @@ class BlockEntitySettlementImportTest {
         assertEquals(1, calls.get(), "Ownership must be resolved per physical container");
         assertEquals(BigInteger.valueOf(200), settlement.commit().personalBalances().get(owner));
     }
+
+    @Test void emptyProtectedContainerRegistersItsEligibleOwnerWithoutInventingCurrency() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        Map<String,Object> emptyChest = Map.of(
+                "id", "minecraft:chest", "x", 10, "y", 64, "z", 2,
+                "Items", List.of());
+        BlockEntitySettlementImport.stageChunk(settlement, "region:file", "world",
+                Map.of("block_entities", List.of(emptyChest)),
+                position -> new BlockEntitySettlementImport.Ownership(owner, false, false, true));
+        settlement.completeSource("region:file");
+        var result = settlement.commit();
+        assertEquals(Map.of(owner, BigInteger.ZERO), result.personalBalances());
+        assertEquals(1, result.statistics().registeredPlayers());
+        assertEquals(BigInteger.ZERO, result.statistics().worldTotal());
+    }
 }
