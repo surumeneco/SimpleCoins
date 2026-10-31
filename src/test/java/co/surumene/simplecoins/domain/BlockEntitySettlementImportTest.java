@@ -54,4 +54,31 @@ class BlockEntitySettlementImportTest {
                         position -> { throw new IOException("BlockLocker protection not resolved"); }));
         assertThrows(IllegalStateException.class, settlement::commit);
     }
+
+    @Test void oneContainerMustResolveOwnershipOnlyOnceForAllCurrencySlots() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        Map<String,Object> item = Map.of(
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> block = Map.of(
+                "id", "minecraft:chest", "x", 10, "y", 64, "z", 2,
+                "Items", List.of(
+                        new java.util.HashMap<String,Object>(item) {{ put("Slot", (byte) 0); }},
+                        new java.util.HashMap<String,Object>(item) {{ put("Slot", (byte) 1); }}));
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        BlockEntitySettlementImport.stageChunk(settlement, "region:file", "world",
+                Map.of("block_entities", List.of(block)),
+                position -> {
+                    if (calls.incrementAndGet() > 1)
+                        throw new IOException("Ownership snapshot changed while reading one container");
+                    return new BlockEntitySettlementImport.Ownership(owner, false, false, true);
+                });
+        settlement.completeSource("region:file");
+        assertEquals(1, calls.get(), "Ownership must be resolved per physical container");
+        assertEquals(BigInteger.valueOf(200), settlement.commit().personalBalances().get(owner));
+    }
 }
