@@ -23,4 +23,22 @@ class ItemDisplaySettlementImportTest {
         settlement.completeSource("entities:file");
         assertEquals(BigInteger.valueOf(100), settlement.commit().free());
     }
+
+    @Test void itemDisplayAndDroppedItemSharingUuidInvalidateSettlement() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> display = Map.of("id", "minecraft:item_display",
+                "UUID", new int[]{0, 0, 0, 50}, "item", coin);
+        Map<String, Object> dropped = Map.of("id", "minecraft:item",
+                "UUID", new int[]{0, 0, 0, 50}, "Item", coin);
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        DroppedItemSettlementImport.stageChunk(settlement, "entities:file", "world",
+                Map.of("Entities", List.of(dropped)));
+        assertThrows(IllegalArgumentException.class, () ->
+                ItemDisplaySettlementImport.stageChunk(settlement, "entities:file", "world",
+                        Map.of("Entities", List.of(display))));
+        assertThrows(IllegalStateException.class, settlement::commit);
+    }
 }
