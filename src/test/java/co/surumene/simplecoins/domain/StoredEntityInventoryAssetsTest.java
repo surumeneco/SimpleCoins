@@ -63,4 +63,15 @@ class StoredEntityInventoryAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(entity))));
     }
+
+    @Test void overflowingNonNbtEntitySlotMustNotAliasSlotZero() {
+        Map<String, Object> malformed = Map.of("Slot", BigInteger.ONE.shiftLeft(64),
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> boat = Map.of("id", "minecraft:oak_chest_boat",
+                "UUID", new int[]{0, 0, 0, 30}, "Items", List.of(malformed));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(boat))));
+    }
 }
