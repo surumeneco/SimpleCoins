@@ -2,6 +2,12 @@ package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Map;
@@ -38,6 +44,8 @@ public final class WorldSnapshotTraversal {
 
         // Reject an ambiguous manifest before invoking any callbacks.
         Set<Path> paths = new HashSet<>();
+        Map<Object, Path> physicalKeys = new HashMap<>();
+        List<Path> unknownKeys = new ArrayList<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
             Path path = source.path().toAbsolutePath().normalize();
             String expectedDirectory = source.kind() == WorldStorageDiscovery.Kind.REGION
@@ -47,6 +55,7 @@ public final class WorldSnapshotTraversal {
                 throw new IOException("World source kind disagrees with storage directory: " + path);
             if (!paths.add(path))
                 throw new IOException("Duplicate world data source: " + path);
+            requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
         }
         for (var entry : manifest.playerDataFiles().entrySet()) {
             Path raw = entry.getValue();
@@ -55,6 +64,10 @@ public final class WorldSnapshotTraversal {
             Path path = raw.toAbsolutePath().normalize();
             if (!paths.add(path))
                 throw new IOException("Duplicate or overlapping playerdata source: " + path);
+            // Keep the existing later read failure for missing playerdata, but
+            // reject physical aliases of present files before any callbacks.
+            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS))
+                requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
         }
 
         int files = 0, chunks = 0, players = 0;
@@ -76,5 +89,36 @@ public final class WorldSnapshotTraversal {
             players = Math.addExact(players, 1);
         }
         return new Report(files, chunks, players);
+    }
+
+    /**
+     * File paths are not physical identities: hard links can expose one saved
+     * economic source under multiple otherwise valid names. Use file keys when
+     * available and isSameFile for providers without them.
+     */
+    private static void requireUniquePhysicalFile(Path path,
+                                                  Map<Object, Path> keyed,
+                                                  List<Path> unkeyed) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attrs.isRegularFile())
+            throw new IOException("Snapshot source missing or symbolic: " + path);
+        Object key = attrs.fileKey();
+        if (key != null) {
+            Path previous = keyed.putIfAbsent(key, path);
+            if (previous != null)
+                throw new IOException("Aliased physical snapshot source: " + previous + " and " + path);
+            for (Path other : unkeyed)
+                if (Files.isSameFile(other, path))
+                    throw new IOException("Aliased physical snapshot source: " + other + " and " + path);
+        } else {
+            for (Path other : keyed.values())
+                if (Files.isSameFile(other, path))
+                    throw new IOException("Aliased physical snapshot source: " + other + " and " + path);
+            for (Path other : unkeyed)
+                if (Files.isSameFile(other, path))
+                    throw new IOException("Aliased physical snapshot source: " + other + " and " + path);
+            unkeyed.add(path);
+        }
     }
 }
