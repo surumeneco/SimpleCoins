@@ -39,7 +39,9 @@ class DroppedItemSettlementImportTest {
         assertThrows(IllegalArgumentException.class, () ->
                 DroppedItemSettlementImport.stageChunk(settlement, "entities:file", "world-b", chunk),
                 "Entity UUID is a physical identity, even when its storage world differs");
-        settlement.completeSource("entities:file");
+        assertThrows(IllegalStateException.class,
+                () -> settlement.completeSource("entities:file"),
+                "A failed entity source must never transition to complete");
         assertThrows(IllegalStateException.class, settlement::commit,
                 "A duplicate Entity UUID must invalidate the entire staged settlement");
     }
