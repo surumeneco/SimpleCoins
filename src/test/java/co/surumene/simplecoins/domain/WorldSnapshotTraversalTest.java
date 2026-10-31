@@ -199,4 +199,25 @@ class WorldSnapshotTraversalTest {
                 }));
         assertEquals(0, visited.get(), "Reject aliased playerdata before callbacks");
     }
+
+    @Test void manuallySuppliedNoncanonicalRegionFilenameCannotAliasChunkCoordinates() throws Exception {
+        Path canonical = region("region", 10);
+        Path alias = canonical.resolveSibling("r.00.0.mca");
+        Files.copy(canonical, alias);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", canonical, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", alias, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                        new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> data) {}
+                }));
+        assertEquals(0, visited.get(), "Reject coordinate aliases before visiting assets");
+    }
 }
