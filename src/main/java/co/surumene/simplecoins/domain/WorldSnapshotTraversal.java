@@ -40,6 +40,11 @@ public final class WorldSnapshotTraversal {
         Set<Path> paths = new HashSet<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
             Path path = source.path().toAbsolutePath().normalize();
+            String expectedDirectory = source.kind() == WorldStorageDiscovery.Kind.REGION
+                    ? "region" : "entities";
+            if (path.getParent() == null ||
+                    !expectedDirectory.equals(path.getParent().getFileName().toString()))
+                throw new IOException("World source kind disagrees with storage directory: " + path);
             if (!paths.add(path))
                 throw new IOException("Duplicate world data source: " + path);
         }
