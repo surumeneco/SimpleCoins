@@ -114,7 +114,8 @@ public final class StoredItemValue {
                     throw new IOException("Malformed container slot");
                 Object rawSlot = slot.get("slot");
                 if (!(rawSlot instanceof Number number) ||
-                        number instanceof Float || number instanceof Double ||
+                        !(number instanceof Byte || number instanceof Short ||
+                          number instanceof Integer || number instanceof Long) ||
                         number.longValue() < 0 || number.longValue() > 255)
                     throw new IOException("Invalid nested container slot");
                 if (!occupiedSlots.add(number.intValue()))
