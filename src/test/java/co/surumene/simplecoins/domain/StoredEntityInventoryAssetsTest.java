@@ -40,4 +40,15 @@ class StoredEntityInventoryAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(minecart))));
     }
+
+    @Test void extractsVillagerUnslottedInventoryItemsByStableListPosition() throws Exception {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 4,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 5))));
+        Map<String, Object> villager = Map.of("id", "minecraft:villager",
+                "UUID", new int[]{0, 0, 0, 40}, "Inventory", List.of(coin));
+        assertEquals(Map.of(
+                "00000000-0000-0000-0000-000000000028:inventory:0", BigInteger.valueOf(20)),
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(villager))));
+    }
 }
