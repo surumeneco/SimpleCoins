@@ -22,4 +22,22 @@ class StoredEntityInventoryAssetsTest {
                 "00000000-0000-0000-0000-00000000001f:inventory:2", BigInteger.valueOf(30)),
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(boat, minecart))));
     }
+
+    @Test void duplicatedEntityInventorySlotMustNotDoubleCountCurrency() {
+        Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 0,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String, Object> boat = Map.of("id", "minecraft:oak_chest_boat",
+                "UUID", new int[]{0, 0, 0, 30}, "Items", List.of(coin, coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(boat))));
+    }
+
+    @Test void malformedEntityInventoryMustFailClosed() {
+        Map<String, Object> minecart = Map.of("id", "minecraft:chest_minecart",
+                "UUID", new int[]{0, 0, 0, 31}, "Items", "unreadable");
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(minecart))));
+    }
 }
