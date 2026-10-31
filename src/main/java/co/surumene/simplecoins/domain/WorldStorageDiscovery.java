@@ -116,6 +116,10 @@ public final class WorldStorageDiscovery {
                         } catch (IllegalArgumentException badName) {
                             throw new IOException("Invalid playerdata UUID: " + file, badName);
                         }
+                        // UUID.fromString accepts abbreviated and mixed-case aliases.
+                        // Only the canonical filename is an authoritative Paper playerdata source.
+                        if (!filename.equals(uuid + ".dat"))
+                            throw new IOException("Noncanonical playerdata UUID filename: " + file);
                         Path previous = players.putIfAbsent(uuid, file);
                         if (previous != null)
                             throw new IOException("Ambiguous playerdata authority for " + uuid + ": " +
