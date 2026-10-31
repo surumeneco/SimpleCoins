@@ -27,7 +27,11 @@ public final class StoredEntityInventoryAssets {
             if (!(rawEntity instanceof Map<?, ?> entity) ||
                     !(entity.get("id") instanceof String id) || id.isBlank())
                 throw new IOException("Malformed saved entity");
-            if (!entity.containsKey("Items")) continue;
+            boolean slotted = entity.containsKey("Items");
+            boolean unslotted = entity.containsKey("Inventory");
+            if (!slotted && !unslotted) continue;
+            if (slotted && unslotted)
+                throw new IOException("Ambiguous Entity inventory representations");
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)
@@ -38,19 +42,31 @@ public final class StoredEntityInventoryAssets {
             if (!seen.add(key))
                 throw new IOException("Duplicate inventory Entity UUID: " + key);
 
-            if (!(entity.get("Items") instanceof List<?> inventory))
-                throw new IOException("Malformed Entity Items list: " + key);
+            Object rawInventory = entity.get(slotted ? "Items" : "Inventory");
+            if (!(rawInventory instanceof List<?> inventory))
+                throw new IOException("Malformed Entity inventory list: " + key);
             Set<Integer> occupiedSlots = new HashSet<>();
+            int position = 0;
             for (Object rawStack : inventory) {
                 if (!(rawStack instanceof Map<?, ?> stack) ||
                         stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
                     throw new IOException("Malformed Entity inventory stack: " + key);
-                Object rawSlot = stack.get("Slot");
-                if (!(rawSlot instanceof Number slot) ||
-                        slot instanceof Float || slot instanceof Double ||
-                        slot.longValue() < 0 || slot.longValue() > 255)
-                    throw new IOException("Invalid Entity inventory slot: " + key);
-                int index = slot.intValue();
+                int index;
+                if (slotted) {
+                    Object rawSlot = stack.get("Slot");
+                    if (!(rawSlot instanceof Number slot) ||
+                            slot instanceof Float || slot instanceof Double ||
+                            slot.longValue() < 0 || slot.longValue() > 255)
+                        throw new IOException("Invalid Entity inventory slot: " + key);
+                    index = slot.intValue();
+                } else {
+                    // Villager/Allay-style Inventory stores stacks in list order
+                    // without Slot tags. This is a snapshot-local physical index.
+                    if (stack.containsKey("Slot"))
+                        throw new IOException("Unexpected Slot in unslotted Entity inventory: " + key);
+                    index = position;
+                }
+                position++;
                 if (!occupiedSlots.add(index))
                     throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
                 @SuppressWarnings("unchecked")
