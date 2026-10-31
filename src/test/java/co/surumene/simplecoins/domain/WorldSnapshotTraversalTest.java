@@ -156,4 +156,26 @@ class WorldSnapshotTraversalTest {
                 }));
         assertEquals(0, visited.get(), "Reject a forged manifest before staging assets");
     }
+
+    @Test void manuallySuppliedHardLinkedRegionSourcesCannotBeVisitedTwice() throws Exception {
+        Path terrain = region("region", 10);
+        Path alias = directory.resolve("entities/r.0.0.mca");
+        Files.createDirectories(alias.getParent());
+        Files.createLink(alias, terrain);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", terrain, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", alias, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                        new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> data) {}
+                }));
+        assertEquals(0, visited.get(), "Reject aliased physical sources before callbacks");
+    }
 }
