@@ -59,4 +59,12 @@ class StoredBlockEntityAssetsTest {
         assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
                 Map.of("block_entities", List.of(chest, chest))));
     }
+    @Test void blockEntityMustBelongToTheDeclaringTerrainChunk() {
+        Map<String,Object> outOfChunk = Map.of(
+                "id", "minecraft:chest", "x", 16, "y", 64, "z", 0,
+                "Items", List.of(coin(0, 1)));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("xPos", 0, "zPos", 0, "block_entities", List.of(outOfChunk))));
+    }
+
 }
