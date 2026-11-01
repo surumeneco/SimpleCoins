@@ -25,10 +25,14 @@
 | P5-SOURCE-10 / SC-SOURCE-TYPE-08,09,10 | regionとplayerdata間、または別座標の外部`.mcc`間に物理hardlinkを作る。対照群は別実体のsidecar | 物理aliasを拒否して二重計上せず、別実体の正当なsourceは読取可能 |
 | P5-SOURCE-11 / SC-LATE-MUTATION-01,02,03 | 後続player callbackが先に読み終えたregion/playerdataを変更する。対照群は無変更 | 最終callback後の再検証で成功Reportを拒否。無変更なら正常Reportを維持 |
 | P5-SOURCE-12 / SC-CLOSURE-01,02,03 | manifest生成後・走査前、または最後のcallback中に権威playerdataが追加される。対照群は集合不変 | 走査前後のsource集合不一致を拒否。集合不変だけではworld catalogの完全性を証明しない |
+| P5-SOURCE-13 / SC-COVERAGE-07 | `players/data`がすべてのworld rootの外にあり、callerはworld rootのみを渡す | playerdataを0件として成功確定しない。独立したplayerdata権威一覧との照合がなければ未確認 |
+| P5-SOURCE-14 / SC-COVERAGE-08 | 保存source一覧は不変だが、走査中にPaper/Multiverseの権威world catalogへworldが追加される | callerのroot集合だけの前後一致では成功確定しない。catalog世代の再照合ができなければ公開不可 |
 
 ## 既存自動テストとの対応（実機受入とは別）
 
 P5-SOURCE-09は`WorldSnapshotLegacyTerrainEntitiesTest`、P5-SOURCE-10は`WorldSnapshotExternalSidecarIdentityTest`と`WorldStorageDiscoveryTest`、P5-SOURCE-11は`WorldSnapshotLateSourceMutationTest`、P5-SOURCE-12は`WorldSnapshotSourceSetClosureTest`を主な回帰入口とする。いずれも`src/test/java/co/surumene/simplecoins/domain/`配下。これらのJUnitが成功しても、隔離Paperでのworld catalog照合・loaded/disk同一時点性・所有者分類は別途未検証とする。
+
+P5-SOURCE-13/14は既存JUnitでは検証されていないDraft受入候補。独立playerdata権威rootの受渡しとPaper/Multiverse catalog世代の取得方法が未決定のため、未実装・未実行として保持する。
 
 ## 結果の扱い
 
