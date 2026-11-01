@@ -13,5 +13,6 @@ When Nexo is absent, SimpleCoins generates a Java resource-pack ZIP and advertis
 - PACK-URL-03: an empty or whitespace-only URL is absent, not a pack delivery attempt.
 - PACK-URL-04: `PackDelivery.onJoin` calls the Paper resource-pack method only after successful validation; malformed configuration is logged and skipped.
 - PACK-HASH-01: hash the exact generated ZIP with bounded-memory streaming; reject absent, directory, or symbolic-link archive paths before distribution.
+- PACK-HASH-02 (Red): reject a generated ZIP reached through any symbolic-link ancestor directory, even when the final ZIP is a regular file. Do not hash a redirected source.
 
 Formal CAT machine gates, Paper/JE/Geyser/BE client delivery, hosted content/hash verification and Nexo delegation remain not-run.
