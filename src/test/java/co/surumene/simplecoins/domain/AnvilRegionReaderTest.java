@@ -191,4 +191,12 @@ class AnvilRegionReaderTest {
         assertEquals(-32, chunks.getFirst().x());
         assertEquals(0, chunks.getFirst().z());
     }
+
+    @Test void externalSidecarStreamCannotGrowBeyondCompressedByteBudget() throws Exception {
+        byte[] bytes = new byte[17];
+        assertEquals(16, AnvilRegionReader.readBoundedExternal(
+                new java.io.ByteArrayInputStream(java.util.Arrays.copyOf(bytes, 16)), 16).length);
+        assertThrows(IOException.class, () -> AnvilRegionReader.readBoundedExternal(
+                new java.io.ByteArrayInputStream(bytes), 16));
+    }
 }
