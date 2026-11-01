@@ -17,3 +17,7 @@ For a known personal owner, current BAN status may be established by multiple re
 - BAN-EVIDENCE-02: empty, duplicate, malformed or null source evidence fails closed.
 
 This is a contract boundary, not an authoritative world snapshot or completed external adapter. Formal CAT machine gates and Paper/WWC/WWW/BAN integration tests remain not-run; Draft is not Confirmed.
+
+## Staging boundary integration (additional Draft vector)
+
+- OWNER-EVIDENCE-04: an inventory containing a real denomination coin, when resolved as UNKNOWN external owner, causes `BlockEntitySettlementImport.stageChunk` to fail and `SettlementAccumulator.commit` to remain unavailable. A verified FREE decision may be staged as Free. This distinguishes missing ownership evidence from zero currency.
