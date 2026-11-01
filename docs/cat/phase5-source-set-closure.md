@@ -1,23 +1,34 @@
-# Phase 5: saved-source set closure at traversal boundary (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.source-set-closure
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+# DomainSpec: 保存済みsource集合の前後closure
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.snapshot | 権威source集合の走査前後一致 |
+| simplecoins.world | caller指定world rootとscope |
 
-A saved-source manifest lists the region/entity files and canonical playerdata files discovered at one point in time. Even if every listed file is individually unchanged, a newly created authoritative file after discovery can be omitted from the settlement candidate.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| closure.pre-added | manifest生成後・走査前にplayerdata sourceが増えたとき | visitor前に拒否 | SC-CLOSURE-01 |
+| closure.post-added | 最終callback中にplayerdata sourceが増えたとき | 走査後に拒否し成功Reportを返さない | SC-CLOSURE-02 |
+| closure.unchanged | 権威source集合が前後で一致するとき | 通常Reportを返す | SC-CLOSURE-03 |
+| closure.scope | excluded worldのregionとworld非依存playerdataがあるとき | region除外を維持しplayerdataは対象に含める | SC-CLOSURE-04 |
+| closure.invalid | source path不正・非通常ファイル・発見予算枯渇のとき | fail-closedで拒否 | SC-CLOSURE-05 |
+| closure.identity | 固定world root/scopeで前後比較するとき | world名・source kind・path・player UUIDの一致を要求 | SC-CLOSURE-01, SC-CLOSURE-02 |
 
-For a caller-supplied fixed set of authoritative world roots and scope, expose a bounded re-discovery comparison. Before and after the read-only traversal, require the exact same authoritative file identities (world name, source kind, path, player UUID). Reject added, removed or renamed authoritative sources, non-regular paths and discovery-budget exhaustion. Do not return a successful traversal Report if either closure check fails.
+## 境界と状態
 
-The caller must supply the authoritative world-root inventory and prevent changes between the final check and publication. This comparison is **best-effort**, not a filesystem transaction, not a loaded-memory reconciliation and not a Paper world freeze. It must not be treated as a settlement publication gate by itself.
-
-## TCE / acceptance vectors
-
-- SC-CLOSURE-01 (Red): a playerdata source added after manifest discovery but before traversal aborts before any visitor callback.
-- SC-CLOSURE-02 (Red): a new playerdata source added during the final visitor callback aborts after traversal, with no successful Report.
-- SC-CLOSURE-03 (Regression): unchanged source inventory returns the normal traversal Report.
-- SC-CLOSURE-04 (Regression): excluded-world region files remain excluded from the source-set comparison; playerdata remains world-independent.
-- SC-CLOSURE-05 (Regression): invalid paths and an exhausted bounded discovery budget propagate failure.
-
-## Gate status
-
-Formal CAT machine gates **not-run**. This Draft does not establish a coherent live-world snapshot, complete Paper source list, ownership, merge, deploy or settlement publication.
+既存SC-CLOSURE-01〜05の意味を変更しないTASK-20261101-003のCAT Draft。bounded再発見比較はbest-effortであり、最終確認後の変更防止、loaded memory整合、Paper world freeze、決算公開を保証しない。正式CAT Process/PI/TCE・機械Gateはnot-run。Confirmed・マージ・リリースを意味しない。
