@@ -172,6 +172,8 @@ public final class SettlementSnapshotStore {
         if (result.personalBalances().size() > MAX_RECORDS || result.deadLocations().size() > MAX_RECORDS)
             throw new IOException("Too many settlement records");
         try {
+            if (result.personalBalances().keySet().stream().anyMatch(Objects::isNull))
+                throw new IOException("Missing settlement player UUID");
             var expected = AssetStatistics.calculate(result.personalBalances(), result.free(), result.dead());
             if (!expected.equals(result.statistics()))
                 throw new IOException("Settlement statistics differ from source balances");
