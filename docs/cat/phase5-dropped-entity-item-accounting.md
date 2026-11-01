@@ -1,24 +1,24 @@
-# Phase 5: saved dropped-item Entity accounting (CAT Draft)
+# Phase 5: dropped-item Entity representation integrity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
 
 ## Process / PI
 
-A saved `minecraft:item` Entity represents a physical dropped stack in the entity-region `Entities` list. Its single `Item` compound is an authoritative asset candidate, not a positional `Items` or `Inventory` list. The current extractor ignores that representation, so a world containing dropped SimpleCoins currency cannot be accounted completely.
+The existing `StoredDroppedItemAssets` extractor already reads the single `Item` compound of a saved `minecraft:item` Entity, and `StoredEntityInventoryAssets` separately reads slotted `Items` and unslotted `Inventory` lists. The two independent extractors must never count competing representations on the same physical Entity.
 
-Read the Entity's canonical four-int UUID before valuing the single stack, and use a stable `<uuid>:dropped:0` location key. Reuse `StoredItemValue.value` for currency, wallet and nested-container validation; never infer an owner. Missing/malformed `Item`, duplicate UUID, or competing `Item`/`Items`/`Inventory` representations must fail closed. A non-item Entity with an unhandled `Item` representation must not silently pass as an asset-free Entity. Ordinary non-inventory Entities without such fields remain ignored.
+A dropped Entity is valid only with one `Item` stack, a four-int UUID, and **neither** `Items` nor `Inventory`. Reject the conflicting representation even if one list is empty. The inventory extractor must independently reject `Items`/`Inventory` on `minecraft:item`, rather than treating them as an additional inventory. Preserve existing single-stack valuation and UUID identity; no ownership inference is authorized.
 
-This extraction only stages saved values. Loaded-Entity reconciliation, dropped-item ownership, complete source inventory, source freeze, and settlement publication are independent release gates.
+This only validates staged saved Entity data. Loaded-vs-disk reconciliation, complete source inventory, entity ownership, snapshot freeze and settlement publication remain independent gates.
 
 ## TCE / acceptance vectors
 
-- SC-DROP-01 (Red): a saved `minecraft:item` with a coin stack contributes its value exactly once at `<uuid>:dropped:0`.
-- SC-DROP-02 (Red): a saved `minecraft:item` with no `Item` compound is rejected instead of treated as zero.
-- SC-DROP-03 (Red): a dropped Entity with malformed `Item` or conflicting `Items`/`Inventory` fails closed.
-- SC-DROP-04 (Red): a non-item Entity with a single `Item` compound is rejected pending a separately specified holder adapter; no silent omission.
-- SC-DROP-05 (Regression): duplicate dropped UUIDs cannot create two asset locations.
-- SC-DROP-06 (Regression): a normal non-inventory Entity without `Item` is ignored and valid chest-minecart `Items` remains countable.
+- SC-DROP-01 (Regression): a normal saved `minecraft:item` contributes one UUID-keyed physical location via `StoredDroppedItemAssets`.
+- SC-DROP-02 (Regression): missing or malformed `Item` fails closed in the dropped-item extractor.
+- SC-DROP-03 (Red): `minecraft:item` containing both `Item` and `Items` must fail in the dropped-item extractor, including an empty `Items` list.
+- SC-DROP-04 (Red): `minecraft:item` containing both `Item` and `Inventory` must fail in the dropped-item extractor.
+- SC-DROP-05 (Red): the independent Entity-inventory extractor rejects a fabricated slotted or unslotted `minecraft:item` inventory.
+- SC-DROP-06 (Regression): ordinary dropped items, non-inventory mobs, and chest-minecart `Items` retain existing behavior.
 
 ## Gate status
 
-Formal CAT machine gates **not-run**. This Draft is not an approval to publish balances, merge, or deploy. Direct Java checks and the repository's JUnit suite provide implementation evidence only.
+Formal CAT machine gates: **not-run**. This Draft is not Confirmed and does not authorize settlement publication, merge or deploy. Local Java checks and JUnit evidence are independent of formal CAT confirmation.
