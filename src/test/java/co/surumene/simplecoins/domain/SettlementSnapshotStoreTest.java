@@ -199,6 +199,8 @@ class SettlementSnapshotStoreTest {
         assertThrows(IOException.class, () -> store.persist(candidate, () -> {
             throw new IOException("Injected failure after marker, before snapshot");
         }));
+        assertTrue(Files.isRegularFile(root.resolve("settlement.initialized")));
+        assertFalse(Files.exists(root.resolve("settlement.snapshot")));
         assertThrows(IOException.class, store::load,
                 "failed first write must leave an initialization tombstone");
         assertThrows(IOException.class, () -> store.persist(candidate));
