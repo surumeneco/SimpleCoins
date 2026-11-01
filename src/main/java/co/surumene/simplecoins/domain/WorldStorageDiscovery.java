@@ -47,6 +47,20 @@ public final class WorldStorageDiscovery {
             worldFiles = List.copyOf(worldFiles);
             playerDataFiles = Map.copyOf(playerDataFiles);
         }
+
+        /** Canonical closure keys for all mandatory settlement sources. */
+        public Set<String> requiredSourceIds() throws IOException {
+            var ids = new java.util.TreeSet<String>();
+            for (SourceFile source : worldFiles) {
+                String id = source.path().toAbsolutePath().normalize().toString();
+                if (!ids.add(id)) throw new IOException("Duplicate manifest source: " + id);
+            }
+            for (Path path : playerDataFiles.values()) {
+                String id = path.toAbsolutePath().normalize().toString();
+                if (!ids.add(id)) throw new IOException("Duplicate manifest source: " + id);
+            }
+            return java.util.Collections.unmodifiableSet(ids);
+        }
     }
 
     /**
