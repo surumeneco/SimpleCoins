@@ -3,10 +3,12 @@ package co.surumene.simplecoins.domain;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.math.BigInteger;
+import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class SettlementGenerationPublisherTest {
     private static SettlementAccumulator staged(long amount, boolean complete) {
@@ -109,6 +111,25 @@ class SettlementGenerationPublisherTest {
                 }));
         assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
                 0, staged(100, true), candidate -> {}));
+    }
+
+    @Test void postCommitErrorPoisonsPublisherUntilDurableRecovery(@TempDir Path directory)
+            throws Exception {
+        var store = new SettlementSnapshotStore(directory.resolve("snapshots"));
+        var publisher = new SettlementGenerationPublisher();
+        assertThrows(AssertionError.class, () -> publisher.publishDurably(
+                0, staged(100, true), candidate -> {
+                    store.persist(candidate);
+                    throw new AssertionError("Injected failure after durable commit");
+                }));
+        assertTrue(publisher.current().isEmpty());
+        assertEquals(1L, store.load().orElseThrow().generation());
+        assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                0, staged(200, true), store::persist));
+        assertThrows(IllegalStateException.class, () -> publisher.publish(
+                0, staged(200, true)));
+        assertEquals(1L, SettlementGenerationPublisher.recoverFrom(store)
+                .current().orElseThrow().generation());
     }
 
     @Test void staleOrMissingDurableWriterCannotCommitPendingSnapshot() throws Exception {
