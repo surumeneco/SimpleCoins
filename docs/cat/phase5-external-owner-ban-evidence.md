@@ -39,6 +39,7 @@ Status: Draft, not Confirmed. Source: forGPT/XPlayServer/OriginalPlugins/SimpleC
 | owner-evidence.companion.www | loaded WWW wolfのpublic APIから所有者を読むとき | commander/owner Optionalを検証し、API不在や未ロードをUNKNOWNとする | COMPANION-WWW-01, COMPANION-WWW-02, COMPANION-WWW-03 |
 | owner-evidence.blocklocker.live | loaded Paper Signから現在のBlockLocker証拠を読むとき | 物理位置・向き・前面4行を検証し、未ロードsignや完全snapshotを推定しない | BLOCKLOCKER-LIVE-01, BLOCKLOCKER-LIVE-02, BLOCKLOCKER-LIVE-03 |
 | owner-evidence.companion.wwc | loaded WWC chickenのPDC follow_targetを読むとき | canonical UUIDのpositive-only証拠だけ返し、欠損をFREEとみなさない | COMPANION-WWC-01, COMPANION-WWC-02, COMPANION-WWC-03 |
+| owner-evidence.companion.wcl-storage | WCL providerからloaded/保存済み個体の収納証拠を取得するとき | Success/NotFound/Failureを区別し、未発見・取得失敗を空収納や所有者不在に変換しない。relationshipsの意味はprovider別に検証する | COMPANION-WCL-01, COMPANION-WCL-02, COMPANION-WCL-03 |
 | owner-evidence.blocklocker.snapshot | callerが保存済みsign候補集合を渡すとき | 完全・一貫したpalette/text証拠を要求し、未列挙候補や空集合をFREEとみなさない | BLOCKLOCKER-SNAPSHOT-01, BLOCKLOCKER-SNAPSHOT-02, BLOCKLOCKER-SNAPSHOT-03 |
 | owner-evidence.ban.collect | 必須外部BAN pluginとPaper sourceの結果を収集するとき | 権威source inventoryと個別結果を照合し、欠損・不明がある場合CLEARを宣言しない | BAN-COLLECT-01, BAN-COLLECT-02, BAN-COLLECT-03 |
 
@@ -156,6 +157,14 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - COMPANION-WWC-03: this is a current-version PDC evidence adapter, not an external plugin's stable API guarantee. A real WWC/Paper integration test and full settlement owner policy remain required.
 
 **検証済みソース境界（WWC `main` `6d4ddb1050bfa6ecafacefd2738b0a4fce03af70`）**: `WonderfulChickenStore` は `type` マーカー値 `wonderful_chicken` と `follow_target` PDC文字列を使用し、読込時にはUUIDとして復元を試みる。これは「現在保存されているfollow先」の正の証拠候補であり、所有者・commanderの確定的な外部API契約ではない。実配備版のPDC互換性と未ロード個体の網羅性は未検証。参照: [WonderfulChickenStore](https://github.com/surumeneco/WhatAWonderfulChicken/blob/6d4ddb1050bfa6ecafacefd2738b0a4fce03af70/src/main/java/co/surumene/whatawonderfulchicken/service/WonderfulChickenStore.java)。
+
+## WCL storage provider boundary (Draft vectors)
+
+- COMPANION-WCL-01: `WonderfulStorageReader.readLoaded` / `readStored` returns `StorageReadResult.Success(snapshot)`, `NotFound` or `Failure(code, detail)`. Only a verified Success may expose its stored item list; NotFound or Failure must not be converted into an empty inventory, zero assets or verified owner absence.
+- COMPANION-WCL-02: `readStored` consumes a caller-provided UUID/world UUID/optional position/PDC from an independently verified offline source. It must not imply that WCL enumerates unloaded entities, reads all saved regions, or freezes the world. The published interface requires the Paper primary thread.
+- COMPANION-WCL-03: `StorageSnapshot.relationships` is a map of relationship names to UUIDs, not a standardized commander/owner precedence contract. Without a verified provider-specific meaning and complete source evidence, neither an absent key nor a generic key name proves FREE or commander absence. Duplicate slot names are invalid at the snapshot boundary; nested contents are traversed once.
+
+**現行APIの確認範囲（WCL `develop` tree `9362625c64ff8ecc8666212c313ff442e3848ccc`）**: [WonderfulStorageReader](https://github.com/surumeneco/WonderfulCoreLibrary/blob/9362625c64ff8ecc8666212c313ff442e3848ccc/wcl-plugin/src/main/java/co/surumene/wcl/plugin/inventory/WonderfulStorageReader.java)、[StorageReadResult](https://github.com/surumeneco/WonderfulCoreLibrary/blob/9362625c64ff8ecc8666212c313ff442e3848ccc/wcl-api/src/main/java/co/surumene/wcl/api/inventory/StorageReadResult.java)、[StorageSnapshot](https://github.com/surumeneco/WonderfulCoreLibrary/blob/9362625c64ff8ecc8666212c313ff442e3848ccc/wcl-api/src/main/java/co/surumene/wcl/api/inventory/StorageSnapshot.java)を参照。これはAPI型の静的確認であり、WWC/WWW provider登録・実サーバーでの応答・owner/commander意味論・保存済み個体の完全性を検証したものではない。
 
 ## Coherent saved-sign candidate assembly (Draft vectors)
 
