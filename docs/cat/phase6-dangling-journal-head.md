@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.dangling-journal-head
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: dangling journal head is not an empty journal (CAT Draft)
 
 Status: **Draft**, not Confirmed. Leaf: `TASK-20261101-005`.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | journal headのNOFOLLOW分類 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| head.link | journal headがdangling symlinkのとき | 存在する不正なdurable recordとして拒否し既存linkを維持する | SC-JOURNAL-HEAD-01 |
+| head.empty | headがなくgrant記録もないとき | 正当な初期sequence zeroのみ生成する | SC-JOURNAL-HEAD-02 |
+| head.missing-records | headがないがgrant記録が存在するとき | 空journalと誤認せずfail-closedとする | SC-JOURNAL-HEAD-03 |
 
 ## Process / PI
 
