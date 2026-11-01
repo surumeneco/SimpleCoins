@@ -29,3 +29,7 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 ## Explicit required-source completeness (additional Draft vector)
 
 - BAN-EVIDENCE-04 Red: callers must pass the authoritative required-source ID set separately from observations. A missing required source yields UNKNOWN (or BANNED if another required source definitively bans), never CLEAR. Unknown/unexpected source IDs fail closed. An empty required-source declaration is invalid. The list-only convenience form must not remain the production decision API because it cannot prove source completeness.
+
+## Required BAN source to owner-decision boundary
+
+- OWNER-EVIDENCE-05: a verified personal UUID with Paper CLEAR but a missing required external BAN source remains UNKNOWN and cannot be converted into publishable personal ownership. The same UUID with all required sources CLEAR may be converted.
