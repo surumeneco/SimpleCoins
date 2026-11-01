@@ -130,4 +130,19 @@ class SettlementSnapshotStoreTest {
             pool.shutdownNow();
         }
     }
+
+    @Test void heldWriterLockRejectsPublicationWithoutWaitingOrChangingHead() throws Exception {
+        Path root = directory.resolve("snapshots");
+        var store = new SettlementSnapshotStore(root);
+        Path lockPath = root.resolve("settlement.lock");
+        try (var channel = java.nio.channels.FileChannel.open(lockPath,
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.WRITE);
+             var held = channel.lock()) {
+            var candidate = new SettlementGenerationPublisher.Published(
+                    1, staged(100, 0, 0, true).commit());
+            assertThrows(IOException.class, () -> store.persist(candidate));
+            assertTrue(store.load().isEmpty());
+        }
+    }
 }
