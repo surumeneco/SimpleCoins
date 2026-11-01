@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.atomic-java-pack-publication
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: atomic Java resource-pack publication (CAT Draft)
 
 Status: **Draft**, not Confirmed. Leaf TASK-20261101-006.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | pack publicationのatomic rename |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| pack.atomic.unsupported | filesystemがATOMIC_MOVEをサポートしないとき | non-atomic fallbackせずIOExceptionを伝播し既存packを維持する | PACK-ATOMIC-01 |
+| pack.atomic.success | atomic moveが成功するとき | candidate bytesを完全に置換する | PACK-ATOMIC-02 |
+| pack.atomic.invalid | temporary archiveが欠損または通常ファイルでないとき | destination変更前に拒否する | PACK-ATOMIC-03 |
 
 ## Process / PI
 
