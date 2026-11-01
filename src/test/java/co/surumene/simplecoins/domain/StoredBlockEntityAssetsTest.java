@@ -150,4 +150,22 @@ class StoredBlockEntityAssetsTest {
         assertEquals(Map.of("0,64,0:8", BigInteger.valueOf(100)),
                 StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(dispenser))));
     }
+
+    @Test void furnaceFamilyCannotCountNonexistentFourthSlot() {
+        for (String id : List.of("minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker")) {
+            Map<String,Object> furnace = Map.of(
+                    "id", id, "x", 0, "y", 64, "z", 0,
+                    "Items", List.of(coin(3, 1)));
+            assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                    Map.of("block_entities", List.of(furnace))), id);
+        }
+    }
+
+    @Test void furnaceOutputSlotRemainsCountable() throws Exception {
+        Map<String,Object> furnace = Map.of(
+                "id", "minecraft:furnace", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(2, 1)));
+        assertEquals(Map.of("0,64,0:2", BigInteger.valueOf(100)),
+                StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(furnace))));
+    }
 }
