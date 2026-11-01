@@ -80,5 +80,32 @@ class BlockLockerSavedProtectionResolverTest {
                 Map.of("2,64,0", wall("east")), raw -> raw,
                 PRIVATE, MORE, EVERYONE,
                 name -> ExternalOwnerDecision.personal(OWNER)).owner());
+
+        // BL-CHEST-05 / BL-EVERYONE: an attached MORE_USERS sign on the
+        // opposite half can make an independently verified PRIVATE owner public.
+        var signs = Map.of(
+                "-1,64,0", sign("[Private]", "Alice", "", ""),
+                "2,64,0", sign("[More Users]", "[Everyone]", "", ""));
+        var attachedStates = Map.of(
+                "-1,64,0", wall("west"), "2,64,0", wall("east"));
+        assertEquals(ExternalOwnerDecision.Kind.FREE,
+                BlockLockerSavedProtectionResolver.doubleChest(
+                        first, second, signs, attachedStates, raw -> raw,
+                        PRIVATE, MORE, EVERYONE,
+                        name -> ExternalOwnerDecision.personal(OWNER)).kind());
+
+        // Everyone does not override an unresolved PRIVATE identity.
+        assertEquals(ExternalOwnerDecision.Kind.UNKNOWN,
+                BlockLockerSavedProtectionResolver.doubleChest(
+                        first, second, signs, attachedStates, raw -> raw,
+                        PRIVATE, MORE, EVERYONE,
+                        name -> ExternalOwnerDecision.unknown()).kind());
+
+        // A visible Everyone sign with the wrong physical facing is unattached.
+        assertEquals(OWNER, BlockLockerSavedProtectionResolver.doubleChest(
+                first, second, signs,
+                Map.of("-1,64,0", wall("west"), "2,64,0", wall("west")),
+                raw -> raw, PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)).owner());
     }
 }
