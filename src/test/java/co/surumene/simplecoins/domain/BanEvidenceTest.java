@@ -32,4 +32,10 @@ class BanEvidenceTest {
         assertThrows(IOException.class, () -> BanEvidence.combine(List.of(
                 new BanEvidence.Source("paper", null))));
     }
+    @Test void caseAndWhitespaceAliasesCannotCountAsIndependentBanSources() {
+        assertThrows(IOException.class, () -> BanEvidence.combine(List.of(
+                new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
+                new BanEvidence.Source(" PAPER ", BanEvidence.Status.CLEAR))));
+    }
+
 }
