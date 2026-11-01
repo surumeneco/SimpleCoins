@@ -61,8 +61,8 @@ public final class StoredBlockEntityAssets {
             if (id.equals("minecraft:decorated_pot") && entity.containsKey("Items"))
                 throw new IOException("Unexpected decorated pot inventory format at " + pos);
 
+            if (!entity.containsKey("Items")) continue;
             Object rawInventory = entity.get("Items");
-            if (rawInventory == null) continue;
             if (!(rawInventory instanceof List<?> inventory))
                 throw new IOException("Malformed block entity Items at " + pos);
 
