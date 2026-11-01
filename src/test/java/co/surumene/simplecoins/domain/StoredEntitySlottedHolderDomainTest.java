@@ -31,6 +31,18 @@ class StoredEntitySlottedHolderDomainTest {
                 Map.of("Entities", List.of(holder("custom:unknown_holder")))));
     }
 
+    @Test void inventedVanillaNamespaceChestBoatCannotInventSlots() {
+        assertThrows(IOException.class, () -> StoredEntityInventoryAssets.extract(
+                Map.of("Entities", List.of(holder("minecraft:fictional_chest_boat")))));
+    }
+
+    @Test void knownPaleOakChestBoatRemainsSupported() throws Exception {
+        assertEquals(Map.of("00000000-0000-0000-0000-00000000005b:inventory:0",
+                        BigInteger.valueOf(100)),
+                StoredEntityInventoryAssets.extract(Map.of("Entities",
+                        List.of(holder("minecraft:pale_oak_chest_boat")))));
+    }
+
     @Test void supportedChestMinecartStillCountsPhysicalSlot() throws Exception {
         assertEquals(Map.of("00000000-0000-0000-0000-00000000005b:inventory:0",
                         BigInteger.valueOf(100)),
