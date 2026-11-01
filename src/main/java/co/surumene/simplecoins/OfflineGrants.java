@@ -112,17 +112,12 @@ public final class OfflineGrants implements Listener {
         } catch(Exception failure) {fail(failure);}
     }
     private void verifySavedReceipt(Player player) throws IOException {
-        Set<Path> candidates=new HashSet<>();
-        for(World world:Bukkit.getWorlds()) {
-            Path root=world.getWorldFolder().toPath();
-            for(String directory:List.of("players/data","playerdata")) {
-                Path candidate=root.resolve(directory).resolve(player.getUniqueId()+".dat");
-                if(Files.isRegularFile(candidate))candidates.add(candidate.toRealPath());
-            }
-        }
-        if(candidates.size()!=1)throw new IOException("Cannot identify unique saved playerdata: "+player.getUniqueId());
+        List<Path> worldRoots = Bukkit.getWorlds().stream()
+                .map(world -> world.getWorldFolder().toPath()).toList();
+        Path receipt = SavedPlayerReceiptLocator.findUnique(worldRoots, player.getUniqueId());
         Map<String,Object> root;
-        try(var input=new GZIPInputStream(Files.newInputStream(candidates.iterator().next()))) {
+        try(var input=new GZIPInputStream(
+                Files.newInputStream(receipt, LinkOption.NOFOLLOW_LINKS))) {
             root=NbtReader.read(input,32*1024*1024);
         }
         if(!(root.get("BukkitValues") instanceof Map<?,?> pdc))throw new IOException("Missing saved receipt PDC");
