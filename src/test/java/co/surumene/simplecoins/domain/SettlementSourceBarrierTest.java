@@ -55,6 +55,13 @@ class SettlementSourceBarrierTest {
         assertThrows(IllegalStateException.class,
                 () -> reentrant.withJoinPermit(() -> reentrant.sourceMutated("region")));
         assertEquals(SettlementSourceBarrier.State.FAILED, reentrant.state());
+        var late = new SettlementSourceBarrier(Set.of("region"));
+        late.beginStaging();
+        late.completeSource("region");
+        late.openAfterDurableReadback(store, expected);
+        late.failSource("region");
+        assertEquals(SettlementSourceBarrier.State.FAILED, late.state());
+        assertThrows(IllegalStateException.class, late::requireJoinReady);
         gate.sourceMutated("region");
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
         assertThrows(IllegalStateException.class,
