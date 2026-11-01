@@ -35,10 +35,10 @@ public final class JavaPackBuilder {
     public Path build() throws IOException {
         Path folder = plugin.getDataFolder().toPath();
         Path imageDir = folder.resolve("images");
-        Files.createDirectories(imageDir);
+        co.surumene.simplecoins.domain.PackImageSource.ensureDirectory(imageDir);
         List<String> names = new ArrayList<>();
         try (var listing = Files.list(imageDir)) {
-            listing.filter(Files::isRegularFile).map(path -> path.getFileName().toString()).forEach(names::add);
+            listing.map(path -> path.getFileName().toString()).forEach(names::add);
         }
         for (CoinDenomination d : CoinDenomination.values()) {
             String stem = CoinImageNames.normalizeStem(items.name(d));
@@ -48,8 +48,8 @@ public final class JavaPackBuilder {
                 if (!items.name(d).equals(d.value() + " Coin")) {
                     throw new IOException("Missing image for renamed denomination: " + items.name(d));
                 }
-                Path image = imageDir.resolve(defaultFile).normalize();
-                if (!image.getParent().equals(imageDir)) throw new IOException("Invalid image path");
+                Path image = co.surumene.simplecoins.domain.PackImageSource
+                        .newDefaultPng(imageDir, defaultFile);
                 makeDefaultCoin(image, d.value());
                 names.add(defaultFile);
             }
@@ -68,7 +68,13 @@ public final class JavaPackBuilder {
                     int value = d.value();
                     String id = "coin_" + value;
                     zip.putNextEntry(new ZipEntry("assets/simplecoins/textures/item/" + id + ".png"));
-                    Files.copy(imageDir.resolve(name), zip);
+                    Path source = co.surumene.simplecoins.domain.PackImageSource
+                            .existingPng(imageDir, name);
+                    try (var input = Files.newInputStream(source,
+                            java.nio.file.StandardOpenOption.READ,
+                            java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                        input.transferTo(zip);
+                    }
                     zip.closeEntry();
                     put(zip, "assets/simplecoins/models/item/" + id + ".json",
                         "{\"parent\":\"minecraft:item/generated\",\"textures\":{\"layer0\":\"simplecoins:item/" + id + "\"}}");
@@ -80,8 +86,13 @@ public final class JavaPackBuilder {
             var images = new java.util.EnumMap<CoinDenomination, byte[]>(CoinDenomination.class);
             var displayNames = new java.util.EnumMap<CoinDenomination, String>(CoinDenomination.class);
             for (CoinDenomination d : CoinDenomination.values()) {
-                Path source = imageDir.resolve(CoinImageNames.uniquePng(items.name(d), names));
-                images.put(d, Files.readAllBytes(source));
+                Path source = co.surumene.simplecoins.domain.PackImageSource.existingPng(
+                        imageDir, CoinImageNames.uniquePng(items.name(d), names));
+                try (var input = Files.newInputStream(source,
+                        java.nio.file.StandardOpenOption.READ,
+                        java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                    images.put(d, input.readAllBytes());
+                }
                 displayNames.put(d, items.name(d));
             }
             co.surumene.simplecoins.domain.BedrockPack.write(
@@ -123,6 +134,11 @@ public final class JavaPackBuilder {
             g.setColor(new Color(56, 42, 24));
             g.drawString(label, (64 - metrics.stringWidth(label)) / 2, 32 + metrics.getAscent()/3);
         } finally { g.dispose(); }
-        if (!ImageIO.write(img, "PNG", path.toFile())) throw new IOException("PNG encoder unavailable");
+        try (var output = Files.newOutputStream(path,
+                java.nio.file.StandardOpenOption.CREATE_NEW,
+                java.nio.file.StandardOpenOption.WRITE)) {
+            if (!ImageIO.write(img, "PNG", output))
+                throw new IOException("PNG encoder unavailable");
+        }
     }
 }
