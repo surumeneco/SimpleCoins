@@ -24,6 +24,10 @@ public final class BlockLockerProtectionResolution {
             Objects.requireNonNull(header);
             if ((header == BlockLockerHeaderMatcher.Type.PRIVATE) != (primary != null))
                 throw new IllegalArgumentException("Inconsistent sign header/primary evidence");
+            // FREE is an aggregate protection result, never a PRIVATE profile.
+            if (header == BlockLockerHeaderMatcher.Type.PRIVATE &&
+                    primary.kind() == ExternalOwnerDecision.Kind.FREE)
+                throw new IllegalArgumentException("PRIVATE sign cannot have a FREE primary");
         }
     }
 
