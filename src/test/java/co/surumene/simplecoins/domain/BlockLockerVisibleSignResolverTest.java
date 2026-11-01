@@ -53,6 +53,14 @@ class BlockLockerVisibleSignResolverTest {
                 BlockLockerProtectionResolution.single(CHEST, List.of(sign)).kind());
     }
 
+    @Test void freeLookupCannotMakePrivateSignPublicEvenWithEveryone() throws Exception {
+        var sign = verify(List.of("[Private]", "Alice", "[Everyone]", ""),
+                Optional.empty(), name -> ExternalOwnerDecision.free());
+        assertEquals(ExternalOwnerDecision.Kind.UNKNOWN, sign.primary().kind());
+        assertEquals(ExternalOwnerDecision.Kind.UNKNOWN,
+                BlockLockerProtectionResolution.single(CHEST, List.of(sign)).kind());
+    }
+
     @Test void savedUuidConflictCannotPromoteUnverifiedOwner() throws Exception {
         var hint = new BlockLockerSavedHints.Hints("PRIVATE", Optional.of(OTHER), false);
         var sign = verify(List.of("[Private]", "Alice", "", ""),
