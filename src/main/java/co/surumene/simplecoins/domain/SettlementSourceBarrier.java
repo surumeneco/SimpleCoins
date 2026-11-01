@@ -27,6 +27,13 @@ public final class SettlementSourceBarrier {
         this.requiredSources = Set.copyOf(requiredSources);
     }
 
+    /** Derive the exact canonical closure from the verified discovery manifest. */
+    public static SettlementSourceBarrier fromManifest(WorldStorageDiscovery.Manifest manifest)
+            throws IOException {
+        Objects.requireNonNull(manifest, "manifest");
+        return new SettlementSourceBarrier(manifest.requiredSourceIds());
+    }
+
     public synchronized State state() { return state; }
 
     public synchronized void beginStaging() {
