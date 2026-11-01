@@ -1,6 +1,31 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.campfire-slot-integrity
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved campfire inventory slot integrity (CAT Draft)
 
 Status: **Draft** (not Confirmed). Parent TASK-20261031-SIMPLECOINS-100; leaf TASK-20261101-003.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| saved campfire BlockEntity | 4つの物理調理slotの境界 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| campfire.out-of-range | campfire/soul_campfireのItemsにslot 4以上があるとき | 存在しない物理slotを資産計上せずIOExceptionで拒否する | SC-CAMPFIRE-01, SC-CAMPFIRE-02 |
+| campfire.valid | slot 0〜3または空Itemsを読み取るとき | 既存の有効な4slotと空inventoryの挙動を維持する | SC-CAMPFIRE-03, SC-CAMPFIRE-04 |
 
 ## Process / PI
 
