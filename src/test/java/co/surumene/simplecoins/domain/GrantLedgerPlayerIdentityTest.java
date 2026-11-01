@@ -44,6 +44,11 @@ class GrantLedgerPlayerIdentityTest {
         assertTrue(ledger.wasApplied(grant, grant.sequence()));
         assertThrows(IllegalStateException.class,
                 () -> ledger.wasApplied(foreign, grant.sequence()));
+        var altered = new GrantLedger.Grant(grant.sequence(), grant.id(),
+                player, grant.amount() + 1, grant.issuer(), grant.createdMillis(),
+                grant.delivered(), null, 0);
+        assertThrows(IllegalStateException.class,
+                () -> ledger.wasApplied(altered, grant.sequence()));
     }
 
 }
