@@ -84,12 +84,14 @@ public final class SettlementSnapshotStore {
             long current = load().map(SettlementGenerationPublisher.Published::generation).orElse(0L);
             if (current == Long.MAX_VALUE || candidate.generation() != current + 1)
                 throw new IOException("Stale or non-sequential settlement generation");
+            // The first write must leave a durable fail-closed marker even if
+            // the subsequent snapshot replacement is interrupted or rejected.
+            if (!Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
+                DurableFile.write(initialized, new byte[] {0x53, 0x43, 0x53, 0x31});
             DurableFile.write(snapshot, payload);
             if (!candidate.equals(load().orElseThrow(
                     () -> new IOException("Committed settlement snapshot disappeared"))))
                 throw new IOException("Settlement snapshot readback differs from committed candidate");
-            if (!Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
-                DurableFile.write(initialized, new byte[] {0x53, 0x43, 0x53, 0x31});
         } catch (OverlappingFileLockException concurrent) {
             throw new IOException("Settlement snapshot writer already active", concurrent);
         }
