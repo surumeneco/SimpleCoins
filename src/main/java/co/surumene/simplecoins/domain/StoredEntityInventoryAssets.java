@@ -34,6 +34,10 @@ public final class StoredEntityInventoryAssets {
                 throw new IOException("Ambiguous Entity inventory representations");
             if (slotted && (id.equals("minecraft:villager") || id.equals("minecraft:allay")))
                 throw new IOException("Villager/Allay must use unslotted Inventory representation");
+            // Only these vanilla entities have a positional, unslotted Inventory.
+            // A fabricated Inventory on a different holder is not a second asset source.
+            if (unslotted && !id.equals("minecraft:villager") && !id.equals("minecraft:allay"))
+                throw new IOException("Unsupported unslotted Entity inventory: " + id);
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)
