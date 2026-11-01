@@ -14,6 +14,9 @@ During bounded, non-symlink discovery, reject a non-regular entry at an authorit
 - SC-SOURCE-TYPE-02 (Red): a directory at `world/playerdata/<UUID>.dat` must throw `IOException` rather than yield a zero-player manifest.
 - SC-SOURCE-TYPE-03 (Green): an unrelated backup directory named `r.0.0.mca` under `world/backups` does not become a mandatory source.
 - SC-SOURCE-TYPE-04 (Regression): regular canonical Anvil/playerdata paths are still discovered and the global visit budget is still enforced.
+- SC-SOURCE-TYPE-05: the modern `dimensions/minecraft/the_nether/entities/r.0.0.mca` path must also reject a directory.
+- SC-SOURCE-TYPE-06: legacy `players/data/<UUID>.dat` must reject a directory.
+- SC-SOURCE-TYPE-07: a region-shaped directory in a world excluded by WorldScope remains outside the world asset scan.
 
 ## Gate status
 
