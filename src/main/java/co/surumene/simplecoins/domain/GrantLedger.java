@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.*;
 
@@ -24,6 +25,7 @@ public final class GrantLedger {
                 true, denomination, coinCount); }
     }
     private final Path directory;
+    private final Object directoryFileKey;
     private final TreeMap<Long, Grant> grants = new TreeMap<>();
     private boolean failed;
 
@@ -35,6 +37,12 @@ public final class GrantLedger {
         requireRealAncestors(this.directory);
         if (!Files.isDirectory(this.directory, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Issuance journal root is not a real directory: " + this.directory);
+        // A live journal instance cannot be rebound to a different directory
+        // simply because a new folder reuses its original pathname.
+        directoryFileKey = Files.readAttributes(this.directory, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS).fileKey();
+        if (directoryFileKey == null)
+            throw new IOException("Stable issuance journal root identity is unavailable");
         try (var listing = Files.list(this.directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
@@ -149,17 +157,15 @@ public final class GrantLedger {
         if (failed) throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
         try {
             requireRealAncestors(directory);
-        } catch (IOException unsafePath) {
+            BasicFileAttributes current = Files.readAttributes(directory,
+                    BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (!current.isDirectory() || !directoryFileKey.equals(current.fileKey()))
+                throw new IOException("Issuance journal physical root changed");
+            if (!Files.isRegularFile(directory.resolve("head"), LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Issuance journal durable head missing or replaced");
+        } catch (IOException unsafe) {
             failed = true;
-            throw new IllegalStateException("Issuance journal root became unsafe", unsafePath);
-        }
-        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
-            failed = true;
-            throw new IllegalStateException("Issuance journal root missing or replaced");
-        }
-        if (!Files.isRegularFile(directory.resolve("head"), LinkOption.NOFOLLOW_LINKS)) {
-            failed = true;
-            throw new IllegalStateException("Issuance journal durable head missing or replaced");
+            throw new IllegalStateException("Issuance journal root became unsafe", unsafe);
         }
     }
     private void persist(Grant grant) throws IOException {
