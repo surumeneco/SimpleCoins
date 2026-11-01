@@ -40,11 +40,23 @@ public final class AnvilRegionReader {
 
     private record Entry(int slot, int offset, int count) {}
 
+    @FunctionalInterface
+    interface SidecarObserver {
+        void observed(Path sidecar) throws IOException;
+    }
+
     /** Unknown compression IDs, truncated/corrupt data or exhausted budgets abort the entire scan. */
     public static void scan(Path regionFile, int maxCompressedBytes, int maxInflatedBytes,
                             ChunkConsumer callback) throws IOException {
+        scan(regionFile, maxCompressedBytes, maxInflatedBytes, callback, sidecar -> {});
+    }
+
+    /** Internal read-only source handoff for final traversal revalidation. */
+    static void scan(Path regionFile, int maxCompressedBytes, int maxInflatedBytes,
+                     ChunkConsumer callback, SidecarObserver observer) throws IOException {
         Objects.requireNonNull(regionFile);
         Objects.requireNonNull(callback);
+        Objects.requireNonNull(observer);
         if (maxCompressedBytes < 1 || maxInflatedBytes < 1)
             throw new IllegalArgumentException("Chunk budgets must be positive");
 
@@ -169,8 +181,10 @@ public final class AnvilRegionReader {
             }
             // Recheck sidecars after all chunk callbacks, not only after
             // their own callback. This is still not a frozen-world snapshot.
-            for (var entry : observedSidecars.entrySet())
+            for (var entry : observedSidecars.entrySet()) {
                 requireUnchangedSidecar(entry.getKey(), entry.getValue());
+                observer.observed(entry.getKey());
+            }
         }
     }
 
