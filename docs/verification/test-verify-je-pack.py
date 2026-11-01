@@ -4,6 +4,8 @@
 import hashlib
 import http.server
 import os
+import shlex
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -130,7 +132,33 @@ def main() -> None:
             assert "Hosted pack download failed (URL redacted)." in option_like_url.stderr
             assert "Usage: curl" not in option_like_url.stdout + option_like_url.stderr
 
-            print("PASS 11/11 Java pack verifier HTTP and failure-path checks")
+            # PACK-HOSTED-01: mutate the local archive immediately after
+            # the first successful byte comparison, before SHA-1 evidence.
+            # A verifier must not report success with divergent digests.
+            with tempfile.TemporaryDirectory(prefix="simplecoins-cmp-hook-") as hook_dir:
+                real_cmp = shutil.which("cmp")
+                assert real_cmp is not None
+                wrapper = Path(hook_dir) / "cmp"
+                wrapper.write_text(
+                    "#!/bin/sh\n"
+                    + shlex.quote(real_cmp) + ' "$@" || exit $?\n'
+                    + 'printf x >> "$SIMPLECOINS_TEST_MUTATE_FILE"\n'
+                )
+                wrapper.chmod(0o755)
+                mutation_env = env.copy()
+                mutation_env["PATH"] = str(hook_dir) + os.pathsep + env["PATH"]
+                mutation_env["SIMPLECOINS_TEST_MUTATE_FILE"] = str(generated)
+                mutated = subprocess.run(
+                    ["bash", str(script), str(generated)],
+                    input=f"http://127.0.0.1:{port}/generated.zip\n",
+                    capture_output=True, text=True, timeout=20,
+                    env=mutation_env, check=False,
+                )
+                assert mutated.returncode == 1, mutated.stdout + mutated.stderr
+                assert "Generated archive changed during verification." in mutated.stderr
+                assert "Verified identical bytes" not in mutated.stdout
+
+            print("PASS 12/12 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
