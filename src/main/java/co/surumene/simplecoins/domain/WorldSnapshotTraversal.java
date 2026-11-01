@@ -55,8 +55,15 @@ public final class WorldSnapshotTraversal {
         // A stable list of saved files does not prove that an empty world root
         // has not been replaced while another world's sources are traversed.
         Map<String, RootIdentity> rootIdentities = new HashMap<>();
-        for (var entry : roots.entrySet())
-            rootIdentities.put(entry.getKey(), rootIdentity(entry.getValue()));
+        Map<RootIdentity, String> physicalRootOwners = new HashMap<>();
+        for (var entry : roots.entrySet()) {
+            RootIdentity identity = rootIdentity(entry.getValue());
+            String previous = physicalRootOwners.putIfAbsent(identity, entry.getKey());
+            if (previous != null)
+                throw new IOException("World roots alias one physical directory: " +
+                        previous + " and " + entry.getKey());
+            rootIdentities.put(entry.getKey(), identity);
+        }
         requireSameSources(manifest,
                 WorldStorageDiscovery.discover(roots, scope, maximumEntries));
         requireSameRoots(roots, rootIdentities);
