@@ -94,7 +94,9 @@ public final class WorldSnapshotTraversal {
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
                     }, sidecar -> {
                         // The reader has validated this referenced sidecar.
-                        // Keep it in the final cross-source recheck as well.
+                        // Physical aliases across all saved-source categories
+                        // must not masquerade as independent inputs.
+                        requireUniquePhysicalFile(sidecar, physicalKeys, unknownKeys);
                         completedSources.put(sidecar, stamp(sidecar));
                     });
             requireUnchanged(source.path(), before);
