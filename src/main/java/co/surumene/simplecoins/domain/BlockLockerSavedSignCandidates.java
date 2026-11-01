@@ -25,8 +25,16 @@ public final class BlockLockerSavedSignCandidates {
                 throw new IOException("Malformed saved block entity");
             if (!id.equals("minecraft:sign") && !id.equals("minecraft:hanging_sign"))
                 continue;
-            String position = coordinate(block.get("x")) + "," +
-                    coordinate(block.get("y")) + "," + coordinate(block.get("z"));
+            int x = coordinate(block.get("x"));
+            int y = coordinate(block.get("y"));
+            int z = coordinate(block.get("z"));
+            String position = x + "," + y + "," + z;
+            if (chunk.containsKey("xPos") || chunk.containsKey("zPos")) {
+                if (!(chunk.get("xPos") instanceof Integer chunkX) ||
+                        !(chunk.get("zPos") instanceof Integer chunkZ) ||
+                        Math.floorDiv(x, 16) != chunkX || Math.floorDiv(z, 16) != chunkZ)
+                    throw new IOException("Saved sign outside declaring terrain chunk: " + position);
+            }
             if (!block.containsKey("PublicBukkitValues")) continue;
             Object rawPdc = block.get("PublicBukkitValues");
             if (!(rawPdc instanceof Map<?, ?> pdc) ||
