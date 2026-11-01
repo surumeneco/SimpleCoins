@@ -21,3 +21,7 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 ## Staging boundary integration (additional Draft vector)
 
 - OWNER-EVIDENCE-04: an inventory containing a real denomination coin, when resolved as UNKNOWN external owner, causes `BlockEntitySettlementImport.stageChunk` to fail and `SettlementAccumulator.commit` to remain unavailable. A verified FREE decision may be staged as Free. This distinguishes missing ownership evidence from zero currency.
+
+## Canonical BAN source identity (additional Draft vector)
+
+- BAN-EVIDENCE-03: source IDs differing only by ASCII case or surrounding whitespace are one logical source, not two independent confirmations. Duplicate normalized IDs must fail closed.
