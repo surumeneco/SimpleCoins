@@ -50,6 +50,11 @@ public final class StoredItemDisplayAssets {
                           count instanceof Integer || count instanceof Long) ||
                         count.longValue() != 0)
                     throw new IOException("Malformed empty item display: " + key);
+                if (stack.containsKey("components")) {
+                    Object rawComponents = stack.get("components");
+                    if (!(rawComponents instanceof Map<?, ?> components) || !components.isEmpty())
+                        throw new IOException("Unexpected components on empty item display: " + key);
+                }
                 continue;
             }
             @SuppressWarnings("unchecked")
