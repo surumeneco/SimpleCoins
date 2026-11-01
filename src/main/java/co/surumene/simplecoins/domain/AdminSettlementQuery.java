@@ -52,6 +52,8 @@ public final class AdminSettlementQuery {
             Objects.requireNonNull(result.personalBalances());
             Objects.requireNonNull(result.statistics());
             Objects.requireNonNull(result.deadLocations());
+            if (result.personalBalances().keySet().stream().anyMatch(Objects::isNull))
+                throw new IOException("Missing registered settlement player UUID");
             var computed = AssetStatistics.calculate(
                     result.personalBalances(), result.free(), result.dead());
             if (!computed.equals(result.statistics()))
@@ -61,7 +63,7 @@ public final class AdminSettlementQuery {
                 if (location == null || location.owner() == null ||
                         location.reason() == null || location.value() == null ||
                         location.value().signum() <= 0 || location.location() == null ||
-                        location.location().isBlank())
+                        location.location().isBlank() || location.location().length() > 1024)
                     throw new IOException("Malformed dead-asset location evidence");
                 located = located.add(location.value());
             }
