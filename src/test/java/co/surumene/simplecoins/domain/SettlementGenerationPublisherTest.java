@@ -33,7 +33,7 @@ class SettlementGenerationPublisherTest {
                 () -> publisher.publish(0, staged(300, true)));
         assertEquals(first, publisher.current().orElseThrow());
 
-        var next = staged(500, true);
+        var next = staged(500, false);
         next.failSource("source", "snapshot changed");
         assertThrows(IllegalStateException.class, () -> publisher.publish(1, next));
         assertEquals(first, publisher.current().orElseThrow());
