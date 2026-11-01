@@ -1,19 +1,32 @@
-# Phase 6: issuance journal player identity queries (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.grant.player-identity
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft** (not Confirmed). Leaf TASK-20261101-005.
+# DomainSpec: 発行予約の受取人UUIDとreceiptの対応
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | 予約・照会の受取人UUID |
+| simplecoins.journal | 永続発行予約のID・sequence・receipt |
 
-A journal lookup requires a concrete player UUID. A null player identity must not be interpreted as an empty pending queue or a valid zero receipt. Otherwise a caller with missing identity evidence could silently skip pending grants during recovery. Reject null identities before reading pending grants or validating saved receipts. Valid UUID lookups and the existing crash replay/acknowledgement behavior remain unchanged.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| grant.pending.identity | pending(null) | 空一覧と解釈せず拒否する | SC-GRANT-IDENTITY-01 |
+| grant.receipt.identity | validateReceipt(null, 0) | 有効なゼロreceiptと解釈せず拒否する | SC-GRANT-IDENTITY-02 |
+| grant.restart.valid | 有効な受取人UUIDの予約を永続化し再起動したとき | 未配達予約を保持し、適正receiptにより一回だけ承認できる | SC-GRANT-IDENTITY-03 |
+| grant.applied.binding | wasAppliedにgrantと保存済みreceiptが渡されたとき | sequence・grant UUID・受取人UUID・不変フィールドを現行journalと照合し、別人や偽造予約を適用済みとしない | SC-GRANT-IDENTITY-04 |
 
-## TCE
+## 境界と状態
 
-- SC-GRANT-IDENTITY-01 (Red): `pending(null)` rejects the request rather than returning an empty list.
-- SC-GRANT-IDENTITY-02 (Red): `validateReceipt(null, 0)` rejects the request rather than accepting an empty receipt.
-- SC-GRANT-IDENTITY-03 (Regression): valid recipient still has a pending reservation after restart and can acknowledge it once.
-
-Formal CAT machine Gates not-run; Draft not Confirmed. No release or merge.
-
-## Journal grant identity binding (Draft vector)
-
-- SC-GRANT-IDENTITY-04: `wasApplied` must match the supplied grant's sequence, grant UUID and recipient UUID against the current durable journal record before using a playerdata receipt. A foreign or forged grant with a coincidentally matching sequence/recipient must not be treated as already applied, even if its receipt is numerically sufficient.
+既存SC-GRANT-IDENTITY-01〜04の意味を変えないTASK-20261101-005のCAT Draft。局所的identity guardはplayerdata保存完了、Paper実機配達、クラッシュ後の完全な再送防止を保証しない。正式CAT Process/PI/TCE・機械Gate・実機検証はnot-run。Confirmed・マージ・リリースを意味しない。
