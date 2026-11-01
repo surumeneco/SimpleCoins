@@ -16,3 +16,6 @@ CAT machine gates (process-closure, TestModel generation, model-conformance, vec
 
 ## Additional physical-stack invariant (Draft)
 A nonempty vanilla bundle or shulker box is not a stackable container of identical hidden inventories. If saved NBT reports count greater than one alongside a nested-storage component, fail closed rather than multiplying the nested balance by that count. Ordinary count-one containers remain valid. This is separate from the dual-component ambiguity and requires its own Red/Green cycle.
+
+## Additional shulker slot invariant (Draft)
+Vanilla shulker boxes have 27 physical inventory slots, indexed 0..26. A saved `minecraft:container` entry with slot 27 or higher on a shulker item is not a valid physical slot. Fail closed instead of accounting an impossible location. This is distinct from generic component storage and needs its own regression test.
