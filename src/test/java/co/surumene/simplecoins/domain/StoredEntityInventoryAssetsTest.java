@@ -153,4 +153,27 @@ class StoredEntityInventoryAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(raft))));
     }
+
+    @Test void hopperMinecartSlotFiveMustFailClosed() {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 5,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> hopper = Map.of("id", "minecraft:hopper_minecart",
+                "UUID", new int[]{0, 0, 0, 34}, "Items", List.of(coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(hopper))));
+    }
+
+    @Test void hopperMinecartLastPhysicalSlotRemainsCountable() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 4,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> hopper = Map.of("id", "minecraft:hopper_minecart",
+                "UUID", new int[]{0, 0, 0, 34}, "Items", List.of(coin));
+        assertEquals(Map.of("00000000-0000-0000-0000-000000000022:inventory:4",
+                BigInteger.valueOf(100)),
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(hopper))));
+    }
 }
