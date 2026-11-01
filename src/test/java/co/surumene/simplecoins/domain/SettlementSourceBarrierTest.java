@@ -23,6 +23,12 @@ class SettlementSourceBarrierTest {
     @Test void onlyExactDurableReadbackOpensAllSources() throws Exception {
         var store = new SettlementSnapshotStore(directory.resolve("snapshots"));
         var expected = new SettlementGenerationPublisher.Published(1, complete().commit());
+        var manifest = new WorldStorageDiscovery.Manifest(
+                java.util.List.of(new WorldStorageDiscovery.SourceFile("world",
+                        directory.resolve("region/r.0.0.mca"), WorldStorageDiscovery.Kind.REGION)),
+                java.util.Map.of());
+        assertEquals(SettlementSourceBarrier.State.BLOCKED,
+                SettlementSourceBarrier.fromManifest(manifest).state());
         var gate = new SettlementSourceBarrier(Set.of("region", "playerdata"));
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
         gate.beginStaging();
