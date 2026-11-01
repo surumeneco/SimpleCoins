@@ -48,6 +48,26 @@ class AdminSettlementQueryTest {
         assertTrue(AdminSettlementQuery.deadLocationsFor(result, UUID.randomUUID()).isEmpty());
     }
 
+    @Test void nullRegisteredPlayerIdentityFailsClosedEvenWithConsistentTotals() {
+        var balances = new java.util.HashMap<UUID, BigInteger>();
+        balances.put(null, BigInteger.ZERO);
+        var result = new SettlementAccumulator.Result(
+                AssetStatistics.calculate(balances, BigInteger.ZERO, BigInteger.ZERO),
+                balances, BigInteger.ZERO, BigInteger.ZERO, List.of());
+        assertThrows(IOException.class, () -> AdminSettlementQuery.statistics(result));
+    }
+
+    @Test void overlongDeadLocationEvidenceFailsClosed() {
+        var valid = completed();
+        var location = new SettlementAccumulator.DeadLocation(
+                PLAYER, AssetOwner.DeadReason.CURRENT_BAN,
+                BigInteger.valueOf(20), "x".repeat(1025));
+        var result = new SettlementAccumulator.Result(
+                valid.statistics(), valid.personalBalances(), valid.free(),
+                valid.dead(), List.of(location));
+        assertThrows(IOException.class, () -> AdminSettlementQuery.deadLocations(result));
+    }
+
     @Test void inconsistentOrMissingSnapshotEvidenceFailsClosed() throws Exception {
         var result = completed();
         var wrongFree = new SettlementAccumulator.Result(
