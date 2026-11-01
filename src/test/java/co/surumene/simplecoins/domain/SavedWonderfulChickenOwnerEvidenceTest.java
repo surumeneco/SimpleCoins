@@ -2,7 +2,11 @@ package co.surumene.simplecoins.domain;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -32,6 +36,30 @@ class SavedWonderfulChickenOwnerEvidenceTest {
             assertEquals(CompanionOwnerResolution.known(OWNER),
                     SavedWonderfulChickenOwnerEvidence.read(
                             chicken("wonderful_chicken", version, OWNER.toString())));
+    }
+
+    @Test void serializedSavedEntityNbtRetainsTypedWwcEvidence() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeByte(10); out.writeUTF(""); // root
+            out.writeByte(9); out.writeUTF("Entities");
+            out.writeByte(10); out.writeInt(1); // one compound
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:chicken");
+            out.writeByte(10); out.writeUTF("BukkitValues");
+            out.writeByte(8); out.writeUTF(NS + "type"); out.writeUTF("wonderful_chicken");
+            out.writeByte(3); out.writeUTF(NS + "data_version"); out.writeInt(4);
+            out.writeByte(8); out.writeUTF(NS + "follow_target");
+            out.writeUTF(OWNER.toString());
+            out.writeByte(0); // BukkitValues
+            out.writeByte(0); // chicken
+            out.writeByte(0); // root
+        }
+        Map<String, Object> root = NbtReader.read(
+                new ByteArrayInputStream(bytes.toByteArray()), 4096);
+        Map<String, Object> saved = (Map<String, Object>)
+                ((List<?>) root.get("Entities")).get(0);
+        assertEquals(CompanionOwnerResolution.known(OWNER),
+                SavedWonderfulChickenOwnerEvidence.read(saved));
     }
 
     @Test void missingOrUnsupportedEvidenceNeverProvesFree() {
