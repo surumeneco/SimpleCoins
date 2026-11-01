@@ -118,7 +118,8 @@ public final class SettlementSourceBarrier {
             if (!actual.equals(expected))
                 throw new IOException("Durable settlement generation differs from staged result");
             state = State.OPEN;
-        } catch (IOException | RuntimeException failure) {
+        } catch (IOException | RuntimeException | Error failure) {
+            // A fatal readback failure leaves durable readiness unverified.
             state = State.FAILED;
             throw failure;
         }
