@@ -159,4 +159,23 @@ class SettlementSnapshotStoreTest {
         assertThrows(IOException.class, () -> SettlementGenerationPublisher.recoverFrom(store));
         assertThrows(IOException.class, () -> store.persist(first));
     }
+
+    @Test void committedWriteWithLostAcknowledgementRecoversExactlyOnce() throws Exception {
+        var store = new SettlementSnapshotStore(directory.resolve("snapshots"));
+        var publisher = new SettlementGenerationPublisher();
+        assertThrows(IOException.class, () -> publisher.publishDurably(
+                0, staged(100, 50, 25, true), candidate -> {
+                    store.persist(candidate);
+                    throw new IOException("Injected post-commit acknowledgement loss");
+                }));
+        assertTrue(publisher.current().isEmpty());
+        assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                0, staged(100, 50, 25, true), store::persist));
+        var recovered = SettlementGenerationPublisher.recoverFrom(store);
+        assertEquals(1L, recovered.current().orElseThrow().generation());
+        assertEquals(2L, recovered.publishDurably(
+                1, staged(200, 75, 10, true), store::persist).generation());
+        assertEquals(2L, SettlementGenerationPublisher.recoverFrom(store)
+                .current().orElseThrow().generation());
+    }
 }
