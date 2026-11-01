@@ -88,7 +88,8 @@ public final class BlockLockerVisibleSignResolver {
         if (header.orElseThrow() == BlockLockerHeaderMatcher.Type.PRIVATE) {
             if (primaryIdentity == null)
                 throw new IOException("Missing authoritative BlockLocker identity resolver");
-            String displayedName = decodedFront.get(1).trim();
+            // Visible legacy formatting is not part of a Minecraft profile name.
+            String displayedName = BlockLockerHeaderMatcher.clean(decodedFront.get(1));
             if (displayedName.isEmpty()) {
                 primary = ExternalOwnerDecision.unknown();
             } else {
