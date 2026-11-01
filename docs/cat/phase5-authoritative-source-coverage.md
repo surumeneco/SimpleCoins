@@ -40,7 +40,8 @@ language: ja
 | --- | --- | --- | --- |
 | coverage.world-inventory | Paper/Multiverseから渡されるworld集合を評価するとき | 決算対象の全worldの権威root一覧とWorldScopeの適用結果。証拠が未確定なら保存走査の完了証明に使わない | SC-COVERAGE-01, SC-COVERAGE-04 |
 | coverage.dimension-layout | 各対象worldのdimension別保存領域を評価するとき | 有効なlegacy/26.x保存配置とterrain/entityのsource種類を判別できること。証拠が未確定なら未認識領域を空とみなさない | SC-COVERAGE-02 |
-| coverage.playerdata | world非依存のプレイヤー保存領域を評価するとき | 現行playerdata正本の所在とUUIDの一意性、複数候補の衝突判定。証拠が未確定なら任意の一方を選ばない | SC-COVERAGE-03, SC-COVERAGE-04 |
+| coverage.playerdata | world非依存のプレイヤー保存領域を評価するとき | 現行playerdata正本の所在とUUIDの一意性、複数候補の衝突判定。証拠が未確定なら任意の一方を選ばない | SC-COVERAGE-03, SC-COVERAGE-04, SC-COVERAGE-07 |
+| coverage.catalog-stability | 走査中に権威world catalogが変化するとき | callerが固定したroot集合のclosure成功だけではworld全体の網羅を証明しない。権威catalogの世代・同一性を再照合できなければ全件決算を公開しない | SC-COVERAGE-08 |
 | coverage.source-read | manifestに含めた各保存sourceを評価するとき | 有界読取、NBT/外部sidecarの読取成功、同一物理sourceの重複排除。証拠が未確定なら全体Reportを成功にしない | SC-COVERAGE-02, SC-COVERAGE-06 |
 | coverage.loaded-vs-disk | ロード済み状態との境界を評価するとき | 同じ物理保有資産を一度だけ計上する時点整合の根拠。証拠が未確定ならPhase 6の決算公開を許可しない | SC-COVERAGE-05, SC-COVERAGE-06 |
 
@@ -56,12 +57,14 @@ language: ja
 | SC-COVERAGE-04 | world固有sourceをWorldScopeで除外し、playerdataが存在 | 除外worldを走査せず、playerdataは引き続き対象 |
 | SC-COVERAGE-05 | manifestの保存sourceは前後一致するが、ロード済みの同じ資産が別経路に存在 | 保存source closureだけでは全件決算を公開しない |
 | SC-COVERAGE-06 | callerが正しい権威world一覧を渡し、対象sourceを全件読み、各種検証も完了 | 保存source網羅性についてのみ合格候補。決算全体の成功を意味しない |
+| SC-COVERAGE-07 | 権威playerdataがworld rootの外側にある`players/data`に存在し、callerがworld rootのみを渡す | world root探索だけでplayerdataが0件と判定されることを許さない。独立のplayerdata正本一覧がなければ網羅証拠不足 |
+| SC-COVERAGE-08 | callerのroot集合と保存source集合は固定だが、Paper/Multiverseの権威world catalogに走査中に別worldが追加される | caller rootの前後一致だけでは全world網羅と判定しない。catalog世代の安定性が証明できなければ公開不可 |
 
 ## 実装前に決定・検証する事項
 
-1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。
+1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。 catalogの走査前後での同一性と、変更時の失敗・再試行境界も未決定。
 2. 保存sourceのディレクトリ不存在が「その版では正当な空」と「想定sourceの未検出」のどちらかを識別する規則。空ディレクトリを必須とする仕様はここでは採用しない。
-3. legacyと26.xの同時存在時に、別実体・別保存版・同一物理資産を区別する権威選択。任意の優先順位をこのDraftから導入しない。
+3. legacyと26.xの同時存在時に、別実体・別保存版・同一物理資産を区別する権威選択。任意の優先順位をこのDraftから導入しない。 world rootの外にあるworld非依存playerdataをどの権威情報から取得するかも未決定。
 4. loaded-vs-diskの同一時点性・APIスレッド制約・停止/保存バリアはPhase 6の正本で決定する。ここで凍結方式や再適用方式を勝手に確定しない。
 
 ## Gate・完了状態
