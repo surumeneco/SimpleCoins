@@ -16,6 +16,15 @@ import java.util.UUID;
  */
 public final class StoredItemValue {
     private static final int MAX_DEPTH = 32;
+    private static final Set<String> VANILLA_BUNDLE_IDS = Set.of(
+            "minecraft:bundle", "minecraft:white_bundle", "minecraft:orange_bundle",
+            "minecraft:magenta_bundle", "minecraft:light_blue_bundle",
+            "minecraft:yellow_bundle", "minecraft:lime_bundle",
+            "minecraft:pink_bundle", "minecraft:gray_bundle",
+            "minecraft:light_gray_bundle", "minecraft:cyan_bundle",
+            "minecraft:purple_bundle", "minecraft:blue_bundle",
+            "minecraft:brown_bundle", "minecraft:green_bundle",
+            "minecraft:red_bundle", "minecraft:black_bundle");
     private StoredItemValue() {}
 
     public static BigInteger value(Map<String, Object> item) throws IOException {
@@ -96,8 +105,7 @@ public final class StoredItemValue {
                 }
             }
             if (pdc.containsKey("simplecoins:wallet_id")) {
-                if (!(id.equals("minecraft:bundle") ||
-                        (id.startsWith("minecraft:") && id.endsWith("_bundle"))) || quantity != 1 ||
+                if (!VANILLA_BUNDLE_IDS.contains(id) || quantity != 1 ||
                         !(pdc.get("simplecoins:wallet_id") instanceof String walletId) ||
                         walletId.isBlank() ||
                         !(pdc.get("simplecoins:wallet_balance") instanceof Long balance) || balance < 0)
