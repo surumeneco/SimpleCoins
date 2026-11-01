@@ -25,6 +25,8 @@ class WorldSnapshotTraversalTest {
         try (var out = new DataOutputStream(bytes)) {
             out.writeByte(10); out.writeUTF("");
             out.writeByte(3); out.writeUTF("testValue"); out.writeInt(amount);
+            // Saved entity chunks have an Entities list, even when empty.
+            out.writeByte(9); out.writeUTF("Entities"); out.writeByte(10); out.writeInt(0);
             out.writeByte(0);
         }
         return bytes.toByteArray();
@@ -104,6 +106,21 @@ class WorldSnapshotTraversalTest {
         assertThrows(IOException.class, () ->
                 WorldSnapshotTraversal.traverse(manifest, 4096, 4096, visitor),
                 "The same physical Entity UUID must not be accounted in two saved chunks");
+    }
+
+    @Test void distinctSavedEntityUuidsAcrossChunksRemainTraversable() throws Exception {
+        Path first = savedEntityRegion("entities", 70);
+        Path second = savedEntityRegion("other/entities", 71);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", first, WorldStorageDiscovery.Kind.ENTITY),
+                new WorldStorageDiscovery.SourceFile("other", second, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        var visitor = new WorldSnapshotTraversal.Visitor() {
+            @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                        AnvilRegionReader.Chunk chunk) {}
+            @Override public void player(UUID player, Map<String,Object> data) {}
+        };
+        assertEquals(2, WorldSnapshotTraversal.traverse(manifest, 4096, 4096, visitor).chunks());
     }
 
     @Test void readsEachDiscoveredRegionAndPlayerWithoutSilentlySkippingSources() throws Exception {
