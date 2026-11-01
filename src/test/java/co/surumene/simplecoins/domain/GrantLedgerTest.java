@@ -147,6 +147,22 @@ class GrantLedgerTest {
         assertEquals(2L, restarted.reserve(player, 50, "console").sequence());
     }
 
+    @Test void fatalFailureAfterAcknowledgementWritePoisonsLedgerUntilRestart() throws Exception {
+        Path path = directory.resolve("fatal-ack-gap");
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(path);
+        var grant = ledger.reserve(player, 100, "console");
+        assertThrows(AssertionError.class, () -> ledger.acknowledgeWithAfterRecordHook(
+                grant, grant.sequence(), () -> {
+                    throw new AssertionError("simulated fatal failure after acknowledgement record");
+                }));
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player));
+
+        var restarted = new GrantLedger(path);
+        assertTrue(restarted.pending(player).isEmpty());
+        assertDoesNotThrow(() -> restarted.acknowledge(grant, grant.sequence()));
+    }
+
     @Test void reservationWrittenBeforeHeadUpdateIsRecovered() throws Exception {
         Path path = directory.resolve("grants");
         var ledger = new GrantLedger(path);
