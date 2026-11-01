@@ -94,7 +94,9 @@ public final class BlockLockerVisibleSignResolver {
                 primary = ExternalOwnerDecision.unknown();
             } else {
                 primary = primaryIdentity.resolve(displayedName);
-                if (primary == null)
+                // FREE is a protection aggregate, not a primary profile identity.
+                // An adapter returning FREE cannot establish an owner or Everyone.
+                if (primary == null || primary.kind() == ExternalOwnerDecision.Kind.FREE)
                     primary = ExternalOwnerDecision.unknown();
             }
             if (savedHints.isPresent() &&
