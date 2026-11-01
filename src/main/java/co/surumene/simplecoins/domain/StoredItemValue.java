@@ -46,6 +46,16 @@ public final class StoredItemValue {
         if (components.containsKey("minecraft:bundle_contents") &&
                 components.containsKey("minecraft:container"))
             throw new IOException("Ambiguous stored item nested storage components");
+        // Nonempty vanilla bundles and shulker boxes are individual physical
+        // containers. A fabricated stack count must not multiply their assets.
+        if (quantity > 1 && id.startsWith("minecraft:") &&
+                (id.equals("minecraft:bundle") || id.endsWith("_bundle") ||
+                 id.endsWith("_shulker_box")) &&
+                ((components.get("minecraft:bundle_contents") instanceof List<?> bundle &&
+                        !bundle.isEmpty()) ||
+                 (components.get("minecraft:container") instanceof List<?> container &&
+                        !container.isEmpty())))
+            throw new IOException("Stacked populated container cannot be accounted safely");
 
         Map<?,?> pdc = null;
         Object rawCustom = components.get("minecraft:custom_data");
