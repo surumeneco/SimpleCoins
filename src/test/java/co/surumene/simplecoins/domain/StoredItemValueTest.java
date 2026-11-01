@@ -238,4 +238,31 @@ class StoredItemValueTest {
             assertThrows(java.io.IOException.class, () -> StoredItemValue.value(item));
         }
     }
+
+    @Test void walletWithExplicitlyNullNestedStorageMustFailClosed() {
+        for (String key : java.util.List.of(
+                "minecraft:bundle_contents", "minecraft:container")) {
+            Map<String,Object> components = new java.util.HashMap<>();
+            components.put("minecraft:custom_data", Map.of("PublicBukkitValues",
+                    Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000004",
+                           "simplecoins:wallet_balance", 250L)));
+            components.put(key, null);
+            Map<String,Object> wallet = Map.of(
+                    "id", "minecraft:bundle", "count", 1, "components", components);
+            assertThrows(java.io.IOException.class, () -> StoredItemValue.value(wallet), key);
+        }
+    }
+
+    @Test void walletWithAbsentOrEmptyNestedStorageRetainsBalance() throws Exception {
+        Map<String,Object> pdc = Map.of(
+                "simplecoins:wallet_id", "00000000-0000-0000-0000-000000000004",
+                "simplecoins:wallet_balance", 250L);
+        assertEquals(BigInteger.valueOf(250), StoredItemValue.value(
+                item("minecraft:bundle", 1, pdc)));
+        Map<String,Object> components = Map.of(
+                "minecraft:custom_data", Map.of("PublicBukkitValues", pdc),
+                "minecraft:bundle_contents", java.util.List.of());
+        assertEquals(BigInteger.valueOf(250), StoredItemValue.value(
+                Map.of("id", "minecraft:bundle", "count", 1, "components", components)));
+    }
 }
