@@ -99,9 +99,16 @@ public final class GrantLedger {
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
-        persist(grant);
-        try { hook.run(); writeHead(next); }
-        catch (IOException failure) { failed = true; throw failure; }
+        try {
+            persist(grant);
+            hook.run();
+            writeHead(next);
+        } catch (IOException | RuntimeException | Error failure) {
+            // The grant record may already be durable. Never reuse its sequence
+            // until a fresh ledger instance reconciles the record and head.
+            failed = true;
+            throw failure;
+        }
         grants.put(next, grant);
         return grant;
     }
