@@ -72,7 +72,19 @@ public final class SettlementSnapshotStore {
      * blindly with the same expected generation.
      */
     public void persist(SettlementGenerationPublisher.Published candidate) throws IOException {
+        persist(candidate, () -> {});
+    }
+
+    @FunctionalInterface
+    interface BeforeSnapshotWrite {
+        void run() throws IOException;
+    }
+
+    /** Package-private deterministic fault injection; production uses the no-op hook. */
+    void persist(SettlementGenerationPublisher.Published candidate,
+                 BeforeSnapshotWrite beforeSnapshotWrite) throws IOException {
         Objects.requireNonNull(candidate, "candidate");
+        Objects.requireNonNull(beforeSnapshotWrite, "beforeSnapshotWrite");
         byte[] payload = encode(candidate);
         requireRealAncestors();
         try (FileChannel channel = FileChannel.open(lock,
@@ -88,6 +100,7 @@ public final class SettlementSnapshotStore {
             // the subsequent snapshot replacement is interrupted or rejected.
             if (!Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
                 DurableFile.write(initialized, new byte[] {0x53, 0x43, 0x53, 0x31});
+            beforeSnapshotWrite.run();
             DurableFile.write(snapshot, payload);
             if (!candidate.equals(load().orElseThrow(
                     () -> new IOException("Committed settlement snapshot disappeared"))))
