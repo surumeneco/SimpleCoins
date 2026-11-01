@@ -9,7 +9,21 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 ## Nexo absent — SimpleCoins-owned assets
 
 1. Start Paper 26.2 with SimpleCoins and Geyser/Floodgate, without Nexo. Check `plugins/SimpleCoins/SimpleCoins-java.zip`, `plugins/SimpleCoins/geyser/SimpleCoins.mcpack` and `plugins/SimpleCoins/geyser/simplecoins.json` exist. Check Geyser's managed `packs/simplecoins-generated.mcpack` and `custom_mappings/simplecoins-generated.json` are installed.
-2. Host the **generated** Java ZIP at the configured HTTP(S) URL. From a separate network, retrieve the configured URL and compare its SHA-1 with `sha1sum plugins/SimpleCoins/SimpleCoins-java.zip`; also check `unzip -t` on the downloaded ZIP. A successful GitHub CI build does not prove external reachability.
+2. Host the **generated** Java ZIP at the configured HTTP(S) URL. From a separate network, download it with the **exact** configured URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
+
+   ```bash
+   read -r -s -p 'Pack URL: ' PACK_URL; printf '\n'
+   tmp=$(mktemp -d) || exit 1
+   curl --proto '=http,https' --proto-redir '=http,https' -fsSL \
+     --output "$tmp/downloaded.zip" "$PACK_URL"
+   cmp plugins/SimpleCoins/SimpleCoins-java.zip "$tmp/downloaded.zip"
+   sha1sum plugins/SimpleCoins/SimpleCoins-java.zip "$tmp/downloaded.zip"
+   unzip -t "$tmp/downloaded.zip"
+   rm -rf -- "$tmp"
+   unset PACK_URL
+   ```
+
+   Run the comparison commands only after a successful download; any nonzero exit is a failed gate. Record the two hashes, HTTP result and the tested artifact identity, not the secret URL. A successful GitHub CI build does not prove external reachability.
 3. Join with a fresh JE client and verify resource-pack acceptance, all nine denominations, configured display names, item models and wallet appearance. Record client prompt/acceptance, screenshots and server log.
 4. Join with a fresh Bedrock client via Geyser/Floodgate and verify all nine denominations, mappings, textures and wallet UI. Record whether custom content is enabled and whether the client actually downloaded the Bedrock pack.
 5. Rename one denomination and replace its image in a disposable copy of the configuration; regenerate packs and repeat both client checks. Confirm stable PDC IDs and numerical denominations.
