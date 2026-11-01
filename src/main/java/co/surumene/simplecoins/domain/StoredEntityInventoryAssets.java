@@ -75,6 +75,11 @@ public final class StoredEntityInventoryAssets {
                 // Reject fabricated saved positions before valuing any currency.
                 if (slotted && id.equals("minecraft:chest_minecart") && index >= 27)
                     throw new IOException("Chest minecart inventory slot outside physical range: " + key + ":" + index);
+                // Vanilla chest boats and bamboo chest rafts expose 27 slots.
+                boolean chestBoat = id.startsWith("minecraft:") &&
+                        (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
+                if (slotted && chestBoat && index >= 27)
+                    throw new IOException("Chest boat inventory slot outside physical range: " + key + ":" + index);
                 position++;
                 if (!occupiedSlots.add(index))
                     throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
