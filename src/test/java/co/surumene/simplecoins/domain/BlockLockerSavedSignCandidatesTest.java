@@ -73,4 +73,21 @@ class BlockLockerSavedSignCandidatesTest {
         var hints = BlockLockerSavedSignCandidates.extract(parsed);
         assertEquals(OWNER, hints.get("1,64,2").firstProfileUuid().orElseThrow());
     }
+
+    @Test void signCandidateMustBelongToItsDeclaringTerrainChunk() throws Exception {
+        Map<String,Object> outside = Map.of(
+                "xPos", 0, "zPos", 0,
+                "block_entities", List.of(sign("minecraft:sign", 16, privatePdc())));
+        assertThrows(IOException.class, () ->
+                BlockLockerSavedSignCandidates.extract(outside));
+        Map<String,Object> inside = Map.of(
+                "xPos", 0, "zPos", 0,
+                "block_entities", List.of(sign("minecraft:sign", 15, privatePdc())));
+        assertTrue(BlockLockerSavedSignCandidates.extract(inside).containsKey("15,64,2"));
+        Map<String,Object> incompleteChunk = Map.of(
+                "xPos", 0,
+                "block_entities", List.of(sign("minecraft:sign", 1, privatePdc())));
+        assertThrows(IOException.class, () ->
+                BlockLockerSavedSignCandidates.extract(incompleteChunk));
+    }
 }
