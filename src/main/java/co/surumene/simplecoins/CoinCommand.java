@@ -107,6 +107,10 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
             } catch (IllegalArgumentException failure) { return List.of(); }
         }
         Player player = Bukkit.getPlayerExact(input);
+        if (player == null) {
+            try { player = Bukkit.getPlayer(java.util.UUID.fromString(input)); }
+            catch (IllegalArgumentException ignored) { /* Not a UUID: exact-name lookup already failed. */ }
+        }
         return player == null ? List.of() : List.of(player);
     }
 
