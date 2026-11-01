@@ -11,5 +11,6 @@ A saved vanilla player has armor slots head/chest/legs/feet and hand slots mainh
 - PE-01: playerdata with `equipment.body` containing currency raises `IOException`.
 - PE-02: playerdata with `equipment.saddle` containing currency raises `IOException`.
 - PE-03: valid `equipment.head` containing currency remains countable.
+- PE-04: explicitly present `equipment: null` is malformed and fails closed; omitted legacy `equipment` remains valid.
 
 Formal CAT machine Gates: **not-run**. Draft is not Confirmed.
