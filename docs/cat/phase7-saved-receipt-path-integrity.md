@@ -16,3 +16,5 @@ After Paper saves inventory and the issuance receipt, the server must verify one
 This is a filesystem selection boundary, not proof of an atomic world snapshot or full server crash recovery. Formal CAT machine Gates and Paper live integration are not-run.
 
 - SC-RECEIPT-PATH-05: after locating the unique real path, receipt verification uses the existing bounded PlayerDataReader with separate compressed/inflated byte budgets and canonical UUID filename validation. A malformed, truncated, oversized or aliased saved receipt cannot be accepted as a zero receipt.
+
+- SC-RECEIPT-PATH-06 (Red): a declared world root containing a non-directory `playerdata`, `players`, or `players/data` component must fail closed even if another world root contains a valid recipient receipt. A malformed authoritative layout cannot be silently skipped in favor of another candidate.
