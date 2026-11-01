@@ -19,5 +19,7 @@ This store does not itself provide a distributed lock, authoritative source clos
 - SETTLEMENT-STORE-05: symlinked ancestor/root and non-regular snapshot paths fail closed.
 - SETTLEMENT-STORE-06: a snapshot with invalid totals or duplicated identity cannot be accepted as a committed candidate.
 - SETTLEMENT-STORE-07: concurrent writers using the same store contract cannot both commit the same generation.
+- SETTLEMENT-STORE-08: an occupied local writer lock rejects promptly rather than waiting indefinitely.
+- SETTLEMENT-STORE-09: after durable publication or verified restart recovery, memory-only publication is forbidden; new generations must pass the durable writer.
 
 Formal CAT machine Gates, real-world source consistency, and Paper fault-injection integration: **not-run**. Do not promote this Draft to Confirmed without an authorized decision.
