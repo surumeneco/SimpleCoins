@@ -113,4 +113,45 @@ class BlockLockerSavedSignCandidatesTest {
                 Map.of("block_entities", List.of(first, distinct))).isEmpty());
     }
 
+    @Test void textOnlyLegacySignIsVisibleWithoutInventingSavedPdcOwnership() throws Exception {
+        Map<String,Object> legacy = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2,
+                "Text1", "[Private]", "Text2", "Alice",
+                "Text3", "[Everyone]", "Text4", "");
+        Map<String,Object> chunk = Map.of("xPos", 0, "zPos", 0,
+                "block_entities", List.of(legacy));
+        assertTrue(BlockLockerSavedSignCandidates.extract(chunk).isEmpty());
+        var text = BlockLockerSavedSignCandidates.extractTextCandidates(chunk);
+        assertEquals(1, text.size());
+        assertEquals("[Private]", text.get("1,64,2").front().get(0));
+        assertTrue(text.get("1,64,2").legacy());
+    }
+
+    @Test void modernTextAndPdcHintsRemainSeparateAtSamePhysicalPosition() throws Exception {
+        List<String> lines = List.of("{\\\"text\\\":\\\"[Private]\\\"}",
+                "{\\\"text\\\":\\\"Alice\\\"}", "{\\\"text\\\":\\\"\\\"}",
+                "{\\\"text\\\":\\\"\\\"}");
+        Map<String,Object> modern = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2,
+                "front_text", Map.of("messages", lines),
+                "PublicBukkitValues", privatePdc());
+        Map<String,Object> chunk = Map.of("block_entities", List.of(modern));
+        assertEquals(OWNER, BlockLockerSavedSignCandidates.extract(chunk)
+                .get("1,64,2").firstProfileUuid().orElseThrow());
+        assertEquals(lines, BlockLockerSavedSignCandidates.extractTextCandidates(chunk)
+                .get("1,64,2").front());
+    }
+
+    @Test void textCandidateReaderRejectsDuplicateAndOutOfChunkSigns() {
+        Map<String,Object> sign = Map.of(
+                "id", "minecraft:sign", "x", 16, "y", 64, "z", 2,
+                "Text1", "[Private]", "Text2", "Alice",
+                "Text3", "", "Text4", "");
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates
+                .extractTextCandidates(Map.of("xPos", 0, "zPos", 0,
+                        "block_entities", List.of(sign))));
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates
+                .extractTextCandidates(Map.of("block_entities", List.of(sign, sign))));
+    }
+
 }
