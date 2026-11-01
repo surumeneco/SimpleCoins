@@ -182,4 +182,21 @@ class StoredItemValueTest {
                     "Noncanonical wallet UUID must not become valid currency: " + invalidId);
         }
     }
+
+    @Test void uncoloredShulkerItemMustEnforcePhysicalContainerRules() throws Exception {
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> stacked = Map.of("id", "minecraft:shulker_box", "count", 2,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 0, "item", coin))));
+        Map<String,Object> invalidSlot = Map.of("id", "minecraft:shulker_box", "count", 1,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 27, "item", coin))));
+        Map<String,Object> valid = Map.of("id", "minecraft:shulker_box", "count", 1,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 26, "item", coin))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(stacked));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalidSlot));
+        assertEquals(BigInteger.valueOf(100), StoredItemValue.value(valid));
+    }
 }
