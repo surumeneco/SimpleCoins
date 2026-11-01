@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 
 /**
  * Read-only saved BlockLocker sign evidence. Neither saved PDC hints nor raw
@@ -14,24 +15,55 @@ import java.util.Optional;
 public final class BlockLockerSavedSignCandidates {
     private BlockLockerSavedSignCandidates() {}
 
+    /** The two evidence streams are never an authoritative owner decision. */
+    public record Evidence(Optional<BlockLockerSavedHints.Hints> pdcHints,
+                           Optional<BlockLockerSavedSignText.Evidence> displayText) {
+        public Evidence {
+            Objects.requireNonNull(pdcHints);
+            Objects.requireNonNull(displayText);
+        }
+    }
+
     /** Saved PDC hints only; text-only legacy signs do not create owner hints. */
     public static Map<String, BlockLockerSavedHints.Hints> extract(
             Map<String, Object> chunk) throws IOException {
         Map<String, BlockLockerSavedHints.Hints> found = new LinkedHashMap<>();
         for (var entry : savedSigns(chunk).entrySet()) {
-            String position = entry.getKey();
-            Map<String, Object> block = entry.getValue();
-            if (!block.containsKey("PublicBukkitValues")) continue;
-            Object rawPdc = block.get("PublicBukkitValues");
-            if (!(rawPdc instanceof Map<?, ?> pdc) ||
-                    pdc.keySet().stream().anyMatch(k -> !(k instanceof String)))
-                throw new IOException("Malformed saved sign PDC at " + position);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> values = (Map<String, Object>) pdc;
-            Optional<BlockLockerSavedHints.Hints> hints = BlockLockerSavedHints.read(values);
-            hints.ifPresent(value -> found.put(position, value));
+            Optional<BlockLockerSavedHints.Hints> hints =
+                    readPdc(entry.getValue(), entry.getKey());
+            hints.ifPresent(value -> found.put(entry.getKey(), value));
         }
         return Map.copyOf(found);
+    }
+
+    /**
+     * One coordinate-keyed snapshot of saved PDC hints and raw text.
+     * A missing stream is unknown, never an inferred free or personal owner.
+     */
+    public static Map<String, Evidence> extractEvidence(
+            Map<String, Object> chunk) throws IOException {
+        Map<String, Evidence> found = new LinkedHashMap<>();
+        for (var entry : savedSigns(chunk).entrySet()) {
+            Optional<BlockLockerSavedHints.Hints> pdc =
+                    readPdc(entry.getValue(), entry.getKey());
+            Optional<BlockLockerSavedSignText.Evidence> text =
+                    BlockLockerSavedSignText.read(entry.getValue());
+            if (pdc.isPresent() || text.isPresent())
+                found.put(entry.getKey(), new Evidence(pdc, text));
+        }
+        return Map.copyOf(found);
+    }
+
+    private static Optional<BlockLockerSavedHints.Hints> readPdc(
+            Map<String, Object> block, String position) throws IOException {
+        if (!block.containsKey("PublicBukkitValues")) return Optional.empty();
+        Object rawPdc = block.get("PublicBukkitValues");
+        if (!(rawPdc instanceof Map<?, ?> pdc) ||
+                pdc.keySet().stream().anyMatch(k -> !(k instanceof String)))
+            throw new IOException("Malformed saved sign PDC at " + position);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> values = (Map<String, Object>) pdc;
+        return BlockLockerSavedHints.read(values);
     }
 
     /** Raw modern/legacy text evidence, including signs with no saved PDC. */
