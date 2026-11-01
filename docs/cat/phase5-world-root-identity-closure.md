@@ -1,6 +1,34 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.world-root-identity-closure
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: world-root identity closure (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.snapshot | 保存source走査前後のroot物理同一性 |
+| simplecoins.world | caller指定world root集合とalias判定 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| root-identity.changed | 走査中に保存source集合が不変でもworld rootの実体が置換されたとき | 走査結果を無効化し成功Reportを返さない | SC-ROOT-01 |
+| root-identity.alias | 異なるworld名が同じ物理ディレクトリを指すとき | visitor前に拒否する | SC-ROOT-03 |
+| root-identity.valid | world rootと保存sourceが不変で有効なとき | 既存の成功Reportを維持する | SC-ROOT-02 |
+| root-identity.invalid | rootが存在しない、symlink、または物理identity不明のとき | visitor前にfail-closedで拒否する | SC-ROOT-04 |
 
 ## Process / PI
 
