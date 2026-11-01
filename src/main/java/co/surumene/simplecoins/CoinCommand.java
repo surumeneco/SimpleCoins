@@ -38,39 +38,31 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
                 Map<CoinDenomination, Long> breakdown = CoinMoney.minimumCoins(amount);
                 long numberOfStacks = 0;
                 for (long n : breakdown.values()) numberOfStacks = Math.addExact(numberOfStacks, IssuanceBudget.coinStacks(n));
-                IssuanceBudget.requireBudget(numberOfStacks, Math.max(1, targets.size()));
-                if (args[1].startsWith("@") && targets.isEmpty()) throw new IllegalArgumentException("No online selector target");
-                var recipients = new java.util.LinkedHashMap<java.util.UUID, Player>();
-                for (Player target : targets) recipients.put(target.getUniqueId(), target);
-                if (recipients.isEmpty()) {
-                    var matches = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
-                        .filter(p -> p.hasPlayedBefore() && ((p.getName() != null && p.getName().equalsIgnoreCase(args[1]))
-                            || p.getUniqueId().toString().equalsIgnoreCase(args[1]))).toList();
-                    if (matches.size() != 1) throw new IllegalArgumentException("Unknown or ambiguous offline player");
-                    recipients.put(matches.get(0).getUniqueId(), null);
-                }
+                var recipients = recipients(args[1], targets);
+                IssuanceBudget.requireBudget(numberOfStacks, recipients.size());
                 for (var recipient : recipients.entrySet()) {
                     var grant = grants.reserve(recipient.getKey(), amount, sender instanceof Player p ? p.getUniqueId().toString() : sender.getName());
                     sender.sendMessage("Reserved " + amount + items.currency() + " for " + recipient.getKey() + ": " + grant.id());
                     if (recipient.getValue() != null) grants.schedule(recipient.getValue());
                 }
             } else if (args.length == 4) {
-                if (targets.isEmpty()) throw new IllegalArgumentException("Item issuance requires an online player");
                 long count = Long.parseLong(args[3]);
                 if (count <= 0 || count > 65536) throw new IllegalArgumentException("Count must be 1..65536 per command");
                 if (args[2].equalsIgnoreCase("wallet")) {
+                    if (targets.isEmpty()) throw new IllegalArgumentException("Wallet issuance requires an online player");
                     IssuanceBudget.requireBudget(count, targets.size());
                     for (Player target : targets) for (long i=0; i<count; i++) deliver(target, items.newWallet());
                     sender.sendMessage("Wallets issued to " + targets.size() + " online player(s).");
                 } else {
                     CoinDenomination denomination = parseDenomination(args[2]);
-                    IssuanceBudget.requireBudget(IssuanceBudget.coinStacks(count), targets.size());
+                    var recipients = recipients(args[1], targets);
+                    IssuanceBudget.requireBudget(IssuanceBudget.coinStacks(count), recipients.size());
                     String issuer = sender instanceof Player p ? p.getUniqueId().toString() : sender.getName();
-                    for (Player target : targets) {
-                        grants.reserveCoins(target.getUniqueId(), denomination, count, issuer);
-                        grants.schedule(target);
+                    for (var recipient : recipients.entrySet()) {
+                        grants.reserveCoins(recipient.getKey(), denomination, count, issuer);
+                        if (recipient.getValue() != null) grants.schedule(recipient.getValue());
                     }
-                    sender.sendMessage("Coin delivery reserved for " + targets.size() + " online player(s).");
+                    sender.sendMessage("Coin delivery reserved for " + recipients.size() + " known player(s).");
                 }
             } else {
                 sender.sendMessage("Unexpected arguments");
@@ -81,6 +73,23 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("Invalid issue request: " + failure.getMessage());
         }
         return true;
+    }
+
+    private Map<java.util.UUID, Player> recipients(String input, List<Player> online) {
+        if (input.startsWith("@") && online.isEmpty())
+            throw new IllegalArgumentException("No online selector target");
+        var recipients = new java.util.LinkedHashMap<java.util.UUID, Player>();
+        for (Player player : online) recipients.put(player.getUniqueId(), player);
+        if (recipients.isEmpty()) {
+            var matches = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
+                    .filter(p -> p.hasPlayedBefore() &&
+                            ((p.getName() != null && p.getName().equalsIgnoreCase(input)) ||
+                                    p.getUniqueId().toString().equalsIgnoreCase(input))).toList();
+            if (matches.size() != 1)
+                throw new IllegalArgumentException("Unknown or ambiguous offline player");
+            recipients.put(matches.get(0).getUniqueId(), null);
+        }
+        return recipients;
     }
 
     private CoinDenomination parseDenomination(String input) {
