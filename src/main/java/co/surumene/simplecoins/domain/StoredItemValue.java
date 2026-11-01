@@ -133,6 +133,11 @@ public final class StoredItemValue {
                           number instanceof Integer || number instanceof Long) ||
                         number.longValue() < 0 || number.longValue() > 255)
                     throw new IOException("Invalid nested container slot");
+                // Vanilla shulker boxes have 27 slots. Treat an out-of-range
+                // saved slot as corrupt instead of publishing fictitious assets.
+                if (id.startsWith("minecraft:") && id.endsWith("_shulker_box") &&
+                        number.longValue() > 26)
+                    throw new IOException("Invalid shulker box slot: " + number.longValue());
                 if (!occupiedSlots.add(number.intValue()))
                     throw new IOException("Duplicate nested container slot: " + number.intValue());
                 nested = nested.add(value(itemMap(slot.get("item")), depth + 1));
