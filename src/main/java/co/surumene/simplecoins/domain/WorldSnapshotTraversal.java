@@ -34,6 +34,16 @@ public final class WorldSnapshotTraversal {
     /** A report exists only if every discovered input was read successfully. */
     public record Report(int regionFiles, int chunks, int playerFiles) {}
 
+    /** Caller-supplied source-set closure; implemented after CAT Red vectors. */
+    public static Report traverseWithClosure(WorldStorageDiscovery.Manifest manifest,
+                                             Map<String, Path> worldFolders,
+                                             WorldScope scope, int maximumEntries,
+                                             int maximumCompressedBytes,
+                                             int maximumInflatedBytes,
+                                             Visitor visitor) throws IOException {
+        return traverse(manifest, maximumCompressedBytes, maximumInflatedBytes, visitor);
+    }
+
     public static Report traverse(WorldStorageDiscovery.Manifest manifest,
                                   int maximumCompressedBytes,
                                   int maximumInflatedBytes,
