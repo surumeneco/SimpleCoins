@@ -34,4 +34,16 @@ class GrantLedgerPlayerIdentityTest {
         recovered.acknowledge(grant, grant.sequence());
         assertTrue(new GrantLedger(journal).pending(player).isEmpty());
     }
+    @Test void foreignGrantCannotReuseAnotherJournalRecordsReceipt() throws Exception {
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(directory.resolve("grants"));
+        var grant = ledger.reserve(player, 100, "console");
+        var foreign = new GrantLedger.Grant(grant.sequence(), UUID.randomUUID(),
+                player, grant.amount(), grant.issuer(), grant.createdMillis(),
+                grant.delivered(), grant.denomination(), grant.coinCount());
+        assertTrue(ledger.wasApplied(grant, grant.sequence()));
+        assertThrows(IllegalStateException.class,
+                () -> ledger.wasApplied(foreign, grant.sequence()));
+    }
+
 }
