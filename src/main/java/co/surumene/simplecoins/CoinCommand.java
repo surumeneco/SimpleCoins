@@ -110,7 +110,7 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
         if (player == null) {
             try {
                 var uuid = java.util.UUID.fromString(input);
-                if (uuid.toString().equals(input)) player = Bukkit.getPlayer(uuid);
+                if (uuid.toString().equalsIgnoreCase(input)) player = Bukkit.getPlayer(uuid);
             } catch (IllegalArgumentException ignored) { /* Not a canonical UUID. */ }
         }
         return player == null ? List.of() : List.of(player);
