@@ -34,7 +34,5 @@ language: ja
 ## 制約
 | 式 |
 | --- |
-| `入力.root_tile_entities != ""` |
-| `入力.level_tile_entities != ""` |
 
 入力はterrain chunk内の各legacy tagを分類した仕様上の観測値であり、Java/NBTの内部表現をPIの状態として定義するものではない。分類不能はmalformedとして扱う。これはDraftであり、enumの機械変換可否は正式Gateで別途判定する。
