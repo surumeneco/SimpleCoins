@@ -29,6 +29,10 @@ public final class StoredItemFrameAssets {
                 throw new IOException("Malformed saved entity");
             if (!id.equals("minecraft:item_frame") && !id.equals("minecraft:glow_item_frame"))
                 continue;
+            // A frame displays a single Item, not an independent inventory.
+            // Even empty competing lists are invalid representations.
+            if (entity.containsKey("Items") || entity.containsKey("Inventory"))
+                throw new IOException("Conflicting item-frame inventory representation");
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)
