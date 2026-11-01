@@ -82,10 +82,10 @@ public final class WorldStorageDiscovery {
         List<SourceFile> worldFiles = new ArrayList<>();
         Map<UUID, Path> players = new HashMap<>();
         Set<Path> worldRoots = new HashSet<>();
-        Map<Object, Path> regionIdentityByKey = new HashMap<>();
-        List<Path> unkeyedRegionPaths = new ArrayList<>();
-        Map<Object, Path> playerIdentityByKey = new HashMap<>();
-        List<Path> unkeyedPlayerPaths = new ArrayList<>();
+        // All authoritative source categories share one physical-identity set.
+        // A hard link between playerdata and a region is not two independent inputs.
+        Map<Object, Path> sourceIdentityByKey = new HashMap<>();
+        List<Path> unkeyedSourcePaths = new ArrayList<>();
         int[] visited = {0};
 
         for (var entry : worldFolders.entrySet()) {
@@ -150,7 +150,7 @@ public final class WorldStorageDiscovery {
                             throw new IOException("Ambiguous playerdata authority for " + uuid + ": " +
                                     previous + " and " + file);
                         requireUniquePhysicalFile(file, attrs.fileKey(),
-                                playerIdentityByKey, unkeyedPlayerPaths, "playerdata");
+                                sourceIdentityByKey, unkeyedSourcePaths, "authoritative source");
                     } else if (scope.includes(worldName)
                             && filename.endsWith(".mca")) {
                         Kind kind = switch (parent) {
@@ -161,7 +161,7 @@ public final class WorldStorageDiscovery {
                         if (kind != null && isExpectedWorldStorage(file, root)) {
                             requireCanonicalRegionFilename(filename);
                             requireUniquePhysicalFile(file, attrs.fileKey(),
-                                    regionIdentityByKey, unkeyedRegionPaths, "Anvil region");
+                                    sourceIdentityByKey, unkeyedSourcePaths, "authoritative source");
                             worldFiles.add(new SourceFile(worldName, file, kind));
                         }
                     }
