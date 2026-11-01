@@ -55,13 +55,16 @@ public final class SettlementSnapshotStore {
     /** Missing means no generation was committed; malformed means fail-closed. */
     public Optional<SettlementGenerationPublisher.Published> load() throws IOException {
         requireRealAncestors();
-        if (!Files.exists(snapshot, LinkOption.NOFOLLOW_LINKS)) {
-            if (Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
+        boolean hasSnapshot = Files.exists(snapshot, LinkOption.NOFOLLOW_LINKS);
+        boolean hasMarker = Files.exists(initialized, LinkOption.NOFOLLOW_LINKS);
+        if (!hasSnapshot) {
+            if (hasMarker)
                 throw new IOException("Previously initialized settlement snapshot is missing");
             return Optional.empty();
         }
-        if (Files.exists(initialized, LinkOption.NOFOLLOW_LINKS) &&
-                !Arrays.equals(DurableFile.read(initialized, 4), new byte[] {0x53, 0x43, 0x53, 0x31}))
+        if (!hasMarker)
+            throw new IOException("Committed settlement snapshot is missing its initialization marker");
+        if (!Arrays.equals(DurableFile.read(initialized, 4), new byte[] {0x53, 0x43, 0x53, 0x31}))
             throw new IOException("Invalid settlement initialization marker");
         return Optional.of(decode(DurableFile.read(snapshot, MAX_BYTES)));
     }
