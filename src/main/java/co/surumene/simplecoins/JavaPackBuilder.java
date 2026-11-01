@@ -13,7 +13,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -77,11 +76,7 @@ public final class JavaPackBuilder {
                         "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"simplecoins:item/" + id + "\"}}");
                 }
             }
-            try {
-                Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
-                Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
-            }
+            co.surumene.simplecoins.domain.PackArchivePublication.publish(temporary, archive);
             var images = new java.util.EnumMap<CoinDenomination, byte[]>(CoinDenomination.class);
             var displayNames = new java.util.EnumMap<CoinDenomination, String>(CoinDenomination.class);
             for (CoinDenomination d : CoinDenomination.values()) {
