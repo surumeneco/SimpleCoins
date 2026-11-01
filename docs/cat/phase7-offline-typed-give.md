@@ -14,5 +14,6 @@ An administrator with `simplecoins.admin` may reserve either an untyped amount o
 - OFFLINE-GIVE-04: wallet item issuance remains online-only.
 - OFFLINE-GIVE-05: command budget counts unique recipients and uses the same durable ledger path.
 - OFFLINE-GIVE-06 (Red): an existing receipt key with a non-LONG PDC value or negative LONG is rejected before any grant delivery; only absent keys default to zero.
+- OFFLINE-GIVE-07 (Red): a fatal runtime failure after a reservation record is durable but before the journal head is updated must poison the current ledger instance; the record is recovered exactly once on restart rather than silently overwritten by a later reservation.
 
 Formal CAT machine Gates and Paper live/offline persistence tests: **not-run**.
