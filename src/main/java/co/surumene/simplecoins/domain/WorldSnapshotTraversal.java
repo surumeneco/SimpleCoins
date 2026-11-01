@@ -34,14 +34,39 @@ public final class WorldSnapshotTraversal {
     /** A report exists only if every discovered input was read successfully. */
     public record Report(int regionFiles, int chunks, int playerFiles) {}
 
-    /** Caller-supplied source-set closure; implemented after CAT Red vectors. */
+    /**
+     * Re-discover a caller-defined authoritative saved-source set on both
+     * sides of traversal. A new or missing file invalidates the staged report.
+     *
+     * This is a bounded best-effort check, not an atomic world snapshot:
+     * callers must still freeze loaded sources and gate settlement publication.
+     */
     public static Report traverseWithClosure(WorldStorageDiscovery.Manifest manifest,
                                              Map<String, Path> worldFolders,
                                              WorldScope scope, int maximumEntries,
                                              int maximumCompressedBytes,
                                              int maximumInflatedBytes,
                                              Visitor visitor) throws IOException {
-        return traverse(manifest, maximumCompressedBytes, maximumInflatedBytes, visitor);
+        Objects.requireNonNull(manifest, "manifest");
+        Objects.requireNonNull(worldFolders, "worldFolders");
+        Objects.requireNonNull(scope, "scope");
+        // Freeze the caller's root inventory for this pair of checks.
+        Map<String, Path> roots = Map.copyOf(worldFolders);
+        requireSameSources(manifest,
+                WorldStorageDiscovery.discover(roots, scope, maximumEntries));
+        Report staged = traverse(manifest, maximumCompressedBytes,
+                maximumInflatedBytes, visitor);
+        requireSameSources(manifest,
+                WorldStorageDiscovery.discover(roots, scope, maximumEntries));
+        return staged;
+    }
+
+    private static void requireSameSources(WorldStorageDiscovery.Manifest expected,
+                                           WorldStorageDiscovery.Manifest observed)
+            throws IOException {
+        if (!expected.worldFiles().equals(observed.worldFiles()) ||
+                !expected.playerDataFiles().equals(observed.playerDataFiles()))
+            throw new IOException("Authoritative saved-source set changed during traversal");
     }
 
     public static Report traverse(WorldStorageDiscovery.Manifest manifest,
