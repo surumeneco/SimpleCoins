@@ -33,3 +33,12 @@ A valid wallet identity and balance do not exempt its saved item components from
 - Red: wallet with a canonical UUID and a valid Long balance, but one nested component key mapped to `null`, must throw `IOException` for each key.
 - Regression: same wallet with both nested keys absent or with one empty list retains its numeric balance.
 - Formal CAT machine gates: not-run; Draft is not Confirmed.
+
+## Nonphysical air stack in ordinary saved inventory (additional Draft vector)
+
+An `minecraft:air` identifier cannot be a physical stored inventory item with a positive stack count. In the general saved-item decoder, treating it as a zero-value ordinary item or traversing nested `minecraft:container` components could conceal an invalid source or fabricate value. Reject positive-count air stacks with `IOException`. Empty item displays use a separate explicit zero-count representation and are handled by their own adapter.
+
+- Red: `minecraft:air` with positive count and no components fails rather than being accepted as ordinary zero-value inventory.
+- Red: `minecraft:air` with a nested container carrying a coin fails rather than yielding the coin's value.
+- Regression: valid ordinary stone remains zero; valid bundle descendants remain countable.
+- Formal CAT machine Gates: not-run; Draft not Confirmed.
