@@ -1,17 +1,33 @@
-# Phase 6: verify targeted grant before acknowledgement (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.grant.ack-durable-target
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Leaf: `TASK-20261101-005`.
+# DomainSpec: 旧発行予約の承認前durable検証
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | 既存の未配達発行予約の承認・durable record |
+| simplecoins.journal | checksummedな発行ジャーナルと同一sequenceの永続レコード |
 
-Acknowledging a previously issued grant replaces its `<sequence>.grant` file with the delivered form. A live ledger may have more recent grants, so a tail-only health check does not prove that an older targeted record still exists and matches the in-memory reservation.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| grant.ack.target-missing | 二つ以上の予約が存在し、承認対象の古い `<sequence>.grant` が欠損したとき | 承認を拒否し、欠損レコードを再作成・上書きしない | SC-JOURNAL-ACK-01 |
+| grant.ack.target-corrupt | 古い承認対象の永続レコードが破損・不一致のとき | 承認を拒否し、破損レコードを上書きしない | SC-JOURNAL-ACK-02 |
+| grant.ack.target-valid | 承認対象の永続レコードが有界・checksummed readerで検証され、メモリ上の予約と全不変フィールドが一致し、保存済みreceiptも対応するとき | 対象予約を承認可能とする | SC-JOURNAL-ACK-03 |
+| grant.ack.health | 承認対象のdurable recordが欠損・破損・不一致と判明したとき | ledgerをunhealthyに固定し、再読込・復旧前の後続操作を許可しない | SC-JOURNAL-ACK-01, SC-JOURNAL-ACK-02 |
+| grant.ack.scope | live ledgerに承認対象より新しい予約があるとき | tailだけの健全性確認を古い承認対象レコードの証明として使わず、対象sequence自身を読み戻す | SC-JOURNAL-ACK-01, SC-JOURNAL-ACK-03 |
 
-Before acknowledging a grant, re-read the targeted durable record using the bounded checksummed journal reader and compare its full immutable grant fields with the in-memory state. Missing, corrupted, or mismatched evidence must latch the ledger unhealthy and prevent replacement. A valid pending grant may still be acknowledged once its saved receipt is verified.
+## 境界と状態
 
-## TCE / acceptance vectors
-
-- SC-JOURNAL-ACK-01: with two reservations, delete the older record; acknowledging it must fail without recreating the file.
-- SC-JOURNAL-ACK-02: corrupt the older record; acknowledgement must fail without overwriting it.
-- SC-JOURNAL-ACK-03: intact older reservation with a matching receipt can be acknowledged.
-
-This is a targeted durable write precondition, not a full historical journal audit or proof of playerdata save durability.
+これはTASK-20261101-005の既存CAT **Draft** を意味変更せず構造化したもの。旧予約の対象レコード検証は、全履歴の完全監査、playerdataの保存durability、Paper実機クラッシュ復旧の証明ではない。現行のGrantLedgerはtail健全性を検査するが、古い承認対象のdurable再読込は未実装。正式CAT Process/PI/TCEの規範確認と機械Gateはnot-runであり、Confirmed・実装完了・決算公開・マージ・デプロイを意味しない。
