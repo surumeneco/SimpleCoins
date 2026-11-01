@@ -76,6 +76,9 @@ public final class WorldSnapshotTraversal {
         // Entity UUIDs are global identities, even across worlds and region files.
         // Per-chunk checks cannot detect copied entities in separate chunks.
         Set<UUID> savedEntityIds = new HashSet<>();
+        // Revalidate all completed inputs after the last callback. A later
+        // visitor may mutate a source that already passed its local check.
+        Map<Path, SourceStamp> completedSources = new java.util.LinkedHashMap<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
             SourceStamp before = stamp(source.path());
             final int[] fileChunks = {0};
@@ -91,6 +94,7 @@ public final class WorldSnapshotTraversal {
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
                     });
             requireUnchanged(source.path(), before);
+            completedSources.put(source.path(), before);
             files = Math.addExact(files, 1);
             chunks = Math.addExact(chunks, fileChunks[0]);
         }
@@ -101,8 +105,13 @@ public final class WorldSnapshotTraversal {
                     maximumCompressedBytes, maximumInflatedBytes);
             visitor.player(entry.getKey(), data);
             requireUnchanged(entry.getValue(), before);
+            completedSources.put(entry.getValue(), before);
             players = Math.addExact(players, 1);
         }
+        // This detects observable changes to earlier sources during later
+        // callbacks; it does not replace a frozen world/snapshot barrier.
+        for (var entry : completedSources.entrySet())
+            requireUnchanged(entry.getKey(), entry.getValue());
         return new Report(files, chunks, players);
     }
 
