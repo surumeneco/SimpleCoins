@@ -24,6 +24,18 @@ class PaperWonderfulWolfOwnerAdapterTest {
         public Loaded loadedIndividuals() { return loaded; }
     }
     public static final class MissingApi {}
+    public static final class MalformedIndividual {
+        public Optional<String> commanderId() { return Optional.of("not-uuid"); }
+        public Optional<UUID> ownerId() { return Optional.of(OWNER); }
+    }
+    public static final class MalformedLoaded {
+        public Optional<MalformedIndividual> find(UUID id) {
+            return Optional.of(new MalformedIndividual());
+        }
+    }
+    public static final class MalformedPlugin {
+        public MalformedLoaded loadedIndividuals() { return new MalformedLoaded(); }
+    }
 
     @Test void commanderTakesPrecedenceOverLoadedWwwOwner() {
         var plugin = new PluginFixture();
@@ -55,17 +67,7 @@ class PaperWonderfulWolfOwnerAdapterTest {
     }
 
     @Test void malformedOptionalIdentityIsUnknown() {
-        class Malformed {
-            public Optional<String> commanderId() { return Optional.of("not-uuid"); }
-            public Optional<UUID> ownerId() { return Optional.of(OWNER); }
-        }
-        class LoadedMalformed {
-            public Optional<Malformed> find(UUID id) { return Optional.of(new Malformed()); }
-        }
-        class PluginMalformed {
-            public LoadedMalformed loadedIndividuals() { return new LoadedMalformed(); }
-        }
         assertEquals(ExternalOwnerDecision.Kind.UNKNOWN,
-                PaperWonderfulWolfOwnerAdapter.readPlugin(new PluginMalformed(), WOLF).kind());
+                PaperWonderfulWolfOwnerAdapter.readPlugin(new MalformedPlugin(), WOLF).kind());
     }
 }
