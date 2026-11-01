@@ -18,5 +18,6 @@ A source-read callback marks its source complete only after the entire callback 
 - SETTLEMENT-BARRIER-06: mutation observed after opening closes the gate to subsequent joins.
 - SETTLEMENT-BARRIER-07: the barrier cannot be restarted/reopened after a failed attempt without constructing a new instance and reconciling authoritative state.
 - SETTLEMENT-BARRIER-08 (Red): a nested withJoinPermit callback must never execute; recursive admission invalidates the barrier and denies later joins.
+- SETTLEMENT-BARRIER-09 (Red): a fatal `Error` during durable readback (including an injected readback provider) must poison the barrier to FAILED; subsequent join admission cannot be permitted from the partially verified staging state.
 
 Formal CAT machine gates, Paper listener wiring, authoritative world freeze, and real server fault injection: **not-run**. Do not promote Draft to Confirmed without authorization.
