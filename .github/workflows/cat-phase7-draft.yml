@@ -1,0 +1,37 @@
+name: CAT Draft syntax validation (Phase 7 packs)
+
+on:
+  push:
+    branches:
+      - feature/phase7-pack-url-validation-20261101-queue-a
+    paths:
+      - 'docs/cat/phase7-*.md'
+      - '.github/workflows/cat-phase7-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout pinned CAT-TDD runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Canonical Draft syntax and reference validation
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase7-atomic-java-pack-publication.md \
+            docs/cat/phase7-bedrock-output-path-integrity.md \
+            docs/cat/phase7-je-pack-url-validation.md \
+            docs/cat/phase7-managed-resource-ancestor-integrity.md \
+            docs/cat/phase7-pack-image-source-integrity.md \
+            docs/cat/phase7-pack-publication-ancestor-integrity.md
+      - name: Declare evidence boundary
+        run: |
+          echo 'Syntax lint only: all Phase7 artifacts remain Draft; Paper/JE/BE/Nexo client tests and semantic CAT Gates not run.' >> "$GITHUB_STEP_SUMMARY"
