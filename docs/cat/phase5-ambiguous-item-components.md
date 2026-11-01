@@ -1,0 +1,15 @@
+# Phase 5: Ambiguous nested-storage components (CAT Draft)
+
+Status: Draft (not Confirmed). Scope: read-only saved ItemStack valuation in SimpleCoins 1.0.0.
+Source requirements: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md, 05_1.0.0_実装計画.md (A02/A03, G0).
+
+## Process / invariant
+A settlement may publish only after every authoritative physical item has been accounted for exactly once. A saved item that simultaneously advertises `minecraft:bundle_contents` and `minecraft:container` has ambiguous nested-storage representation. Do not add both collections or silently choose one. Reject the item with IOException and prevent a successful settlement result. A single supported collection continues to be valued normally.
+
+## Test model
+- Red: one parent item with both nested-storage component keys, each holding a valid 100-C coin, must fail closed rather than return 200 C.
+- Regression: a bundle with only bundle_contents and a shulker with only container retain their current totals.
+- Invalid or empty competing component is still ambiguous; presence of both keys is sufficient.
+
+## Verification status
+CAT machine gates (process-closure, TestModel generation, model-conformance, vectors, Queue, current-item, implementation-conformance): not-run; the dedicated Chat plugin/Skill is unavailable in this session. This Draft does not claim Confirmed status or substitute for a formal CAT Artifact.
