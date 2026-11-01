@@ -111,5 +111,10 @@ class SavedPlayerAssetsTest {
             assertThrows(IOException.class, () -> SavedPlayerAssets.extract(invalid),
                     "Invalid physical player inventory slot: " + invalidSlot);
         }
+        var overflow = new java.util.HashMap<String,Object>(coin(0, 100, 1));
+        overflow.put("Slot", BigInteger.ONE.shiftLeft(64));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(
+                Map.of("Inventory", List.of(overflow), "EnderItems", List.of())),
+                "An overflowing Number must not alias valid physical slot zero");
     }
 }
