@@ -14,3 +14,11 @@ A saved vanilla player has armor slots head/chest/legs/feet and hand slots mainh
 - PE-04: explicitly present `equipment: null` is malformed and fails closed; omitted legacy `equipment` remains valid.
 
 Formal CAT machine Gates: **not-run**. Draft is not Confirmed.
+
+## Missing selected-slot identity (additional Draft vector)
+
+If modern `equipment.mainhand` and a legacy `Inventory` hotbar slot (0..8) are both present, but `SelectedItemSlot` is absent, the reader cannot determine whether they are the same physical item. Reject this ambiguous saved snapshot rather than counting the mainhand and a potentially identical hotbar stack independently. A mainhand with no legacy hotbar entry remains countable, and a valid selected slot retains the existing overlap checks. This does not establish live playerdata consistency.
+
+- PE-05 Red: missing `SelectedItemSlot`, one saved hotbar item and one `equipment.mainhand` item must raise `IOException`.
+- PE-06 regression: missing `SelectedItemSlot` with no saved hotbar item may count `equipment.mainhand`.
+- Formal CAT machine Gates remain not-run; Draft not Confirmed.
