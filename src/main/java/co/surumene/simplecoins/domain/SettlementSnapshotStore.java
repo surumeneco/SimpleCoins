@@ -54,7 +54,7 @@ public final class SettlementSnapshotStore {
 
     /** Missing means no generation was committed; malformed means fail-closed. */
     public Optional<SettlementGenerationPublisher.Published> load() throws IOException {
-        requireRealAncestors();
+        requireLiveRoot();
         boolean hasSnapshot = Files.exists(snapshot, LinkOption.NOFOLLOW_LINKS);
         boolean hasMarker = Files.exists(initialized, LinkOption.NOFOLLOW_LINKS);
         if (!hasSnapshot) {
@@ -89,7 +89,7 @@ public final class SettlementSnapshotStore {
         Objects.requireNonNull(candidate, "candidate");
         Objects.requireNonNull(beforeSnapshotWrite, "beforeSnapshotWrite");
         byte[] payload = encode(candidate);
-        requireRealAncestors();
+        requireLiveRoot();
         try (FileChannel channel = FileChannel.open(lock,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
              FileLock guard = channel.tryLock()) {
@@ -111,6 +111,13 @@ public final class SettlementSnapshotStore {
         } catch (OverlappingFileLockException concurrent) {
             throw new IOException("Settlement snapshot writer already active", concurrent);
         }
+    }
+
+    /** A root removed or replaced after construction is not an empty store. */
+    private void requireLiveRoot() throws IOException {
+        requireRealAncestors();
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Settlement snapshot root missing or replaced");
     }
 
     private void requireRealAncestors() throws IOException {
