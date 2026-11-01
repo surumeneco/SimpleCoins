@@ -69,6 +69,10 @@ public final class BlockLockerProtectionResolution {
         }
         if (primary == null)
             return ExternalOwnerDecision.unknown();
+        // An unresolved PRIVATE primary cannot establish public ownership,
+        // even when a visible Everyone tag was independently verified.
+        if (primary.kind() == ExternalOwnerDecision.Kind.UNKNOWN)
+            return ExternalOwnerDecision.unknown();
         return everyone ? ExternalOwnerDecision.free() : primary;
     }
 }
