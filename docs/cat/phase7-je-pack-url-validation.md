@@ -1,6 +1,35 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.je-pack-url-validation
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: Java resource-pack URL validation (CAT Draft)
 
 Status: Draft, not Confirmed. Leaf TASK-20261101-006. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/03_運営設定・コマンド.md.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | JE pack URLと生成ZIP hashの検証 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| pack.url.invalid | 非HTTP(S)、userinfo、fragment、不完全URLが指定されたとき | Paper resource-pack APIへ渡さず拒否する | PACK-URL-01 |
+| pack.url.valid | 正当なHTTP(S) URLとqueryが指定されたとき | URL文字列を変更せず維持する | PACK-URL-02 |
+| pack.url.empty | URLが空または空白のみのとき | 配布未設定として送信しない | PACK-URL-03 |
+| pack.url.join | join時にpack URLを使用するとき | 検証済みURLのみPaper APIへ渡す | PACK-URL-04 |
+| pack.hash.regular | 生成ZIPをSHA-1計算するとき | 正規の非symlink通常ファイルを有界メモリでhashする | PACK-HASH-01 |
+| pack.hash.ancestor | ZIPへのancestorにsymlinkがあるとき | 外部へredirectされたsourceをhashしない | PACK-HASH-02 |
 
 ## Process / PI
 
