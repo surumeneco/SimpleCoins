@@ -19,6 +19,7 @@ public final class SettlementGenerationPublisher {
     private Published current;
     private boolean durableUncertain;
     private boolean durableMode;
+    private boolean publicationInProgress;
 
     public synchronized Optional<Published> current() {
         return Optional.ofNullable(current);
@@ -60,22 +61,27 @@ public final class SettlementGenerationPublisher {
             throw new IllegalArgumentException("Negative expected settlement generation");
         Objects.requireNonNull(pending, "pending");
         Objects.requireNonNull(writer, "writer");
-        long actual = current == null ? 0 : current.generation();
-        if (actual != expectedGeneration)
-            throw new IllegalStateException("Stale settlement generation");
-        long next = Math.addExact(actual, 1);
-        Published candidate = new Published(next, pending.commit());
+        publicationInProgress = true;
         try {
-            writer.persist(candidate);
-        } catch (IOException | RuntimeException | Error uncertain) {
-            // The writer may have committed before throwing. Refuse further
-            // publication until restart recovery reconciles the durable head.
-            durableUncertain = true;
-            throw uncertain;
+            long actual = current == null ? 0 : current.generation();
+            if (actual != expectedGeneration)
+                throw new IllegalStateException("Stale settlement generation");
+            long next = Math.addExact(actual, 1);
+            Published candidate = new Published(next, pending.commit());
+            try {
+                writer.persist(candidate);
+            } catch (IOException | RuntimeException | Error uncertain) {
+                // The writer may have committed before throwing. Refuse further
+                // publication until restart recovery reconciles the durable head.
+                durableUncertain = true;
+                throw uncertain;
+            }
+            current = candidate;
+            durableMode = true;
+            return candidate;
+        } finally {
+            publicationInProgress = false;
         }
-        current = candidate;
-        durableMode = true;
-        return candidate;
     }
 
     /** Recover the authoritative generation from verified durable bytes. */
@@ -89,6 +95,8 @@ public final class SettlementGenerationPublisher {
     }
 
     private void checkDurableKnown() {
+        if (publicationInProgress)
+            throw new IllegalStateException("Reentrant settlement publication is not allowed");
         if (durableUncertain)
             throw new IllegalStateException(
                     "Durable settlement generation is uncertain; reload and reconcile before publishing");
