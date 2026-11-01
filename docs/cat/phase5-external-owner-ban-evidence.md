@@ -69,3 +69,11 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - PAPER-IP-01: when the caller supplies a complete, authoritative set of addresses associated with the target UUID, the Paper IP ban list yields BANNED if any address is banned, otherwise CLEAR only when every address lookup succeeds and is clear.
 - PAPER-IP-02: absent/incomplete address mapping, no known addresses, null/failed address lookup or unavailable IP ban list yields UNKNOWN unless a known associated address is definitively banned (BANNED dominates UNKNOWN).
 - PAPER-IP-03: this adapter does not infer UUID/address associations, query historical addresses or treat the current online IP as a complete identity history. A Paper profile-ban CLEAR and IP-ban UNKNOWN cannot be published as globally CLEAR.
+
+## Verified visible-sign reconciliation boundary (Draft vectors)
+
+- BLOCKLOCKER-TEXT-01: a physically verified sign with four caller-decoded visible front lines and runtime-verified localized aliases can be converted into a verified sign only when its PRIVATE primary identity has been independently resolved. Missing identity evidence remains UNKNOWN, even when an Everyone profile is displayed.
+- BLOCKLOCKER-TEXT-02: a saved PDC UUID is only a hint. If a present PDC first-owner UUID disagrees with an independently verified displayed-name identity, return UNKNOWN rather than silently using either owner. Text-only legacy signs may resolve when an authoritative identity source verifies the displayed owner.
+- BLOCKLOCKER-TEXT-03: an attached MORE_USERS sign with a verified visible Everyone tag can override an independently verified PRIVATE owner, but PDC Everyone markers without a visible Everyone tag cannot do so. Header mismatches must not promote a stale PDC owner.
+- BLOCKLOCKER-TEXT-04: malformed/incomplete decoded lines, missing runtime aliases, null evidence or failed identity lookup must fail closed. This boundary does not parse raw JSON, authenticate physical block states or connect the BlockLocker API; those remain separate integration gates.
+- BLOCKLOCKER-AGG-06: an attached PRIVATE sign with unresolved primary identity must remain UNKNOWN even if a verified Everyone tag is also present; a public-ownership decision requires a resolved primary sign.
