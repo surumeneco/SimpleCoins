@@ -36,8 +36,8 @@ public final class SavedPlayerAssets {
     private static void extractEquipment(Map<String,Object> root,
                                          Map<String,BigInteger> found,
                                          Set<String> visitedSlots) throws IOException {
+        if (!root.containsKey("equipment")) return;
         Object raw = root.get("equipment");
-        if (raw == null) return;
         if (!(raw instanceof Map<?,?> equipment))
             throw new IOException("Malformed saved player equipment");
         Map<String,Integer> legacySlots = Map.of(
