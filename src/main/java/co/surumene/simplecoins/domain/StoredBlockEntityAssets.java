@@ -84,6 +84,8 @@ public final class StoredBlockEntityAssets {
                     throw new IOException("Invalid chest inventory slot: " + slot);
                 if (id.equals("minecraft:hopper") && slot > 4)
                     throw new IOException("Invalid hopper inventory slot: " + slot);
+                if (id.equals("minecraft:barrel") && slot > 26)
+                    throw new IOException("Invalid barrel inventory slot: " + slot);
                 if (!slots.add(slot))
                     throw new IOException("Duplicate block entity slot: " + pos + ":" + slot);
                 if (stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
