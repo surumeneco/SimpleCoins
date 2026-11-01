@@ -132,6 +132,20 @@ class SettlementGenerationPublisherTest {
                 .current().orElseThrow().generation());
     }
 
+    @Test void durableWriterCannotReenterSamePublisher() throws Exception {
+        var publisher = new SettlementGenerationPublisher();
+        var first = publisher.publishDurably(0, staged(100, true), candidate -> {
+            assertTrue(publisher.current().isEmpty());
+            assertThrows(IllegalStateException.class, () -> publisher.publish(
+                    0, staged(200, true)));
+            assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                    0, staged(300, true), ignored -> {}));
+        });
+        assertEquals(1L, first.generation());
+        assertEquals(BigInteger.valueOf(100), first.result().free());
+        assertEquals(first, publisher.current().orElseThrow());
+    }
+
     @Test void staleOrMissingDurableWriterCannotCommitPendingSnapshot() throws Exception {
         var publisher = new SettlementGenerationPublisher();
         publisher.publishDurably(0, staged(100, true), candidate -> {});
