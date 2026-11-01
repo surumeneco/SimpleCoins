@@ -16,5 +16,6 @@ An administrator with `simplecoins.admin` may reserve either an untyped amount o
 - OFFLINE-GIVE-06 (Red): an existing receipt key with a non-LONG PDC value or negative LONG is rejected before any grant delivery; only absent keys default to zero.
 - OFFLINE-GIVE-07 (Red): a fatal runtime failure after a reservation record is durable but before the journal head is updated must poison the current ledger instance; the record is recovered exactly once on restart rather than silently overwritten by a later reservation.
 - OFFLINE-GIVE-08 (Red): a fatal failure after a delivered/acknowledged record is durable but before the in-memory ledger is updated must poison that instance; restart recovers the delivered record without reissuing assets.
+- OFFLINE-GIVE-09 (Red): an issuance journal root or ancestor that is a symbolic link must not be accepted as an authoritative durable-money store, even if its target is a readable directory.
 
 Formal CAT machine Gates and Paper live/offline persistence tests: **not-run**.
