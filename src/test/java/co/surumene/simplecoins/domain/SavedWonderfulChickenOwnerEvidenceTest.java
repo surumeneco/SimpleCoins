@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 /** TASK-20261101-004: saved WWC PDC is positive-only commander evidence. */
 class SavedWonderfulChickenOwnerEvidenceTest {
     private static final UUID OWNER =
-            UUID.fromString("00000000-0000-0000-0000-000000000047");
+            UUID.fromString("00000000-0000-0000-0000-0000000000ab");
     private static final String NS = "whatawonderfulchicken:";
 
     private static Map<String, Object> chicken(Object marker, Object version, Object target) {
