@@ -1,23 +1,40 @@
-# Phase 6: source-closure readiness barrier (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.settlement.source-readiness
+status: draft
+process: simplecoins.settlement
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Leaf `TASK-20261101-005`.
+# DomainSpec: settlement source-closure readiness barrier
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.settlement | join admissionと保存済み資産のsource closure |
+| simplecoins.snapshot | durable generationとreadbackの同一性 |
+| simplecoins.paper | 読取中/公開後の外部mutation通知と実機同期 |
 
-A settlement generation cannot be exposed to new joins before every manifest-declared authoritative source has completed staging and the **exact** completed result has been durably persisted and read back. The barrier begins closed. A factory derives the required IDs from the manifest's canonical source closure, and the admission callback is serialized with mutation notifications. A partially failed admission invalidates readiness. Its source IDs are immutable and nonempty; unknown or duplicate completions, failed sources, and mutations during staging invalidate the attempt (fail closed). A mutation or delayed source failure observed after opening closes the barrier to subsequent joins. A join admission callback cannot recursively issue another admission: a nested permit is an ambiguous reentrant admission and must fail closed before invoking its callback.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| barrier.initial | barrier生成直後、または全sourceのstagingが完了していないとき | join admissionは閉じたまま | SETTLEMENT-BARRIER-01 |
+| barrier.source-set | manifest由来の必須source IDを処理するとき | 必須集合は非空・不変。未知ID、重複完了、欠損sourceは失敗として閉じる | SETTLEMENT-BARRIER-02 |
+| barrier.failure | staging中にsource失敗またはmutationが発生したとき | 試行をFAILEDにし、公開とjoinを拒否する | SETTLEMENT-BARRIER-03 |
+| barrier.durable | 全source完了後に公開を検討するとき | exact generationのdurable persistとreadbackが成功・一致した場合のみ開ける | SETTLEMENT-BARRIER-04 |
+| barrier.readback-failure | durable stateが欠損・破損・不一致、またはreadback providerが例外を出すとき | FAILEDとして閉じ、部分検証済み状態からのjoinを拒否する | SETTLEMENT-BARRIER-05, SETTLEMENT-BARRIER-09 |
+| barrier.late-mutation | barrier開放後にsource mutationまたは遅延失敗を観測したとき | 以後のjoinを閉じる | SETTLEMENT-BARRIER-06 |
+| barrier.restart | 失敗したbarrierを再開しようとするとき | 同一インスタンスを再開せず、権威状態を再照合した新インスタンスが必要 | SETTLEMENT-BARRIER-07 |
+| barrier.reentrant | join admission callbackが再帰的にjoin admissionを要求したとき | nested callbackを実行せず、barrierを無効化し後続joinを拒否する | SETTLEMENT-BARRIER-08 |
+| barrier.callback | source-read callbackがI/Oまたはruntime failureで終了したとき | source完了と数えずFAILEDにする | source callback fault-injection |
 
-A source-read callback marks its source complete only after the entire callback succeeds; any I/O or runtime failure closes the attempt. The barrier coordinates readiness **only**. It does not freeze loaded chunks/entities, prevent existing players from mutating inventories, discover authoritative sources, integrate Paper join events, or prove that the world and disk were captured atomically. Those obligations belong to the caller and remain acceptance blockers until integrated and tested. The caller must notify the barrier of mutations and must prevent physical mutation between source capture and durable verification.
+## 実装・検証境界
 
-## TCE / Test model
+これはTask-20261101-005に基づくCAT **Draft**。source readinessの制御は、Paper loaded chunk/entityの凍結、既存プレイヤーの資産変更防止、権威source集合の発見、join listenerとの同一thread直列化、world/diskの原子的captureを証明しない。呼出元がmutationをbarrierへ通知し、captureからdurable verificationまでの物理的変更を抑止する必要がある。
 
-- SETTLEMENT-BARRIER-01: joining is denied before staging, while staging, and before complete source closure.
-- SETTLEMENT-BARRIER-02: only exact manifest source IDs can complete; duplicates and unknown IDs poison the attempt.
-- SETTLEMENT-BARRIER-03: source failure or mutation during staging blocks publication and joins.
-- SETTLEMENT-BARRIER-04: a completed source set opens only after exact durable snapshot readback, not an in-memory candidate or mismatched generation.
-- SETTLEMENT-BARRIER-05: corrupt/missing durable state or a failed verification closes the barrier.
-- SETTLEMENT-BARRIER-06: mutation observed after opening closes the gate to subsequent joins.
-- SETTLEMENT-BARRIER-07: the barrier cannot be restarted/reopened after a failed attempt without constructing a new instance and reconciling authoritative state.
-- SETTLEMENT-BARRIER-08 (Red): a nested withJoinPermit callback must never execute; recursive admission invalidates the barrier and denies later joins.
-- SETTLEMENT-BARRIER-09 (Red): a fatal `Error` during durable readback (including an injected readback provider) must poison the barrier to FAILED; subsequent join admission cannot be permitted from the partially verified staging state.
-
-Formal CAT machine gates, Paper listener wiring, authoritative world freeze, and real server fault injection: **not-run**. Do not promote Draft to Confirmed without authorization.
+このDomainSpecは規範的Process/PI/TCE、正式CAT機械Gate、Paper実機故障注入の代替ではない。現行状態はDraftであり、Confirmedへの昇格、process-closure、model-conformance、vectors、Queue生成、実機統合はnot-run。
