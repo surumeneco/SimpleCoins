@@ -1,0 +1,19 @@
+# Phase 5: external ownership and BAN evidence completeness (CAT Draft)
+
+Status: Draft, not Confirmed. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md, 05_1.0.0_実装計画.md.
+
+## Process / PI
+
+An external owner adapter must distinguish three states: a verified personal owner UUID, verified free ownership, and **unknown** because the external source/API, snapshot or identity resolution is unavailable. Unknown is not equivalent to null UUID/free ownership or a zero-value inventory. Only a verified owner/free decision can be converted into an existing BlockEntity/Entity staging ownership record; unknown fails closed.
+
+For a known personal owner, current BAN status may be established by multiple required sources (Paper profile bans, supported external adapters, and any resolvable IP-ban mapping). Each source reports BANNED, CLEAR or UNKNOWN for that UUID. Any verified BANNED suffices for dead-asset classification; all required sources must be CLEAR to classify as unbanned. An UNKNOWN without a definitive BANNED remains UNKNOWN and cannot be silently treated as CLEAR. Duplicate/missing source identities are invalid. This pure evidence layer does not claim that an external BAN plugin, IP-to-UUID mapping or WWC/WWW/WCL API has actually been connected.
+
+## Test model / TCE
+
+- OWNER-EVIDENCE-01 Red: UNKNOWN external ownership cannot become free or personal staging ownership.
+- OWNER-EVIDENCE-02: verified FREE and PERSONAL convert to the corresponding staging ownership without inventing an owner.
+- OWNER-EVIDENCE-03: missing or unknown BAN evidence blocks classification of a verified personal owner.
+- BAN-EVIDENCE-01 Red: all CLEAR sources produce CLEAR; any BANNED produces BANNED; UNKNOWN without a BANNED remains UNKNOWN.
+- BAN-EVIDENCE-02: empty, duplicate, malformed or null source evidence fails closed.
+
+This is a contract boundary, not an authoritative world snapshot or completed external adapter. Formal CAT machine gates and Paper/WWC/WWW/BAN integration tests remain not-run; Draft is not Confirmed.
