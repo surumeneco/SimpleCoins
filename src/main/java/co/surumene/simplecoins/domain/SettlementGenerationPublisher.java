@@ -1,5 +1,6 @@
 package co.surumene.simplecoins.domain;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -35,4 +36,32 @@ public final class SettlementGenerationPublisher {
         current = published;
         return published;
     }
+    @FunctionalInterface
+    public interface DurableWriter {
+        /** Return only after the complete candidate is durably committed. */
+        void persist(Published candidate) throws IOException;
+    }
+
+    /**
+     * Publish only after a caller-supplied durable writer succeeds. The writer
+     * is responsible for atomic storage and fsync; this method guarantees only
+     * in-process visibility ordering, not an on-disk format or restart replay.
+     */
+    public synchronized Published publishDurably(long expectedGeneration,
+                                                 SettlementAccumulator pending,
+                                                 DurableWriter writer) throws IOException {
+        if (expectedGeneration < 0)
+            throw new IllegalArgumentException("Negative expected settlement generation");
+        Objects.requireNonNull(pending, "pending");
+        Objects.requireNonNull(writer, "writer");
+        long actual = current == null ? 0 : current.generation();
+        if (actual != expectedGeneration)
+            throw new IllegalStateException("Stale settlement generation");
+        long next = Math.addExact(actual, 1);
+        Published candidate = new Published(next, pending.commit());
+        writer.persist(candidate);
+        current = candidate;
+        return candidate;
+    }
+
 }
