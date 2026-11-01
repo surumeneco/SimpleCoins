@@ -88,3 +88,8 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 
 - BLOCKLOCKER-TEXT-05: a coordinate-keyed saved sign evidence pair must pass all four raw front components through a caller-supplied verified text-component decoder before applying visible-sign identity rules. A text-only legacy sign is eligible for authoritative identity lookup; PDC-only evidence is not sufficient to classify ownership.
 - BLOCKLOCKER-TEXT-06: missing raw text, null decoder output or a decoder error blocks owner classification. An evidence pair containing neither stream is not a protection sign. This handoff does not itself implement a JSON component decoder, verify the sign's palette index or establish a world snapshot.
+
+## Paper tameable owner evidence (Draft vectors)
+
+- COMPANION-OWNER-05: a currently loaded, verified untamed Paper Tameable supplies ABSENT owner evidence; a tamed entity with a non-null AnimalTamer UUID supplies KNOWN. Null entity, failed API call, missing owner or missing UUID supplies UNKNOWN.
+- COMPANION-OWNER-06: Paper Tameable owner evidence is not WWC/WWW/WCL commander evidence. Without a separately verified commander absence or commander UUID, a known Paper owner cannot be published as the companion's final owner.
