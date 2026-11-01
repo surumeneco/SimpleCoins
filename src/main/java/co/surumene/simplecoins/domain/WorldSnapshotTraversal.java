@@ -92,6 +92,10 @@ public final class WorldSnapshotTraversal {
                         }
                         visitor.chunk(source, chunk);
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
+                    }, sidecar -> {
+                        // The reader has validated this referenced sidecar.
+                        // Keep it in the final cross-source recheck as well.
+                        completedSources.put(sidecar, stamp(sidecar));
                     });
             requireUnchanged(source.path(), before);
             completedSources.put(source.path(), before);
