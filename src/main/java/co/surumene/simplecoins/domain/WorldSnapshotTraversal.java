@@ -72,10 +72,19 @@ public final class WorldSnapshotTraversal {
         }
 
         int files = 0, chunks = 0, players = 0;
+        // Entity UUIDs are global identities, even across worlds and region files.
+        // Per-chunk checks cannot detect copied entities in separate chunks.
+        Set<UUID> savedEntityIds = new HashSet<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
             final int[] fileChunks = {0};
             AnvilRegionReader.scan(source.path(), maximumCompressedBytes, maximumInflatedBytes,
                     chunk -> {
+                        if (source.kind() == WorldStorageDiscovery.Kind.ENTITY) {
+                            for (UUID uuid : SavedEntityUuidIntegrity.identities(chunk.nbt())) {
+                                if (!savedEntityIds.add(uuid))
+                                    throw new IOException("Duplicate saved Entity UUID across chunks: " + uuid);
+                            }
+                        }
                         visitor.chunk(source, chunk);
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
                     });
