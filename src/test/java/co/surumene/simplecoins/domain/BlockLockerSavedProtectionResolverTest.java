@@ -27,7 +27,7 @@ class BlockLockerSavedProtectionResolverTest {
 
     private static Map<String, Object> wall(String facing) {
         return Map.of("Name", "minecraft:oak_wall_sign",
-                "Properties", Map.of("facing", facing));
+                "Properties", Map.of("facing", facing, "waterlogged", "false"));
     }
 
     private static ExternalOwnerDecision.Evidence single(
