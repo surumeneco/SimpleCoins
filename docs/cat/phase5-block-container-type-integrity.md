@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.block-container-type-integrity
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved block container type integrity (CAT Draft)
 
 Status: Draft, not Confirmed. Leaf TASK-20261101-003. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| saved BlockEntity | コンテナ型とItemsリストの権威性 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| block.type-unknown | 未知・未対応のBlockEntityがItemsを持つとき | 推測で資産計上せず、保存走査を拒否する | BLOCK-TYPE-01 |
+| block.shulker | shulker型の色識別子を評価するとき | 実在するvanilla色のみ受け入れ、架空色を拒否する | BLOCK-TYPE-02 |
+| block.known | 既知コンテナ型を読み取るとき | 既存のslot上限と正当な保存資産計上を維持する | BLOCK-TYPE-03 |
 
 ## Process / PI
 
