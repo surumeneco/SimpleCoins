@@ -15,5 +15,6 @@ The caller must verify the saved Entity's UUID, authoritative world snapshot, cu
 - WWC-SAVED-03: wrong entity type, malformed PDC compound, wrong-typed target or noncanonical UUID yields UNKNOWN.
 - WWC-SAVED-04: a valid typed v2/v3/v4 marker and target remain recognized; no inference of FREE for ordinary chickens.
 - WWC-SAVED-05: no changes to source maps or Bukkit state.
+- WWC-SAVED-06: a serialized named-root NBT chunk containing the typed saved BukkitValues compound decodes through NbtReader and yields the same positive-only commander evidence.
 
 The saved NBT representation requires real Paper 26.2 integration verification. Formal CAT machine Gates: **not-run**; Draft not Confirmed. No merge, deployment or settlement publication.
