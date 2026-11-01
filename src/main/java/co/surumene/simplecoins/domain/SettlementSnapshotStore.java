@@ -14,6 +14,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +37,7 @@ public final class SettlementSnapshotStore {
     private final Path root;
     private final Path snapshot;
     private final Path lock;
+    private final Path initialized;
 
     public SettlementSnapshotStore(Path directory) throws IOException {
         if (directory == null) throw new IOException("Missing settlement snapshot directory");
@@ -47,12 +49,20 @@ public final class SettlementSnapshotStore {
             throw new IOException("Settlement snapshot root is not a real directory");
         snapshot = root.resolve("settlement.snapshot");
         lock = root.resolve("settlement.lock");
+        initialized = root.resolve("settlement.initialized");
     }
 
     /** Missing means no generation was committed; malformed means fail-closed. */
     public Optional<SettlementGenerationPublisher.Published> load() throws IOException {
         requireRealAncestors();
-        if (!Files.exists(snapshot, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+        if (!Files.exists(snapshot, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Previously initialized settlement snapshot is missing");
+            return Optional.empty();
+        }
+        if (Files.exists(initialized, LinkOption.NOFOLLOW_LINKS) &&
+                !Arrays.equals(DurableFile.read(initialized, 4), new byte[] {0x53, 0x43, 0x53, 0x31}))
+            throw new IOException("Invalid settlement initialization marker");
         return Optional.of(decode(DurableFile.read(snapshot, MAX_BYTES)));
     }
 
@@ -78,6 +88,8 @@ public final class SettlementSnapshotStore {
             if (!candidate.equals(load().orElseThrow(
                     () -> new IOException("Committed settlement snapshot disappeared"))))
                 throw new IOException("Settlement snapshot readback differs from committed candidate");
+            if (!Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
+                DurableFile.write(initialized, new byte[] {0x53, 0x43, 0x53, 0x31});
         } catch (OverlappingFileLockException concurrent) {
             throw new IOException("Settlement snapshot writer already active", concurrent);
         }
