@@ -150,4 +150,26 @@ class GrantLedgerTest {
         assertThrows(java.io.IOException.class, () -> new GrantLedger(journal));
     }
 
+
+    @Test void noncanonicalUuidInChecksummedJournalMustFailReplay() throws Exception {
+        Path folder = directory.resolve("uuid-alias");
+        java.nio.file.Files.createDirectories(folder);
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var out = new java.io.DataOutputStream(bytes)) {
+            out.writeInt(0x53434732);
+            out.writeLong(1);
+            out.writeUTF("1-1-1-1-1"); // UUID.fromString silently normalizes this alias
+            out.writeUTF(UUID.randomUUID().toString());
+            out.writeLong(100);
+            out.writeUTF("console");
+            out.writeLong(12345L);
+            out.writeBoolean(false);
+            out.writeInt(0);
+            out.writeLong(0);
+        }
+        DurableFile.write(folder.resolve("1.grant"), bytes.toByteArray());
+        DurableFile.write(folder.resolve("head"),
+                java.nio.ByteBuffer.allocate(8).putLong(1L).array());
+        assertThrows(java.io.IOException.class, () -> new GrantLedger(folder));
+    }
 }
