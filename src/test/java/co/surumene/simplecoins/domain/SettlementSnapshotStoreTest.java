@@ -194,11 +194,11 @@ class SettlementSnapshotStoreTest {
     @Test void failedFirstSnapshotReplacementNeverResetsInitialization() throws Exception {
         Path root = directory.resolve("first-write");
         var store = new SettlementSnapshotStore(root);
-        Path obstruction = Files.createDirectory(root.resolve("settlement.snapshot"));
         var candidate = new SettlementGenerationPublisher.Published(
                 1, staged(100, 0, 0, true).commit());
-        assertThrows(IOException.class, () -> store.persist(candidate));
-        Files.delete(obstruction);
+        assertThrows(IOException.class, () -> store.persist(candidate, () -> {
+            throw new IOException("Injected failure after marker, before snapshot");
+        }));
         assertThrows(IOException.class, store::load,
                 "failed first write must leave an initialization tombstone");
         assertThrows(IOException.class, () -> store.persist(candidate));
