@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class BanEvidenceTest {
@@ -36,6 +37,20 @@ class BanEvidenceTest {
         assertThrows(IOException.class, () -> BanEvidence.combine(List.of(
                 new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
                 new BanEvidence.Source(" PAPER ", BanEvidence.Status.CLEAR))));
+    }
+
+    @Test void omittedRequiredBanSourceCannotProveClear() throws Exception {
+        assertEquals(BanEvidence.Status.UNKNOWN, BanEvidence.combine(
+                Set.of("paper", "external"),
+                List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR))));
+        assertEquals(BanEvidence.Status.BANNED, BanEvidence.combine(
+                Set.of("paper", "external"),
+                List.of(new BanEvidence.Source("paper", BanEvidence.Status.BANNED))));
+        assertThrows(IOException.class, () -> BanEvidence.combine(
+                Set.of("paper"), List.of(
+                        new BanEvidence.Source("unexpected", BanEvidence.Status.CLEAR))));
+        assertThrows(IOException.class, () -> BanEvidence.combine(
+                Set.of(), List.of()));
     }
 
 }
