@@ -137,4 +137,17 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(bundle));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(shulker));
     }
+
+    @Test void shulkerNestedSlotsMustFitItsTwentySevenPhysicalSlots() throws Exception {
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> valid = Map.of("id", "minecraft:red_shulker_box",
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 26, "item", coin))));
+        Map<String,Object> invalid = Map.of("id", "minecraft:red_shulker_box",
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 27, "item", coin))));
+        assertEquals(BigInteger.valueOf(100), StoredItemValue.value(valid));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
+    }
 }
