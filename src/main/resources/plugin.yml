@@ -1,0 +1,16 @@
+name: SimpleCoins
+version: '1.0.0'
+main: co.surumene.simplecoins.SimpleCoinsPlugin
+api-version: '26.2'
+description: Physical currency, wallets, and accounting for MofuPark
+softdepend: [Nexo, Geyser-Spigot, floodgate, BlockLocker, WhatAWonderfulChicken, WhatAWonderfulWolf]
+commands:
+  simplecoins:
+    aliases: [sc]
+    description: SimpleCoins administration
+    usage: /simplecoins give <player> <amount|denomination> [count]
+    permission: simplecoins.admin
+permissions:
+  simplecoins.admin:
+    description: Manage SimpleCoins issuance
+    default: op

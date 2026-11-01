@@ -1,0 +1,39 @@
+# Phase 5: saved sign display-text evidence (CAT Draft)
+
+Status: Draft, not Confirmed. Sources: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md and BlockLocker v1.14.1 SignParserImpl / ProfileFactoryImpl.
+
+## Process / PI
+
+Read-only decoding of the raw display-text evidence on a saved sign block entity. Modern Java signs have a `front_text` compound containing four `messages` (serialized text components) and may have a `back_text` compound. Legacy signs may instead contain `Text1` through `Text4`. Preserve the exact strings and the format; do **not** interpret the localized header, player identity, Everyone marker, or protection attachment from this step. BlockLocker gives display text precedence over mismatching saved PDC and accepts legacy text-only signs, so the future authoritative resolver must see both sources.
+
+The decoder returns no evidence when neither recognized representation exists. A present but malformed/incomplete representation, or simultaneously present modern and legacy formats, fails closed. A missing back side is explicitly unknown, not proof of an empty backside. The returned collections are immutable snapshots.
+
+## Test model / TCE
+
+- BL-TEXT-01: modern front/back four-line text components are preserved without interpretation.
+- BL-TEXT-02: a legacy text-only sign preserves Text1–Text4 even with no BlockLocker PDC.
+- BL-TEXT-03: a missing optional back side remains unknown; missing both formats yields no evidence.
+- BL-TEXT-04: malformed modern compounds, non-string lines, missing legacy lines, and ambiguous mixed formats throw IOException.
+- BL-TEXT-05: returned lists cannot be modified through the decoder.
+
+This unit cannot publish ownership or settlement. Text JSON interpretation, localized aliases, physical sign attachment, double-chest topology, live/disk consistency, and authoritative UUID resolution remain later stages. Formal CAT machine gates not-run; Draft is not Confirmed.
+
+## Terrain candidate integration (additional Draft vectors)
+
+The terrain adapter must expose display-text evidence from **every** sign with a recognized text representation, including signs with no BlockLocker PDC. The existing PDC-only hint extraction remains unchanged and is not an ownership classifier. Both evidence streams use validated chunk-local physical coordinates; duplicate sign positions abort the read.
+
+- BL-TEXT-06 Red: a legacy text-only sign appears in `extractTextCandidates`, while `extract` still returns no PDC owner hint.
+- BL-TEXT-07: modern front/back text is available at the same physical key as the PDC hint.
+- BL-TEXT-08: duplicate physical sign entries and out-of-chunk coordinates fail closed before returning a text candidate.
+
+## Raw NBT integration (verification vector)
+
+- BL-TEXT-09: a serialized named-root NBT terrain chunk with a text-only modern sign is decoded through `NbtReader` and `extractTextCandidates`. Preserve all four raw messages and return no saved-PDC owner hint. This tests the real NBT tag shape, not just hand-built Java maps.
+
+## Joined saved-sign evidence (additional Draft vectors)
+
+An intermediate caller should be able to obtain PDC hints and raw display-text evidence in one coordinate-keyed, read-only record. Include a sign when either stream has evidence, including legacy text-only signs. A missing stream remains `Optional.empty`; it is not an inferred owner or free-asset classification. Malformed present evidence in either stream aborts the combined read.
+
+- BL-TEXT-10 Red: PDC-only, text-only and combined signs retain their respective evidence without silently dropping text-only signs.
+- BL-TEXT-11: a malformed present text/PDC stream rejects the combined read rather than publishing the other stream alone.
+- BL-TEXT-12: a sign with neither recognized evidence is omitted from the joined candidate map, not classified as unprotected.

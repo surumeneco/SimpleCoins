@@ -1,0 +1,32 @@
+currency:
+  unit: C
+coins:
+  '1': {name: '1 Coin'}
+  '5': {name: '5 Coin'}
+  '10': {name: '10 Coin'}
+  '50': {name: '50 Coin'}
+  '100': {name: '100 Coin'}
+  '500': {name: '500 Coin'}
+  '1000': {name: '1000 Coin'}
+  '5000': {name: '5000 Coin'}
+  '10000': {name: '10000 Coin'}
+wallet:
+  max-balance: 640000
+trader-drops:
+  enabled: true
+  chance: 0.001
+  minimum-count: 1
+  maximum-count: 1
+  weights:
+    '1': 20
+    '5': 12
+    '10': 6
+    '50': 2
+    '100': 1
+resource-pack:
+  # Set to a publicly served URL for plugins/SimpleCoins/SimpleCoins-java.zip (no Nexo)
+  public-url: ""
+statistics:
+  default-enabled: true
+  enabled-worlds: []
+  disabled-worlds: []

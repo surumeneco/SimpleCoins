@@ -1,0 +1,101 @@
+package co.surumene.simplecoins.domain;
+
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Read-only saved Entity inventory extraction for container vehicles and
+ * other Entities with an Items list. No ownership is inferred: authoritative
+ * owner, loaded-Entity and world snapshot reconciliation remain mandatory.
+ */
+public final class StoredEntityInventoryAssets {
+    private StoredEntityInventoryAssets() {}
+
+    public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
+        if (chunk == null || !(chunk.get("Entities") instanceof List<?> entities))
+            throw new IOException("Missing saved entity chunk Entities list");
+
+        Map<String, BigInteger> found = new LinkedHashMap<>();
+        Set<String> seen = new HashSet<>();
+        for (Object rawEntity : entities) {
+            if (!(rawEntity instanceof Map<?, ?> entity) ||
+                    !(entity.get("id") instanceof String id) || id.isBlank())
+                throw new IOException("Malformed saved entity");
+            boolean slotted = entity.containsKey("Items");
+            boolean unslotted = entity.containsKey("Inventory");
+            if (!slotted && !unslotted) continue;
+            if (slotted && unslotted)
+                throw new IOException("Ambiguous Entity inventory representations");
+            if (slotted && (id.equals("minecraft:villager") || id.equals("minecraft:allay")))
+                throw new IOException("Villager/Allay must use unslotted Inventory representation");
+
+            Object rawUuid = entity.get("UUID");
+            if (!(rawUuid instanceof int[] parts) || parts.length != 4)
+                throw new IOException("Inventory Entity has no valid UUID");
+            UUID uuid = new UUID(((long) parts[0] << 32) | Integer.toUnsignedLong(parts[1]),
+                    ((long) parts[2] << 32) | Integer.toUnsignedLong(parts[3]));
+            String key = uuid.toString();
+            if (!seen.add(key))
+                throw new IOException("Duplicate inventory Entity UUID: " + key);
+
+            Object rawInventory = entity.get(slotted ? "Items" : "Inventory");
+            if (!(rawInventory instanceof List<?> inventory))
+                throw new IOException("Malformed Entity inventory list: " + key);
+            // A vanilla villager has eight positional inventory slots.
+            // Extra entries cannot represent additional physical currency.
+            if (unslotted && id.equals("minecraft:villager") && inventory.size() > 8)
+                throw new IOException("Villager inventory exceeds eight physical slots: " + key);
+            // A vanilla Allay can carry only one inventory stack.
+            if (unslotted && id.equals("minecraft:allay") && inventory.size() > 1)
+                throw new IOException("Allay inventory exceeds one physical slot: " + key);
+            Set<Integer> occupiedSlots = new HashSet<>();
+            int position = 0;
+            for (Object rawStack : inventory) {
+                if (!(rawStack instanceof Map<?, ?> stack) ||
+                        stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
+                    throw new IOException("Malformed Entity inventory stack: " + key);
+                int index;
+                if (slotted) {
+                    Object rawSlot = stack.get("Slot");
+                    if (!(rawSlot instanceof Number slot) ||
+                            !(slot instanceof Byte || slot instanceof Short ||
+                              slot instanceof Integer || slot instanceof Long) ||
+                            slot.longValue() < 0 || slot.longValue() > 255)
+                        throw new IOException("Invalid Entity inventory slot: " + key);
+                    index = slot.intValue();
+                } else {
+                    // Villager/Allay-style Inventory stores stacks in list order
+                    // without Slot tags. This is a snapshot-local physical index.
+                    if (stack.containsKey("Slot"))
+                        throw new IOException("Unexpected Slot in unslotted Entity inventory: " + key);
+                    index = position;
+                }
+                // A chest minecart exposes 27 physical slots (0 through 26).
+                // Reject fabricated saved positions before valuing any currency.
+                if (slotted && id.equals("minecraft:chest_minecart") && index >= 27)
+                    throw new IOException("Chest minecart inventory slot outside physical range: " + key + ":" + index);
+                // Vanilla chest boats and bamboo chest rafts expose 27 slots.
+                boolean chestBoat = id.startsWith("minecraft:") &&
+                        (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
+                if (slotted && chestBoat && index >= 27)
+                    throw new IOException("Chest boat inventory slot outside physical range: " + key + ":" + index);
+                if (slotted && id.equals("minecraft:hopper_minecart") && index >= 5)
+                    throw new IOException("Hopper minecart inventory slot outside physical range: " + key + ":" + index);
+                position++;
+                if (!occupiedSlots.add(index))
+                    throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> item = (Map<String, Object>) stack;
+                BigInteger value = StoredItemValue.value(item);
+                if (value.signum() > 0) found.put(key + ":inventory:" + index, value);
+            }
+        }
+        return Map.copyOf(found);
+    }
+}
