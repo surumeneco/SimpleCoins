@@ -14,5 +14,7 @@ The caller must independently authenticate the admin permission and obtain an au
 - SC-ADMIN-QUERY-02: unknown/unregistered UUID is absent, not a zero-balance registered account.
 - SC-ADMIN-QUERY-03: null/invalid result, inconsistent statistics or dead-location totals fail closed.
 - SC-ADMIN-QUERY-04: results returned to callers are immutable and cannot alter published totals.
+- SC-ADMIN-QUERY-05 (Red): a result containing a null registered-player UUID cannot be presented as valid statistics even when the numeric totals reconcile.
+- SC-ADMIN-QUERY-06 (Red): dead-location evidence longer than the durable snapshot store's 1024-character bound is rejected rather than surfaced as a valid admin result.
 
 Formal CAT machine Gates, Paper command permission integration and live-world data are not-run.
