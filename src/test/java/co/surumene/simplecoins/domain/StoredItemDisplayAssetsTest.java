@@ -37,4 +37,13 @@ class StoredItemDisplayAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display))));
     }
+
+    @Test void overflowingAirDisplayCountCannotAliasZero() {
+        Map<String,Object> display = Map.of(
+                "id", "minecraft:item_display", "UUID", new int[]{0, 0, 0, 52},
+                "item", Map.of("id", "minecraft:air",
+                        "count", BigInteger.ONE.shiftLeft(64)));
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display))));
+    }
 }
