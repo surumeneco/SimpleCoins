@@ -46,7 +46,9 @@ public final class StoredItemDisplayAssets {
             if ("minecraft:air".equals(stack.get("id"))) {
                 Object rawCount = stack.get("count");
                 if (!(rawCount instanceof Number count) ||
-                        count instanceof Float || count instanceof Double || count.longValue() != 0)
+                        !(count instanceof Byte || count instanceof Short ||
+                          count instanceof Integer || count instanceof Long) ||
+                        count.longValue() != 0)
                     throw new IOException("Malformed empty item display: " + key);
                 continue;
             }
