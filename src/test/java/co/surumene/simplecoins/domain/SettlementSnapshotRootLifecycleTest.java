@@ -44,6 +44,22 @@ class SettlementSnapshotRootLifecycleTest {
         assertFalse(Files.exists(root.resolve("settlement.initialized")));
     }
 
+    @Test void rootSwapDuringDurableWriteCannotCreateSnapshotInSubstitute() throws Exception {
+        Path root = directory.resolve("settlement");
+        var store = new SettlementSnapshotStore(root);
+        var staged = new SettlementAccumulator(
+                new WorldScope(true, java.util.Set.of(), java.util.Set.of()),
+                java.util.Set.of("source"));
+        staged.completeSource("source");
+        var first = new SettlementGenerationPublisher.Published(1, staged.commit());
+        assertThrows(IOException.class, () -> store.persist(first, () -> {
+            Files.move(root, directory.resolve("moved-during-write"));
+            Files.createDirectory(root);
+        }));
+        assertFalse(Files.exists(root.resolve("settlement.snapshot")),
+                "a substituted root must never receive the generation payload");
+    }
+
     @Test void newlyConstructedRealEmptyDirectoryStillHasNoGeneration() throws Exception {
         var store = new SettlementSnapshotStore(directory.resolve("fresh"));
         assertTrue(store.load().isEmpty());
