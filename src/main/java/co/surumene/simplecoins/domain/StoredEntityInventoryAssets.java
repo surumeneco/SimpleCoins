@@ -49,6 +49,9 @@ public final class StoredEntityInventoryAssets {
             // Extra entries cannot represent additional physical currency.
             if (unslotted && id.equals("minecraft:villager") && inventory.size() > 8)
                 throw new IOException("Villager inventory exceeds eight physical slots: " + key);
+            // A vanilla Allay can carry only one inventory stack.
+            if (unslotted && id.equals("minecraft:allay") && inventory.size() > 1)
+                throw new IOException("Allay inventory exceeds one physical slot: " + key);
             Set<Integer> occupiedSlots = new HashSet<>();
             int position = 0;
             for (Object rawStack : inventory) {
