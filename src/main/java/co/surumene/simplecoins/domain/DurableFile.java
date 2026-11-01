@@ -1,9 +1,12 @@
 package co.surumene.simplecoins.domain;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -44,6 +47,20 @@ public final class DurableFile {
             throw new IOException("Journal checksum mismatch: " + target);
         return payload;
     }
+    static byte[] readBounded(InputStream input, int maximumBytes) throws IOException {
+        if (input == null || maximumBytes < 0)
+            throw new IllegalArgumentException("Invalid bounded journal input");
+        var output = new ByteArrayOutputStream(Math.min(maximumBytes, 8192));
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            if (count > maximumBytes - output.size())
+                throw new IOException("Journal stream exceeds byte budget");
+            output.write(buffer, 0, count);
+        }
+        return output.toByteArray();
+    }
+
     private static byte[] hash(byte[] payload) {
         try { return MessageDigest.getInstance("SHA-256").digest(payload); }
         catch (NoSuchAlgorithmException impossible) { throw new AssertionError(impossible); }
