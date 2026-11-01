@@ -75,4 +75,37 @@ class SettlementGenerationPublisherTest {
             executor.shutdownNow();
         }
     }
+    @Test void persistenceFailureCannotExposeAnUnwrittenGeneration() throws Exception {
+        var publisher = new SettlementGenerationPublisher();
+        assertThrows(java.io.IOException.class, () -> publisher.publishDurably(
+                0, staged(100, true), candidate -> {
+                    assertEquals(1L, candidate.generation());
+                    assertEquals(BigInteger.valueOf(100), candidate.result().free());
+                    throw new java.io.IOException("Injected durable writer failure");
+                }));
+        assertTrue(publisher.current().isEmpty());
+        var first = publisher.publishDurably(0, staged(200, true), candidate -> {});
+        assertEquals(1L, first.generation());
+        assertThrows(java.io.IOException.class, () -> publisher.publishDurably(
+                1, staged(300, true), candidate -> {
+                    throw new java.io.IOException("Injected second write failure");
+                }));
+        assertEquals(first, publisher.current().orElseThrow());
+        var second = publisher.publishDurably(1, staged(400, true), candidate -> {});
+        assertEquals(2L, second.generation());
+        assertEquals(BigInteger.valueOf(400), second.result().free());
+    }
+
+    @Test void staleOrMissingDurableWriterCannotCommitPendingSnapshot() throws Exception {
+        var publisher = new SettlementGenerationPublisher();
+        publisher.publishDurably(0, staged(100, true), candidate -> {});
+        var pending = staged(200, true);
+        assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                0, pending, candidate -> fail("Stale writer must not run")));
+        assertThrows(NullPointerException.class,
+                () -> publisher.publishDurably(1, pending, null));
+        assertEquals(2L, publisher.publishDurably(
+                1, pending, candidate -> {}).generation());
+    }
+
 }
