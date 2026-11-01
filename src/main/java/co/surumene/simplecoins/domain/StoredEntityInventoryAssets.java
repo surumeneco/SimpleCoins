@@ -33,6 +33,9 @@ public final class StoredEntityInventoryAssets {
             // extractor. Never allow an invented Items list to count it twice.
             if (id.equals("minecraft:item") && (slotted || unslotted))
                 throw new IOException("Dropped item cannot expose an Entity inventory");
+            if ((id.equals("minecraft:item_frame") ||
+                    id.equals("minecraft:glow_item_frame")) && (slotted || unslotted))
+                throw new IOException("Item frame cannot expose an Entity inventory");
             if (!slotted && !unslotted) continue;
             if (slotted && unslotted)
                 throw new IOException("Ambiguous Entity inventory representations");
