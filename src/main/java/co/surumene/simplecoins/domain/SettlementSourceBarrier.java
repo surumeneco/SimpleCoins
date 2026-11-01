@@ -9,8 +9,9 @@ import java.util.Set;
  * Fail-closed readiness gate for one complete settlement generation.
  *
  * This gate does not freeze Minecraft sources or intercept joins by itself.
- * The Paper adapter must prevent concurrent physical mutations and call
- * requireJoinReady() on the actual join path before allowing participation.
+ * The Paper adapter must prevent concurrent physical mutations and
+ * coordinate join actions with source-mutation callbacks. A standalone
+ * readiness check is only safe on an already serialized Paper main thread.
  */
 public final class SettlementSourceBarrier {
     public enum State { BLOCKED, STAGING, OPEN, FAILED }
@@ -85,7 +86,17 @@ public final class SettlementSourceBarrier {
         }
     }
 
-    /** Invoke on the actual join/readiness path; no implicit Paper integration. */
+    /**
+     * Run a join admission action under the same monitor as mutation reports.
+     * All cooperating mutation paths must honor this monitor; this alone does
+     * not freeze arbitrary world mutations outside the barrier.
+     */
+    public synchronized void withJoinPermit(Runnable admission) {
+        requireJoinReady();
+        Objects.requireNonNull(admission, "admission").run();
+    }
+
+    /** A readiness check only; prefer withJoinPermit for concurrent adapters. */
     public synchronized void requireJoinReady() {
         if (state != State.OPEN)
             throw new IllegalStateException("Settlement is not verified for joining");
