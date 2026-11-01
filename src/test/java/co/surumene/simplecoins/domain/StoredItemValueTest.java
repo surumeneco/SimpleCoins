@@ -113,4 +113,16 @@ class StoredItemValueTest {
                         Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
         assertEquals(BigInteger.valueOf(300), StoredItemValue.value(coin));
     }
+
+    @Test void simultaneousBundleAndContainerComponentsCannotDoubleCountCurrency() {
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> ambiguous = Map.of("id", "minecraft:bundle", "count", 1,
+                "components", Map.of(
+                        "minecraft:bundle_contents", java.util.List.of(coin),
+                        "minecraft:container", java.util.List.of(
+                                Map.of("slot", 0, "item", coin))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(ambiguous),
+                "The same physical nested currency must not be counted through two storage representations");
+    }
 }
