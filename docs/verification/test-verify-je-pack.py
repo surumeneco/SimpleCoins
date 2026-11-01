@@ -121,7 +121,16 @@ def main() -> None:
             assert empty_url.returncode == 2
             assert "No URL supplied" in empty_url.stderr
 
-            print("PASS 10/10 Java pack verifier HTTP and failure-path checks")
+            option_like_url = subprocess.run(
+                ["bash", str(script), str(generated)],
+                input="--help\n", capture_output=True, text=True,
+                timeout=20, env=env, check=False,
+            )
+            assert option_like_url.returncode == 1
+            assert "Hosted pack download failed (URL redacted)." in option_like_url.stderr
+            assert "Usage: curl" not in option_like_url.stdout + option_like_url.stderr
+
+            print("PASS 11/11 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()

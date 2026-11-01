@@ -25,7 +25,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"; unset pack_url' EXIT
 if ! curl --proto '=http,https' --proto-redir '=http,https' \
     --fail --silent --show-error --location --max-time 90 \
-    --output "$tmp/hosted.zip" "$pack_url" 2>"$tmp/curl.err"; then
+    --output "$tmp/hosted.zip" -- "$pack_url" 2>"$tmp/curl.err"; then
   printf 'Hosted pack download failed (URL redacted).\n' >&2
   exit 1
 fi
