@@ -126,4 +126,22 @@ class BlockEntitySettlementImportTest {
         assertEquals(Map.of(owner, BigInteger.ZERO), result.personalBalances());
         assertEquals(1, result.statistics().registeredPlayers());
     }
+
+    @Test void allSixteenDyedShulkerVariantsPreserveEmptyProtectedOwnership() throws Exception {
+        for (String dye : List.of("white", "orange", "magenta", "light_blue",
+                "yellow", "lime", "pink", "gray", "light_gray", "cyan",
+                "purple", "blue", "brown", "green", "red", "black")) {
+            UUID owner = UUID.randomUUID();
+            var settlement = new SettlementAccumulator(
+                    new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+            Map<String,Object> shulker = Map.of(
+                    "id", "minecraft:" + dye + "_shulker_box", "x", 10, "y", 64, "z", 2);
+            BlockEntitySettlementImport.stageChunk(settlement, "region:file", "world",
+                    Map.of("block_entities", List.of(shulker)),
+                    position -> new BlockEntitySettlementImport.Ownership(owner, false, false, true));
+            settlement.completeSource("region:file");
+            assertEquals(Map.of(owner, BigInteger.ZERO), settlement.commit().personalBalances(),
+                    dye + " shulker must preserve its eligible protected owner");
+        }
+    }
 }
