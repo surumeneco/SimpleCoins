@@ -32,6 +32,8 @@ public final class StoredEntityInventoryAssets {
             if (!slotted && !unslotted) continue;
             if (slotted && unslotted)
                 throw new IOException("Ambiguous Entity inventory representations");
+            if (slotted && id.equals("minecraft:villager"))
+                throw new IOException("Villager must use unslotted Inventory representation");
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)
