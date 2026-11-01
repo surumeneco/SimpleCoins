@@ -167,6 +167,16 @@ public final class GrantLedger {
             long expectedLast = grants.isEmpty() ? 0 : grants.lastKey();
             if (head.length != 8 || java.nio.ByteBuffer.wrap(head).getLong() != expectedLast)
                 throw new IOException("Issuance journal durable head differs from live state");
+            // The durable head is only a sequence marker. A deleted or
+            // corrupted tail record must not leave a live ledger issuing from
+            // its in-memory copy without durable reservation evidence.
+            if (!grants.isEmpty()) {
+                Grant tail = grants.lastEntry().getValue();
+                Grant durableTail = decode(DurableFile.read(
+                        directory.resolve(tail.sequence() + ".grant"), 8192));
+                if (!tail.equals(durableTail))
+                    throw new IOException("Issuance journal durable tail differs from live state");
+            }
         } catch (IOException unsafe) {
             failed = true;
             throw new IllegalStateException("Issuance journal root became unsafe", unsafe);
