@@ -10,6 +10,7 @@ An `AssetOwner.Result` is internally consistent: FREE has no player and no dead 
 
 - AO-01: PERSONAL with CURRENT_BAN reason raises `IllegalArgumentException`.
 - AO-02: DEAD without a reason raises `IllegalArgumentException`.
-- AO-03: valid FREE, PERSONAL and DEAD combinations remain constructible.
+- AO-03: a null classification kind raises `IllegalArgumentException`.
+- AO-04: valid FREE, PERSONAL and DEAD combinations remain constructible.
 
 Formal CAT machine Gates: **not-run**. Draft is not Confirmed.
