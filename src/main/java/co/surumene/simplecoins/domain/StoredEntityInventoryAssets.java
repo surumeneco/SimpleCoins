@@ -29,6 +29,10 @@ public final class StoredEntityInventoryAssets {
                 throw new IOException("Malformed saved entity");
             boolean slotted = entity.containsKey("Items");
             boolean unslotted = entity.containsKey("Inventory");
+            // minecraft:item is handled only by the single-stack dropped-item
+            // extractor. Never allow an invented Items list to count it twice.
+            if (id.equals("minecraft:item") && (slotted || unslotted))
+                throw new IOException("Dropped item cannot expose an Entity inventory");
             if (!slotted && !unslotted) continue;
             if (slotted && unslotted)
                 throw new IOException("Ambiguous Entity inventory representations");
