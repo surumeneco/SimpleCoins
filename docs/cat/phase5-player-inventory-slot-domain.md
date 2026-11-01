@@ -10,3 +10,6 @@ For the vanilla saved `Inventory` list, physical slot keys must denote a real pl
 - Regression: slots 35, 100, and -106 remain valid; malformed slot values do not become zero balances.
 
 Formal CAT machine gates: not-run (Chat plugin/Skill unavailable); Draft is not Confirmed.
+
+## Numeric identity integrity (Draft)
+A saved slot or selected-hotbar index must be represented by an integral NBT numeric tag (Byte, Short, Integer, or Long). Arbitrary `Number` implementations such as a huge BigInteger must not be narrowed with `longValue()` or `intValue()`, because overflow can alias a valid slot and bypass duplicate checks. The same rule applies to `SelectedItemSlot` when reconciling modern `equipment.mainhand`.
