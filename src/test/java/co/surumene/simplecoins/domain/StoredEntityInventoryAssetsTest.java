@@ -74,6 +74,17 @@ class StoredEntityInventoryAssetsTest {
                 Map.of("Entities", List.of(villager))).size());
     }
 
+    @Test void villagerItemsRepresentationCannotInventSlottedCurrency() {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 0,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> villager = Map.of("id", "minecraft:villager",
+                "UUID", new int[]{0, 0, 0, 40}, "Items", List.of(coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(villager))));
+    }
+
     @Test void ambiguousSlottedAndUnslottedInventoryCannotBeCountedAsIndependent() {
         Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 1,
                 "Slot", (byte) 0,
