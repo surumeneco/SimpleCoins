@@ -24,6 +24,9 @@ import java.util.UUID;
 public final class WorldSnapshotTraversal {
     private WorldSnapshotTraversal() {}
 
+    private record LogicalChunk(String world, String dimension,
+                                WorldStorageDiscovery.Kind kind, int x, int z) {}
+
     public interface Visitor {
         void chunk(WorldStorageDiscovery.SourceFile source,
                    AnvilRegionReader.Chunk chunk) throws IOException;
@@ -75,10 +78,18 @@ public final class WorldSnapshotTraversal {
         // Entity UUIDs are global identities, even across worlds and region files.
         // Per-chunk checks cannot detect copied entities in separate chunks.
         Set<UUID> savedEntityIds = new HashSet<>();
+        Set<LogicalChunk> savedChunkIds = new HashSet<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
+            String dimension = logicalDimension(source.path());
             final int[] fileChunks = {0};
             AnvilRegionReader.scan(source.path(), maximumCompressedBytes, maximumInflatedBytes,
                     chunk -> {
+                        // Different storage paths can represent the same logical
+                        // chunk after a legacy-to-26.x dimension migration.
+                        var identity = new LogicalChunk(source.world(), dimension,
+                                source.kind(), chunk.x(), chunk.z());
+                        if (!savedChunkIds.add(identity))
+                            throw new IOException("Duplicate logical saved chunk: " + identity);
                         if (source.kind() == WorldStorageDiscovery.Kind.ENTITY) {
                             for (UUID uuid : SavedEntityUuidIntegrity.identities(chunk.nbt())) {
                                 if (!savedEntityIds.add(uuid))
@@ -99,6 +110,31 @@ public final class WorldSnapshotTraversal {
             players = Math.addExact(players, 1);
         }
         return new Report(files, chunks, players);
+    }
+
+    /**
+     * Canonicalize vanilla dimension identities across legacy and 26.x
+     * storage layouts. A world supplied by the caller remains a separate
+     * logical world even if another world uses the same chunk coordinates.
+     */
+    private static String logicalDimension(Path file) throws IOException {
+        Path dataDirectory = file.toAbsolutePath().normalize().getParent();
+        Path dimensionDirectory = dataDirectory == null ? null : dataDirectory.getParent();
+        if (dimensionDirectory == null || dimensionDirectory.getFileName() == null)
+            throw new IOException("Cannot identify saved chunk dimension: " + file);
+        String name = dimensionDirectory.getFileName().toString();
+        if ("DIM-1".equals(name)) return "minecraft:the_nether";
+        if ("DIM1".equals(name)) return "minecraft:the_end";
+        Path namespace = dimensionDirectory.getParent();
+        Path dimensions = namespace == null ? null : namespace.getParent();
+        if (dimensions != null && dimensions.getFileName() != null &&
+                "dimensions".equals(dimensions.getFileName().toString())) {
+            String ns = namespace.getFileName().toString();
+            if (ns.isBlank() || name.isBlank())
+                throw new IOException("Invalid saved chunk dimension identity: " + file);
+            return ns + ":" + name;
+        }
+        return "minecraft:overworld";
     }
 
     /**

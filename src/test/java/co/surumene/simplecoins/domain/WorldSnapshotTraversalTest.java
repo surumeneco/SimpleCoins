@@ -284,4 +284,69 @@ class WorldSnapshotTraversalTest {
                 }));
         assertEquals(0, visited.get(), "Reject coordinate aliases before visiting assets");
     }
+    @Test void legacyAndModernOverworldLayoutsCannotDuplicateOneSavedChunk() throws Exception {
+        Path legacy = region("region", 10);
+        Path modern = region("dimensions/minecraft/overworld/region", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", legacy, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", modern, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()));
+    }
+
+    @Test void legacyAndModernNetherLayoutsCannotDuplicateOneSavedChunk() throws Exception {
+        Path legacy = region("DIM-1/region", 10);
+        Path modern = region("dimensions/minecraft/the_nether/region", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", legacy, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", modern, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()));
+    }
+
+    @Test void differentDimensionsAndWorldsCanReuseChunkCoordinates() throws Exception {
+        Path overworld = region("region", 10);
+        Path nether = region("DIM-1/region", 20);
+        Path otherWorld = region("other/region", 30);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", overworld, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", nether, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("other", otherWorld, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertEquals(3, WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()).chunks());
+    }
+
+    private static WorldSnapshotTraversal.Visitor noOpVisitor() {
+        return new WorldSnapshotTraversal.Visitor() {
+            @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                        AnvilRegionReader.Chunk chunk) {}
+            @Override public void player(UUID player, Map<String,Object> data) {}
+        };
+    }
+
+    @Test void legacyAndModernEndEntityLayoutsCannotDuplicateOneSavedChunk() throws Exception {
+        Path legacy = region("DIM1/entities", 10);
+        Path modern = region("dimensions/minecraft/the_end/entities", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", legacy, WorldStorageDiscovery.Kind.ENTITY),
+                new WorldStorageDiscovery.SourceFile("world", modern, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()));
+    }
+
+    @Test void differentCustomNamespacesDoNotAliasOneLogicalDimension() throws Exception {
+        Path first = region("dimensions/alpha/sky/region", 10);
+        Path second = region("dimensions/beta/sky/region", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", first, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", second, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertEquals(2, WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()).chunks());
+    }
+
 }
