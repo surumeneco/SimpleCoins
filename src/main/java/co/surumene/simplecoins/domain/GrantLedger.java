@@ -89,6 +89,7 @@ public final class GrantLedger {
     }
     public synchronized List<Grant> pending(UUID player) {
         checkHealthy();
+        if (player == null) throw new IllegalArgumentException("Missing grant recipient UUID");
         return grants.values().stream().filter(g -> g.player().equals(player) && !g.delivered()).toList();
     }
     public synchronized boolean wasApplied(Grant grant, long savedReceipt) {
@@ -98,6 +99,7 @@ public final class GrantLedger {
     }
     public synchronized void validateReceipt(UUID player, long receipt) {
         checkHealthy();
+        if (player == null) throw new IllegalArgumentException("Missing receipt recipient UUID");
         if (receipt < 0 || (receipt != 0 && (!grants.containsKey(receipt) ||
                 !grants.get(receipt).player().equals(player))))
             throw new IllegalStateException("Receipt does not belong to this player's journal");
