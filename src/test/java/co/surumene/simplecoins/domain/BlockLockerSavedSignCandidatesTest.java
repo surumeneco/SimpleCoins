@@ -183,4 +183,42 @@ class BlockLockerSavedSignCandidatesTest {
         assertTrue(text.get("1,64,2").back().isEmpty());
     }
 
+    @Test void jointEvidenceRetainsPdcOnlyTextOnlyAndBothWithoutAssigningOwner() throws Exception {
+        Map<String,Object> pdcOnly = sign("minecraft:sign", 1, privatePdc());
+        Map<String,Object> textOnly = Map.of(
+                "id", "minecraft:sign", "x", 2, "y", 64, "z", 2,
+                "Text1", "[Private]", "Text2", "Bob", "Text3", "", "Text4", "");
+        Map<String,Object> both = Map.of(
+                "id", "minecraft:sign", "x", 3, "y", 64, "z", 2,
+                "PublicBukkitValues", privatePdc(),
+                "Text1", "[Private]", "Text2", "Alice", "Text3", "", "Text4", "");
+        Map<String,Object> ordinary = Map.of(
+                "id", "minecraft:sign", "x", 4, "y", 64, "z", 2);
+        var evidence = BlockLockerSavedSignCandidates.extractEvidence(
+                Map.of("block_entities", List.of(pdcOnly, textOnly, both, ordinary)));
+        assertEquals(3, evidence.size());
+        assertTrue(evidence.get("1,64,2").pdcHints().isPresent());
+        assertTrue(evidence.get("1,64,2").displayText().isEmpty());
+        assertTrue(evidence.get("2,64,2").pdcHints().isEmpty());
+        assertEquals("Bob", evidence.get("2,64,2").displayText()
+                .orElseThrow().front().get(1));
+        assertTrue(evidence.get("3,64,2").pdcHints().isPresent());
+        assertTrue(evidence.get("3,64,2").displayText().isPresent());
+        assertFalse(evidence.containsKey("4,64,2"));
+    }
+
+    @Test void jointEvidenceRejectsMalformedPresentStreamEvenWhenOtherIsValid() {
+        Map<String,Object> malformedText = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2,
+                "PublicBukkitValues", privatePdc(), "Text1", "[Private]");
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates
+                .extractEvidence(Map.of("block_entities", List.of(malformedText))));
+        Map<String,Object> malformedPdc = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2,
+                "PublicBukkitValues", Map.of("blocklocker:header", 42),
+                "Text1", "[Private]", "Text2", "Alice", "Text3", "", "Text4", "");
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates
+                .extractEvidence(Map.of("block_entities", List.of(malformedPdc))));
+    }
+
 }
