@@ -30,6 +30,7 @@ Status: Draft, not Confirmed. Leaf TASK-20261101-006. Source: forGPT/XPlayServer
 | pack.url.join | join時にpack URLを使用するとき | 検証済みURLのみPaper APIへ渡す | PACK-URL-04 |
 | pack.hash.regular | 生成ZIPをSHA-1計算するとき | 正規の非symlink通常ファイルを有界メモリでhashする | PACK-HASH-01 |
 | pack.hash.ancestor | ZIPへのancestorにsymlinkがあるとき | 外部へredirectされたsourceをhashしない | PACK-HASH-02 |
+| pack.hosted-stability | 外部検証中に生成ZIPが変化するとき | 取得時のbyte一致だけで成功扱いせず、hash時点の不一致を拒否する（原子的snapshot保証ではない） | PACK-HOSTED-01 |
 
 ## Process / PI
 
@@ -43,5 +44,6 @@ When Nexo is absent, SimpleCoins generates a Java resource-pack ZIP and advertis
 - PACK-URL-04: `PackDelivery.onJoin` calls the Paper resource-pack method only after successful validation; malformed configuration is logged and skipped.
 - PACK-HASH-01: hash the exact generated ZIP with bounded-memory streaming; reject absent, directory, or symbolic-link archive paths before distribution.
 - PACK-HASH-02 (Red): reject a generated ZIP reached through any symbolic-link ancestor directory, even when the final ZIP is a regular file. Do not hash a redirected source.
+- PACK-HOSTED-01 (verification-helper regression): if the generated archive changes after initial byte comparison but before SHA-1 evidence, reject the external verification instead of reporting identical hosted bytes.
 
-Formal CAT machine gates, Paper/JE/Geyser/BE client delivery, hosted content/hash verification and Nexo delegation remain not-run.
+Formal CAT machine gates, Paper/JE/Geyser/BE client delivery, real hosted deployment/JE-client validation and Nexo delegation remain not-run. PACK-HOSTED-01 is an isolated helper regression, not a coherent world/pack publication snapshot.
