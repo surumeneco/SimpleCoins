@@ -34,6 +34,16 @@ class ManagedResourcesTest {
         assertArrayEquals(new byte[]{99}, Files.readAllBytes(file));
     }
 
+    @Test void symlinkedAncestorCannotRedirectManagedPackInstallation() throws Exception {
+        Path actual = Files.createDirectory(directory.resolve("actual"));
+        Path alias = Files.createSymbolicLink(directory.resolve("alias"), actual);
+        var install = new ManagedResources(alias.resolve("geyser"));
+        assertThrows(java.io.IOException.class, () -> install.replace(
+                Map.of("packs/simplecoins-generated.mcpack", new byte[]{1})));
+        assertFalse(Files.exists(actual.resolve("geyser/packs/simplecoins-generated.mcpack")));
+        assertFalse(Files.exists(actual.resolve("geyser/simplecoins-managed-resources")));
+    }
+
     @Test void refusesPathsOutsideManagedPackDirectories() {
         var install = new ManagedResources(directory);
         assertThrows(java.io.IOException.class, () -> install.replace(Map.of("../config.yml", new byte[]{1})));
