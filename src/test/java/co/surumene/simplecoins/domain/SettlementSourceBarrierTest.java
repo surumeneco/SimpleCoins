@@ -97,6 +97,17 @@ class SettlementSourceBarrierTest {
         assertThrows(IOException.class, () -> mismatch.openAfterDurableReadback(store, other));
         assertEquals(SettlementSourceBarrier.State.FAILED, mismatch.state());
     }
+    @Test void fatalDurableReadbackErrorPoisonsBarrier() {
+        var expected = new SettlementGenerationPublisher.Published(1, complete().commit());
+        var gate = new SettlementSourceBarrier(Set.of("disk"));
+        gate.beginStaging();
+        gate.completeSource("disk");
+        assertThrows(AssertionError.class, () -> gate.openAfterDurableReadback(
+                () -> { throw new AssertionError("simulated fatal readback"); }, expected));
+        assertEquals(SettlementSourceBarrier.State.FAILED, gate.state());
+        assertThrows(IllegalStateException.class, gate::requireJoinReady);
+    }
+
     @Test void nestedAdmissionFailsClosedBeforeNestedCallback() throws Exception {
         var store = new SettlementSnapshotStore(directory.resolve("nested-snapshots"));
         var expected = new SettlementGenerationPublisher.Published(1, complete().commit());
