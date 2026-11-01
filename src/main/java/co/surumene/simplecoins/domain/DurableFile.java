@@ -37,11 +37,19 @@ public final class DurableFile {
         }
     }
     public static byte[] read(Path target, int maximumBytes) throws IOException {
-        if (!Files.isRegularFile(target, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        if (maximumBytes < 0) throw new IllegalArgumentException("Negative journal budget");
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Journal record is missing, non-regular or symbolic: " + target);
         long size = Files.size(target);
-        if (size < 32 || size > maximumBytes + 32L) throw new IOException("Invalid journal size: " + target);
-        byte[] all = Files.readAllBytes(target);
+        if (size < 32 || size > maximumBytes + 32L || size > Integer.MAX_VALUE)
+            throw new IOException("Invalid journal size: " + target);
+        byte[] all;
+        try (InputStream input = Files.newInputStream(target,
+                StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            all = readBounded(input, (int) size);
+        }
+        if (all.length != size)
+            throw new IOException("Journal changed while reading: " + target);
         byte[] payload = Arrays.copyOfRange(all, 32, all.length);
         if (!MessageDigest.isEqual(Arrays.copyOf(all, 32), hash(payload)))
             throw new IOException("Journal checksum mismatch: " + target);
