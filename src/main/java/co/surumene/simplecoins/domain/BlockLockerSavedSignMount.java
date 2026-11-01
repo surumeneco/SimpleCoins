@@ -42,6 +42,10 @@ public final class BlockLockerSavedSignMount {
             if (key.equals("waterlogged") && !value.equals("true") && !value.equals("false"))
                 throw new IOException("Invalid saved sign waterlogged state");
         }
+        // Modern vanilla sign states always include the waterlogged property.
+        // An incomplete palette cannot authenticate physical attachment.
+        if (!properties.containsKey("waterlogged"))
+            throw new IOException("Missing saved sign waterlogged state");
         Object raw = properties.get(wall ? "facing" : "rotation");
         if (!(raw instanceof String value))
             throw new IOException("Missing saved sign orientation");
