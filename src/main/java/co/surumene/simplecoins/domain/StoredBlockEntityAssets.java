@@ -91,6 +91,8 @@ public final class StoredBlockEntityAssets {
                 if ((id.equals("minecraft:furnace") || id.equals("minecraft:blast_furnace") ||
                         id.equals("minecraft:smoker")) && slot > 2)
                     throw new IOException("Invalid furnace-family inventory slot: " + slot);
+                if (id.equals("minecraft:brewing_stand") && slot > 4)
+                    throw new IOException("Invalid brewing stand inventory slot: " + slot);
                 if (!slots.add(slot))
                     throw new IOException("Duplicate block entity slot: " + pos + ":" + slot);
                 if (stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
