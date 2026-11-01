@@ -156,4 +156,32 @@ class SavedPlayerAssetsTest {
         assertTrue(SavedPlayerAssets.extract(
                 Map.of("Inventory", List.of(), "EnderItems", List.of())).isEmpty());
     }
+
+    @Test void missingSelectedSlotCannotDoubleCountMainhandAndHotbar() {
+        Map<String,Object> equippedCoin = Map.of(
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> root = Map.of(
+                "Inventory", List.of(coin(0, 100, 1)),
+                "EnderItems", List.of(),
+                "equipment", Map.of("mainhand", equippedCoin));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(root),
+                "Without SelectedItemSlot, mainhand and a hotbar entry may alias");
+    }
+
+    @Test void mainhandWithoutSelectedSlotOrLegacyHotbarRemainsCountable() throws Exception {
+        Map<String,Object> equippedCoin = Map.of(
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> root = Map.of(
+                "Inventory", List.of(),
+                "EnderItems", List.of(),
+                "equipment", Map.of("mainhand", equippedCoin));
+        assertEquals(BigInteger.valueOf(100),
+                SavedPlayerAssets.extract(root).get("equipment:mainhand"));
+    }
 }
