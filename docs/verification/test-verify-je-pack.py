@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline HTTP smoke tests for the read-only Java pack verification helper."""
 
+import hashlib
 import http.server
 import os
 from pathlib import Path
@@ -71,6 +72,8 @@ def main() -> None:
             identical = run("generated.zip")
             assert identical.returncode == 0, identical.stderr
             assert "Verified identical bytes" in identical.stdout
+            digest = hashlib.sha1(generated.read_bytes()).hexdigest()
+            assert identical.stdout.count(digest) == 2, identical.stdout
 
             safe_redirect = run("safe-redirect")
             assert safe_redirect.returncode == 0, safe_redirect.stderr
@@ -91,6 +94,7 @@ def main() -> None:
             unsafe = run("unsafe-redirect")
             assert unsafe.returncode == 1
             assert "URL redacted" in unsafe.stderr
+            assert f"127.0.0.1:{port}" not in unsafe.stderr + unsafe.stdout
 
             symlink = run("generated.zip", linked)
             assert symlink.returncode == 2
