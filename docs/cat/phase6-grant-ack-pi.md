@@ -6,7 +6,8 @@ status: draft
 process: simplecoins.grant.ack
 source_refs:
   - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
-refs: []
+refs:
+  - simplecoins.grant.ack
 semantic_contract: markdown-v2
 language: ja
 ---
