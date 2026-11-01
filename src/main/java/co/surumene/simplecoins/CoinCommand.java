@@ -81,13 +81,10 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
         var recipients = new java.util.LinkedHashMap<java.util.UUID, Player>();
         for (Player player : online) recipients.put(player.getUniqueId(), player);
         if (recipients.isEmpty()) {
-            var matches = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
-                    .filter(p -> p.hasPlayedBefore() &&
-                            ((p.getName() != null && p.getName().equalsIgnoreCase(input)) ||
-                                    p.getUniqueId().toString().equalsIgnoreCase(input))).toList();
-            if (matches.size() != 1)
-                throw new IllegalArgumentException("Unknown or ambiguous offline player");
-            recipients.put(matches.get(0).getUniqueId(), null);
+            var known = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
+                    .map(p -> new co.surumene.simplecoins.domain.KnownOfflineRecipient.Identity(
+                            p.getUniqueId(), p.getName(), p.hasPlayedBefore())).toList();
+            recipients.put(co.surumene.simplecoins.domain.KnownOfflineRecipient.resolve(input, known), null);
         }
         return recipients;
     }
