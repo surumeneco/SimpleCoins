@@ -75,6 +75,10 @@ def main() -> None:
             digest = hashlib.sha1(generated.read_bytes()).hexdigest()
             assert identical.stdout.count(digest) == 2, identical.stdout
 
+            signed_query = run("generated.zip?signature=abc%2Fdef&expires=999")
+            assert signed_query.returncode == 0, signed_query.stderr
+            assert "Verified identical bytes" in signed_query.stdout
+
             safe_redirect = run("safe-redirect")
             assert safe_redirect.returncode == 0, safe_redirect.stderr
             assert "Verified identical bytes" in safe_redirect.stdout
@@ -108,7 +112,7 @@ def main() -> None:
             assert empty_url.returncode == 2
             assert "No URL supplied" in empty_url.stderr
 
-            print("PASS 8/8 Java pack verifier HTTP and failure-path checks")
+            print("PASS 9/9 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
