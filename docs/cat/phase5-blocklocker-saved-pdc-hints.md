@@ -19,3 +19,12 @@ Malformed present profile compounds, malformed UUID arrays and orphan profiles w
 - BL-PDC-05: absent BlockLocker keys yields Optional.empty, requiring text/placement resolution.
 
 Formal CAT machine gates: not-run. This Draft is not Confirmed and does not authorize settlement publication.
+
+## Saved sign candidate enumeration (additional Draft vector)
+
+A read-only terrain-chunk adapter may enumerate `minecraft:sign` and `minecraft:hanging_sign` block entities, validate their saved `PublicBukkitValues` compound, and expose only candidates with recognized BlockLocker headers. Use canonical block coordinates as keys and reject duplicate candidate positions. A sign without saved BlockLocker keys is *not* evidence of an unprotected container; legacy text-only signs require separate inspection. Non-sign block entities are not protection signs. This helper does not infer which containers a sign protects, does not reconcile sign display text, and cannot publish ownership.
+
+- BL-PDC-06 Red: one saved sign with valid PRIVATE PDC produces a coordinate-keyed hint.
+- BL-PDC-07 regression: a sign without PDC yields no hint, not a free-asset ownership decision.
+- BL-PDC-08: malformed sign PDC and duplicate saved candidate positions throw IOException.
+- Formal CAT machine Gates remain not-run; Draft not Confirmed.
