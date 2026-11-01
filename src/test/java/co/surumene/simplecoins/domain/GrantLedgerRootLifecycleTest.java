@@ -33,6 +33,13 @@ class GrantLedgerRootLifecycleTest {
         assertThrows(IllegalStateException.class, () -> ledger.validateReceipt(PLAYER, 0));
     }
 
+    @Test void missingJournalHeadBlocksPendingDelivery() throws Exception {
+        Path root = directory.resolve("journal");
+        var ledger = new GrantLedger(root);
+        Files.delete(root.resolve("head"));
+        assertThrows(IllegalStateException.class, () -> ledger.pending(PLAYER));
+    }
+
     @Test void intactJournalStillPermitsEmptyPendingAndZeroReceipt() throws Exception {
         var ledger = new GrantLedger(directory.resolve("healthy"));
         assertTrue(ledger.pending(PLAYER).isEmpty());
