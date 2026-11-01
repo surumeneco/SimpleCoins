@@ -94,4 +94,20 @@ class StoredBlockEntityAssetsTest {
         assertThrows(IOException.class, () ->
                 StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(chest))));
     }
+
+    @Test void hopperBlockSlotFiveMustFailClosed() {
+        Map<String,Object> hopper = Map.of(
+                "id", "minecraft:hopper", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(5, 1)));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(hopper))));
+    }
+
+    @Test void hopperBlockLastPhysicalSlotRemainsCountable() throws Exception {
+        Map<String,Object> hopper = Map.of(
+                "id", "minecraft:hopper", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(4, 1)));
+        assertEquals(Map.of("0,64,0:4", BigInteger.valueOf(100)),
+                StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(hopper))));
+    }
 }
