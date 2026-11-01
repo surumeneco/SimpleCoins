@@ -4,7 +4,6 @@ import co.surumene.simplecoins.domain.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.zip.GZIPInputStream;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
@@ -115,11 +114,8 @@ public final class OfflineGrants implements Listener {
         List<Path> worldRoots = Bukkit.getWorlds().stream()
                 .map(world -> world.getWorldFolder().toPath()).toList();
         Path receipt = SavedPlayerReceiptLocator.findUnique(worldRoots, player.getUniqueId());
-        Map<String,Object> root;
-        try(var input=new GZIPInputStream(
-                Files.newInputStream(receipt, LinkOption.NOFOLLOW_LINKS))) {
-            root=NbtReader.read(input,32*1024*1024);
-        }
+        Map<String,Object> root = PlayerDataReader.read(
+                receipt, 32 * 1024 * 1024, 32 * 1024 * 1024);
         if(!(root.get("BukkitValues") instanceof Map<?,?> pdc))throw new IOException("Missing saved receipt PDC");
         for(NamespacedKey key:List.of(completedKey,activeKey,paidKey)) {
             Object saved=pdc.get(key.toString());
