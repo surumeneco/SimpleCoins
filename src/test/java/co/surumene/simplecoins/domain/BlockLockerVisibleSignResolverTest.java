@@ -110,4 +110,47 @@ class BlockLockerVisibleSignResolverTest {
                 List.of("Hello", "Alice", "", ""), Optional.of(hint),
                 name -> ExternalOwnerDecision.personal(OWNER)));
     }
+    @Test void savedEvidenceRequiresDecodedFrontAndVerifiedPrimary() throws Exception {
+        var raw = new BlockLockerSavedSignText.Evidence(
+                List.of("header", "owner", "empty", "empty"), Optional.empty(), true);
+        var saved = new BlockLockerSavedSignCandidates.Evidence(
+                Optional.empty(), Optional.of(raw));
+        var sign = BlockLockerVisibleSignResolver.fromSaved(
+                SIGN, BlockLockerSignAttachment.Mount.WALL_NORTH,
+                saved, component -> java.util.Map.of(
+                        "header", "[Private]", "owner", "Alice", "empty", "").get(component),
+                PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)).orElseThrow();
+        assertEquals(OWNER, BlockLockerProtectionResolution.single(CHEST, List.of(sign)).owner());
+    }
+
+    @Test void pdcOnlyOrFailedDecoderCannotEstablishOwnership() throws Exception {
+        var hint = new BlockLockerSavedHints.Hints("PRIVATE", Optional.of(OWNER), false);
+        var pdcOnly = new BlockLockerSavedSignCandidates.Evidence(
+                Optional.of(hint), Optional.empty());
+        assertThrows(IOException.class, () -> BlockLockerVisibleSignResolver.fromSaved(
+                SIGN, BlockLockerSignAttachment.Mount.WALL_NORTH,
+                pdcOnly, raw -> raw, PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)));
+        var empty = new BlockLockerSavedSignCandidates.Evidence(
+                Optional.empty(), Optional.empty());
+        assertTrue(BlockLockerVisibleSignResolver.fromSaved(
+                SIGN, BlockLockerSignAttachment.Mount.WALL_NORTH,
+                empty, raw -> raw, PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)).isEmpty());
+        var text = new BlockLockerSavedSignText.Evidence(
+                List.of("h", "o", "e", "e"), Optional.empty(), false);
+        var saved = new BlockLockerSavedSignCandidates.Evidence(
+                Optional.empty(), Optional.of(text));
+        assertThrows(IOException.class, () -> BlockLockerVisibleSignResolver.fromSaved(
+                SIGN, BlockLockerSignAttachment.Mount.WALL_NORTH,
+                saved, raw -> null, PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)));
+        assertThrows(IOException.class, () -> BlockLockerVisibleSignResolver.fromSaved(
+                SIGN, BlockLockerSignAttachment.Mount.WALL_NORTH,
+                saved, raw -> { throw new IOException("Decoder unavailable"); },
+                PRIVATE, MORE, EVERYONE,
+                name -> ExternalOwnerDecision.personal(OWNER)));
+    }
+
 }
