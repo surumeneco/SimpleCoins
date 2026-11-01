@@ -58,7 +58,9 @@ public final class CoinItems {
         String material = stack.getType().name();
         if (!material.equals("BUNDLE") && !material.endsWith("_BUNDLE")) return false;
         String id = stack.getItemMeta().getPersistentDataContainer().get(walletKey, PersistentDataType.STRING);
-        return id != null && !id.isEmpty();
+        if (id == null || id.isEmpty()) return false;
+        try { return UUID.fromString(id).toString().equals(id); }
+        catch (IllegalArgumentException invalid) { return false; }
     }
 
     public ItemStack newWallet() { return newWallet(Material.BUNDLE); }
