@@ -100,7 +100,14 @@ public final class SettlementSourceBarrier {
      */
     public synchronized void withJoinPermit(Runnable admission) {
         requireJoinReady();
-        Objects.requireNonNull(admission, "admission").run();
+        Objects.requireNonNull(admission, "admission");
+        try {
+            admission.run();
+        } catch (RuntimeException | Error uncertain) {
+            // A partially applied admission may have changed world state.
+            state = State.FAILED;
+            throw uncertain;
+        }
     }
 
     /** A readiness check only; prefer withJoinPermit for concurrent adapters. */
