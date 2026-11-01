@@ -93,3 +93,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 
 - COMPANION-OWNER-05: a currently loaded, verified untamed Paper Tameable supplies ABSENT owner evidence; a tamed entity with a non-null AnimalTamer UUID supplies KNOWN. Null entity, failed API call, missing owner or missing UUID supplies UNKNOWN.
 - COMPANION-OWNER-06: Paper Tameable owner evidence is not WWC/WWW/WCL commander evidence. Without a separately verified commander absence or commander UUID, a known Paper owner cannot be published as the companion's final owner.
+
+## Optional WWW loaded-individual contract (Draft vectors)
+
+- COMPANION-WWW-01: an enabled WhatAWonderfulWolf plugin's public `loadedIndividuals().find(wolfUuid)` returns a loaded individual whose `commanderId()` and `ownerId()` are Optional UUIDs. A verified commander takes precedence; verified absence of commander permits owner fallback.
+- COMPANION-WWW-02: missing/disabled plugin, unloaded wolf (empty find), invalid reflection contract, malformed Optional or lookup exception yields UNKNOWN, not FREE or an inferred commander absence.
+- COMPANION-WWW-03: the adapter uses the current public WWW API without a mandatory build-time dependency, and is read-only on the Paper server thread. Saved/unloaded WWW identity, WWC/WCL APIs and full settlement integration remain separate acceptance gates.
