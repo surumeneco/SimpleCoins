@@ -37,6 +37,31 @@ class WorldStorageDiscoveryTest {
                 "resource", oldRegions.toAbsolutePath(), WorldStorageDiscovery.Kind.REGION)));
     }
 
+    @Test void customNamespaceDimensionSourcesAreDiscoveredWithoutBackupAliases() throws Exception {
+        Path root = directory.resolve("modded");
+        Path region = root.resolve("dimensions/custom/moon/region/r.-2.3.mca");
+        Path entities = root.resolve("dimensions/custom/moon/entities/r.-2.3.mca");
+        Path backup = root.resolve("backups/dimensions/custom/moon/region/r.0.0.mca");
+        for (Path file : new Path[]{region, entities, backup}) {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("modded", root), new WorldScope(true, Set.of(), Set.of()), 100);
+        assertEquals(Set.of(
+                new WorldStorageDiscovery.SourceFile("modded", region.toAbsolutePath(),
+                        WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("modded", entities.toAbsolutePath(),
+                        WorldStorageDiscovery.Kind.ENTITY)), Set.copyOf(manifest.worldFiles()));
+        assertTrue(manifest.playerDataFiles().isEmpty());
+
+        // SC-COVERAGE-02: a directory at an authoritative custom source path
+        // must fail closed instead of being counted as an empty region file.
+        Files.createDirectories(root.resolve("dimensions/custom/moon/entities/r.0.0.mca"));
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("modded", root), new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
     @Test void disabledWorldStillProvidesWorldIndependentPlayerdataCandidate() throws Exception {
         Path excluded = directory.resolve("off");
         UUID player = UUID.randomUUID();
