@@ -10,7 +10,7 @@ Every `load()` and `persist()` must verify that the configured root still exists
 
 ## TCE / acceptance vectors
 
-- SC-ROOT-01 (Red): delete an initialized store's root directory, then `load()` must throw IOException rather than return empty.
+- SC-ROOT-01 (Red): delete a constructed store's root directory, then `load()` must throw IOException rather than return empty.
 - SC-ROOT-02 (Red): replace the root with a regular file, then `load()` must throw IOException.
 - SC-ROOT-03 (Regression): a newly constructed empty real directory returns Optional.empty.
 - SC-ROOT-04 (Regression): a valid persisted generation remains loadable, and symbolic ancestor rejection remains intact.
