@@ -1,4 +1,30 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.localized-everyone
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: BlockLocker localized Everyone profile matching (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | Verified saved/live BlockLocker evidence boundary |
+| simplecoins.settlement | No ownership publication from partial evidence |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| everyone.localized | runtime alias and displayed line include localization, formatting or case changes | Strip legacy formatting and compare bracketed alias case-insensitively | BL-EVERYONE-01 |
+| everyone.nonmatch | unknown group or trailing text appears | Do not infer an Everyone profile | BL-EVERYONE-02 |
+| everyone.invalid-config | runtime aliases are missing, blank, malformed or include brackets | Fail closed without guessing English defaults | BL-EVERYONE-03 |
 
 Status: Draft, not Confirmed. Sources: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md; BlockLocker v1.14.1 ProfileFactoryImpl.fromDisplayText.
 
