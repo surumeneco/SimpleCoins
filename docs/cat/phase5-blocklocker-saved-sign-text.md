@@ -17,3 +17,11 @@ The decoder returns no evidence when neither recognized representation exists. A
 - BL-TEXT-05: returned lists cannot be modified through the decoder.
 
 This unit cannot publish ownership or settlement. Text JSON interpretation, localized aliases, physical sign attachment, double-chest topology, live/disk consistency, and authoritative UUID resolution remain later stages. Formal CAT machine gates not-run; Draft is not Confirmed.
+
+## Terrain candidate integration (additional Draft vectors)
+
+The terrain adapter must expose display-text evidence from **every** sign with a recognized text representation, including signs with no BlockLocker PDC. The existing PDC-only hint extraction remains unchanged and is not an ownership classifier. Both evidence streams use validated chunk-local physical coordinates; duplicate sign positions abort the read.
+
+- BL-TEXT-06 Red: a legacy text-only sign appears in `extractTextCandidates`, while `extract` still returns no PDC owner hint.
+- BL-TEXT-07: modern front/back text is available at the same physical key as the PDC hint.
+- BL-TEXT-08: duplicate physical sign entries and out-of-chunk coordinates fail closed before returning a text candidate.
