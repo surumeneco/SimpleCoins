@@ -137,13 +137,21 @@ public final class GrantLedger {
         }
     }
     public synchronized void acknowledge(Grant grant, long savedReceipt) throws IOException {
+        acknowledgeWithAfterRecordHook(grant, savedReceipt, () -> {});
+    }
+
+    /** Deterministic post-acknowledgement fault injection. */
+    synchronized void acknowledgeWithAfterRecordHook(
+            Grant grant, long savedReceipt, AfterRecordPersist hook) throws IOException {
         checkHealthy();
+        Objects.requireNonNull(hook, "hook");
         Grant current = grants.get(grant.sequence());
         if (current == null || !current.id().equals(grant.id()) || !wasApplied(current, savedReceipt))
             throw new IllegalStateException("Cannot acknowledge an unapplied grant");
         if (current.delivered()) return;
         Grant complete = current.completed();
         persist(complete);
+        hook.run();
         grants.put(complete.sequence(), complete);
     }
     private void checkHealthy() {
