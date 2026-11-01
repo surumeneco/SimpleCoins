@@ -7,9 +7,9 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Per-UUID BAN evidence from a caller-enumerated set of required sources.
- * UNKNOWN is never silently treated as CLEAR. This class does not discover
- * installed BAN plugins or infer IP-to-UUID mappings.
+ * Per-UUID BAN evidence from an explicit caller-declared set of required
+ * sources. UNKNOWN or missing required sources are never silently CLEAR.
+ * This class does not discover plugins or infer IP-to-UUID mappings.
  */
 public final class BanEvidence {
     private BanEvidence() {}
@@ -17,28 +17,6 @@ public final class BanEvidence {
     public enum Status { BANNED, CLEAR, UNKNOWN }
     public record Source(String id, Status status) {}
 
-    public static Status combine(List<Source> sources) throws IOException {
-        if (sources == null || sources.isEmpty())
-            throw new IOException("Missing required BAN source evidence");
-        Set<String> seen = new HashSet<>();
-        boolean banned = false;
-        boolean unknown = false;
-        for (Source source : sources) {
-            if (source == null || source.id() == null || source.id().isBlank() ||
-                    source.status() == null)
-                throw new IOException("Malformed BAN source evidence");
-            String sourceKey = source.id().trim().toLowerCase(Locale.ROOT);
-            if (!seen.add(sourceKey))
-                throw new IOException("Duplicate BAN source evidence: " + source.id());
-            banned |= source.status() == Status.BANNED;
-            unknown |= source.status() == Status.UNKNOWN;
-        }
-        return banned ? Status.BANNED : unknown ? Status.UNKNOWN : Status.CLEAR;
-    }
-    /**
-     * Authoritative form: the required source set is independent of received
-     * observations. Missing required observations are UNKNOWN, never CLEAR.
-     */
     public static Status combine(Set<String> requiredSourceIds, List<Source> sources)
             throws IOException {
         if (requiredSourceIds == null || requiredSourceIds.isEmpty() || sources == null)
@@ -68,5 +46,4 @@ public final class BanEvidence {
         return banned ? Status.BANNED :
                 unknown || observed.size() != required.size() ? Status.UNKNOWN : Status.CLEAR;
     }
-
 }
