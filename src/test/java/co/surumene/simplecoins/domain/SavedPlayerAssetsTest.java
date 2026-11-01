@@ -117,4 +117,15 @@ class SavedPlayerAssetsTest {
                 Map.of("Inventory", List.of(overflow), "EnderItems", List.of())),
                 "An overflowing Number must not alias valid physical slot zero");
     }
+
+    @Test void overflowingSelectedHotbarSlotCannotAliasMainhand() {
+        Map<String,Object> item = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> root = Map.of(
+                "Inventory", List.of(), "EnderItems", List.of(),
+                "SelectedItemSlot", BigInteger.ONE.shiftLeft(64),
+                "equipment", Map.of("mainhand", item));
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(root));
+    }
 }
