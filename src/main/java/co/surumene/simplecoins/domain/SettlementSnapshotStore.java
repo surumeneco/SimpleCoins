@@ -67,7 +67,8 @@ public final class SettlementSnapshotStore {
         requireRealAncestors();
         try (FileChannel channel = FileChannel.open(lock,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
-             FileLock ignored = channel.lock()) {
+             FileLock guard = channel.tryLock()) {
+            if (guard == null) throw new IOException("Settlement snapshot writer is busy");
             if (!Files.isRegularFile(lock, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Invalid settlement writer lock");
             long current = load().map(SettlementGenerationPublisher.Published::generation).orElse(0L);
