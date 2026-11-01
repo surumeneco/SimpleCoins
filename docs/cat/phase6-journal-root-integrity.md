@@ -14,3 +14,9 @@ This is a local root-path check, not a proof that every ancestor is symlink-free
 - SC-JOURNAL-ROOT-02 (Regression): an ordinary real journal directory remains writable and replayable after restart.
 
 Formal CAT machine Gates not-run; Draft not Confirmed. No release or merge.
+
+## Ancestor-path integrity (additional Draft vector)
+
+- SC-JOURNAL-ROOT-03: a symlink in **any ancestor** of the issuance journal root is rejected before creating the final journal directory or head file, even if the final path itself is a real directory. Validate the absolute normalized path both before and after creating missing directories. A normal nested path remains writable and replayable.
+
+This prevents accidental traversal through a pre-existing symlink. It does not claim atomic protection against an adversary concurrently replacing path components; secure directory-handle traversal/locking remains a separate integration requirement.
