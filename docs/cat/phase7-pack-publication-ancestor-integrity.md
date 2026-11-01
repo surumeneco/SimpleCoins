@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.pack-publication-ancestor-integrity
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: Java pack publication ancestor integrity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-006.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | Java packのatomic publication前のsource/destination ancestry |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| publication.source | candidateへのancestorがsymlinkのとき | atomic moveを呼ばず既存packを保持する | SC-PACK-PATH-01 |
+| publication.destination | destinationへのancestorがsymlinkのとき | atomic moveを呼ばず拒否する | SC-PACK-PATH-02 |
+| publication.valid | 通常の同一directoryにatomic publishするとき | 既存の成功動作を維持する | SC-PACK-PATH-03 |
 
 ## Process / PI
 
