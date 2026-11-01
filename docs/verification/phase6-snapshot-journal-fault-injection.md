@@ -21,6 +21,7 @@
 | P6-06 / SC-JOURNAL-ACK-04,05 | sequence 1と2を予約し、head・tail 2を正常なまま非tail `1.grant` を欠損・破損・別Grantへ置換してsequence 1をacknowledge | 対象のdurable recordを再読込し、承認記録を書かず拒否。破損ファイルを上書き復元せず、ledgerをunhealthyとして後続発行を止める |
 | P6-07 / SC-JOURNAL-ACK-06 | sequence 1/2のhead・tailと非tail `1.grant`が健全で、sequence 1の保存済みreceiptが一致する | sequence 1だけがdeliveredへ遷移し、sequence 2のpendingを維持。再起動後も両者の状態が一致し、二重配布しない |
 | P6-08 / source-readiness-barrier / manifest-source-closure | 対象worldのEntity source欠落、未ロードsourceの変更、走査中の他Pluginによる変更 | 未確認を0資産としない。成功した決算世代を公開せず、参加受付再開を早めない |
+| P6-09 / SC-JOURNAL-ACK-07 | sequence 1と2を予約し、非tailのsequence 1を正常に承認済みとした後、停止中のコピーで`1.grant`を欠損・破損させ、同一live ledgerのsequence 1へ再承認を試す | 既配達のメモリ状態だけで成功を返さず、対象durableを再検証して拒否・unhealthy化する。破損bytesを上書きせず、tail 2とheadが健全でも検出する |
 
 非tail故障注入では、**操作前の`1.grant`のbytes/ハッシュ、注入直後のbytes/ハッシュ、承認失敗後のbytes/ハッシュ**を個別に保存する。`head`とtail 2が健全なままでも古い対象のdurable内容が不正なら拒否されることを確認する。正常系はsequence 2のpendingが不変であることを再起動後にも照合する。これらは既存Draftベクトルの検証準備であり、未実行のRed/Greenを合格扱いしない。
 
