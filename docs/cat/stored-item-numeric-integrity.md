@@ -25,3 +25,11 @@ Status: **Draft / not Confirmed**. Source: SimpleCoins 02B and 05 Phase 5/G0 fai
 | NUM-09 | item_display `minecraft:air` count with `BigInteger(2^64)` | IOException rather than silently treating overflow as zero |
 
 Formal CAT process-closure, TestModel, vectors, Queue and implementation-conformance are **not-run**; no Confirmed promotion is implied. Red/Green must be independently verified in feature-branch CI.
+
+## Empty item-display component integrity (additional Draft vector)
+
+The special `minecraft:air` display representation is accepted as an empty display only when its `count` is a valid numeric zero and no nonempty or malformed item `components` are attached. A nonempty `minecraft:custom_data` on a zero-count air display may contain a currency identity; ignoring it without validating the representation is not a complete fail-closed read. An absent or empty components map remains a valid empty display.
+
+- NUM-10 Red: zero-count `minecraft:air` display carrying a nonempty custom-data/PDC component must throw `IOException` instead of being ignored.
+- NUM-11 regression: zero-count air with no components or an empty components map remains empty.
+- Formal CAT machine Gates: not-run; Draft not Confirmed.
