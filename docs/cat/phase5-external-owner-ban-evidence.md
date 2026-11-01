@@ -53,3 +53,11 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 - BLOCKLOCKER-AGG-04: duplicate attached PRIVATE signs or inconsistent sign evidence fail closed. A verified legacy owner-unresolvable FREE decision is distinct from UNKNOWN due to unreadable/unavailable sign data.
 
 This aggregation layer consumes caller-verified header, text/PDC reconciliation and physical block states. It is not a complete saved-sign parser, live BlockLocker API adapter or settled-world snapshot.
+
+## Paper profile BAN source (Draft vectors)
+
+- PAPER-BAN-01: a UUID-resolved Paper offline profile's current profile-ban flag maps to the mandatory `paper-profile` source as BANNED or CLEAR, never to a final cross-source BAN decision by itself.
+- PAPER-BAN-02: a null/failed/unavailable profile lookup maps to UNKNOWN, not CLEAR. Invalid null UUID input is rejected.
+- PAPER-BAN-03: a verified Paper CLEAR with a missing required external or IP BAN source still produces UNKNOWN at the combined settlement boundary. This adapter must not claim to detect IP bans or external plugins.
+
+The adapter may call Paper APIs only in an appropriate server execution context. Real-server Paper 26.2 API behavior remains an integration gate.
