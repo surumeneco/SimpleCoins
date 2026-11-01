@@ -15,6 +15,15 @@ import java.util.UUID;
  * owner, loaded-Entity and world snapshot reconciliation remain mandatory.
  */
 public final class StoredEntityInventoryAssets {
+    // Explicit vanilla Entity IDs for the current saved-data adapter.
+    // A matching suffix alone is not proof of physical inventory slots.
+    private static final Set<String> CHEST_BOAT_IDS = Set.of(
+            "minecraft:oak_chest_boat", "minecraft:spruce_chest_boat",
+            "minecraft:birch_chest_boat", "minecraft:jungle_chest_boat",
+            "minecraft:acacia_chest_boat", "minecraft:dark_oak_chest_boat",
+            "minecraft:mangrove_chest_boat", "minecraft:cherry_chest_boat",
+            "minecraft:pale_oak_chest_boat", "minecraft:bamboo_chest_raft");
+
     private StoredEntityInventoryAssets() {}
 
     public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
@@ -44,8 +53,7 @@ public final class StoredEntityInventoryAssets {
             // A saved Items tag is not evidence of physical slots on an arbitrary
             // Entity. Only the vanilla slotted holder families in this adapter
             // may contribute currency; custom holders require their own contract.
-            boolean chestBoat = id.startsWith("minecraft:") &&
-                    (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
+            boolean chestBoat = CHEST_BOAT_IDS.contains(id);
             if (slotted && !id.equals("minecraft:chest_minecart") &&
                     !id.equals("minecraft:hopper_minecart") && !chestBoat)
                 throw new IOException("Unsupported slotted Entity inventory: " + id);
