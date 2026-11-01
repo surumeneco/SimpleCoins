@@ -41,6 +41,11 @@ public final class StoredItemValue {
         if (rawComponents == null) return BigInteger.ZERO;
         if (!(rawComponents instanceof Map<?,?> components))
             throw new IOException("Invalid stored item components");
+        // A single physical item cannot expose two independent views of the
+        // same nested inventory. Summing both would risk double-counting coins.
+        if (components.containsKey("minecraft:bundle_contents") &&
+                components.containsKey("minecraft:container"))
+            throw new IOException("Ambiguous stored item nested storage components");
 
         Map<?,?> pdc = null;
         Object rawCustom = components.get("minecraft:custom_data");
