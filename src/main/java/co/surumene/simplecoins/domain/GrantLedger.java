@@ -28,10 +28,13 @@ public final class GrantLedger {
     private boolean failed;
 
     public GrantLedger(Path directory) throws IOException {
-        this.directory = directory;
-        Files.createDirectories(directory);
-        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
-            throw new IOException("Issuance journal root is not a real directory: " + directory);
+        if (directory == null) throw new IOException("Missing issuance journal directory");
+        this.directory = directory.toAbsolutePath().normalize();
+        requireRealAncestors(this.directory);
+        Files.createDirectories(this.directory);
+        requireRealAncestors(this.directory);
+        if (!Files.isDirectory(this.directory, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Issuance journal root is not a real directory: " + this.directory);
         try (var listing = Files.list(directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
@@ -61,6 +64,13 @@ public final class GrantLedger {
             writeHead(0);
         }
     }
+    private static void requireRealAncestors(Path path) throws IOException {
+        for (Path current = path; current != null; current = current.getParent()) {
+            if (Files.isSymbolicLink(current))
+                throw new IOException("Issuance journal path contains a symbolic link: " + current);
+        }
+    }
+
     private void writeHead(long sequence) throws IOException {
         DurableFile.write(directory.resolve("head"), java.nio.ByteBuffer.allocate(8).putLong(sequence).array());
     }
