@@ -37,6 +37,8 @@ public final class WorldStorageDiscovery {
     public record SourceFile(String world, Path path, Kind kind) {
         public SourceFile {
             Objects.requireNonNull(world);
+            if (world.isBlank())
+                throw new IllegalArgumentException("World source name must not be blank");
             Objects.requireNonNull(path);
             Objects.requireNonNull(kind);
         }
