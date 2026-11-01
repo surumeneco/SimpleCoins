@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -38,6 +39,7 @@ public final class SettlementSnapshotStore {
     private final Path snapshot;
     private final Path lock;
     private final Path initialized;
+    private final Object rootFileKey;
 
     public SettlementSnapshotStore(Path directory) throws IOException {
         if (directory == null) throw new IOException("Missing settlement snapshot directory");
@@ -47,6 +49,12 @@ public final class SettlementSnapshotStore {
         requireRealAncestors();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Settlement snapshot root is not a real directory");
+        // Bind this store instance to the original physical directory, not a
+        // pathname that can be reused after a move or deletion.
+        rootFileKey = Files.readAttributes(root, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS).fileKey();
+        if (rootFileKey == null)
+            throw new IOException("Stable settlement root file identity is unavailable");
         snapshot = root.resolve("settlement.snapshot");
         lock = root.resolve("settlement.lock");
         initialized = root.resolve("settlement.initialized");
@@ -94,6 +102,7 @@ public final class SettlementSnapshotStore {
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
              FileLock guard = channel.tryLock()) {
             if (guard == null) throw new IOException("Settlement snapshot writer is busy");
+            requireLiveRoot();
             if (!Files.isRegularFile(lock, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Invalid settlement writer lock");
             long current = load().map(SettlementGenerationPublisher.Published::generation).orElse(0L);
@@ -104,6 +113,9 @@ public final class SettlementSnapshotStore {
             if (!Files.exists(initialized, LinkOption.NOFOLLOW_LINKS))
                 DurableFile.write(initialized, new byte[] {0x53, 0x43, 0x53, 0x31});
             beforeSnapshotWrite.run();
+            // A fault or concurrent operation may have substituted the root
+            // after the first marker write. Never write the generation there.
+            requireLiveRoot();
             DurableFile.write(snapshot, payload);
             if (!candidate.equals(load().orElseThrow(
                     () -> new IOException("Committed settlement snapshot disappeared"))))
@@ -113,10 +125,12 @@ public final class SettlementSnapshotStore {
         }
     }
 
-    /** A root removed or replaced after construction is not an empty store. */
+    /** A root removed or substituted after construction is not an empty store. */
     private void requireLiveRoot() throws IOException {
         requireRealAncestors();
-        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
+        BasicFileAttributes current = Files.readAttributes(root, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!current.isDirectory() || !rootFileKey.equals(current.fileKey()))
             throw new IOException("Settlement snapshot root missing or replaced");
     }
 
