@@ -97,6 +97,8 @@ public final class StoredBlockEntityAssets {
                     throw new IOException("Invalid crafter inventory slot: " + slot);
                 if (id.startsWith("minecraft:") && id.endsWith("_shulker_box") && slot > 26)
                     throw new IOException("Invalid placed shulker box slot: " + slot);
+                if (id.equals("minecraft:chiseled_bookshelf") && slot > 5)
+                    throw new IOException("Invalid chiseled bookshelf inventory slot: " + slot);
                 if (!slots.add(slot))
                     throw new IOException("Duplicate block entity slot: " + pos + ":" + slot);
                 if (stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
