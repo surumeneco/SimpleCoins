@@ -91,4 +91,12 @@ class ExternalOwnerDecisionTest {
         assertFalse(resolved.currentlyBanned());
     }
 
+    @Test void bareClearStatusCannotBypassRequiredBanSources() {
+        assertThrows(IOException.class, () -> ExternalOwnerDecision.toBlock(
+                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.CLEAR, true));
+        assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
+                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.BANNED, true));
+    }
+
+
 }
