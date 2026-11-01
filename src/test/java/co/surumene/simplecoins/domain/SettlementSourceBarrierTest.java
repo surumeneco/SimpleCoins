@@ -102,7 +102,7 @@ class SettlementSourceBarrierTest {
         var gate = new SettlementSourceBarrier(Set.of("disk"));
         gate.beginStaging();
         gate.completeSource("disk");
-        assertThrows(AssertionError.class, () -> gate.openAfterDurableReadback(
+        assertThrows(AssertionError.class, () -> gate.openAfterDurableReadbackUsing(
                 () -> { throw new AssertionError("simulated fatal readback"); }, expected));
         assertEquals(SettlementSourceBarrier.State.FAILED, gate.state());
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
