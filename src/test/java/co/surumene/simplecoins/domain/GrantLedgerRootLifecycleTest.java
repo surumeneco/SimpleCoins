@@ -54,6 +54,18 @@ class GrantLedgerRootLifecycleTest {
         assertEquals(1, new GrantLedger(original).pending(PLAYER).size());
     }
 
+    @Test void validButRolledBackHeadCannotAuthorizeLiveJournalDecisions() throws Exception {
+        Path root = directory.resolve("journal");
+        var ledger = new GrantLedger(root);
+        ledger.reserve(PLAYER, 100, "admin");
+        DurableFile.write(root.resolve("head"),
+                java.nio.ByteBuffer.allocate(8).putLong(0).array());
+        assertThrows(IllegalStateException.class, () -> ledger.pending(PLAYER));
+        assertThrows(IllegalStateException.class, () -> ledger.validateReceipt(PLAYER, 0));
+        assertThrows(IllegalStateException.class, () -> ledger.reserve(PLAYER, 100, "admin"));
+        assertFalse(Files.exists(root.resolve("2.grant")));
+    }
+
     @Test void intactJournalStillPermitsEmptyPendingAndZeroReceipt() throws Exception {
         var ledger = new GrantLedger(directory.resolve("healthy"));
         assertTrue(ledger.pending(PLAYER).isEmpty());
