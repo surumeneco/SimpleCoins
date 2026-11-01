@@ -1,25 +1,36 @@
-# Phase 5: saved snapshot source mutation detection (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.source-mutation
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+# DomainSpec: 保存済み資産sourceの走査中変更検知
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.snapshot | authoritative region/entity/playerdataのread-only走査 |
+| simplecoins.anvil | 外部.mcc sidecarとchunk callback後の再検証 |
 
-The read-only saved-asset traversal must not return a successful Report when an authoritative region/entity or playerdata file changes while that file is being traversed or its decoded data is delivered to the visitor. Capture a no-follow file identity/metadata stamp immediately before reading each file, and compare it after the read and callback(s). A mismatch (file type, physical file key, size, creation time or last-modified time) raises IOException. A failure yields no successful Report and cannot authorize publication.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| source.stability.region | region/entity fileがchunk visitor中に変更されたとき | IOExceptionで中断し成功Reportを返さない | SC-SOURCE-STABILITY-01 |
+| source.stability.player | playerdataがplayer visitor中に変更されたとき | IOExceptionで中断し成功Reportを返さない | SC-SOURCE-STABILITY-02 |
+| source.stability.unchanged | regionとplayerdataが走査中不変のとき | 正しい件数のReportを返す | SC-SOURCE-STABILITY-03 |
+| source.stability.replaced | 必須sourceが消失・置換されたとき | 空資産とせずfail-closedで拒否する | SC-SOURCE-STABILITY-04 |
+| source.stability.sidecar | 参照外部.mcc sidecarがchunk callback中に変更されたとき | Anvil readerがIOExceptionで中断する | SC-SOURCE-STABILITY-05 |
+| source.stability.sidecar-unchanged | 正しい外部.mcc sidecarが不変のとき | 正常に読み取る | SC-SOURCE-STABILITY-06 |
+| source.stability.sidecar-late | 既読sidecarが同じregion内の後続chunk callbackで変更されたとき | 成功前に既読sidecarを再検証し拒否する | SC-SOURCE-STABILITY-07 |
+| source.stability.sidecar-after-region | region走査後のplayerdata callbackが以前のsidecarを変更したとき | 全体Report返却前の再検証で拒否する | SC-SOURCE-STABILITY-08 |
 
-This is a **best-effort mutation detector**, not a stable-snapshot protocol. An attacker or concurrent writer can restore size and timestamps, and a live Paper server may mutate world memory without modifying the saved file. The caller must still establish a consistent authoritative snapshot and reconcile loaded/disk state; this Draft does not authorize settlement commit, merge or deploy.
+## 境界と状態
 
-## TCE / regression vectors
-
-- SC-SOURCE-STABILITY-01 (Red): a region file changed during its chunk visitor must cause traverse to throw IOException, not return a successful Report.
-- SC-SOURCE-STABILITY-02 (Red): a playerdata file changed during its player visitor must likewise throw IOException.
-- SC-SOURCE-STABILITY-03 (Regression): an unchanged region and unchanged playerdata file traverse successfully with correct counts.
-- SC-SOURCE-STABILITY-04: replacement or disappearance of a source must fail closed rather than being silently counted as empty.
-
-- SC-SOURCE-STABILITY-05 (Red): a referenced external `.mcc` sidecar changed during the decoded chunk callback must cause the Anvil reader to throw IOException.
-- SC-SOURCE-STABILITY-06 (Regression): a valid unchanged external sidecar is still readable.
-- SC-SOURCE-STABILITY-07 (Red): an external sidecar that was already decoded is changed by a *later chunk* callback in the same region; the reader must revalidate all previously observed sidecars before successful return.
-- SC-SOURCE-STABILITY-08 (Red): after a region containing an external sidecar has finished scanning, a later playerdata callback mutates that sidecar; the full traversal must reject its final report.
-
-External sidecars are physical payloads referenced by the region header. They must receive the same best-effort no-follow metadata check. This does not detect all same-size/same-timestamp races or establish a consistent Paper snapshot.
-
-Formal CAT machine Gates: **not-run**. This is a new Draft and is not Confirmed.
+既存SC-SOURCE-STABILITY-01〜08を意味変更せず構造化したTASK-20261101-003のCAT Draft。各ファイルをNOFOLLOWで読み取る前後にfile type・physical file key・size・creation/modified timeを比較するbest-effort検出であり、同じsize/timeへの復元やloaded Paper memoryの変更を完全には検知しない。完全なsnapshot・loaded/disk照合・公開ゲートは別途必要。正式CAT Process/PI/TCE・機械Gateはnot-run。Confirmed・マージ・決算公開を意味しない。
