@@ -41,6 +41,14 @@ public final class StoredEntityInventoryAssets {
                 throw new IOException("Ambiguous Entity inventory representations");
             if (slotted && (id.equals("minecraft:villager") || id.equals("minecraft:allay")))
                 throw new IOException("Villager/Allay must use unslotted Inventory representation");
+            // A saved Items tag is not evidence of physical slots on an arbitrary
+            // Entity. Only the vanilla slotted holder families in this adapter
+            // may contribute currency; custom holders require their own contract.
+            boolean chestBoat = id.startsWith("minecraft:") &&
+                    (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
+            if (slotted && !id.equals("minecraft:chest_minecart") &&
+                    !id.equals("minecraft:hopper_minecart") && !chestBoat)
+                throw new IOException("Unsupported slotted Entity inventory: " + id);
             // Only these vanilla entities have a positional, unslotted Inventory.
             // A fabricated Inventory on a different holder is not a second asset source.
             if (unslotted && !id.equals("minecraft:villager") && !id.equals("minecraft:allay"))
@@ -92,8 +100,6 @@ public final class StoredEntityInventoryAssets {
                 if (slotted && id.equals("minecraft:chest_minecart") && index >= 27)
                     throw new IOException("Chest minecart inventory slot outside physical range: " + key + ":" + index);
                 // Vanilla chest boats and bamboo chest rafts expose 27 slots.
-                boolean chestBoat = id.startsWith("minecraft:") &&
-                        (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
                 if (slotted && chestBoat && index >= 27)
                     throw new IOException("Chest boat inventory slot outside physical range: " + key + ":" + index);
                 if (slotted && id.equals("minecraft:hopper_minecart") && index >= 5)
