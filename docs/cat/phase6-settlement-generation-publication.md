@@ -1,6 +1,35 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.settlement-generation-publication
+status: draft
+process: simplecoins.settlement
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: in-process settlement generation publication (CAT Draft)
 
 Status: Draft, not Confirmed. Leaf TASK-20261101-005. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.settlement | in-process generationとdurable publication |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| generation.incomplete | stagingが未完了または失敗したとき | 既存の公開済みgenerationを変更しない | SETTLEMENT-GEN-01 |
+| generation.success | 完了したstagingからpublishするとき | 世代を一度だけ進め完全な結果を原子的に公開する | SETTLEMENT-GEN-02 |
+| generation.concurrent | 期待世代がstaleか同時publisherが競合するとき | 双方成功や不正な世代更新を拒否する | SETTLEMENT-GEN-03 |
+| generation.invalid | null入力またはgeneration overflowのとき | 公開済み結果を変更せず拒否する | SETTLEMENT-GEN-04 |
+| generation.durable | durable callbackを介して公開するとき | 永続化成功後のみ可視化し、callback前の検証失敗は再試行可能とする | SETTLEMENT-GEN-05, SETTLEMENT-GEN-06 |
+| generation.uncertain | durable callbackがcommit後に例外を投げた可能性があるとき | publisherをpoisonしrestartで権威generationを再確認するまで更新しない | SETTLEMENT-GEN-07 |
 
 ## Process / PI
 
