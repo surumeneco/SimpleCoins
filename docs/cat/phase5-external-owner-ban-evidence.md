@@ -37,3 +37,10 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 ## Evidence provenance at the settlement boundary (Draft vector)
 
 - OWNER-EVIDENCE-06: personal ownership conversion must not accept a caller-supplied `BanEvidence.Status.CLEAR` as proof. A status is valid only when wrapped in an immutable decision produced by `BanEvidence.evaluate(requiredSources, observations)`. Missing required sources produce UNKNOWN and block personal settlement. The legacy enum-only conversion path fails closed for PERSONAL; verified FREE remains independent of a player's BAN evidence. This is a domain contract, not proof that Paper or external BAN adapters are connected.
+
+## Companion ownership precedence (Draft vectors)
+
+- COMPANION-OWNER-01: a verified commander UUID takes precedence over the tamed owner's UUID, including when both are present and differ.
+- COMPANION-OWNER-02: a verified absence of commander permits a known owner; verified absence of both permits FREE.
+- COMPANION-OWNER-03: an unavailable/unloaded/unknown commander must not silently fall back to an owner or FREE. If commander absence is verified but owner state is unknown, the result is UNKNOWN.
+- COMPANION-OWNER-04: null or internally inconsistent identity evidence is invalid. The resolver consumes already verified WWC/WWW/WCL evidence; it does not claim an external plugin API is connected or that unloaded entities were scanned.
