@@ -21,6 +21,40 @@ public final class BlockLockerVisibleSignResolver {
         ExternalOwnerDecision.Evidence resolve(String displayedName) throws IOException;
     }
 
+    @FunctionalInterface
+    public interface VisibleTextDecoder {
+        /** Decode one saved JSON/legacy text component to visible plain text. */
+        String decode(String rawComponent) throws IOException;
+    }
+
+    public static Optional<BlockLockerProtectionResolution.VerifiedSign> fromSaved(
+            BlockLockerSignAttachment.Position position,
+            BlockLockerSignAttachment.Mount mount,
+            BlockLockerSavedSignCandidates.Evidence saved,
+            VisibleTextDecoder decoder,
+            Set<String> privateAliases,
+            Set<String> moreUsersAliases,
+            Set<String> everyoneAliases,
+            PrimaryIdentity primaryIdentity) throws IOException {
+        if (saved == null || decoder == null)
+            throw new IOException("Missing saved BlockLocker evidence or component decoder");
+        if (saved.displayText().isEmpty()) {
+            if (saved.pdcHints().isPresent())
+                throw new IOException("Saved BlockLocker PDC without authoritative visible text");
+            return Optional.empty();
+        }
+        List<String> raw = saved.displayText().orElseThrow().front();
+        java.util.ArrayList<String> decoded = new java.util.ArrayList<>(4);
+        for (String component : raw) {
+            String line = decoder.decode(component);
+            if (line == null)
+                throw new IOException("Unresolved saved BlockLocker visible component");
+            decoded.add(line);
+        }
+        return verify(position, mount, decoded, saved.pdcHints(),
+                privateAliases, moreUsersAliases, everyoneAliases, primaryIdentity);
+    }
+
     public static Optional<BlockLockerProtectionResolution.VerifiedSign> verify(
             BlockLockerSignAttachment.Position position,
             BlockLockerSignAttachment.Mount mount,
