@@ -19,3 +19,9 @@ A nonempty vanilla bundle or shulker box is not a stackable container of identic
 
 ## Additional shulker slot invariant (Draft)
 Vanilla shulker boxes have 27 physical inventory slots, indexed 0..26. A saved `minecraft:container` entry with slot 27 or higher on a shulker item is not a valid physical slot. Fail closed instead of accounting an impossible location. This is distinct from generic component storage and needs its own regression test.
+
+## Additional malformed-components invariant (Draft)
+
+Modern saved NBT may omit `components` for an untagged item, which contributes zero currency. An explicitly present `components: null` is not a valid NBT compound and must not be silently interpreted as absence; reject it with `IOException`. This prevents malformed source data from being accepted as a verified zero-value item.
+
+Exploratory vectors: (1) `components` key present with null fails closed; (2) key absent remains a valid zero-value ordinary item; (3) a valid tagged coin remains countable. Formal CAT gates remain not-run.
