@@ -1,20 +1,33 @@
-# Phase 5: BlockLocker PRIVATE sign primary identity domain (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.private-primary
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-004.
+# DomainSpec: BlockLocker PRIVATE sign primary identity
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | PRIVATE signのprimary identityと集約後所有権の区別 |
+| simplecoins.settlement | 未確定所有権からの公開禁止 |
 
-A verified BlockLocker `PRIVATE` sign must have a primary identity that is either an authoritative `PERSONAL(owner UUID)` or unresolved `UNKNOWN`. The `FREE` decision is an **aggregate** result of an authenticated, attached Everyone profile with a resolved primary, or a separately proven ownerless asset; it is not a valid primary profile lookup result. A `PRIVATE` sign cannot become FREE solely because a profile lookup adapter returned FREE.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| private.primary.domain | PRIVATE signのprimary identityを検証するとき | primaryは検証済みPERSONAL(owner UUID)またはUNKNOWNのみ。FREEはprimaryの有効値ではない | SC-BLOCKLOCKER-PRIMARY-02 |
+| private.primary.lookup | identity lookup adapterがPRIVATE signにFREEを返したとき | 集約前にUNKNOWNへ正規化し、FREEを証明したと扱わない | SC-BLOCKLOCKER-PRIMARY-01 |
+| private.everyone.authority | 物理的にattachedなEveryone markerが存在するとき | independently verified PERSONAL primaryがある場合にのみ集約結果をFREEにできる | SC-BLOCKLOCKER-PRIMARY-01, SC-BLOCKLOCKER-PRIMARY-03 |
+| private.personal | independently verified PERSONAL primaryがあり、Everyone markerがないとき | 集約結果はPERSONALのまま維持する | SC-BLOCKLOCKER-PRIMARY-03 |
+| private.unknown | primary lookupが欠損・利用不能・不明のとき | 集約結果はUNKNOWNまたはfail-closed。ゼロ資産・FREE・公開可能な決算とみなさない | SC-BLOCKLOCKER-PRIMARY-04 |
 
-If an identity lookup yields FREE, normalize the sign primary to UNKNOWN before protection aggregation; direct construction of a `VerifiedSign` with PRIVATE/FREE is invalid. Unknown must not be promoted to FREE even when an Everyone marker appears. No asset may be published while ownership remains UNKNOWN.
+## 境界と状態
 
-## TCE / acceptance vectors
-
-- SC-BLOCKLOCKER-PRIMARY-01 (Red): `PrimaryIdentity.resolve` returns FREE for a PRIVATE sign with a visible Everyone marker; aggregate decision remains UNKNOWN, not FREE.
-- SC-BLOCKLOCKER-PRIMARY-02 (Red): direct PRIVATE `VerifiedSign` with a FREE primary is rejected at the trust boundary.
-- SC-BLOCKLOCKER-PRIMARY-03 (Regression): a verified PERSONAL primary and attached Everyone still yields FREE, while a PERSONAL primary without Everyone remains PERSONAL.
-- SC-BLOCKLOCKER-PRIMARY-04 (Regression): missing/unavailable lookup remains UNKNOWN or aborts, never a zero-asset or FREE result.
-
-## Gate and integration boundary
-
-Draft only. Formal CAT machine gates, real BlockLocker 1.14.1 runtime identity resolution, coherent saved/live world snapshot, and Paper integration are **not-run**. This local guard does not establish owner authority or permission to publish a settlement.
+これは既存TASK-20261101-004の要求に対するCAT **Draft**。実装済みの局所guardは、BlockLocker 1.14.1の実機API、保存済みとliveの全看板の一貫性、UUID解決権限、Paper snapshotの完全性を証明しない。TCE/PIの正式な規範確認・機械Gateはnot-runであり、このDomainSpecをそれらの代替にしない。既存のRed/GreenとCIはソースの実行証拠であり、規範的Confirmed昇格ではない。
