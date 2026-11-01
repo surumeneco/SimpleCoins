@@ -69,6 +69,8 @@ public final class AnvilRegionReader {
                 throw new IOException("Incomplete or unaligned region file: " + regionFile);
             ByteBuffer header = read(channel, 0L, SECTOR);
             List<Entry> entries = new ArrayList<>();
+            // A later chunk callback can mutate an earlier external payload.
+            Map<Path, SidecarStamp> observedSidecars = new java.util.LinkedHashMap<>();
             for (int i = 0; i < SLOTS; i++) {
                 int address = header.getInt(i * 4);
                 int offset = address >>> 8, count = address & 0xff;
@@ -111,6 +113,7 @@ public final class AnvilRegionReader {
                 if (external) {
                     sidecar = regionFile.resolveSibling("c." + x + "." + z + ".mcc");
                     sidecarBefore = sidecarStamp(sidecar);
+                    observedSidecars.put(sidecar, sidecarBefore);
                     long sidecarSize = sidecarBefore.size();
                     if (sidecarSize < 1 || sidecarSize > maxCompressedBytes)
                         throw new IOException("External chunk exceeds input budget: " + sidecar);
@@ -164,6 +167,10 @@ public final class AnvilRegionReader {
                     if (sidecar != null) requireUnchangedSidecar(sidecar, sidecarBefore);
                 }
             }
+            // Recheck sidecars after all chunk callbacks, not only after
+            // their own callback. This is still not a frozen-world snapshot.
+            for (var entry : observedSidecars.entrySet())
+                requireUnchangedSidecar(entry.getKey(), entry.getValue());
         }
     }
 
