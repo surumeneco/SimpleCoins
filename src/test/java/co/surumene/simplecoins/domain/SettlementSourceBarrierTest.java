@@ -41,6 +41,13 @@ class SettlementSourceBarrierTest {
         var admissions = new java.util.concurrent.atomic.AtomicInteger();
         gate.withJoinPermit(admissions::incrementAndGet);
         assertEquals(1, admissions.get());
+        var uncertain = new SettlementSourceBarrier(Set.of("region"));
+        uncertain.beginStaging();
+        uncertain.completeSource("region");
+        uncertain.openAfterDurableReadback(store, expected);
+        assertThrows(IllegalStateException.class,
+                () -> uncertain.withJoinPermit(() -> { throw new IllegalStateException("admission failed"); }));
+        assertEquals(SettlementSourceBarrier.State.FAILED, uncertain.state());
         gate.sourceMutated("region");
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
         assertThrows(IllegalStateException.class,
