@@ -53,15 +53,24 @@ public final class SavedPlayerAssets {
                 throw new IOException("Invalid saved equipment item: " + slot);
             // The selected hotbar slot and equipment.mainhand can be two
             // representations of the same physical stack in saved playerdata.
-            if ("mainhand".equals(slot) && root.containsKey("SelectedItemSlot")) {
-                Object rawSelected = root.get("SelectedItemSlot");
-                if (!(rawSelected instanceof Number selected) ||
-                        !(selected instanceof Byte || selected instanceof Short ||
-                          selected instanceof Integer || selected instanceof Long) ||
-                        selected.longValue() < 0 || selected.longValue() > 8)
-                    throw new IOException("Invalid selected hotbar slot in playerdata");
-                if (visitedSlots.contains("inventory:" + selected.intValue()))
-                    throw new IOException("Duplicate selected inventory/equipment mainhand slot");
+            if ("mainhand".equals(slot)) {
+                if (root.containsKey("SelectedItemSlot")) {
+                    Object rawSelected = root.get("SelectedItemSlot");
+                    if (!(rawSelected instanceof Number selected) ||
+                            !(selected instanceof Byte || selected instanceof Short ||
+                              selected instanceof Integer || selected instanceof Long) ||
+                            selected.longValue() < 0 || selected.longValue() > 8)
+                        throw new IOException("Invalid selected hotbar slot in playerdata");
+                    if (visitedSlots.contains("inventory:" + selected.intValue()))
+                        throw new IOException("Duplicate selected inventory/equipment mainhand slot");
+                } else {
+                    // Without the selected index, any saved hotbar entry may
+                    // represent the same physical mainhand item.
+                    for (int hotbar = 0; hotbar < 9; hotbar++) {
+                        if (visitedSlots.contains("inventory:" + hotbar))
+                            throw new IOException("Ambiguous mainhand without selected hotbar slot");
+                    }
+                }
             }
             Integer legacy = legacySlots.get(slot);
             if (legacy != null && visitedSlots.contains("inventory:" + legacy))
