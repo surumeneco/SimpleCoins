@@ -13,3 +13,6 @@ A settlement may publish only after every authoritative physical item has been a
 
 ## Verification status
 CAT machine gates (process-closure, TestModel generation, model-conformance, vectors, Queue, current-item, implementation-conformance): not-run; the dedicated Chat plugin/Skill is unavailable in this session. This Draft does not claim Confirmed status or substitute for a formal CAT Artifact.
+
+## Additional physical-stack invariant (Draft)
+A nonempty vanilla bundle or shulker box is not a stackable container of identical hidden inventories. If saved NBT reports count greater than one alongside a nested-storage component, fail closed rather than multiplying the nested balance by that count. Ordinary count-one containers remain valid. This is separate from the dual-component ambiguity and requires its own Red/Green cycle.
