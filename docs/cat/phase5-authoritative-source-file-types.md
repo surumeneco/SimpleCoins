@@ -18,6 +18,8 @@ During bounded, non-symlink discovery, reject a non-regular entry at an authorit
 - SC-SOURCE-TYPE-06: legacy `players/data/<UUID>.dat` must reject a directory.
 - SC-SOURCE-TYPE-07: a region-shaped directory in a world excluded by WorldScope remains outside the world asset scan.
 
+- SC-SOURCE-TYPE-08 (Red): a hard link shared by an Anvil region file and a canonical playerdata file is a single physical source masquerading as two different authority categories; reject it even though each category has no internal duplicate.
+
 ## Gate status
 
 Formal CAT machine gates: **not-run**. This Draft does not authorize a settlement commit, merge, deployment, or publication. GitHub CI may validate the Java/JUnit contract independently.
