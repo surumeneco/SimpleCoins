@@ -84,6 +84,18 @@ class BlockLockerVisibleSignResolverTest {
                 BlockLockerProtectionResolution.single(CHEST, List.of(primary, publicSign)).kind());
     }
 
+    @Test void legacyColorFormattingCannotHideVisibleEveryoneTag() throws Exception {
+        assertTrue(BlockLockerEveryoneText.matches("§a [Everyone] §r", EVERYONE));
+        var primary = verify(List.of("[Private]", "Alice", "", ""),
+                Optional.empty(), name -> ExternalOwnerDecision.personal(OWNER));
+        var publicSign = moreUsers(List.of("[More Users]", "§a [Everyone] §r", "", ""),
+                Optional.empty());
+        assertTrue(publicSign.everyone());
+        assertEquals(ExternalOwnerDecision.Kind.FREE,
+                BlockLockerProtectionResolution.single(CHEST, List.of(primary, publicSign)).kind());
+        assertFalse(BlockLockerEveryoneText.matches("§a [NotEveryone] §r", EVERYONE));
+    }
+
     @Test void mismatchedHeadersAndMalformedVisibleLinesFailClosed() {
         var hint = new BlockLockerSavedHints.Hints("MORE_USERS", Optional.empty(), false);
         assertThrows(IOException.class, () -> verify(
