@@ -146,7 +146,12 @@ public final class GrantLedger {
             if (schema != 0x53434731 && schema != 0x53434732)
                 throw new IOException("Unknown issuance journal schema");
             long sequence = in.readLong();
-            UUID id = UUID.fromString(in.readUTF()), player = UUID.fromString(in.readUTF());
+            String rawId = in.readUTF(), rawPlayer = in.readUTF();
+            UUID id = UUID.fromString(rawId), player = UUID.fromString(rawPlayer);
+            // UUID.fromString accepts abbreviated and case-aliased spellings.
+            // Monetary journal identities must replay exactly as encoded.
+            if (!id.toString().equals(rawId) || !player.toString().equals(rawPlayer))
+                throw new IOException("Noncanonical issuance journal UUID");
             long amount = in.readLong();
             String issuer = in.readUTF();
             long createdMillis = in.readLong();
