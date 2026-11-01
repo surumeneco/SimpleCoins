@@ -45,9 +45,8 @@ class BlockLockerProtectionResolutionTest {
         assertEquals(ExternalOwnerDecision.Kind.UNKNOWN,
                 BlockLockerProtectionResolution.single(
                         CHEST, List.of(primary(ExternalOwnerDecision.unknown()))).kind());
-        assertEquals(ExternalOwnerDecision.Kind.FREE,
-                BlockLockerProtectionResolution.single(
-                        CHEST, List.of(primary(ExternalOwnerDecision.free()))).kind());
+        assertThrows(IllegalArgumentException.class, () ->
+                primary(ExternalOwnerDecision.free()));
     }
 
     @Test void duplicateAttachedPrivateSignsAndMalformedEvidenceFailClosed() {
