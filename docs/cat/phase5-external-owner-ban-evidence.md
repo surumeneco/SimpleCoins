@@ -83,3 +83,8 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - BLOCKLOCKER-MOUNT-01: a verified vanilla wall-sign palette state with north/east/south/west facing maps to the corresponding physical support direction, without trusting PDC or displayed text as a source of geometry.
 - BLOCKLOCKER-MOUNT-02: a verified standing-sign palette state with a valid 0–15 rotation maps to STANDING support beneath the sign; waterlogged properties do not alter the support position.
 - BLOCKLOCKER-MOUNT-03: missing/invalid facing or rotation, unsupported wood/block kinds, hanging-sign states, and contradictory wall/standing properties fail closed. The caller must still establish the sign block position and coherent world snapshot; this is not a region-palette reader or live BlockLocker adapter.
+
+## Saved sign evidence handoff (Draft vectors)
+
+- BLOCKLOCKER-TEXT-05: a coordinate-keyed saved sign evidence pair must pass all four raw front components through a caller-supplied verified text-component decoder before applying visible-sign identity rules. A text-only legacy sign is eligible for authoritative identity lookup; PDC-only evidence is not sufficient to classify ownership.
+- BLOCKLOCKER-TEXT-06: missing raw text, null decoder output or a decoder error blocks owner classification. An evidence pair containing neither stream is not a protection sign. This handoff does not itself implement a JSON component decoder, verify the sign's palette index or establish a world snapshot.
