@@ -26,15 +26,23 @@ language: ja
 - Minecraft 26.xのdimension別 `region` / `entities`、`players/data`、従来の配置、Multiverseの実際のworld rootを考慮する。保存形式を一つの固定パスに限定しない。
 - 読めない・未知・欠損した権威sourceを「資産0」として成功確定しない。同一の物理資産を異なる保存経路・メモリ経路から二重計上しない。部分的な走査結果を決算統計へ公開しない。
 
-## 受入に必要な証拠と責務
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.snapshot | 保存sourceの網羅性と走査完了の証拠 |
+| simplecoins.world | Paper/Multiverseのworld一覧・dimension保存領域・WorldScope |
+| simplecoins.playerdata | world非依存のplayerdata正本とUUID一意性 |
+| simplecoins.snapshot.source-set-closure | 保存sourceの走査前後一致と物理的重複排除 |
+| simplecoins.snapshot.loaded-vs-disk | ロード済み資産と保存資産の同一時点性（Phase 6との境界） |
 
-| ID | 境界 | 要求される証拠 | 未確定なら |
+## 規則
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
-| coverage.world-inventory | Paper/Multiverseから渡されるworld集合 | 決算対象の全worldの権威root一覧とWorldScopeの適用結果 | 保存走査の完了証明に使わない |
-| coverage.dimension-layout | 各対象worldのdimension別保存領域 | 有効なlegacy/26.x保存配置とterrain/entityのsource種類を判別できること | 未認識領域を空とみなさない |
-| coverage.playerdata | world非依存のプレイヤー保存領域 | 現行playerdata正本の所在とUUIDの一意性、複数候補の衝突判定 | 任意の一方を選ばない |
-| coverage.source-read | manifestに含めた各保存source | 有界読取、NBT/外部sidecarの読取成功、同一物理sourceの重複排除 | 全体Reportを成功にしない |
-| coverage.loaded-vs-disk | ロード済み状態との境界 | 同じ物理保有資産を一度だけ計上する時点整合の根拠 | Phase 6の決算公開を許可しない |
+| coverage.world-inventory | Paper/Multiverseから渡されるworld集合を評価するとき | 決算対象の全worldの権威root一覧とWorldScopeの適用結果。証拠が未確定なら保存走査の完了証明に使わない | SC-COVERAGE-01, SC-COVERAGE-04 |
+| coverage.dimension-layout | 各対象worldのdimension別保存領域を評価するとき | 有効なlegacy/26.x保存配置とterrain/entityのsource種類を判別できること。証拠が未確定なら未認識領域を空とみなさない | SC-COVERAGE-02 |
+| coverage.playerdata | world非依存のプレイヤー保存領域を評価するとき | 現行playerdata正本の所在とUUIDの一意性、複数候補の衝突判定。証拠が未確定なら任意の一方を選ばない | SC-COVERAGE-03, SC-COVERAGE-04 |
+| coverage.source-read | manifestに含めた各保存sourceを評価するとき | 有界読取、NBT/外部sidecarの読取成功、同一物理sourceの重複排除。証拠が未確定なら全体Reportを成功にしない | SC-COVERAGE-02, SC-COVERAGE-06 |
+| coverage.loaded-vs-disk | ロード済み状態との境界を評価するとき | 同じ物理保有資産を一度だけ計上する時点整合の根拠。証拠が未確定ならPhase 6の決算公開を許可しない | SC-COVERAGE-05, SC-COVERAGE-06 |
 
 `coverage.source-read` は既存のPhase 5走査が部分的に検証済み。他の行をこのDraftだけで実装済み・検証済みとはしない。
 
