@@ -117,4 +117,27 @@ class SettlementSourceBarrierTest {
         assertEquals(1, calls.get());
     }
 
+    @Test void lateSourceCompletionAfterOpenRevokesReadiness() throws Exception {
+        var store = new SettlementSnapshotStore(directory.resolve("late-snapshots"));
+        var expected = new SettlementGenerationPublisher.Published(1, complete().commit());
+        store.persist(expected);
+        var completion = new SettlementSourceBarrier(Set.of("disk"));
+        completion.beginStaging();
+        completion.completeSource("disk");
+        completion.openAfterDurableReadback(store, expected);
+        assertThrows(IllegalStateException.class, () -> completion.completeSource("disk"));
+        assertEquals(SettlementSourceBarrier.State.FAILED, completion.state());
+        assertThrows(IllegalStateException.class, completion::requireJoinReady);
+
+        var lateRead = new SettlementSourceBarrier(Set.of("disk"));
+        lateRead.beginStaging();
+        lateRead.completeSource("disk");
+        lateRead.openAfterDurableReadback(store, expected);
+        var executed = new java.util.concurrent.atomic.AtomicBoolean();
+        assertThrows(IllegalStateException.class,
+                () -> lateRead.readAndCompleteSource("disk", () -> executed.set(true)));
+        assertFalse(executed.get(), "late reader must never run");
+        assertEquals(SettlementSourceBarrier.State.FAILED, lateRead.state());
+    }
+
 }
