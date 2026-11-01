@@ -1,22 +1,36 @@
-# Phase 6: issuance journal root lifecycle integrity (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.grant.root-lifecycle
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-005.
+# DomainSpec: 発行ジャーナルのdurable root lifecycle
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.journal | durable root・head・物理directory identity |
+| simplecoins.grant | pending・receipt・発行予約の安全な継続条件 |
 
-`GrantLedger` verifies its durable root at construction, then serves in-memory `pending`, receipt and replay decisions. If the root directory is deleted or replaced after construction, those reads currently continue as if the journal remained durable. A stale in-memory issuance state must not authorize further delivery.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| journal.root.deleted | 構築後にjournal rootとheadを削除したとき | pendingをfail-closedで拒否する | SC-GRANT-ROOT-01 |
+| journal.root.replaced-file | 構築後にrootを通常ファイルへ置換したとき | validateReceiptをfail-closedで拒否する | SC-GRANT-ROOT-02 |
+| journal.head.missing | rootは存在するがdurable headが欠損・非通常ファイルのとき | 未配達予約を公開せず拒否する | SC-GRANT-ROOT-03 |
+| journal.root.healthy | 正常な新規ledgerのroot/headが検証できるとき | 空pendingとreceipt=0を許可する | SC-GRANT-ROOT-04 |
+| journal.root.latch | 異常を検出したrootを同じパスに再作成したとき | 既存ledgerをunhealthyのまま維持し、明示のrestart/replayを要求する | SC-GRANT-ROOT-05 |
+| journal.head.rollback | durable headが形式上有効だがin-memory最新sequenceより古いとき | pending・receipt照会・追加発行を拒否する | SC-GRANT-ROOT-06 |
+| journal.root.identity | 構築後にrootの物理ディレクトリが同じパスの別実体へ置換されたとき | 構築時の物理identityと照合し、継続使用を拒否する | SC-GRANT-ROOT-01, SC-GRANT-ROOT-05 |
+| journal.root.ancestor | journal pathの祖先がsymbolic linkへ変化したとき | root健全性を失効させ、再起動・復旧まで後続操作を停止する | SC-GRANT-ROOT-05 |
 
-Before any public ledger operation, fail closed if the root no longer exists as the same physical directory, the durable journal head is missing/non-regular, its authenticated sequence differs from the in-memory last journal sequence, or a path ancestor has become symbolic. Mark the ledger unhealthy so subsequent calls remain blocked until explicit restart/recovery. This is a single-host lifecycle guard; it cannot substitute for a cross-process transaction, full record-by-record replay or protection against filesystem identity reuse.
+## 境界と状態
 
-## TCE / acceptance vectors
-
-- SC-GRANT-ROOT-01 (Red): after deleting the root and head file, `pending` fails closed instead of returning an empty list.
-- SC-GRANT-ROOT-02 (Red): after replacing the root with a regular file, `validateReceipt` fails closed.
-- SC-GRANT-ROOT-03 (Red): removing the durable head file while the root remains must block pending delivery.
-- SC-GRANT-ROOT-04 (Regression): a healthy newly constructed ledger permits an empty pending list and receipt zero.
-- SC-GRANT-ROOT-05 (Regression): an unhealthy ledger remains blocked after a root is recreated; restart/replay is required.
-- SC-GRANT-ROOT-06 (Red): a validly encoded but rolled-back durable head sequence must block `pending`, receipt checks and further grants instead of trusting the in-memory last sequence.
-
-## Gate status
-
-Formal CAT machine Gates **not-run**; Draft not Confirmed. No live Paper delivery or crash-recovery verification is claimed.
+既存SC-GRANT-ROOT-01〜06を意味変更せず構造化したTASK-20261101-005のCAT Draft。rootの同一ホストlifecycle guardはcross-process transaction、全履歴replay、filesystem identity再利用に対する完全保証を意味しない。正式CAT Process/PI/TCE・機械Gate、Paper実機の配達・クラッシュ復旧はnot-run。Confirmed・マージ・デプロイを意味しない。
