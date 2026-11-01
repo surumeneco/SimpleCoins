@@ -48,7 +48,8 @@ public final class BlockLockerHeaderMatcher {
                 throw new IOException("Malformed BlockLocker " + kind + " header alias");
     }
 
-    private static String clean(String value) {
+    /** Shared normalization for headers and first visible profile lookup keys. */
+    static String clean(String value) {
         return LEGACY_COLOR.matcher(value).replaceAll("").trim();
     }
 }
