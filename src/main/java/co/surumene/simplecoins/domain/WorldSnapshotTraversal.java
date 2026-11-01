@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -76,6 +77,7 @@ public final class WorldSnapshotTraversal {
         // Per-chunk checks cannot detect copied entities in separate chunks.
         Set<UUID> savedEntityIds = new HashSet<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
+            SourceStamp before = stamp(source.path());
             final int[] fileChunks = {0};
             AnvilRegionReader.scan(source.path(), maximumCompressedBytes, maximumInflatedBytes,
                     chunk -> {
@@ -88,14 +90,17 @@ public final class WorldSnapshotTraversal {
                         visitor.chunk(source, chunk);
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
                     });
+            requireUnchanged(source.path(), before);
             files = Math.addExact(files, 1);
             chunks = Math.addExact(chunks, fileChunks[0]);
         }
         for (var entry : manifest.playerDataFiles().entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().toString())).toList()) {
+            SourceStamp before = stamp(entry.getValue());
             var data = PlayerDataReader.read(entry.getValue(),
                     maximumCompressedBytes, maximumInflatedBytes);
             visitor.player(entry.getKey(), data);
+            requireUnchanged(entry.getValue(), before);
             players = Math.addExact(players, 1);
         }
         return new Report(files, chunks, players);
@@ -130,6 +135,26 @@ public final class WorldSnapshotTraversal {
                     throw new IOException("Aliased physical snapshot source: " + other + " and " + path);
             unkeyed.add(path);
         }
+    }
+
+    /**
+     * Best-effort detection of concurrent saved-file changes during traversal.
+     * Metadata stamps are not a substitute for a frozen Paper/world snapshot.
+     */
+    private record SourceStamp(Object key, long size, FileTime created, FileTime modified) {}
+
+    private static SourceStamp stamp(Path path) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attrs.isRegularFile())
+            throw new IOException("Snapshot source is no longer a regular file: " + path);
+        return new SourceStamp(attrs.fileKey(), attrs.size(),
+                attrs.creationTime(), attrs.lastModifiedTime());
+    }
+
+    private static void requireUnchanged(Path path, SourceStamp before) throws IOException {
+        if (!before.equals(stamp(path)))
+            throw new IOException("Snapshot source changed during traversal: " + path);
     }
 
     /** Reject coordinate aliases even when a caller bypasses discovery. */
