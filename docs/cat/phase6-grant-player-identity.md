@@ -13,3 +13,7 @@ A journal lookup requires a concrete player UUID. A null player identity must no
 - SC-GRANT-IDENTITY-03 (Regression): valid recipient still has a pending reservation after restart and can acknowledge it once.
 
 Formal CAT machine Gates not-run; Draft not Confirmed. No release or merge.
+
+## Journal grant identity binding (Draft vector)
+
+- SC-GRANT-IDENTITY-04: `wasApplied` must match the supplied grant's sequence, grant UUID and recipient UUID against the current durable journal record before using a playerdata receipt. A foreign or forged grant with a coincidentally matching sequence/recipient must not be treated as already applied, even if its receipt is numerically sufficient.
