@@ -1,6 +1,46 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.owner.external-owner-ban-evidence
+status: draft
+process: simplecoins.owner
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: external ownership and BAN evidence completeness (CAT Draft)
 
 Status: Draft, not Confirmed. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md, 05_1.0.0_実装計画.md.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.owner | 外部owner/commanderの権威証拠とUNKNOWNの保持 |
+| simplecoins.ban | Paper・IP・外部pluginの必須BAN source集約 |
+| simplecoins.blocklocker | 物理的に付属したsign・保存/liveテキストの所有権判定 |
+| simplecoins.snapshot | 保存済みとloaded sourceの完全性・時点整合 |
+| simplecoins.settlement | 未確定証拠からの決算公開禁止 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| owner-evidence.owner.evidence | 外部所有権の検証済み状態をsettlement stagingへ渡すとき | UNKNOWNをFREE/PERSONALやゼロ資産と混同せず、BAN証拠の来歴を伴う検証済み状態だけ受け入れる | OWNER-EVIDENCE-01, OWNER-EVIDENCE-02, OWNER-EVIDENCE-03, OWNER-EVIDENCE-04, OWNER-EVIDENCE-05, OWNER-EVIDENCE-06 |
+| owner-evidence.ban.evidence | 複数BAN sourceを一つのUUIDについて集約するとき | 必須source一覧を独立に宣言し、欠損・重複・UNKNOWNをCLEARへ昇格せずBANNEDの優先を維持する | BAN-EVIDENCE-01, BAN-EVIDENCE-02, BAN-EVIDENCE-03, BAN-EVIDENCE-04 |
+| owner-evidence.companion.owner | WWC/WWW/WCL等のcompanion所有者・commanderを解決するとき | 検証済みcommander優先・owner fallbackを守り、未ロードや不明をabsenceと推定しない | COMPANION-OWNER-01, COMPANION-OWNER-02, COMPANION-OWNER-03, COMPANION-OWNER-04, COMPANION-OWNER-05, COMPANION-OWNER-06 |
+| owner-evidence.blocklocker.agg | 物理的に付属したPRIVATE/MORE_USERS signから所有権を集約するとき | primaryとEveryone、double chestの相互関係を検証し、矛盾・未解決primaryをUNKNOWNとして扱う | BLOCKLOCKER-AGG-01, BLOCKLOCKER-AGG-02, BLOCKLOCKER-AGG-03, BLOCKLOCKER-AGG-04, BLOCKLOCKER-AGG-05, BLOCKLOCKER-AGG-06 |
+| owner-evidence.paper.ban | Paper profile BANを外部BAN集合の一sourceとして取得するとき | 単独のCLEARを総合CLEARと誤認せず、不明なprofileはUNKNOWNとする | PAPER-BAN-01, PAPER-BAN-02, PAPER-BAN-03 |
+| owner-evidence.paper.ip | Paper IP BANをUUIDへ結び付けるとき | UUIDとアドレスの権威ある完全対応を要求し、未知のアドレスをCLEARとみなさない | PAPER-IP-01, PAPER-IP-02, PAPER-IP-03 |
+| owner-evidence.blocklocker.text | 保存済みBlockLocker signの可視テキスト/PDCを照合するとき | 4行・runtime alias・verified UUID・Everyoneの意味を独立に確認し、不正入力や未解決primaryを拒否する | BLOCKLOCKER-TEXT-01, BLOCKLOCKER-TEXT-02, BLOCKLOCKER-TEXT-03, BLOCKLOCKER-TEXT-04, BLOCKLOCKER-TEXT-05, BLOCKLOCKER-TEXT-06, BLOCKLOCKER-TEXT-07 |
+| owner-evidence.blocklocker.mount | 保存済みsign paletteの壁・立看板のmountを判定するとき | 正当なvanilla向き・rotationのみ受け入れ、物理的付属関係を推測で補わない | BLOCKLOCKER-MOUNT-01, BLOCKLOCKER-MOUNT-02, BLOCKLOCKER-MOUNT-03 |
+| owner-evidence.companion.www | loaded WWW wolfのpublic APIから所有者を読むとき | commander/owner Optionalを検証し、API不在や未ロードをUNKNOWNとする | COMPANION-WWW-01, COMPANION-WWW-02, COMPANION-WWW-03 |
+| owner-evidence.blocklocker.live | loaded Paper Signから現在のBlockLocker証拠を読むとき | 物理位置・向き・前面4行を検証し、未ロードsignや完全snapshotを推定しない | BLOCKLOCKER-LIVE-01, BLOCKLOCKER-LIVE-02, BLOCKLOCKER-LIVE-03 |
+| owner-evidence.companion.wwc | loaded WWC chickenのPDC follow_targetを読むとき | canonical UUIDのpositive-only証拠だけ返し、欠損をFREEとみなさない | COMPANION-WWC-01, COMPANION-WWC-02, COMPANION-WWC-03 |
+| owner-evidence.blocklocker.snapshot | callerが保存済みsign候補集合を渡すとき | 完全・一貫したpalette/text証拠を要求し、未列挙候補や空集合をFREEとみなさない | BLOCKLOCKER-SNAPSHOT-01, BLOCKLOCKER-SNAPSHOT-02, BLOCKLOCKER-SNAPSHOT-03 |
+| owner-evidence.ban.collect | 必須外部BAN pluginとPaper sourceの結果を収集するとき | 権威source inventoryと個別結果を照合し、欠損・不明がある場合CLEARを宣言しない | BAN-COLLECT-01, BAN-COLLECT-02, BAN-COLLECT-03 |
 
 ## Process / PI
 
