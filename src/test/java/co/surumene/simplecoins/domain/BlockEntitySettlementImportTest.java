@@ -144,4 +144,23 @@ class BlockEntitySettlementImportTest {
                     dye + " shulker must preserve its eligible protected owner");
         }
     }
+
+    @Test void invalidPhysicalHopperSlotAbortsStagingAndCannotCommit() {
+        UUID owner = UUID.randomUUID();
+        Map<String,Object> coin = Map.of("Slot", (byte) 5,
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> hopper = Map.of(
+                "id", "minecraft:hopper", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin));
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        assertThrows(IOException.class, () -> BlockEntitySettlementImport.stageChunk(
+                settlement, "region:file", "world",
+                Map.of("block_entities", List.of(hopper)),
+                position -> new BlockEntitySettlementImport.Ownership(owner, false, false, true)));
+        assertThrows(IllegalStateException.class, settlement::commit,
+                "A rejected source must never yield publishable settlement totals");
+    }
 }
