@@ -224,4 +224,18 @@ class StoredItemValueTest {
                     () -> StoredItemValue.value(container), key);
         }
     }
+
+    @Test void explicitlyNullCustomDataOrPdcCannotHideCurrency() {
+        Map<String,Object> nullCustomComponents = new java.util.HashMap<>();
+        nullCustomComponents.put("minecraft:custom_data", null);
+        Map<String,Object> nullPdc = new java.util.HashMap<>();
+        nullPdc.put("PublicBukkitValues", null);
+        for (Map<String,Object> components : java.util.List.of(
+                nullCustomComponents,
+                Map.of("minecraft:custom_data", nullPdc))) {
+            Map<String,Object> item = Map.of(
+                    "id", "minecraft:paper", "count", 1, "components", components);
+            assertThrows(java.io.IOException.class, () -> StoredItemValue.value(item));
+        }
+    }
 }
