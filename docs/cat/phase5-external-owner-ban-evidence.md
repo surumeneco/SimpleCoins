@@ -33,3 +33,7 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 ## Required BAN source to owner-decision boundary
 
 - OWNER-EVIDENCE-05: a verified personal UUID with Paper CLEAR but a missing required external BAN source remains UNKNOWN and cannot be converted into publishable personal ownership. The same UUID with all required sources CLEAR may be converted.
+
+## Evidence provenance at the settlement boundary (Draft vector)
+
+- OWNER-EVIDENCE-06: personal ownership conversion must not accept a caller-supplied `BanEvidence.Status.CLEAR` as proof. A status is valid only when wrapped in an immutable decision produced by `BanEvidence.evaluate(requiredSources, observations)`. Missing required sources produce UNKNOWN and block personal settlement. The legacy enum-only conversion path fails closed for PERSONAL; verified FREE remains independent of a player's BAN evidence. This is a domain contract, not proof that Paper or external BAN adapters are connected.
