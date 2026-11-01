@@ -37,6 +37,24 @@ public final class BlockLockerChestLinkage {
                 neighbor(second).equals(first.position());
     }
 
+    /**
+     * Geometry-only attachment to either half of a verified double chest.
+     * A nonreciprocal pair is invalid input, not evidence of two owners.
+     */
+    public static boolean signAttachedToPair(
+            BlockLockerSignAttachment.Position sign,
+            BlockLockerSignAttachment.Mount mount,
+            Part first, Part second) throws IOException {
+        if (!linked(first, second))
+            throw new IOException("Unverified double-chest physical linkage");
+        return BlockLockerSignAttachment.attaches(sign, mount,
+                new BlockLockerSignAttachment.Position(first.position().x(),
+                        first.position().y(), first.position().z())) ||
+                BlockLockerSignAttachment.attaches(sign, mount,
+                        new BlockLockerSignAttachment.Position(second.position().x(),
+                                second.position().y(), second.position().z()));
+    }
+
     private static Position neighbor(Part chest) throws IOException {
         int dx = 0, dz = 0;
         switch (chest.facing()) {
