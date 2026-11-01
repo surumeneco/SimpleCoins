@@ -60,7 +60,7 @@ public final class StoredItemValue {
         // containers. A fabricated stack count must not multiply their assets.
         if (quantity > 1 && id.startsWith("minecraft:") &&
                 (id.equals("minecraft:bundle") || id.endsWith("_bundle") ||
-                 id.endsWith("_shulker_box")) &&
+                 id.equals("minecraft:shulker_box") || id.endsWith("_shulker_box")) &&
                 ((components.get("minecraft:bundle_contents") instanceof List<?> bundle &&
                         !bundle.isEmpty()) ||
                  (components.get("minecraft:container") instanceof List<?> container &&
@@ -151,7 +151,8 @@ public final class StoredItemValue {
                     throw new IOException("Invalid nested container slot");
                 // Vanilla shulker boxes have 27 slots. Treat an out-of-range
                 // saved slot as corrupt instead of publishing fictitious assets.
-                if (id.startsWith("minecraft:") && id.endsWith("_shulker_box") &&
+                if ((id.equals("minecraft:shulker_box") ||
+                        (id.startsWith("minecraft:") && id.endsWith("_shulker_box"))) &&
                         number.longValue() > 26)
                     throw new IOException("Invalid shulker box slot: " + number.longValue());
                 if (!occupiedSlots.add(number.intValue()))
