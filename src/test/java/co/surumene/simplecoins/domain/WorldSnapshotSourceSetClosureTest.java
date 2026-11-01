@@ -73,7 +73,7 @@ class WorldSnapshotSourceSetClosureTest {
                                                 AnvilRegionReader.Chunk chunk) {}
                     @Override public void player(UUID uuid, Map<String, Object> data)
                             throws IOException {
-                        player(SECOND);
+                        WorldSnapshotSourceSetClosureTest.this.player(SECOND);
                     }
                 }));
     }
