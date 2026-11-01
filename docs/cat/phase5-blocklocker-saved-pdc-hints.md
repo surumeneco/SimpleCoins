@@ -1,4 +1,35 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.saved-pdc-hints
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: BlockLocker saved PDC hints (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | 保存済みPublicBukkitValuesからの候補証拠抽出 |
+| simplecoins.terrain | terrain chunk内の看板候補と座標一意性 |
+| simplecoins.settlement | 所有権UNKNOWNを維持する公開禁止境界 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| pdc.private.uuid-hint | PRIVATE headerとfirst profileの有効なUUIDがあるとき | candidate UUIDだけを返し、表示テキスト・物理付属関係の検証前に所有者を確定しない | BL-PDC-01 |
+| pdc.everyone.presence | 六つのprofileのいずれかにEveryone markerが存在するとき | byte値が0でも存在をhintとして保持し、FREE資産に昇格しない | BL-PDC-02 |
+| pdc.more-users | MORE_USERS headerとprofileがあるとき | first profileからownerを推定せず追加利用者のhintに留める | BL-PDC-03 |
+| pdc.malformed | UUID配列・profile型・header無しprofileが不正なとき | IOExceptionで拒否し、欠損した保護情報を正常な無保護として扱わない | BL-PDC-04, BL-PDC-08 |
+| pdc.absent | BlockLocker PDCが存在しない看板を読むとき | Optional.emptyとし、legacy表示テキストの独立照合を必要とする | BL-PDC-05, BL-PDC-07 |
+| pdc.candidate-coordinate | 保存済み看板候補をterrain chunkから列挙するとき | 正規座標をkeyとし重複を拒否し、非看板を保護証拠として扱わない | BL-PDC-06, BL-PDC-08 |
+| pdc.chunk-boundary | chunk xPos/zPosの一方または両方が宣言されたとき | 両方の整数座標とfloorDivによるblock座標の所属を検証し、外部chunk候補を拒否する | BL-PDC-09, BL-PDC-10 |
 
 Status: Draft, not Confirmed. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md, BlockLocker v1.14.1 SignParserImpl / NbtSecretSignEntry / ProfileFactoryImpl.
 
