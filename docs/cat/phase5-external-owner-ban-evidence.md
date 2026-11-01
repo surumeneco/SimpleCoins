@@ -77,3 +77,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - BLOCKLOCKER-TEXT-03: an attached MORE_USERS sign with a verified visible Everyone tag can override an independently verified PRIVATE owner, but PDC Everyone markers without a visible Everyone tag cannot do so. Header mismatches must not promote a stale PDC owner.
 - BLOCKLOCKER-TEXT-04: malformed/incomplete decoded lines, missing runtime aliases, null evidence or failed identity lookup must fail closed. This boundary does not parse raw JSON, authenticate physical block states or connect the BlockLocker API; those remain separate integration gates.
 - BLOCKLOCKER-AGG-06: an attached PRIVATE sign with unresolved primary identity must remain UNKNOWN even if a verified Everyone tag is also present; a public-ownership decision requires a resolved primary sign.
+
+## Saved sign block-state mount decoding (Draft vectors)
+
+- BLOCKLOCKER-MOUNT-01: a verified vanilla wall-sign palette state with north/east/south/west facing maps to the corresponding physical support direction, without trusting PDC or displayed text as a source of geometry.
+- BLOCKLOCKER-MOUNT-02: a verified standing-sign palette state with a valid 0–15 rotation maps to STANDING support beneath the sign; waterlogged properties do not alter the support position.
+- BLOCKLOCKER-MOUNT-03: missing/invalid facing or rotation, unsupported wood/block kinds, hanging-sign states, and contradictory wall/standing properties fail closed. The caller must still establish the sign block position and coherent world snapshot; this is not a region-palette reader or live BlockLocker adapter.
