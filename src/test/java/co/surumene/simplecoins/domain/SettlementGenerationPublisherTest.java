@@ -75,7 +75,7 @@ class SettlementGenerationPublisherTest {
             executor.shutdownNow();
         }
     }
-    @Test void persistenceFailureCannotExposeAnUnwrittenGeneration() throws Exception {
+    @Test void ambiguousDurableWriteFailurePoisonsPublisherUntilRecovery() throws Exception {
         var publisher = new SettlementGenerationPublisher();
         assertThrows(java.io.IOException.class, () -> publisher.publishDurably(
                 0, staged(100, true), candidate -> {
@@ -84,16 +84,31 @@ class SettlementGenerationPublisherTest {
                     throw new java.io.IOException("Injected durable writer failure");
                 }));
         assertTrue(publisher.current().isEmpty());
-        var first = publisher.publishDurably(0, staged(200, true), candidate -> {});
+        assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                0, staged(200, true), candidate -> {}));
+        assertThrows(IllegalStateException.class, () -> publisher.publish(
+                0, staged(200, true)));
+
+        var fresh = new SettlementGenerationPublisher();
+        var first = fresh.publishDurably(0, staged(200, true), candidate -> {});
         assertEquals(1L, first.generation());
-        assertThrows(java.io.IOException.class, () -> publisher.publishDurably(
+        assertThrows(java.io.IOException.class, () -> fresh.publishDurably(
                 1, staged(300, true), candidate -> {
-                    throw new java.io.IOException("Injected second write failure");
+                    throw new java.io.IOException("Ambiguous second write");
                 }));
-        assertEquals(first, publisher.current().orElseThrow());
-        var second = publisher.publishDurably(1, staged(400, true), candidate -> {});
-        assertEquals(2L, second.generation());
-        assertEquals(BigInteger.valueOf(400), second.result().free());
+        assertEquals(first, fresh.current().orElseThrow());
+        assertThrows(IllegalStateException.class, () -> fresh.publishDurably(
+                1, staged(400, true), candidate -> {}));
+    }
+
+    @Test void uncheckedDurableWriterFailureAlsoPoisonsPublisher() throws Exception {
+        var publisher = new SettlementGenerationPublisher();
+        assertThrows(IllegalArgumentException.class, () -> publisher.publishDurably(
+                0, staged(100, true), candidate -> {
+                    throw new IllegalArgumentException("Uncertain writer outcome");
+                }));
+        assertThrows(IllegalStateException.class, () -> publisher.publishDurably(
+                0, staged(100, true), candidate -> {}));
     }
 
     @Test void staleOrMissingDurableWriterCannotCommitPendingSnapshot() throws Exception {
