@@ -19,6 +19,7 @@ public final class SettlementSourceBarrier {
     private final Set<String> requiredSources;
     private final Set<String> completedSources = new HashSet<>();
     private State state = State.BLOCKED;
+    private boolean admissionInProgress;
 
     public SettlementSourceBarrier(Set<String> requiredSources) {
         if (requiredSources == null || requiredSources.isEmpty() ||
@@ -118,7 +119,12 @@ public final class SettlementSourceBarrier {
      */
     public synchronized void withJoinPermit(Runnable admission) {
         requireJoinReady();
+        if (admissionInProgress) {
+            state = State.FAILED;
+            throw new IllegalStateException("Nested settlement admission is not allowed");
+        }
         Objects.requireNonNull(admission, "admission");
+        admissionInProgress = true;
         try {
             admission.run();
             if (state != State.OPEN)
@@ -127,6 +133,8 @@ public final class SettlementSourceBarrier {
             // A partially applied admission may have changed world state.
             state = State.FAILED;
             throw uncertain;
+        } finally {
+            admissionInProgress = false;
         }
     }
 
