@@ -1,20 +1,34 @@
-# Phase 5: saved WWC follow-target evidence (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.wwc.saved-follow-target
+status: draft
+process: simplecoins.owner
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Parent TASK-20261031-SIMPLECOINS-100; leaf TASK-20261101-004.
+# DomainSpec: 保存済みWWC鶏のfollow-target証拠
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.owner | WWC commander UUIDのpositive-only証拠 |
+| simplecoins.snapshot | 保存済みEntityとloaded memoryの同一時点性 |
 
-The current WhatAWonderfulChicken `WonderfulChickenStore` persists a marker `wonderful_chicken`, `data_version` (2–4), and an optional canonical UUID `follow_target` through Bukkit PersistentDataContainer keys. A saved Java chicken Entity may expose those typed values under the `BukkitValues` NBT compound with the plugin's lowercase namespace `whatawonderfulchicken`. This is a read-only, **positive-only commander hint**: a valid marker/version/target yields a UUID; missing/malformed evidence is UNKNOWN, never FREE or a zero-asset assertion. It does not prove that the entity was unloaded at snapshot time, that the commander is registered/unbanned, or that the entity is absent from loaded memory.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| wwc.saved.positive | minecraft:chickenのBukkitValuesに正規marker・v2〜v4・canonical UUID follow_targetがあるとき | 既知のcommander UUIDをpositive-only evidenceとして返す | WWC-SAVED-01 |
+| wwc.saved.missing | BukkitValues・marker・follow_targetが欠損、またはversionが未対応のとき | UNKNOWNとしFREEやゼロ資産と推論しない | WWC-SAVED-02 |
+| wwc.saved.malformed | Entity種別が違うか、PDCが不正型、targetが不正型・非canonical UUIDのとき | UNKNOWNとする | WWC-SAVED-03 |
+| wwc.saved.version | 正しいv2/v3/v4のmarkerとtargetがあるとき | 各versionで正規UUIDを認識し、通常の鶏をFREEと断定しない | WWC-SAVED-04 |
+| wwc.saved.readonly | 保存済みEntityから証拠を読むとき | 入力source mapやBukkit状態を変更しない | WWC-SAVED-05 |
+| wwc.saved.nbt | named-root NBT chunkにtyped BukkitValuesがあるとき | NbtReader経由でも同じpositive-only commander evidenceを得る | WWC-SAVED-06 |
 
-The caller must verify the saved Entity's UUID, authoritative world snapshot, current WWC contract, ownership precedence and loaded-vs-disk reconciliation before settlement. No Paper world or plugin state may be mutated.
+## 境界と状態
 
-## TCE / vectors
-
-- WWC-SAVED-01 (Red): a saved `minecraft:chicken` with canonical PDC marker/version/target yields known commander UUID.
-- WWC-SAVED-02: absent `BukkitValues`, missing marker, missing target or unsupported version yields UNKNOWN.
-- WWC-SAVED-03: wrong entity type, malformed PDC compound, wrong-typed target or noncanonical UUID yields UNKNOWN.
-- WWC-SAVED-04: a valid typed v2/v3/v4 marker and target remain recognized; no inference of FREE for ordinary chickens.
-- WWC-SAVED-05: no changes to source maps or Bukkit state.
-- WWC-SAVED-06: a serialized named-root NBT chunk containing the typed saved BukkitValues compound decodes through NbtReader and yields the same positive-only commander evidence.
-
-The saved NBT representation requires real Paper 26.2 integration verification. Formal CAT machine Gates: **not-run**; Draft not Confirmed. No merge, deployment or settlement publication.
+既存WWC-SAVED-01〜06を意味変更せず構造化したTASK-20261101-004のCAT Draft。PDC namespaceはwhatawonderfulchicken、markerはwonderful_chicken。呼出側はEntity UUID、WWC契約、loaded/disk照合、所有権優先順位、BAN、snapshotの完全性を別途検証する。Paper/WWC状態は変更しない。正式CAT Process/PI/TCE・機械GateとPaper 26.2実機検証はnot-run。Confirmed・マージ・決算公開を意味しない。
