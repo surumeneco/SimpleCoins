@@ -22,12 +22,30 @@ class SettlementScanRunnerTest {
     @TempDir Path directory;
 
     private Path playerData(UUID player) throws IOException {
+        return playerData(player, 0);
+    }
+
+    private Path playerData(UUID player, int coinCount) throws IOException {
         Path file = directory.resolve("playerdata/" + player + ".dat");
         Files.createDirectories(file.getParent());
         var nbt = new ByteArrayOutputStream();
         try (var out = new DataOutputStream(nbt)) {
             out.writeByte(10); out.writeUTF("");
-            out.writeByte(9); out.writeUTF("Inventory"); out.writeByte(10); out.writeInt(0);
+            out.writeByte(9); out.writeUTF("Inventory"); out.writeByte(10);
+            out.writeInt(coinCount > 0 ? 1 : 0);
+            if (coinCount > 0) {
+                out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
+                out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
+                out.writeByte(3); out.writeUTF("count"); out.writeInt(coinCount);
+                out.writeByte(10); out.writeUTF("components");
+                out.writeByte(10); out.writeUTF("minecraft:custom_data");
+                out.writeByte(10); out.writeUTF("PublicBukkitValues");
+                out.writeByte(3); out.writeUTF("simplecoins:denomination"); out.writeInt(100);
+                out.writeByte(0); // PublicBukkitValues
+                out.writeByte(0); // custom_data
+                out.writeByte(0); // components
+                out.writeByte(0); // inventory item
+            }
             out.writeByte(9); out.writeUTF("EnderItems"); out.writeByte(10); out.writeInt(0);
             out.writeByte(0);
         }
@@ -88,5 +106,19 @@ class SettlementScanRunnerTest {
         assertThrows(IOException.class, () -> SettlementScanRunner.stage(manifest,
                 new WorldScope(true, Set.of(), Set.of()), Set.of(),
                 (world, position) -> null, (world, chunk) -> Map.of(), 4096, 4096));
+    }
+
+    @Test void stagesSavedCoinsAndCurrentBanStateWithoutPublishing() throws Exception {
+        UUID player = UUID.randomUUID();
+        Path data = playerData(player, 2);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(), Map.of(player, data));
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var personal = SettlementScanRunner.stage(manifest, scope, Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(), 4096, 4096);
+        assertEquals(BigInteger.valueOf(200),
+                personal.pending().commit().personalBalances().get(player));
+        var banned = SettlementScanRunner.stage(manifest, scope, Set.of(player),
+                (world, position) -> null, (world, chunk) -> Map.of(), 4096, 4096);
+        assertEquals(BigInteger.valueOf(200), banned.pending().commit().statistics().dead());
     }
 }
