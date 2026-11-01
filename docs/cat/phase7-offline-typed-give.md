@@ -4,7 +4,7 @@ Status: **Draft**, not Confirmed. Leaf `TASK-20261101-006`.
 
 ## Process / PI
 
-An administrator with `simplecoins.admin` may reserve either an untyped amount or a specific denomination/count for an already known offline player. Both paths must use the same exact-identity lookup: online UUIDs or a uniquely matched previously seen offline player. Unknown or ambiguous names fail closed; selectors are online-only and must not fall back to an offline account. A typed grant is journaled before delivery; if the player is offline, it remains pending and is delivered on a later join. Wallet item issuance still requires an online player. Duplicate selector results must not reserve the same grant twice.
+An administrator with `simplecoins.admin` may reserve either an untyped amount or a specific denomination/count for an already known offline player. Both paths must use the same exact-identity lookup: online UUIDs or a uniquely matched previously seen offline player. Unknown or ambiguous names fail closed; selectors are online-only and must not fall back to an offline account. A typed grant is journaled before delivery; if the player is offline, it remains pending and is delivered on a later join. A UUID-addressed player who is currently online must instead be scheduled immediately. Wallet item issuance still requires an online player. Duplicate selector results must not reserve the same grant twice.
 
 ## TCE
 
