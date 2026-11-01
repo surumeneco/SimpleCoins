@@ -48,6 +48,13 @@ class SettlementSourceBarrierTest {
         assertThrows(IllegalStateException.class,
                 () -> uncertain.withJoinPermit(() -> { throw new IllegalStateException("admission failed"); }));
         assertEquals(SettlementSourceBarrier.State.FAILED, uncertain.state());
+        var reentrant = new SettlementSourceBarrier(Set.of("region"));
+        reentrant.beginStaging();
+        reentrant.completeSource("region");
+        reentrant.openAfterDurableReadback(store, expected);
+        assertThrows(IllegalStateException.class,
+                () -> reentrant.withJoinPermit(() -> reentrant.sourceMutated("region")));
+        assertEquals(SettlementSourceBarrier.State.FAILED, reentrant.state());
         gate.sourceMutated("region");
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
         assertThrows(IllegalStateException.class,
