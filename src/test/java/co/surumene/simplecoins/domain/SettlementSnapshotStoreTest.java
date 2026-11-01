@@ -145,4 +145,18 @@ class SettlementSnapshotStoreTest {
             assertTrue(store.load().isEmpty());
         }
     }
+
+    @Test void deletedPreviouslyCommittedSnapshotCannotResetGenerationToZero() throws Exception {
+        Path root = directory.resolve("snapshots");
+        var store = new SettlementSnapshotStore(root);
+        assertTrue(store.load().isEmpty());
+        var first = new SettlementGenerationPublisher.Published(
+                1, staged(100, 0, 0, true).commit());
+        store.persist(first);
+        assertTrue(Files.isRegularFile(root.resolve("settlement.initialized")));
+        Files.delete(root.resolve("settlement.snapshot"));
+        assertThrows(IOException.class, store::load);
+        assertThrows(IOException.class, () -> SettlementGenerationPublisher.recoverFrom(store));
+        assertThrows(IOException.class, () -> store.persist(first));
+    }
 }
