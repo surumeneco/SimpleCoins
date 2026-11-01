@@ -117,3 +117,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - BLOCKLOCKER-SNAPSHOT-01: a caller-supplied complete, coherent set of coordinate-keyed saved sign evidence and matching verified palette states can be decoded into physical mount/position and authoritative visible ownership evidence before single-container aggregation.
 - BLOCKLOCKER-SNAPSHOT-02: a verified reciprocal double chest aggregates signs on either half once, including visible Everyone overrides; duplicate/malformed/missing palette state or noncanonical coordinate keys fail closed.
 - BLOCKLOCKER-SNAPSHOT-03: the assembly does not enumerate neighboring chunks, prove candidate-set completeness, freeze the world or supply a name-to-UUID authority. The caller must establish all of these before using its result for settlement; an empty candidate set is UNKNOWN rather than an inferred FREE.
+
+## Complete BAN source collection boundary (Draft vectors)
+
+- BAN-COLLECT-01: a declared complete inventory of required external BAN plugins, Paper profile bans and Paper IP bans is combined for one owner UUID. Only all verified CLEAR sources can yield CLEAR; any verified BANNED dominates, and missing/unavailable evidence yields UNKNOWN.
+- BAN-COLLECT-02: an unverified external-plugin inventory cannot establish CLEAR even if every currently supplied source is clear. Each required external plugin must have an explicit lookup result or UNKNOWN; duplicate normalized plugin IDs and collisions with built-in source names fail closed.
+- BAN-COLLECT-03: the caller must independently prove UUID-to-address completeness and authoritative external-plugin discovery. The collector does not infer IP history, scan plugins, or establish a world snapshot.
