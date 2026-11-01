@@ -28,9 +28,15 @@ public final class GrantLedger {
     private boolean failed;
 
     public GrantLedger(Path directory) throws IOException {
-        this.directory = directory;
-        Files.createDirectories(directory);
-        try (var listing = Files.list(directory)) {
+        if (directory == null) throw new IOException("Missing issuance journal directory");
+        Path root = directory.toAbsolutePath().normalize();
+        rejectSymbolicAncestors(root);
+        Files.createDirectories(root);
+        rejectSymbolicAncestors(root);
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Issuance journal root is not a real directory");
+        this.directory = root;
+        try (var listing = Files.list(root)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
                 if (!file.getFileName().toString().equals(grant.sequence() + ".grant") ||
@@ -45,7 +51,7 @@ public final class GrantLedger {
                 throw new IOException("Missing or duplicate issuance journal record");
         }
         long last = grants.isEmpty() ? 0 : grants.lastKey();
-        Path head = directory.resolve("head");
+        Path head = root.resolve("head");
         if (Files.exists(head)) {
             byte[] bytes = DurableFile.read(head, 8);
             if (bytes.length != 8) throw new IOException("Invalid journal head");
@@ -59,6 +65,12 @@ public final class GrantLedger {
             writeHead(0);
         }
     }
+    private static void rejectSymbolicAncestors(Path path) throws IOException {
+        for (Path current = path; current != null; current = current.getParent())
+            if (Files.isSymbolicLink(current))
+                throw new IOException("Issuance journal path contains a symbolic link: " + current);
+    }
+
     private void writeHead(long sequence) throws IOException {
         DurableFile.write(directory.resolve("head"), java.nio.ByteBuffer.allocate(8).putLong(sequence).array());
     }
