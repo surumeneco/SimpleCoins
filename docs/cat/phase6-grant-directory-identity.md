@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.grant-directory-identity
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: issuance journal root directory identity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-005.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | 永続grant rootの物理identity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| grant.root.replaced | ledger起動後にjournal rootを別ディレクトリへ置換したとき | 古いinstanceでpending/reserveを拒否し再検証済みreplayを要求する | SC-GRANT-ROOT-ID-01 |
+| grant.root.valid | 元のjournal rootが不変で有効なとき | restart replay・reservation・ackを維持する | SC-GRANT-ROOT-ID-02 |
+| grant.root.invalid | journal rootが欠損・非directory・symlinkのとき | fail-closedで拒否する | SC-GRANT-ROOT-ID-03 |
 
 ## Process / PI
 
