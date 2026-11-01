@@ -96,4 +96,27 @@ class StoredEntityInventoryAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(boat))));
     }
+
+    @Test void chestMinecartSlotBeyondTwentySixMustFailClosed() {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 27,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> minecart = Map.of("id", "minecraft:chest_minecart",
+                "UUID", new int[]{0, 0, 0, 31}, "Items", List.of(coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(minecart))));
+    }
+
+    @Test void chestMinecartLastPhysicalSlotRemainsCountable() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "Slot", (byte) 26,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> minecart = Map.of("id", "minecraft:chest_minecart",
+                "UUID", new int[]{0, 0, 0, 31}, "Items", List.of(coin));
+        assertEquals(Map.of("00000000-0000-0000-0000-00000000001f:inventory:26",
+                BigInteger.valueOf(100)),
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(minecart))));
+    }
 }
