@@ -35,7 +35,7 @@ public final class GrantLedger {
         requireRealAncestors(this.directory);
         if (!Files.isDirectory(this.directory, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Issuance journal root is not a real directory: " + this.directory);
-        try (var listing = Files.list(directory)) {
+        try (var listing = Files.list(this.directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
                 if (!file.getFileName().toString().equals(grant.sequence() + ".grant") ||
@@ -50,7 +50,7 @@ public final class GrantLedger {
                 throw new IOException("Missing or duplicate issuance journal record");
         }
         long last = grants.isEmpty() ? 0 : grants.lastKey();
-        Path head = directory.resolve("head");
+        Path head = this.directory.resolve("head");
         if (Files.exists(head)) {
             byte[] bytes = DurableFile.read(head, 8);
             if (bytes.length != 8) throw new IOException("Invalid journal head");
