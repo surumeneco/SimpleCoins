@@ -23,11 +23,9 @@ public final class PackArchivePublication {
         if (temporary == null || archive == null || move == null ||
                 !Files.isRegularFile(temporary, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Generated Java pack candidate is missing or not a regular file");
-        try {
-            move.apply(temporary, archive, StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
-            move.apply(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
-        }
+        // An unsupported atomic move is a checked failure, not permission to
+        // expose a partially replaced archive to concurrent HTTP readers.
+        move.apply(temporary, archive, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
     }
 }
