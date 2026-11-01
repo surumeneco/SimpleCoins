@@ -18,3 +18,6 @@ A SimpleCoins wallet is a vanilla Minecraft bundle (including dyed variants), no
 - WBI-01: `example:fake_bundle` carrying valid SimpleCoins wallet tags is rejected.
 - WBI-02: `minecraft:blue_bundle` carrying canonical wallet tags retains its balance.
 - CAT machine gates remain not-run; use a test-first Red and feature-branch Green.
+
+### Known vanilla bundle material set (additional Draft case)
+Only the undyed bundle and Minecraft's 16 named dye-color bundles are valid wallet base items. A fictitious `minecraft:fake_bundle` must fail closed even though it has the expected suffix. The existing valid blue-bundle regression remains Green. This is an item-identity check, not a substitute for unique wallet-ID reconciliation across physical slots.
