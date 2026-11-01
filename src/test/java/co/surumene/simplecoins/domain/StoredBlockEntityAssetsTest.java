@@ -234,4 +234,15 @@ class StoredBlockEntityAssetsTest {
         assertEquals(Map.of("0,64,0:5", BigInteger.valueOf(100)),
                 StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(shelf))));
     }
+
+    @Test void explicitlyNullItemsCannotMasqueradeAsEmptyChest() {
+        Map<String,Object> chest = new java.util.HashMap<>();
+        chest.put("id", "minecraft:chest");
+        chest.put("x", 0);
+        chest.put("y", 64);
+        chest.put("z", 0);
+        chest.put("Items", null);
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(chest))));
+    }
 }
