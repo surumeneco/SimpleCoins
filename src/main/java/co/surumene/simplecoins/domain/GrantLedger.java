@@ -157,6 +157,10 @@ public final class GrantLedger {
             failed = true;
             throw new IllegalStateException("Issuance journal root missing or replaced");
         }
+        if (!Files.isRegularFile(directory.resolve("head"), LinkOption.NOFOLLOW_LINKS)) {
+            failed = true;
+            throw new IllegalStateException("Issuance journal durable head missing or replaced");
+        }
     }
     private void persist(Grant grant) throws IOException {
         try { DurableFile.write(directory.resolve(grant.sequence() + ".grant"), encode(grant)); }
