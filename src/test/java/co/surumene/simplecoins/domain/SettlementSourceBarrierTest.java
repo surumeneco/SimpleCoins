@@ -32,8 +32,14 @@ class SettlementSourceBarrierTest {
         gate.completeSource("playerdata");
         gate.openAfterDurableReadback(store, expected);
         assertDoesNotThrow(gate::requireJoinReady);
+        var admissions = new java.util.concurrent.atomic.AtomicInteger();
+        gate.withJoinPermit(admissions::incrementAndGet);
+        assertEquals(1, admissions.get());
         gate.sourceMutated("region");
         assertThrows(IllegalStateException.class, gate::requireJoinReady);
+        assertThrows(IllegalStateException.class,
+                () -> gate.withJoinPermit(admissions::incrementAndGet));
+        assertEquals(1, admissions.get());
     }
 
     @Test void duplicateOrUnknownSourcesFailClosed() {
