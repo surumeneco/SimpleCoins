@@ -90,4 +90,27 @@ class BlockLockerSavedSignCandidatesTest {
         assertThrows(IOException.class, () ->
                 BlockLockerSavedSignCandidates.extract(incompleteChunk));
     }
+    @Test void duplicatePhysicalSignPositionFailsEvenIfOneHasNoSavedPdc() {
+        Map<String,Object> protectedSign = sign("minecraft:sign", 1, privatePdc());
+        Map<String,Object> textOnly = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates.extract(
+                Map.of("block_entities", List.of(protectedSign, textOnly))));
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates.extract(
+                Map.of("block_entities", List.of(textOnly, protectedSign))));
+    }
+
+    @Test void duplicateTextOnlySignsFailWithoutInventingOwnership() {
+        Map<String,Object> first = Map.of(
+                "id", "minecraft:sign", "x", 1, "y", 64, "z", 2);
+        Map<String,Object> duplicate = Map.of(
+                "id", "minecraft:hanging_sign", "x", 1, "y", 64, "z", 2);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates.extract(
+                Map.of("block_entities", List.of(first, duplicate))));
+        Map<String,Object> distinct = Map.of(
+                "id", "minecraft:sign", "x", 2, "y", 64, "z", 2);
+        assertTrue(BlockLockerSavedSignCandidates.extract(
+                Map.of("block_entities", List.of(first, distinct))).isEmpty());
+    }
+
 }
