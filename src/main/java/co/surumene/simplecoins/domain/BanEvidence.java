@@ -3,6 +3,7 @@ package co.surumene.simplecoins.domain;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -26,7 +27,8 @@ public final class BanEvidence {
             if (source == null || source.id() == null || source.id().isBlank() ||
                     source.status() == null)
                 throw new IOException("Malformed BAN source evidence");
-            if (!seen.add(source.id()))
+            String sourceKey = source.id().trim().toLowerCase(Locale.ROOT);
+            if (!seen.add(sourceKey))
                 throw new IOException("Duplicate BAN source evidence: " + source.id());
             banned |= source.status() == Status.BANNED;
             unknown |= source.status() == Status.UNKNOWN;
