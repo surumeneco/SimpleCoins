@@ -27,6 +27,7 @@ language: ja
 | grant.ack.target-valid | 承認対象の永続レコードが有界・checksummed readerで検証され、メモリ上の予約と全不変フィールドが一致し、保存済みreceiptも対応するとき | 対象予約を承認可能とする | SC-JOURNAL-ACK-03 |
 | grant.ack.health | 承認対象のdurable recordが欠損・破損・不一致と判明したとき | ledgerをunhealthyに固定し、再読込・復旧前の後続操作を許可しない | SC-JOURNAL-ACK-01, SC-JOURNAL-ACK-02 |
 | grant.ack.scope | live ledgerに承認対象より新しい予約があるとき | tailだけの健全性確認を古い承認対象レコードの証明として使わず、対象sequence自身を読み戻す | SC-JOURNAL-ACK-01, SC-JOURNAL-ACK-03 |
+| grant.ack.idempotent-durable | 既にdeliveredの非tail予約へ再度acknowledgeし、対象の永続レコードが後から欠損・破損したとき | メモリ上のdeliveredだけで成功扱いせず、対象durableを再検証して不正ならunhealthyへ遷移し、上書き修復しない | SC-JOURNAL-ACK-07 |
 
 ## 境界と状態
 
