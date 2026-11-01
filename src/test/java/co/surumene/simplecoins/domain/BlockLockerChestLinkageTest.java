@@ -66,4 +66,33 @@ class BlockLockerChestLinkageTest {
                 BlockLockerChestLinkage.Half.RIGHT, BlockLockerChestLinkage.Kind.CHEST);
         assertThrows(IOException.class, () -> BlockLockerChestLinkage.linked(left, right));
     }
+    @Test void wallAndStandingSignsCanAttachToEitherVerifiedChestHalf() throws Exception {
+        var left = chest(15, 64, 0, BlockLockerChestLinkage.Facing.NORTH,
+                BlockLockerChestLinkage.Half.LEFT, BlockLockerChestLinkage.Kind.CHEST);
+        var right = chest(16, 64, 0, BlockLockerChestLinkage.Facing.NORTH,
+                BlockLockerChestLinkage.Half.RIGHT, BlockLockerChestLinkage.Kind.CHEST);
+        assertTrue(BlockLockerChestLinkage.signAttachedToPair(
+                new BlockLockerSignAttachment.Position(15, 64, -1),
+                BlockLockerSignAttachment.Mount.WALL_NORTH, left, right));
+        assertTrue(BlockLockerChestLinkage.signAttachedToPair(
+                new BlockLockerSignAttachment.Position(16, 64, -1),
+                BlockLockerSignAttachment.Mount.WALL_NORTH, left, right));
+        assertTrue(BlockLockerChestLinkage.signAttachedToPair(
+                new BlockLockerSignAttachment.Position(16, 65, 0),
+                BlockLockerSignAttachment.Mount.STANDING, left, right));
+        assertFalse(BlockLockerChestLinkage.signAttachedToPair(
+                new BlockLockerSignAttachment.Position(17, 64, -1),
+                BlockLockerSignAttachment.Mount.WALL_NORTH, left, right));
+    }
+
+    @Test void invalidChestPairCannotBeUsedAsSignOwnershipEvidence() {
+        var left = chest(15, 64, 0, BlockLockerChestLinkage.Facing.NORTH,
+                BlockLockerChestLinkage.Half.LEFT, BlockLockerChestLinkage.Kind.CHEST);
+        var invalid = chest(16, 64, 0, BlockLockerChestLinkage.Facing.SOUTH,
+                BlockLockerChestLinkage.Half.RIGHT, BlockLockerChestLinkage.Kind.CHEST);
+        assertThrows(IOException.class, () -> BlockLockerChestLinkage.signAttachedToPair(
+                new BlockLockerSignAttachment.Position(16, 64, -1),
+                BlockLockerSignAttachment.Mount.WALL_NORTH, left, invalid));
+    }
+
 }
