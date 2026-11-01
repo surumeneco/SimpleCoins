@@ -22,3 +22,7 @@ Formal CAT machine Gates and Paper/live-world integration are not-run.
 - SETTLEMENT-GEN-05: a caller-supplied durable persistence operation receives only a fully committed candidate generation; readers do not observe it until persistence returns successfully. An IOException leaves the prior generation intact.
 - SETTLEMENT-GEN-06: stale expected generations and null persistence reject before the callback; a subsequent fresh, independently staged generation can be persisted and published exactly once.
 - This callback boundary does not itself implement disk serialization, fsync, restart replay, multi-process locking or source freeze. Only a verified durable writer can supply the durability guarantee; in-memory `publish` remains explicitly non-durable.
+
+## Ambiguous durable-writer failure (Draft vector)
+
+- SETTLEMENT-GEN-07: a persistence callback may commit to disk and then throw before returning. After any callback IOException/runtime failure, the publisher must enter an uncertain/poisoned state and reject all subsequent publications, including in-memory publication, until authoritative restart recovery reconciles the durable generation. A validation failure or incomplete accumulator before the callback does not poison the publisher.
