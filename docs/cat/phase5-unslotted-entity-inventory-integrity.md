@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.unslotted-entity-inventory-integrity
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved Entity unslotted inventory identity (CAT Draft)
 
 Status: **Draft** (not Confirmed). Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| saved Entity Inventory | villager/allayのunslotted保存資産と非対象Entity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| unslotted.unsupported | chest minecartやitem EntityがInventoryを持つとき | 別の物理資産源とみなさずIOExceptionで拒否する | SC-ENTITY-UNSLOTTED-01, SC-ENTITY-UNSLOTTED-02 |
+| unslotted.supported | villager/allayのInventoryを読むとき | それぞれの既存物理slot数に従って計上する | SC-ENTITY-UNSLOTTED-03, SC-ENTITY-UNSLOTTED-04 |
+| unslotted.slotted | chest minecartのItemsを読むとき | 独立したslotted契約の既存計上を維持する | SC-ENTITY-UNSLOTTED-05 |
 
 ## Process / PI
 
