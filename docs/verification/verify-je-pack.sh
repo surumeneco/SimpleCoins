@@ -37,5 +37,13 @@ if ! unzip -tq "$tmp/hosted.zip" >/dev/null; then
   printf 'Hosted bytes are not a valid ZIP archive.\n' >&2
   exit 1
 fi
+# A generated archive can change after cmp but before digest evidence.
+# Re-read both byte streams and reject divergent hashes (not an atomic snapshot).
+generated_hash=$(sha1sum < "$archive")
+hosted_hash=$(sha1sum < "$tmp/hosted.zip")
+if [[ "$generated_hash" != "$hosted_hash" ]]; then
+  printf 'Generated archive changed during verification.\n' >&2
+  exit 1
+fi
 printf 'Verified identical bytes and ZIP integrity. SHA-1 evidence:\n'
-sha1sum -- "$archive" "$tmp/hosted.zip"
+printf '%s  generated\n%s  hosted\n' "${generated_hash%% *}" "${hosted_hash%% *}"
