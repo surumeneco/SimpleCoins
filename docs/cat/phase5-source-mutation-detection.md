@@ -15,4 +15,9 @@ This is a **best-effort mutation detector**, not a stable-snapshot protocol. An 
 - SC-SOURCE-STABILITY-03 (Regression): an unchanged region and unchanged playerdata file traverse successfully with correct counts.
 - SC-SOURCE-STABILITY-04: replacement or disappearance of a source must fail closed rather than being silently counted as empty.
 
+- SC-SOURCE-STABILITY-05 (Red): a referenced external `.mcc` sidecar changed during the decoded chunk callback must cause the Anvil reader to throw IOException.
+- SC-SOURCE-STABILITY-06 (Regression): a valid unchanged external sidecar is still readable.
+
+External sidecars are physical payloads referenced by the region header. They must receive the same best-effort no-follow metadata check. This does not detect all same-size/same-timestamp races or establish a consistent Paper snapshot.
+
 Formal CAT machine Gates: **not-run**. This is a new Draft and is not Confirmed.
