@@ -18,6 +18,8 @@ jobs:
           gradle-version: "9.2.1"
       - name: Compile, test, and package
         run: gradle --no-daemon clean build
+      - name: Verify Java pack helper over local HTTP
+        run: python3 docs/verification/test-verify-je-pack.py
       - name: Check plugin descriptor in artifact
         run: |
           unzip -p build/libs/SimpleCoins-1.0.0.jar plugin.yml | grep 'version:'
