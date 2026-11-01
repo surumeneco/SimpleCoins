@@ -77,6 +77,11 @@ public final class StoredBlockEntityAssets {
                         n.longValue() < 0 || n.longValue() > 255)
                     throw new IOException("Invalid block entity slot at " + pos);
                 int slot = n.intValue();
+                // Each chest half has 27 physical slots, even when linked.
+                // An out-of-range slot is not an independent asset location.
+                if ((id.equals("minecraft:chest") || id.equals("minecraft:trapped_chest")) &&
+                        slot > 26)
+                    throw new IOException("Invalid chest inventory slot: " + slot);
                 if (!slots.add(slot))
                     throw new IOException("Duplicate block entity slot: " + pos + ":" + slot);
                 if (stack.keySet().stream().anyMatch(k -> !(k instanceof String)))
