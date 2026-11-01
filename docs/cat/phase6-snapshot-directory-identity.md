@@ -13,6 +13,7 @@ At construction, record a stable file-system directory identity from `BasicFileA
 - SC-SNAPSHOT-ROOT-ID-01 (Red): after moving the original directory and creating a new empty directory at the same pathname, `load()` must throw `IOException`, not return `Optional.empty()`.
 - SC-SNAPSHOT-ROOT-ID-02 (Red): `persist(generation=1)` on the old store instance must reject the substituted directory without writing a snapshot or initialization marker.
 - SC-SNAPSHOT-ROOT-ID-03 (Regression): a fresh instance bound to a genuine empty directory returns no generation; a normal committed generation survives restart using a newly constructed store on the same physical directory.
+- SC-SNAPSHOT-ROOT-ID-04 (Red): a root substitution during the deterministic pre-write hook aborts before writing the generation payload into the substitute directory.
 
 ## Gate and deployment
 
