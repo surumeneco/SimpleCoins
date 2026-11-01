@@ -21,5 +21,6 @@ This store does not itself provide a distributed lock, authoritative source clos
 - SETTLEMENT-STORE-07: concurrent writers using the same store contract cannot both commit the same generation.
 - SETTLEMENT-STORE-08: an occupied local writer lock rejects promptly rather than waiting indefinitely.
 - SETTLEMENT-STORE-09: after durable publication or verified restart recovery, memory-only publication is forbidden; new generations must pass the durable writer.
+- SETTLEMENT-STORE-10: after first successful publication, a durable initialization marker prevents a deleted snapshot from being misread as a fresh generation-zero store. A crash before the marker is written remains recoverable from the already committed snapshot.
 
 Formal CAT machine Gates, real-world source consistency, and Paper fault-injection integration: **not-run**. Do not promote this Draft to Confirmed without an authorized decision.
