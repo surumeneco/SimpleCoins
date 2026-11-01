@@ -118,7 +118,8 @@ public final class StoredItemValue {
                 }
                 for (String childKey : List.of("minecraft:bundle_contents", "minecraft:container")) {
                     Object children = components.get(childKey);
-                    if (children != null && (!(children instanceof List<?> list) || !list.isEmpty()))
+                    if (components.containsKey(childKey) &&
+                            (!(children instanceof List<?> list) || !list.isEmpty()))
                         throw new IOException("Wallet contains unexpected nested items: " + childKey);
                 }
                 return BigInteger.valueOf(balance);
