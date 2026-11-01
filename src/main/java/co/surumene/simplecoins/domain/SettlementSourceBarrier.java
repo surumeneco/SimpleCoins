@@ -51,6 +51,25 @@ public final class SettlementSourceBarrier {
         }
     }
 
+    @FunctionalInterface public interface SourceReader { void read() throws IOException; }
+
+    /** A source is complete only after its entire read succeeds. */
+    public synchronized void readAndCompleteSource(String source, SourceReader reader)
+            throws IOException {
+        requireStaging();
+        if (!requiredSources.contains(source) || completedSources.contains(source)) {
+            state = State.FAILED;
+            throw new IllegalStateException("Unknown or duplicate source read");
+        }
+        try {
+            Objects.requireNonNull(reader, "reader").read();
+            completeSource(source);
+        } catch (IOException | RuntimeException | Error failure) {
+            state = State.FAILED;
+            throw failure;
+        }
+    }
+
     public synchronized void failSource(String source) {
         requireStaging();
         if (!requiredSources.contains(source)) {
