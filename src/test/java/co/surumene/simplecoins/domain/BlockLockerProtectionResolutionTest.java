@@ -100,7 +100,8 @@ class BlockLockerProtectionResolutionTest {
                                 java.util.Map.of("simplecoins:denomination", 100))));
         var chest = java.util.Map.of("id", "minecraft:chest",
                 "x", 0, "y", 64, "z", 0, "Items", java.util.List.of(coin));
-        var chunk = java.util.Map.of("block_entities", java.util.List.of(chest));
+        java.util.Map<String, Object> chunk = java.util.Map.of(
+                "block_entities", java.util.List.of(chest));
         var verifiedFree = BlockLockerProtectionResolution.single(CHEST,
                 List.of(primary(ExternalOwnerDecision.personal(OWNER)), everyone(1, 0)));
         var accumulator = new SettlementAccumulator(
