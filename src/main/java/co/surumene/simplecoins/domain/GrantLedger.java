@@ -168,6 +168,8 @@ public final class GrantLedger {
                     createdMillis, delivered, denomination, coinCount);
             if (in.available() != 0) throw new IOException("Trailing journal data");
             return result;
-        } catch (IllegalArgumentException ex) { throw new IOException("Invalid journal", ex); }
+        } catch (IllegalArgumentException | ArithmeticException ex) {
+            throw new IOException("Invalid journal", ex);
+        }
     }
 }
