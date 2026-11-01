@@ -92,6 +92,68 @@ class SettlementScanRunnerTest {
         return file;
     }
 
+    private Path equippedEntityRegion(UUID entityId) throws IOException {
+        Path file = directory.resolve("entities/r.0.0.mca");
+        Files.createDirectories(file.getParent());
+        var nbt = new ByteArrayOutputStream();
+        try (var out = new DataOutputStream(nbt)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(9); out.writeUTF("Entities"); out.writeByte(10); out.writeInt(1);
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:wolf");
+            out.writeByte(11); out.writeUTF("UUID"); out.writeInt(4);
+            out.writeInt((int)(entityId.getMostSignificantBits() >>> 32));
+            out.writeInt((int)entityId.getMostSignificantBits());
+            out.writeInt((int)(entityId.getLeastSignificantBits() >>> 32));
+            out.writeInt((int)entityId.getLeastSignificantBits());
+            out.writeByte(10); out.writeUTF("equipment");
+            out.writeByte(10); out.writeUTF("mainhand");
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
+            out.writeByte(3); out.writeUTF("count"); out.writeInt(1);
+            out.writeByte(10); out.writeUTF("components");
+            out.writeByte(10); out.writeUTF("minecraft:custom_data");
+            out.writeByte(10); out.writeUTF("PublicBukkitValues");
+            out.writeByte(3); out.writeUTF("simplecoins:denomination"); out.writeInt(100);
+            out.writeByte(0); // PublicBukkitValues
+            out.writeByte(0); // custom_data
+            out.writeByte(0); // components
+            out.writeByte(0); // mainhand
+            out.writeByte(0); // equipment
+            out.writeByte(0); // Entity
+            out.writeByte(0); // root
+        }
+        var compressed = new ByteArrayOutputStream();
+        try (var deflate = new DeflaterOutputStream(compressed)) {
+            deflate.write(nbt.toByteArray());
+        }
+        byte[] payload = compressed.toByteArray();
+        byte[] region = new byte[3 * 4096];
+        ByteBuffer.wrap(region).putInt(0, (2 << 8) | 1);
+        ByteBuffer.wrap(region).putInt(8192, payload.length + 1);
+        region[8196] = 2;
+        System.arraycopy(payload, 0, region, 8197, payload.length);
+        Files.write(file, region);
+        return file;
+    }
+
+    @Test void ownedEntityEquipmentRequiresExplicitResolvedOwnership() throws Exception {
+        UUID entityId = UUID.randomUUID(), owner = UUID.randomUUID();
+        Path file = equippedEntityRegion(entityId);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", file, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        assertThrows(IOException.class, () -> SettlementScanRunner.stage(manifest,
+                scope, Set.of(), (world, position) -> null,
+                (world, chunk) -> Map.of(), 4096, 4096));
+        var staged = SettlementScanRunner.stage(manifest, scope, Set.of(),
+                (world, position) -> null,
+                (world, chunk) -> Map.of(entityId.toString(),
+                        new ResolvedEntitySettlementImport.Ownership(owner, false, true)),
+                4096, 4096);
+        assertEquals(BigInteger.valueOf(100),
+                staged.pending().commit().personalBalances().get(owner));
+    }
+
     @Test void stagesAllManifestSourcesWithoutAutomaticallyCommitting() throws Exception {
         UUID player = UUID.randomUUID();
         Path region = emptyRegion(), data = playerData(player);
