@@ -265,4 +265,16 @@ class StoredItemValueTest {
         assertEquals(BigInteger.valueOf(250), StoredItemValue.value(
                 Map.of("id", "minecraft:bundle", "count", 1, "components", components)));
     }
+
+    @Test void positiveCountAirCannotRepresentAStoredPhysicalItem() {
+        Map<String,Object> emptyAir = Map.of("id", "minecraft:air", "count", 1);
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> airWithHiddenCoin = Map.of(
+                "id", "minecraft:air", "count", 1,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 0, "item", coin))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(emptyAir));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(airWithHiddenCoin));
+    }
 }
