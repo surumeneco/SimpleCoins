@@ -98,4 +98,18 @@ class SavedPlayerAssetsTest {
                 "EnderItems", List.of(coin(27, 100, 1)));
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(data));
     }
+
+    @Test void savedInventoryRejectsSlotsOutsideVanillaPhysicalDomain() throws Exception {
+        Map<String,Object> valid = Map.of(
+                "Inventory", List.of(coin(35, 100, 1), coin(100, 100, 1), coin(-106, 100, 1)),
+                "EnderItems", List.of());
+        assertEquals(3, SavedPlayerAssets.extract(valid).size());
+        for (int invalidSlot : new int[]{-1, 36, 99, 104}) {
+            Map<String,Object> invalid = Map.of(
+                    "Inventory", List.of(coin(invalidSlot, 100, 1)),
+                    "EnderItems", List.of());
+            assertThrows(IOException.class, () -> SavedPlayerAssets.extract(invalid),
+                    "Invalid physical player inventory slot: " + invalidSlot);
+        }
+    }
 }
