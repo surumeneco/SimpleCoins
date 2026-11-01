@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.managed-resource-ancestor-integrity
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: managed Geyser pack root ancestry (CAT Draft)
 
 Status: **Draft**, not Confirmed. Leaf TASK-20261101-006.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | Geyser管理root/出力のancestor integrity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| managed.ancestor | 管理rootより上のancestorがsymlinkのとき | 対象外へpack/mapping/manifestを書かず拒否する | GEYSER-MANAGED-ANCESTOR-01 |
+| managed.normal | 通常のreal nested rootを使うとき | 管理対象のみinstall/update/removeする | GEYSER-MANAGED-ANCESTOR-02 |
+| managed.output | 管理outputや直近parentがsymlinkのとき | 拒否して無関係ファイルを変更しない | GEYSER-MANAGED-ANCESTOR-03 |
 
 ## Process / PI
 
