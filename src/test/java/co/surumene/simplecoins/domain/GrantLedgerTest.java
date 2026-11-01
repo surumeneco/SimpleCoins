@@ -129,6 +129,40 @@ class GrantLedgerTest {
         assertThrows(java.io.IOException.class, () -> new GrantLedger(path));
     }
 
+    @Test void fatalFailureAfterRecordWritePoisonsLedgerUntilRestart() throws Exception {
+        Path path = directory.resolve("fatal-head-gap");
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(path);
+        assertThrows(AssertionError.class, () -> ledger.reserveWithAfterRecordHook(
+                player, 100, "console", () -> {
+                    throw new AssertionError("simulated fatal failure after durable grant record");
+                }));
+        assertThrows(IllegalStateException.class, () -> ledger.reserve(player, 50, "console"));
+
+        var restarted = new GrantLedger(path);
+        var recovered = restarted.pending(player);
+        assertEquals(1, recovered.size());
+        assertEquals(1L, recovered.getFirst().sequence());
+        assertEquals(100L, recovered.getFirst().amount());
+        assertEquals(2L, restarted.reserve(player, 50, "console").sequence());
+    }
+
+    @Test void fatalFailureAfterAcknowledgementWritePoisonsLedgerUntilRestart() throws Exception {
+        Path path = directory.resolve("fatal-ack-gap");
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(path);
+        var grant = ledger.reserve(player, 100, "console");
+        assertThrows(AssertionError.class, () -> ledger.acknowledgeWithAfterRecordHook(
+                grant, grant.sequence(), () -> {
+                    throw new AssertionError("simulated fatal failure after acknowledgement record");
+                }));
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player));
+
+        var restarted = new GrantLedger(path);
+        assertTrue(restarted.pending(player).isEmpty());
+        assertDoesNotThrow(() -> restarted.acknowledge(grant, grant.sequence()));
+    }
+
     @Test void reservationWrittenBeforeHeadUpdateIsRecovered() throws Exception {
         Path path = directory.resolve("grants");
         var ledger = new GrantLedger(path);
@@ -138,6 +172,14 @@ class GrantLedgerTest {
         java.nio.file.Files.write(path.resolve("head"), initialHead);
         assertEquals(grant, new GrantLedger(path).pending(player).getFirst());
     }
+    @Test void symlinkedJournalRootOrAncestorIsRejected() throws Exception {
+        Path real = java.nio.file.Files.createDirectories(directory.resolve("real-journal"));
+        Path alias = directory.resolve("journal-alias");
+        java.nio.file.Files.createSymbolicLink(alias, real.toAbsolutePath());
+        assertThrows(java.io.IOException.class, () -> new GrantLedger(alias));
+        assertThrows(java.io.IOException.class, () -> new GrantLedger(alias.resolve("nested")));
+    }
+
     @Test void symlinkedJournalRecordsAreRejectedRatherThanTrusted() throws Exception {
         Path journal = directory.resolve("links");
         var ledger = new GrantLedger(journal);

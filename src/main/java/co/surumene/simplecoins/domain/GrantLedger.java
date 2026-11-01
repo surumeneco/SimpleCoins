@@ -28,9 +28,15 @@ public final class GrantLedger {
     private boolean failed;
 
     public GrantLedger(Path directory) throws IOException {
-        this.directory = directory;
-        Files.createDirectories(directory);
-        try (var listing = Files.list(directory)) {
+        if (directory == null) throw new IOException("Missing issuance journal directory");
+        Path root = directory.toAbsolutePath().normalize();
+        rejectSymbolicAncestors(root);
+        Files.createDirectories(root);
+        rejectSymbolicAncestors(root);
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Issuance journal root is not a real directory");
+        this.directory = root;
+        try (var listing = Files.list(root)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
                 if (!file.getFileName().toString().equals(grant.sequence() + ".grant") ||
@@ -45,7 +51,7 @@ public final class GrantLedger {
                 throw new IOException("Missing or duplicate issuance journal record");
         }
         long last = grants.isEmpty() ? 0 : grants.lastKey();
-        Path head = directory.resolve("head");
+        Path head = root.resolve("head");
         if (Files.exists(head)) {
             byte[] bytes = DurableFile.read(head, 8);
             if (bytes.length != 8) throw new IOException("Invalid journal head");
@@ -59,6 +65,12 @@ public final class GrantLedger {
             writeHead(0);
         }
     }
+    private static void rejectSymbolicAncestors(Path path) throws IOException {
+        for (Path current = path; current != null; current = current.getParent())
+            if (Files.isSymbolicLink(current))
+                throw new IOException("Issuance journal path contains a symbolic link: " + current);
+    }
+
     private void writeHead(long sequence) throws IOException {
         DurableFile.write(directory.resolve("head"), java.nio.ByteBuffer.allocate(8).putLong(sequence).array());
     }
@@ -75,15 +87,40 @@ public final class GrantLedger {
                 issuer, denomination, count);
     }
 
+    @FunctionalInterface
+    interface AfterRecordPersist {
+        void run() throws IOException;
+    }
+
+    /** Deterministic post-record fault injection; production always uses no-op. */
+    synchronized Grant reserveWithAfterRecordHook(UUID player, long amount, String issuer,
+                                                  AfterRecordPersist hook) throws IOException {
+        return reserveTyped(player, amount, issuer, null, 0, hook);
+    }
+
     private Grant reserveTyped(UUID player, long amount, String issuer,
                                CoinDenomination denomination, long coinCount) throws IOException {
+        return reserveTyped(player, amount, issuer, denomination, coinCount, () -> {});
+    }
+
+    private Grant reserveTyped(UUID player, long amount, String issuer,
+                               CoinDenomination denomination, long coinCount,
+                               AfterRecordPersist hook) throws IOException {
         checkHealthy();
+        Objects.requireNonNull(hook, "hook");
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
-        persist(grant);
-        try { writeHead(next); }
-        catch (IOException failure) { failed = true; throw failure; }
+        try {
+            persist(grant);
+            hook.run();
+            writeHead(next);
+        } catch (IOException | RuntimeException | Error failure) {
+            // The grant record may already be durable. Never reuse its sequence
+            // until a fresh ledger instance reconciles the record and head.
+            failed = true;
+            throw failure;
+        }
         grants.put(next, grant);
         return grant;
     }
@@ -112,13 +149,28 @@ public final class GrantLedger {
         }
     }
     public synchronized void acknowledge(Grant grant, long savedReceipt) throws IOException {
+        acknowledgeWithAfterRecordHook(grant, savedReceipt, () -> {});
+    }
+
+    /** Deterministic post-acknowledgement fault injection. */
+    synchronized void acknowledgeWithAfterRecordHook(
+            Grant grant, long savedReceipt, AfterRecordPersist hook) throws IOException {
         checkHealthy();
+        Objects.requireNonNull(hook, "hook");
         Grant current = grants.get(grant.sequence());
         if (current == null || !current.id().equals(grant.id()) || !wasApplied(current, savedReceipt))
             throw new IllegalStateException("Cannot acknowledge an unapplied grant");
         if (current.delivered()) return;
         Grant complete = current.completed();
-        persist(complete);
+        try {
+            persist(complete);
+            hook.run();
+        } catch (IOException | RuntimeException | Error failure) {
+            // The acknowledgement may already be durable. Require restart
+            // replay before further issuance or receipt processing.
+            failed = true;
+            throw failure;
+        }
         grants.put(complete.sequence(), complete);
     }
     private void checkHealthy() {

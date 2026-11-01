@@ -4,7 +4,6 @@ import co.surumene.simplecoins.domain.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.zip.GZIPInputStream;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
@@ -51,7 +50,10 @@ public final class OfflineGrants implements Listener {
     @EventHandler(priority=EventPriority.MONITOR) public void close(InventoryCloseEvent event){
         if(event.getPlayer() instanceof Player player)schedule(player);
     }
-    private long get(Player player,NamespacedKey key){return player.getPersistentDataContainer().getOrDefault(key,PersistentDataType.LONG,0L);}
+    private long get(Player player, NamespacedKey key) throws IOException {
+        var pdc = player.getPersistentDataContainer();
+        return GrantReceiptValue.read(pdc.has(key), pdc.get(key, PersistentDataType.LONG));
+    }
     private void set(Player player,NamespacedKey key,long value){player.getPersistentDataContainer().set(key,PersistentDataType.LONG,value);}
 
     private void deliver(Player player) {
@@ -112,19 +114,11 @@ public final class OfflineGrants implements Listener {
         } catch(Exception failure) {fail(failure);}
     }
     private void verifySavedReceipt(Player player) throws IOException {
-        Set<Path> candidates=new HashSet<>();
-        for(World world:Bukkit.getWorlds()) {
-            Path root=world.getWorldFolder().toPath();
-            for(String directory:List.of("players/data","playerdata")) {
-                Path candidate=root.resolve(directory).resolve(player.getUniqueId()+".dat");
-                if(Files.isRegularFile(candidate))candidates.add(candidate.toRealPath());
-            }
-        }
-        if(candidates.size()!=1)throw new IOException("Cannot identify unique saved playerdata: "+player.getUniqueId());
-        Map<String,Object> root;
-        try(var input=new GZIPInputStream(Files.newInputStream(candidates.iterator().next()))) {
-            root=NbtReader.read(input,32*1024*1024);
-        }
+        List<Path> worldRoots = Bukkit.getWorlds().stream()
+                .map(world -> world.getWorldFolder().toPath()).toList();
+        Path receipt = SavedPlayerReceiptLocator.findUnique(worldRoots, player.getUniqueId());
+        Map<String,Object> root = PlayerDataReader.read(
+                receipt, 32 * 1024 * 1024, 32 * 1024 * 1024);
         if(!(root.get("BukkitValues") instanceof Map<?,?> pdc))throw new IOException("Missing saved receipt PDC");
         for(NamespacedKey key:List.of(completedKey,activeKey,paidKey)) {
             Object saved=pdc.get(key.toString());
