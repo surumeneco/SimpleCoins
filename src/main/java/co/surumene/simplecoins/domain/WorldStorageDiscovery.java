@@ -113,6 +113,11 @@ public final class WorldStorageDiscovery {
                     charge(dir);
                     if (attrs.isSymbolicLink())
                         throw new IOException("World storage links are not valid snapshot roots: " + dir);
+                    // A source-shaped directory is not an empty saved file.
+                    // Reject it before a partial manifest can omit its assets.
+                    if (!dir.equals(root) && isAuthoritativeSourcePath(
+                            dir, root, scope.includes(worldName)))
+                        throw new IOException("Non-regular authoritative storage source: " + dir);
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -121,7 +126,11 @@ public final class WorldStorageDiscovery {
                     charge(file);
                     if (attrs.isSymbolicLink())
                         throw new IOException("Symbolic storage file cannot be safely resolved: " + file);
-                    if (!attrs.isRegularFile()) return FileVisitResult.CONTINUE;
+                    if (!attrs.isRegularFile()) {
+                        if (isAuthoritativeSourcePath(file, root, scope.includes(worldName)))
+                            throw new IOException("Non-regular authoritative storage source: " + file);
+                        return FileVisitResult.CONTINUE;
+                    }
 
                     String filename = file.getFileName().toString();
                     String parent = file.getParent().getFileName().toString();
@@ -170,6 +179,23 @@ public final class WorldStorageDiscovery {
                 .thenComparing(a -> a.path().toString())
                 .thenComparing(SourceFile::kind));
         return new Manifest(worldFiles, players);
+    }
+
+    /**
+     * Classify paths before checking file type: an invalid filesystem object
+     * at a mandatory saved-source location must not disappear from the manifest.
+     * Playerdata remains world-independent even for excluded worlds.
+     */
+    private static boolean isAuthoritativeSourcePath(Path path, Path root,
+                                                      boolean includedWorld) {
+        String filename = path.getFileName().toString();
+        if (filename.endsWith(".dat") && isPlayerData(path, root)) return true;
+        if (!includedWorld || !filename.endsWith(".mca")) return false;
+        Path parent = path.getParent();
+        if (parent == null || parent.getFileName() == null) return false;
+        String storage = parent.getFileName().toString();
+        return ("region".equals(storage) || "entities".equals(storage)) &&
+                isExpectedWorldStorage(path, root);
     }
 
     /**
