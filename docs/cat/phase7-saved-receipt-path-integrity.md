@@ -14,3 +14,5 @@ After Paper saves inventory and the issuance receipt, the server must verify one
 - SC-RECEIPT-PATH-04: null recipient or invalid/non-regular candidate fails closed; the existing receipt parser still checks UUID and all three PDC values after the path is resolved.
 
 This is a filesystem selection boundary, not proof of an atomic world snapshot or full server crash recovery. Formal CAT machine Gates and Paper live integration are not-run.
+
+- SC-RECEIPT-PATH-05: after locating the unique real path, receipt verification uses the existing bounded PlayerDataReader with separate compressed/inflated byte budgets and canonical UUID filename validation. A malformed, truncated, oversized or aliased saved receipt cannot be accepted as a zero receipt.
