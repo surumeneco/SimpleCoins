@@ -91,6 +91,23 @@ class WorldSnapshotSourceMutationTest {
                 }));
     }
 
+    @Test void replacedPlayerdataDuringCallbackMustAbortTraversal() throws Exception {
+        Path region = region();
+        UUID uuid = UUID.randomUUID();
+        Path player = player(uuid);
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest(region, uuid, player), 4096, 4096,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {}
+                    @Override public void player(UUID playerId, Map<String, Object> data)
+                            throws IOException {
+                        Files.delete(player);
+                        Files.write(player, new byte[]{1, 2, 3});
+                    }
+                }));
+    }
+
     @Test void unchangedSourcesStillYieldCompleteReport() throws Exception {
         Path region = region();
         UUID uuid = UUID.randomUUID();
