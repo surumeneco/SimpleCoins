@@ -176,5 +176,13 @@ class WorldStorageDiscoveryTest {
         var duplicate = new WorldStorageDiscovery.Manifest(
                 List.of(source), Map.of(player, region));
         assertThrows(IOException.class, duplicate::requiredSourceIds);
+
+        var pending = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), manifest.requiredSourceIds());
+        pending.completeSource(region.toAbsolutePath().normalize().toString());
+        assertThrows(IllegalStateException.class, pending::commit,
+                "Playerdata must not be omitted from the required-source closure");
+        pending.completeSource(playerdata.toAbsolutePath().normalize().toString());
+        assertEquals(java.math.BigInteger.ZERO, pending.commit().statistics().worldTotal());
     }
 }
