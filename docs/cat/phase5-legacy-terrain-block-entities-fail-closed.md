@@ -28,9 +28,9 @@ language: ja
 ## 適用境界と未決定事項
 
 - terrain `Kind.REGION` chunkのroot `TileEntities` と `Level.TileEntities` を対象とする。非空または非List値は、visitor呼出し前に`IOException`として拒否する。空Listは通過する。既存modern `block_entities` adapterには影響させない。
-- SC-LEGACY-BLOCK-01/02: root / Levelの非空Listは拒否し、visitor呼出しは0件。
+- SC-LEGACY-BLOCK-01 and SC-LEGACY-BLOCK-02: root / Levelの非空Listは拒否し、visitor呼出しは0件。
 - SC-LEGACY-BLOCK-03: root / Levelの非List値は拒否し、visitor呼出しは0件。
-- SC-LEGACY-BLOCK-04/05: 空Listは通過し、modern `block_entities` は従来のadapterで処理する。
+- SC-LEGACY-BLOCK-04 and SC-LEGACY-BLOCK-05: 空Listは通過し、modern `block_entities` は従来のadapterで処理する。
 - SC-LEGACY-BLOCK-06（Draftテスト準備）: `Level`タグ自体が存在してcompoundでない場合は`入力.level_tile_entities = malformed`と分類し、root側が空または欠損でもvisitorを呼ばずに拒否する。`Level`タグ欠損と非compound値を同一視しない。
 - rootとLevelの双方が不正な場合の優先順位は規範未確定。ここでは「どちらかが不正なら拒否」という安全要件のみ記述し、詳細なerror文字列をoracleにしない。
 - これは不完全な旧形式を黙ってゼロ計上しない防御境界であり、legacy block-entity decoder、Paper live/disk整合、完全なsource inventory、settlement公開を実装・保証しない。
