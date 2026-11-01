@@ -17,6 +17,7 @@ Status: **Draft, not Confirmed**. Sources: `forGPT/XPlayServer/OriginalPlugins/S
 | BSI-02 | chest with currency in slot 26 | accepted once |
 | BSI-03 | hopper with currency in slot 5 | IOException |
 | BSI-04 | hopper with currency in slot 4 | accepted once |
+| BSI-05 | known inventory block with explicit `Items: null` | IOException (malformed, not empty) |
 
 ## Verification boundary
 
