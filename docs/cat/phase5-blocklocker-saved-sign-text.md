@@ -29,3 +29,11 @@ The terrain adapter must expose display-text evidence from **every** sign with a
 ## Raw NBT integration (verification vector)
 
 - BL-TEXT-09: a serialized named-root NBT terrain chunk with a text-only modern sign is decoded through `NbtReader` and `extractTextCandidates`. Preserve all four raw messages and return no saved-PDC owner hint. This tests the real NBT tag shape, not just hand-built Java maps.
+
+## Joined saved-sign evidence (additional Draft vectors)
+
+An intermediate caller should be able to obtain PDC hints and raw display-text evidence in one coordinate-keyed, read-only record. Include a sign when either stream has evidence, including legacy text-only signs. A missing stream remains `Optional.empty`; it is not an inferred owner or free-asset classification. Malformed present evidence in either stream aborts the combined read.
+
+- BL-TEXT-10 Red: PDC-only, text-only and combined signs retain their respective evidence without silently dropping text-only signs.
+- BL-TEXT-11: a malformed present text/PDC stream rejects the combined read rather than publishing the other stream alone.
+- BL-TEXT-12: a sign with neither recognized evidence is omitted from the joined candidate map, not classified as unprotected.
