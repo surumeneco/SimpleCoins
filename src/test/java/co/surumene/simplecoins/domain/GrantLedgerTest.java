@@ -129,6 +129,24 @@ class GrantLedgerTest {
         assertThrows(java.io.IOException.class, () -> new GrantLedger(path));
     }
 
+    @Test void fatalFailureAfterRecordWritePoisonsLedgerUntilRestart() throws Exception {
+        Path path = directory.resolve("fatal-head-gap");
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(path);
+        assertThrows(AssertionError.class, () -> ledger.reserveWithAfterRecordHook(
+                player, 100, "console", () -> {
+                    throw new AssertionError("simulated fatal failure after durable grant record");
+                }));
+        assertThrows(IllegalStateException.class, () -> ledger.reserve(player, 50, "console"));
+
+        var restarted = new GrantLedger(path);
+        var recovered = restarted.pending(player);
+        assertEquals(1, recovered.size());
+        assertEquals(1L, recovered.getFirst().sequence());
+        assertEquals(100L, recovered.getFirst().amount());
+        assertEquals(2L, restarted.reserve(player, 50, "console").sequence());
+    }
+
     @Test void reservationWrittenBeforeHeadUpdateIsRecovered() throws Exception {
         Path path = directory.resolve("grants");
         var ledger = new GrantLedger(path);
