@@ -191,6 +191,20 @@ class SettlementSnapshotStoreTest {
                 new SettlementGenerationPublisher.Published(1, forged)));
         assertTrue(store.load().isEmpty());
     }
+    @Test void committedSnapshotWithoutInitializationMarkerIsNotTrusted() throws Exception {
+        Path root = directory.resolve("missing-marker");
+        var store = new SettlementSnapshotStore(root);
+        var first = new SettlementGenerationPublisher.Published(
+                1, staged(100, 0, 0, true).commit());
+        store.persist(first);
+        Files.delete(root.resolve("settlement.initialized"));
+        assertThrows(IOException.class, store::load,
+                "a committed snapshot requires its initialization marker");
+        assertThrows(IOException.class, () -> store.persist(
+                new SettlementGenerationPublisher.Published(
+                        2, staged(200, 0, 0, true).commit())));
+    }
+
     @Test void failedFirstSnapshotReplacementNeverResetsInitialization() throws Exception {
         Path root = directory.resolve("first-write");
         var store = new SettlementSnapshotStore(root);
