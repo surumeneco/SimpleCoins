@@ -125,4 +125,16 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(ambiguous),
                 "The same physical nested currency must not be counted through two storage representations");
     }
+
+    @Test void stackedPopulatedVanillaContainersCannotMultiplyHiddenCurrency() {
+        Map<String,Object> coin = item("minecraft:paper", 1,
+                Map.of("simplecoins:denomination", 100));
+        Map<String,Object> bundle = Map.of("id", "minecraft:bundle", "count", 2,
+                "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin)));
+        Map<String,Object> shulker = Map.of("id", "minecraft:red_shulker_box", "count", 2,
+                "components", Map.of("minecraft:container", java.util.List.of(
+                        Map.of("slot", 0, "item", coin))));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(bundle));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(shulker));
+    }
 }
