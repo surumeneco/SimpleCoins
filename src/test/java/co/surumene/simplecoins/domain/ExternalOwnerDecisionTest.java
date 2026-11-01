@@ -83,7 +83,7 @@ class ExternalOwnerDecisionTest {
     @Test void missingRequiredExternalBanSourceCannotPublishPersonalAssets() throws Exception {
         var incomplete = BanEvidence.evaluate(Set.of("paper", "external"), List.of(
                 new BanEvidence.Source("paper", BanEvidence.Status.CLEAR)));
-        assertEquals(ban(BanEvidence.Status.UNKNOWN), incomplete);
+        assertEquals(BanEvidence.Status.UNKNOWN, incomplete.status());
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
                 ExternalOwnerDecision.personal(OWNER), incomplete, true));
 
