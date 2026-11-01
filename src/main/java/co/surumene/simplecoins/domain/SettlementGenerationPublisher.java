@@ -67,7 +67,7 @@ public final class SettlementGenerationPublisher {
         Published candidate = new Published(next, pending.commit());
         try {
             writer.persist(candidate);
-        } catch (IOException | RuntimeException uncertain) {
+        } catch (IOException | RuntimeException | Error uncertain) {
             // The writer may have committed before throwing. Refuse further
             // publication until restart recovery reconciles the durable head.
             durableUncertain = true;
