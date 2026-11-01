@@ -6,6 +6,11 @@ on:
       - feature/asset-scan-source-types-20261101-queue-b
     paths:
       - 'docs/cat/phase5-legacy-terrain-block-entities-*.md'
+      - 'docs/cat/phase5-authoritative-source-coverage.md'
+      - 'docs/cat/phase5-source-set-closure.md'
+      - 'docs/cat/phase5-legacy-terrain-entities-fail-closed.md'
+      - 'docs/cat/phase5-authoritative-source-file-types.md'
+      - 'docs/cat/phase5-late-source-mutation-revalidation.md'
       - '.github/workflows/cat-phase5-draft.yml'
   workflow_dispatch:
 
@@ -31,6 +36,14 @@ jobs:
             docs/cat/phase5-legacy-terrain-block-entities-process.md \
             docs/cat/phase5-legacy-terrain-block-entities-pi.md \
             docs/cat/phase5-legacy-terrain-block-entities-fail-closed.md
+      - name: Validate saved-source Draft coverage and referenced IDs
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-source-set-closure.md \
+            docs/cat/phase5-authoritative-source-coverage.md \
+            docs/cat/phase5-legacy-terrain-entities-fail-closed.md \
+            docs/cat/phase5-authoritative-source-file-types.md \
+            docs/cat/phase5-late-source-mutation-revalidation.md
       - name: Probe Draft model without normative promotion
         id: model_probe
         run: |
