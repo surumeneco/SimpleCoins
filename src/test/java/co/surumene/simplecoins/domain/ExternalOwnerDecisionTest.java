@@ -14,23 +14,28 @@ class ExternalOwnerDecisionTest {
     private static final UUID OWNER =
             UUID.fromString("00000000-0000-0000-0000-00000000002a");
 
+    private static BanEvidence.Decision ban(BanEvidence.Status status) throws IOException {
+        return BanEvidence.evaluate(Set.of("paper"),
+                List.of(new BanEvidence.Source("paper", status)));
+    }
+
     @Test void unavailableExternalOwnerCannotBecomeFreeOrPersonal() {
         var unknown = ExternalOwnerDecision.unknown();
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toBlock(
-                unknown, BanEvidence.Status.CLEAR, true));
+                unknown, ban(BanEvidence.Status.CLEAR), true));
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
-                unknown, BanEvidence.Status.CLEAR, true));
+                unknown, ban(BanEvidence.Status.CLEAR), true));
     }
 
     @Test void verifiedFreeAndPersonalDecisionsConvertWithoutInventingOwner() throws Exception {
         var free = ExternalOwnerDecision.toBlock(ExternalOwnerDecision.free(),
-                BanEvidence.Status.UNKNOWN, false);
+                ban(BanEvidence.Status.UNKNOWN), false);
         assertNull(free.owner());
         assertFalse(free.currentlyBanned());
         assertFalse(free.hasPlayerdata());
 
         var personal = ExternalOwnerDecision.toEntity(
-                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.BANNED, true);
+                ExternalOwnerDecision.personal(OWNER), ban(BanEvidence.Status.BANNED), true);
         assertEquals(OWNER, personal.owner());
         assertTrue(personal.currentlyBanned());
         assertTrue(personal.hasPlayerdata());
@@ -38,7 +43,7 @@ class ExternalOwnerDecisionTest {
 
     @Test void unknownBanStatusCannotBeCoercedToClearForPersonalOwner() {
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toBlock(
-                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.UNKNOWN, true));
+                ExternalOwnerDecision.personal(OWNER), ban(BanEvidence.Status.UNKNOWN), true));
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
                 ExternalOwnerDecision.personal(OWNER), null, true));
     }
@@ -63,26 +68,26 @@ class ExternalOwnerDecisionTest {
         assertThrows(IOException.class, () -> BlockEntitySettlementImport.stageChunk(
                 unknownSettlement, "region:file", "world", chunk,
                 position -> ExternalOwnerDecision.toBlock(ExternalOwnerDecision.unknown(),
-                        BanEvidence.Status.UNKNOWN, false)));
+                        ban(BanEvidence.Status.UNKNOWN), false)));
         assertThrows(IllegalStateException.class, unknownSettlement::commit);
 
         var freeSettlement = new SettlementAccumulator(
                 new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
         BlockEntitySettlementImport.stageChunk(freeSettlement, "region:file", "world", chunk,
                 position -> ExternalOwnerDecision.toBlock(ExternalOwnerDecision.free(),
-                        BanEvidence.Status.UNKNOWN, false));
+                        ban(BanEvidence.Status.UNKNOWN), false));
         freeSettlement.completeSource("region:file");
         assertEquals(BigInteger.valueOf(100), freeSettlement.commit().free());
     }
 
     @Test void missingRequiredExternalBanSourceCannotPublishPersonalAssets() throws Exception {
-        var incomplete = BanEvidence.combine(Set.of("paper", "external"), List.of(
+        var incomplete = BanEvidence.evaluate(Set.of("paper", "external"), List.of(
                 new BanEvidence.Source("paper", BanEvidence.Status.CLEAR)));
-        assertEquals(BanEvidence.Status.UNKNOWN, incomplete);
+        assertEquals(ban(BanEvidence.Status.UNKNOWN), incomplete);
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
                 ExternalOwnerDecision.personal(OWNER), incomplete, true));
 
-        var complete = BanEvidence.combine(Set.of("paper", "external"), List.of(
+        var complete = BanEvidence.evaluate(Set.of("paper", "external"), List.of(
                 new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
                 new BanEvidence.Source("external", BanEvidence.Status.CLEAR)));
         var resolved = ExternalOwnerDecision.toEntity(
@@ -93,9 +98,9 @@ class ExternalOwnerDecisionTest {
 
     @Test void bareClearStatusCannotBypassRequiredBanSources() {
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toBlock(
-                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.CLEAR, true));
+                ExternalOwnerDecision.personal(OWNER), ban(BanEvidence.Status.CLEAR), true));
         assertThrows(IOException.class, () -> ExternalOwnerDecision.toEntity(
-                ExternalOwnerDecision.personal(OWNER), BanEvidence.Status.BANNED, true));
+                ExternalOwnerDecision.personal(OWNER), ban(BanEvidence.Status.BANNED), true));
     }
 
 
