@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 class PaperWonderfulChickenOwnerAdapterTest {
     private static final UUID COMMANDER =
-            UUID.fromString("00000000-0000-0000-0000-000000000047");
+            UUID.fromString("00000000-0000-0000-0000-0000000000af");
 
     @Test void canonicalLoadedWwcFollowTargetSuppliesPositiveCommanderEvidence() throws Exception {
         var commander = PaperWonderfulChickenOwnerAdapter.read(
