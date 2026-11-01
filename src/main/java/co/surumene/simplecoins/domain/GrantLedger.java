@@ -59,7 +59,7 @@ public final class GrantLedger {
         }
         long last = grants.isEmpty() ? 0 : grants.lastKey();
         Path head = this.directory.resolve("head");
-        if (Files.exists(head)) {
+        if (Files.exists(head, LinkOption.NOFOLLOW_LINKS)) {
             byte[] bytes = DurableFile.read(head, 8);
             if (bytes.length != 8) throw new IOException("Invalid journal head");
             long expectedLast = java.nio.ByteBuffer.wrap(bytes).getLong();
