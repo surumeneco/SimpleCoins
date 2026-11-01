@@ -42,6 +42,21 @@ The current `plugin.yml` exposes `/simplecoins` (alias `/sc`) with `simplecoins.
 
 Record each case as pass/fail/not-run with the tested commit, Paper version, journal/receipt evidence and observed inventory totals. The command-source inspection is **not** a Paper execution result. The missing read-only admin query, real Paper failure injection, and JE/BE client acceptance remain open.
 
+## 管理照会の受入マトリクス（CAT Draft・未実行）
+
+現行の`CoinCommand`には照会コマンドがないため、以下は実機試験済みの結果ではなく、`docs/cat/phase7-admin-asset-query.md`の既存ベクトルをPaperで検証するための条件である。コマンド名・ページング・未確定時の表示形式は規範未決定のまま維持する。
+
+| Vector | 隔離Paperでの入力・操作 | 必須の観測結果 |
+| --- | --- | --- |
+| ADMIN-QUERY-01 | 管理権限のない送信者と権限付与済み送信者が同じ照会を試す | 無権限側に金額・UUID・死蔵所在を開示しない。権限付与後だけ照会を許可 |
+| ADMIN-QUERY-02 | 有効UUIDの保有額、未知UUID、snapshot未完了の各状態を照会 | 検証済みA[u]と集計時点を区別。未知・未集計を確定0と表示しない |
+| ADMIN-QUERY-03 | 隔離データでP=100、F=20、D=30を準備して総額を照会 | 通常総額T=120とD=30を別項表示し、150を通常総額にしない |
+| ADMIN-QUERY-04 | BAN中UUIDの保護チェストとworld非依存の死蔵保管先を作る | 金額・所有者UUID・理由・保管種別・実座標または論理所在を正しく返す |
+| ADMIN-QUERY-05 | 必須BAN sourceまたは保存sourceの読取を失敗させ、所在索引を未確定にする | 空一覧や0額を正常完了として公開せず、未確定状態を識別可能にする |
+| ADMIN-QUERY-06 | worldを統計OFFにし、world非依存playerdata/エンダーチェストへ貨幣を配置 | world固有資産は除外し、world非依存資産は照会対象に維持する |
+
+各行の結果は`not-run / pass / fail / blocked`とし、検証時のcommit、権限設定、snapshot世代、BAN/owner根拠、WorldScope、コマンド出力を対応付ける。未実装の段階でpassにしない。
+
 ## Negative cases and release gate
 
 - Blank public URL: no JE pack request; operator warning remains visible.
