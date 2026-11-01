@@ -44,4 +44,33 @@ class BlockLockerSavedSignCandidatesTest {
         assertThrows(IOException.class, () -> BlockLockerSavedSignCandidates.extract(
                 Map.of("block_entities", List.of(duplicate, duplicate))));
     }
+
+    @Test void readsNestedBlockLockerProfileFromRealNbtBytes() throws Exception {
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var out = new java.io.DataOutputStream(bytes)) {
+            out.writeByte(10); out.writeUTF(""); // root compound
+            out.writeByte(9); out.writeUTF("block_entities");
+            out.writeByte(10); out.writeInt(1); // one compound in list
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:sign");
+            out.writeByte(3); out.writeUTF("x"); out.writeInt(1);
+            out.writeByte(3); out.writeUTF("y"); out.writeInt(64);
+            out.writeByte(3); out.writeUTF("z"); out.writeInt(2);
+            out.writeByte(10); out.writeUTF("PublicBukkitValues");
+            out.writeByte(8); out.writeUTF("blocklocker:header"); out.writeUTF("PRIVATE");
+            out.writeByte(10); out.writeUTF("blocklocker:profile_1");
+            out.writeByte(8); out.writeUTF("blocklocker:n"); out.writeUTF("Alice");
+            out.writeByte(12); out.writeUTF("blocklocker:u");
+            out.writeInt(2);
+            out.writeLong(OWNER.getMostSignificantBits());
+            out.writeLong(OWNER.getLeastSignificantBits());
+            out.writeByte(0); // profile compound
+            out.writeByte(0); // PublicBukkitValues compound
+            out.writeByte(0); // block entity compound
+            out.writeByte(0); // root compound
+        }
+        var parsed = NbtReader.read(
+                new java.io.ByteArrayInputStream(bytes.toByteArray()), 8192);
+        var hints = BlockLockerSavedSignCandidates.extract(parsed);
+        assertEquals(OWNER, hints.get("1,64,2").firstProfileUuid().orElseThrow());
+    }
 }
