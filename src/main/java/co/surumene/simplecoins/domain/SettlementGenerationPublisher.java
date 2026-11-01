@@ -18,6 +18,7 @@ public final class SettlementGenerationPublisher {
 
     private Published current;
     private boolean durableUncertain;
+    private boolean durableMode;
 
     public synchronized Optional<Published> current() {
         return Optional.ofNullable(current);
@@ -26,6 +27,8 @@ public final class SettlementGenerationPublisher {
     public synchronized Published publish(long expectedGeneration,
                                           SettlementAccumulator pending) {
         checkDurableKnown();
+        if (durableMode)
+            throw new IllegalStateException("Durable settlement generation requires persistent publication");
         if (expectedGeneration < 0)
             throw new IllegalArgumentException("Negative expected settlement generation");
         Objects.requireNonNull(pending, "pending");
@@ -71,6 +74,7 @@ public final class SettlementGenerationPublisher {
             throw uncertain;
         }
         current = candidate;
+        durableMode = true;
         return candidate;
     }
 
@@ -80,6 +84,7 @@ public final class SettlementGenerationPublisher {
         Objects.requireNonNull(store, "store");
         var publisher = new SettlementGenerationPublisher();
         publisher.current = store.load().orElse(null);
+        publisher.durableMode = true;
         return publisher;
     }
 
