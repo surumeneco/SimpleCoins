@@ -25,3 +25,7 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 ## Canonical BAN source identity (additional Draft vector)
 
 - BAN-EVIDENCE-03: source IDs differing only by ASCII case or surrounding whitespace are one logical source, not two independent confirmations. Duplicate normalized IDs must fail closed.
+
+## Explicit required-source completeness (additional Draft vector)
+
+- BAN-EVIDENCE-04 Red: callers must pass the authoritative required-source ID set separately from observations. A missing required source yields UNKNOWN (or BANNED if another required source definitively bans), never CLEAR. Unknown/unexpected source IDs fail closed. An empty required-source declaration is invalid. The list-only convenience form must not remain the production decision API because it cannot prove source completeness.
