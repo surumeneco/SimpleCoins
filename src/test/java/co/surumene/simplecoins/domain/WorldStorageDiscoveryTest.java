@@ -195,4 +195,17 @@ class WorldStorageDiscoveryTest {
         assertEquals("world", new WorldStorageDiscovery.SourceFile(
                 "world", region, WorldStorageDiscovery.Kind.REGION).world());
     }
+    @Test void crossCategoryHardlinkCannotBeTwoAuthoritativeSources() throws Exception {
+        Path world = directory.resolve("cross-kind-world");
+        Path region = world.resolve("region/r.0.0.mca");
+        Path playerdata = world.resolve("playerdata/" +
+                UUID.fromString("00000000-0000-0000-0000-000000000045") + ".dat");
+        Files.createDirectories(region.getParent());
+        Files.createDirectories(playerdata.getParent());
+        Files.writeString(region, "shared physical source");
+        Files.createLink(playerdata, region);
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", world), new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
 }
