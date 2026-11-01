@@ -29,6 +29,15 @@ class BlockLockerVisibleSignResolverTest {
                 lines, hints, PRIVATE, MORE, EVERYONE, identity).orElseThrow();
     }
 
+    private static BlockLockerProtectionResolution.VerifiedSign moreUsers(
+            List<String> lines, Optional<BlockLockerSavedHints.Hints> hints) throws IOException {
+        return BlockLockerVisibleSignResolver.verify(
+                new BlockLockerSignAttachment.Position(1, 64, 0),
+                BlockLockerSignAttachment.Mount.WALL_EAST,
+                lines, hints, PRIVATE, MORE, EVERYONE,
+                name -> { throw new AssertionError("MORE_USERS has no primary"); }).orElseThrow();
+    }
+
     @Test void verifiedPrivateIdentityAndMatchingSavedHintResolvePersonal() throws Exception {
         var hint = new BlockLockerSavedHints.Hints("PRIVATE", Optional.of(OWNER), false);
         var sign = verify(List.of("[Private]", "Alice", "", ""),
@@ -65,13 +74,11 @@ class BlockLockerVisibleSignResolverTest {
         var primary = verify(List.of("[Private]", "Alice", "", ""),
                 Optional.empty(), name -> ExternalOwnerDecision.personal(OWNER));
         var marker = new BlockLockerSavedHints.Hints("MORE_USERS", Optional.empty(), true);
-        var ignored = verify(List.of("[More Users]", "Bob", "", ""),
-                Optional.of(marker), name -> { throw new AssertionError("MORE_USERS has no primary"); });
+        var ignored = moreUsers(List.of("[More Users]", "Bob", "", ""), Optional.of(marker));
         assertFalse(ignored.everyone());
         assertEquals(OWNER, BlockLockerProtectionResolution.single(
                 CHEST, List.of(primary, ignored)).owner());
-        var publicSign = verify(List.of("[More Users]", "[Everyone]", "", ""),
-                Optional.of(marker), name -> { throw new AssertionError("MORE_USERS has no primary"); });
+        var publicSign = moreUsers(List.of("[More Users]", "[Everyone]", "", ""), Optional.of(marker));
         assertTrue(publicSign.everyone());
         assertEquals(ExternalOwnerDecision.Kind.FREE,
                 BlockLockerProtectionResolution.single(CHEST, List.of(primary, publicSign)).kind());
