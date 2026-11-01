@@ -163,6 +163,10 @@ public final class GrantLedger {
                 throw new IOException("Issuance journal physical root changed");
             if (!Files.isRegularFile(directory.resolve("head"), LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Issuance journal durable head missing or replaced");
+            byte[] head = DurableFile.read(directory.resolve("head"), 8);
+            long expectedLast = grants.isEmpty() ? 0 : grants.lastKey();
+            if (head.length != 8 || java.nio.ByteBuffer.wrap(head).getLong() != expectedLast)
+                throw new IOException("Issuance journal durable head differs from live state");
         } catch (IOException unsafe) {
             failed = true;
             throw new IllegalStateException("Issuance journal root became unsafe", unsafe);
