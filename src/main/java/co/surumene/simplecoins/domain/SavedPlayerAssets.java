@@ -56,7 +56,8 @@ public final class SavedPlayerAssets {
             if ("mainhand".equals(slot) && root.containsKey("SelectedItemSlot")) {
                 Object rawSelected = root.get("SelectedItemSlot");
                 if (!(rawSelected instanceof Number selected) ||
-                        selected instanceof Float || selected instanceof Double ||
+                        !(selected instanceof Byte || selected instanceof Short ||
+                          selected instanceof Integer || selected instanceof Long) ||
                         selected.longValue() < 0 || selected.longValue() > 8)
                     throw new IOException("Invalid selected hotbar slot in playerdata");
                 if (visitedSlots.contains("inventory:" + selected.intValue()))
@@ -86,9 +87,18 @@ public final class SavedPlayerAssets {
                 throw new IOException("Malformed playerdata item in " + key);
             Object rawSlot = item.get("Slot");
             if (!(rawSlot instanceof Number slot) ||
-                    slot instanceof Float || slot instanceof Double ||
+                    !(slot instanceof Byte || slot instanceof Short ||
+                      slot instanceof Integer || slot instanceof Long) ||
                     slot.longValue() < -128 || slot.longValue() > 255)
                 throw new IOException("Missing or invalid playerdata physical slot in " + key);
+            // The vanilla saved Inventory list has 0..35, legacy armor 100..103
+            // and offhand -106. Other numbers are not physical player slots.
+            long slotNumber = slot.longValue();
+            if ("inventory".equals(prefix) &&
+                    !((slotNumber >= 0 && slotNumber <= 35) ||
+                      (slotNumber >= 100 && slotNumber <= 103) ||
+                      slotNumber == -106))
+                throw new IOException("Invalid saved player inventory slot: " + slotNumber);
 
             // Ender chests have exactly 27 slots (0..26). Unlike the
             // player inventory, negative legacy equipment slots are invalid.
