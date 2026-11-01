@@ -199,4 +199,17 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalidSlot));
         assertEquals(BigInteger.valueOf(100), StoredItemValue.value(valid));
     }
+
+    @Test void explicitlyNullComponentsCannotBeSilentlyCountedAsZero() {
+        Map<String,Object> invalid = new java.util.HashMap<>();
+        invalid.put("id", "minecraft:paper");
+        invalid.put("count", 1);
+        invalid.put("components", null);
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
+    }
+
+    @Test void omittedComponentsRemainValidForOrdinaryUntaggedItem() throws Exception {
+        assertEquals(BigInteger.ZERO, StoredItemValue.value(
+                Map.of("id", "minecraft:stone", "count", 1)));
+    }
 }
