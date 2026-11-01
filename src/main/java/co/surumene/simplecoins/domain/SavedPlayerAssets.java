@@ -44,7 +44,7 @@ public final class SavedPlayerAssets {
                 "head", 103, "chest", 102, "legs", 101, "feet", 100,
                 "offhand", -106);
         Set<String> permitted = Set.of("head", "chest", "legs", "feet",
-                "offhand", "mainhand", "body", "saddle");
+                "offhand", "mainhand");
         for (var entry : equipment.entrySet()) {
             if (!(entry.getKey() instanceof String slot) || !permitted.contains(slot))
                 throw new IOException("Unknown saved equipment slot: " + entry.getKey());
