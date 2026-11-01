@@ -34,26 +34,26 @@ public final class ExternalOwnerDecision {
     }
 
     public static BlockEntitySettlementImport.Ownership toBlock(
-            Evidence evidence, BanEvidence.Status ban, boolean hasPlayerdata)
+            Evidence evidence, BanEvidence.Decision ban, boolean hasPlayerdata)
             throws IOException {
         requireKnown(evidence, ban, hasPlayerdata);
         if (evidence.kind() == Kind.FREE)
             return new BlockEntitySettlementImport.Ownership(null, false, false, false);
         return new BlockEntitySettlementImport.Ownership(evidence.owner(), false,
-                ban == BanEvidence.Status.BANNED, hasPlayerdata);
+                ban.status() == BanEvidence.Status.BANNED, hasPlayerdata);
     }
 
     public static ResolvedEntitySettlementImport.Ownership toEntity(
-            Evidence evidence, BanEvidence.Status ban, boolean hasPlayerdata)
+            Evidence evidence, BanEvidence.Decision ban, boolean hasPlayerdata)
             throws IOException {
         requireKnown(evidence, ban, hasPlayerdata);
         if (evidence.kind() == Kind.FREE)
             return new ResolvedEntitySettlementImport.Ownership(null, false, false);
         return new ResolvedEntitySettlementImport.Ownership(evidence.owner(),
-                ban == BanEvidence.Status.BANNED, hasPlayerdata);
+                ban.status() == BanEvidence.Status.BANNED, hasPlayerdata);
     }
 
-    private static void requireKnown(Evidence evidence, BanEvidence.Status ban,
+    private static void requireKnown(Evidence evidence, BanEvidence.Decision ban,
                                      boolean hasPlayerdata) throws IOException {
         if (evidence == null || evidence.kind() == Kind.UNKNOWN)
             throw new IOException("External ownership is unresolved");
@@ -62,7 +62,7 @@ public final class ExternalOwnerDecision {
                 throw new IOException("Ownerless asset cannot carry playerdata evidence");
             return;
         }
-        if (ban == null || ban == BanEvidence.Status.UNKNOWN)
+        if (ban == null || ban.status() == BanEvidence.Status.UNKNOWN)
             throw new IOException("Current BAN status is unresolved for personal owner");
     }
 }
