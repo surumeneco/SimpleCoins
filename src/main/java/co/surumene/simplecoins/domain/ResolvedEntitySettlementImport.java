@@ -31,6 +31,10 @@ public final class ResolvedEntitySettlementImport {
             if (world == null || world.isBlank())
                 throw new IOException("A physical world identity is required");
             Objects.requireNonNull(ownershipByUuid);
+            // Equipment and inventory adapters each deduplicate only their own
+            // holders. Validate all saved Entity identities across both before
+            // staging either view, or a copied UUID can count two inventories.
+            SavedEntityUuidIntegrity.validate(chunk);
             Map<String, BigInteger> equipment = StoredEntityEquipmentAssets.extract(chunk);
             Map<String, BigInteger> inventory = StoredEntityInventoryAssets.extract(chunk);
             List<SettlementAccumulator.Asset> pending = new ArrayList<>();
