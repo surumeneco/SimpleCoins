@@ -327,4 +327,26 @@ class WorldSnapshotTraversalTest {
         };
     }
 
+    @Test void legacyAndModernEndEntityLayoutsCannotDuplicateOneSavedChunk() throws Exception {
+        Path legacy = region("DIM1/entities", 10);
+        Path modern = region("dimensions/minecraft/the_end/entities", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", legacy, WorldStorageDiscovery.Kind.ENTITY),
+                new WorldStorageDiscovery.SourceFile("world", modern, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()));
+    }
+
+    @Test void differentCustomNamespacesDoNotAliasOneLogicalDimension() throws Exception {
+        Path first = region("dimensions/alpha/sky/region", 10);
+        Path second = region("dimensions/beta/sky/region", 20);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", first, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", second, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertEquals(2, WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, noOpVisitor()).chunks());
+    }
+
 }
