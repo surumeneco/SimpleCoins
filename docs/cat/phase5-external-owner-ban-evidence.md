@@ -61,3 +61,5 @@ This aggregation layer consumes caller-verified header, text/PDC reconciliation 
 - PAPER-BAN-03: a verified Paper CLEAR with a missing required external or IP BAN source still produces UNKNOWN at the combined settlement boundary. This adapter must not claim to detect IP bans or external plugins.
 
 The adapter may call Paper APIs only in an appropriate server execution context. Real-server Paper 26.2 API behavior remains an integration gate.
+
+- BLOCKLOCKER-AGG-05: a real saved coin inventory resolved through an attached Everyone protection stages as FREE; missing primary sign yields UNKNOWN and aborts staging/commit instead of silently counting zero. This checks the existing settlement staging boundary without claiming that raw sign text/PDC has been authoritatively decoded.
