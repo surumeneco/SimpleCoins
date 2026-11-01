@@ -178,4 +178,17 @@ class SettlementSnapshotStoreTest {
         assertEquals(2L, SettlementGenerationPublisher.recoverFrom(store)
                 .current().orElseThrow().generation());
     }
+
+    @Test void nullPlayerIdentityIsACheckedPersistenceFailure() throws Exception {
+        var store = new SettlementSnapshotStore(directory.resolve("snapshots"));
+        var balances = new java.util.HashMap<UUID, BigInteger>();
+        balances.put(null, BigInteger.ONE);
+        balances.put(UUID.randomUUID(), BigInteger.TEN);
+        var forged = new SettlementAccumulator.Result(
+                AssetStatistics.calculate(balances, BigInteger.ZERO, BigInteger.ZERO),
+                balances, BigInteger.ZERO, BigInteger.ZERO, java.util.List.of());
+        assertThrows(IOException.class, () -> store.persist(
+                new SettlementGenerationPublisher.Published(1, forged)));
+        assertTrue(store.load().isEmpty());
+    }
 }
