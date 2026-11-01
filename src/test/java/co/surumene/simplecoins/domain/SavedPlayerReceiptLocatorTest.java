@@ -60,6 +60,27 @@ class SavedPlayerReceiptLocatorTest {
                 List.of(world), PLAYER));
     }
 
+    @Test void malformedPlayerdataDirectoryCannotBeSkippedForAnotherWorld() throws Exception {
+        Path valid = Files.createDirectories(temp.resolve("valid-world"));
+        saved(valid, "playerdata");
+
+        Path directFile = Files.createDirectories(temp.resolve("bad-direct"));
+        Files.write(directFile.resolve("playerdata"), new byte[]{1});
+        assertThrows(IOException.class, () -> SavedPlayerReceiptLocator.findUnique(
+                List.of(directFile, valid), PLAYER));
+
+        Path legacyParentFile = Files.createDirectories(temp.resolve("bad-legacy-parent"));
+        Files.write(legacyParentFile.resolve("players"), new byte[]{1});
+        assertThrows(IOException.class, () -> SavedPlayerReceiptLocator.findUnique(
+                List.of(legacyParentFile, valid), PLAYER));
+
+        Path legacyDataFile = Files.createDirectories(temp.resolve("bad-legacy-data"));
+        Files.createDirectory(legacyDataFile.resolve("players"));
+        Files.write(legacyDataFile.resolve("players/data"), new byte[]{1});
+        assertThrows(IOException.class, () -> SavedPlayerReceiptLocator.findUnique(
+                List.of(legacyDataFile, valid), PLAYER));
+    }
+
     @Test void nonRegularReceiptCandidateFailsClosed() throws Exception {
         Path world = Files.createDirectories(temp.resolve("world"));
         Path folder = Files.createDirectories(world.resolve("playerdata"));
