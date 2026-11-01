@@ -21,6 +21,14 @@ class ResourcePackHashTest {
         assertEquals(20, ResourcePackHash.sha1(archive).length);
     }
 
+    @Test void symlinkedAncestorCannotRedirectGeneratedPackHash() throws Exception {
+        Path real = Files.createDirectory(directory.resolve("real-pack-dir"));
+        Files.write(real.resolve("generated.zip"), new byte[]{1, 2, 3});
+        Path alias = Files.createSymbolicLink(directory.resolve("alias-pack-dir"), real);
+        assertThrows(IOException.class,
+                () -> ResourcePackHash.sha1(alias.resolve("generated.zip")));
+    }
+
     @Test void rejectsAbsentNonregularAndLinkedArchives() throws Exception {
         Path archive = Files.write(directory.resolve("actual.zip"), new byte[]{1, 2, 3});
         assertThrows(IOException.class, () -> ResourcePackHash.sha1(null));
