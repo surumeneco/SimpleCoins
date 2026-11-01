@@ -150,4 +150,15 @@ class StoredItemValueTest {
         assertEquals(BigInteger.valueOf(100), StoredItemValue.value(valid));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
     }
+
+    @Test void savedWalletIdentityMustBeCanonicalUuid() {
+        for (String invalidId : java.util.List.of("not-a-uuid", "1-1-1-1-1",
+                "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")) {
+            Map<String,Object> wallet = item("minecraft:bundle", 1,
+                    Map.of("simplecoins:wallet_id", invalidId,
+                            "simplecoins:wallet_balance", 100L));
+            assertThrows(java.io.IOException.class, () -> StoredItemValue.value(wallet),
+                    "Noncanonical wallet UUID must not become valid currency: " + invalidId);
+        }
+    }
 }
