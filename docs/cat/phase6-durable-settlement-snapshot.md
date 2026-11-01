@@ -8,7 +8,7 @@ A complete `SettlementAccumulator.Result` can be persisted as one versioned, che
 
 Serialize all personal balances, Free/Dead totals, and positive dead-asset locations; recompute statistics on load rather than trusting serialized derived statistics. Verify that the sum of dead locations equals the dead total, reject duplicate UUIDs, negative values, excess sizes, and unknown dead reasons. The result is a durable *completed input set*, not proof that Minecraft's loaded/unloaded world sources were frozen or complete.
 
-This store does not itself provide a distributed lock, authoritative source closure, Paper join barrier, external owner evidence, or a world-consistent snapshot. An IOException after a write may be ambiguous: the in-process publisher stays poisoned until a fresh instance reloads the durable record.
+For the first generation, write and durably confirm the initialization marker before attempting the snapshot replacement. If the snapshot write then fails, the marker-without-snapshot state must fail closed rather than allow a later generation-zero reset. This store does not itself provide a distributed lock, authoritative source closure, Paper join barrier, external owner evidence, or a world-consistent snapshot. An IOException after a write may be ambiguous: the in-process publisher stays poisoned until a fresh instance reloads the durable record.
 
 ## TCE / Test model
 
@@ -21,6 +21,7 @@ This store does not itself provide a distributed lock, authoritative source clos
 - SETTLEMENT-STORE-07: concurrent writers using the same store contract cannot both commit the same generation.
 - SETTLEMENT-STORE-08: an occupied local writer lock rejects promptly rather than waiting indefinitely.
 - SETTLEMENT-STORE-09: after durable publication or verified restart recovery, memory-only publication is forbidden; new generations must pass the durable writer.
-- SETTLEMENT-STORE-10: after first successful publication, a durable initialization marker prevents a deleted snapshot from being misread as a fresh generation-zero store. A crash before the marker is written remains recoverable from the already committed snapshot.
+- SETTLEMENT-STORE-10: a durable initialization marker prevents a deleted snapshot from being misread as a fresh generation-zero store.
+- SETTLEMENT-STORE-11 (Red): initialization marker is durable before the first snapshot write; a failed initial snapshot replacement cannot silently reset to generation zero after the obstructing file is removed.
 
 Formal CAT machine Gates, real-world source consistency, and Paper fault-injection integration: **not-run**. Do not promote this Draft to Confirmed without an authorized decision.
