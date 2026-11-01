@@ -150,8 +150,15 @@ public final class GrantLedger {
             throw new IllegalStateException("Cannot acknowledge an unapplied grant");
         if (current.delivered()) return;
         Grant complete = current.completed();
-        persist(complete);
-        hook.run();
+        try {
+            persist(complete);
+            hook.run();
+        } catch (IOException | RuntimeException | Error failure) {
+            // The acknowledgement may already be durable. Require restart
+            // replay before further issuance or receipt processing.
+            failed = true;
+            throw failure;
+        }
         grants.put(complete.sequence(), complete);
     }
     private void checkHealthy() {
