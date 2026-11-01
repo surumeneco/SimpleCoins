@@ -45,6 +45,10 @@ public final class StoredEntityInventoryAssets {
             Object rawInventory = entity.get(slotted ? "Items" : "Inventory");
             if (!(rawInventory instanceof List<?> inventory))
                 throw new IOException("Malformed Entity inventory list: " + key);
+            // A vanilla villager has eight positional inventory slots.
+            // Extra entries cannot represent additional physical currency.
+            if (unslotted && id.equals("minecraft:villager") && inventory.size() > 8)
+                throw new IOException("Villager inventory exceeds eight physical slots: " + key);
             Set<Integer> occupiedSlots = new HashSet<>();
             int position = 0;
             for (Object rawStack : inventory) {
