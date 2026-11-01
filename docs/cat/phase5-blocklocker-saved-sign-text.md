@@ -1,4 +1,37 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.saved-sign-text
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved sign display-text evidence (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | 保存済み看板の表示テキストとPDC hintの独立証拠 |
+| simplecoins.terrain | terrain chunkのNBT形状・座標一意性 |
+| simplecoins.settlement | 未検証テキストからの所有権確定禁止 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| text.modern | modern front_text/back_textが存在するとき | 四つのraw messagesを解釈せず保存し、back側がない場合はunknownとして保持する | BL-TEXT-01, BL-TEXT-03 |
+| text.legacy | Text1〜Text4だけが存在するとき | BlockLocker PDCがなくても四つのraw stringsを保持し、テキストのみの候補を捨てない | BL-TEXT-02, BL-TEXT-06 |
+| text.malformed | modern/legacy形式が不完全・型不正・同時存在するとき | IOExceptionで拒否し、部分的な表示テキストを所有権証拠として確定しない | BL-TEXT-04 |
+| text.immutable | 保存済みテキストを読み終えたとき | 外部から変更できないread-only snapshotを返す | BL-TEXT-05 |
+| text.candidate | terrain chunkの看板テキスト候補を列挙するとき | PDC hintと同一物理座標で照合でき、重複位置・chunk外座標を拒否する | BL-TEXT-07, BL-TEXT-08 |
+| text.raw-nbt | named-root NBTのmodern text-only看板を読み取るとき | 実NBT tag shapeから四行を保持し、存在しないPDC所有者を推測しない | BL-TEXT-09 |
+| text.joined | PDCのみ・textのみ・双方の証拠を結合するとき | 座標keyのread-only recordに両streamのOptionalを保持し、片方欠損をFREEと扱わない | BL-TEXT-10 |
+| text.joined-malformed | 結合対象の一方に不正な証拠があるとき | 他方が正常でも結合全体を拒否する | BL-TEXT-11 |
+| text.joined-empty | どちらの証拠もない看板を結合するとき | 候補から除外し、無保護という判定を出さない | BL-TEXT-12 |
 
 Status: Draft, not Confirmed. Sources: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md and BlockLocker v1.14.1 SignParserImpl / ProfileFactoryImpl.
 
