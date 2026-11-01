@@ -1,6 +1,33 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.bedrock-output-path-integrity
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: Bedrock pack and mapping output path integrity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-006.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | Bedrock pack/mapping出力先のpath integrity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| bedrock.pack-parent | pack出力のparentがsymlinkのとき | 対象外へarchiveを書かず拒否する | SC-BEDROCK-PATH-01 |
+| bedrock.mapping-parent | mapping出力のparentがsymlinkのとき | packとmappingのいずれも公開せず拒否する | SC-BEDROCK-PATH-02 |
+| bedrock.destination | 出力destinationがsymlinkのとき | リンク先を追跡・上書きしない | SC-BEDROCK-PATH-03 |
+| bedrock.normal | 両出力先が正当な実directoryのとき | atomic replacementで有効なpackとmappingを生成する | SC-BEDROCK-PATH-04 |
 
 ## Process / PI
 
