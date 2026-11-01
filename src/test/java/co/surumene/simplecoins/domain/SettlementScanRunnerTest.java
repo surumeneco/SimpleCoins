@@ -58,13 +58,24 @@ class SettlementScanRunnerTest {
     }
 
     private Path emptyRegion() throws IOException {
+        return region(false);
+    }
+
+    private Path region(boolean withChest) throws IOException {
         Path file = directory.resolve("region/r.0.0.mca");
         Files.createDirectories(file.getParent());
         var nbt = new ByteArrayOutputStream();
         try (var out = new DataOutputStream(nbt)) {
             out.writeByte(10); out.writeUTF("");
             out.writeByte(9); out.writeUTF("block_entities");
-            out.writeByte(10); out.writeInt(0);
+            out.writeByte(10); out.writeInt(withChest ? 1 : 0);
+            if (withChest) {
+                out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:chest");
+                out.writeByte(3); out.writeUTF("x"); out.writeInt(0);
+                out.writeByte(3); out.writeUTF("y"); out.writeInt(64);
+                out.writeByte(3); out.writeUTF("z"); out.writeInt(0);
+                out.writeByte(0); // chest compound
+            }
             out.writeByte(0);
         }
         var compressed = new ByteArrayOutputStream();
@@ -120,5 +131,16 @@ class SettlementScanRunnerTest {
         var banned = SettlementScanRunner.stage(manifest, scope, Set.of(player),
                 (world, position) -> null, (world, chunk) -> Map.of(), 4096, 4096);
         assertEquals(BigInteger.valueOf(200), banned.pending().commit().statistics().dead());
+    }
+
+    @Test void unresolvedBlockOwnershipAbortsTheEntireStagingRun() throws Exception {
+        Path file = region(true);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", file, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        assertThrows(IOException.class, () -> SettlementScanRunner.stage(manifest,
+                new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> { throw new IOException("BlockLocker ownership not resolved"); },
+                (world, chunk) -> Map.of(), 4096, 4096));
     }
 }
