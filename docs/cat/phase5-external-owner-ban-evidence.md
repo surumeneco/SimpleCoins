@@ -141,6 +141,8 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - COMPANION-WWW-02: missing/disabled plugin, unloaded wolf (empty find), invalid reflection contract, malformed Optional or lookup exception yields UNKNOWN, not FREE or an inferred commander absence.
 - COMPANION-WWW-03: the adapter uses the current public WWW API without a mandatory build-time dependency, and is read-only on the Paper server thread. Saved/unloaded WWW identity, WWC/WCL APIs and full settlement integration remain separate acceptance gates.
 
+**検証済みソース境界（WWW `main` `c8d216e32cb6786641fb3eadbf9d3d18716d4250`）**: `WhatAWonderfulWolfPlugin.loadedIndividuals()` はpublic getter、`WonderfulWolfLoadedIndividuals.find(UUID)` はロード済みMapから `Optional<WonderfulWolfIndividual>` を返す。`unregister(Entity)` は該当Mapから削除する。`WonderfulWolfIndividual` は `Optional<UUID> commanderId` / `ownerId` を保持する。従って `find` がemptyの場合は「未ロードまたは未登録」であり、commander不存在の証明ではない。実サーバーに配備されたJARがこのリビジョンと一致するかは未検証。参照: [Plugin](https://github.com/surumeneco/WhatAWonderfulWolf/blob/c8d216e32cb6786641fb3eadbf9d3d18716d4250/src/main/java/co/surumene/www/WhatAWonderfulWolfPlugin.java), [LoadedIndividuals](https://github.com/surumeneco/WhatAWonderfulWolf/blob/c8d216e32cb6786641fb3eadbf9d3d18716d4250/src/main/java/co/surumene/www/persistence/WonderfulWolfLoadedIndividuals.java), [Individual](https://github.com/surumeneco/WhatAWonderfulWolf/blob/c8d216e32cb6786641fb3eadbf9d3d18716d4250/src/main/java/co/surumene/www/individual/WonderfulWolfIndividual.java)。
+
 ## Live Paper BlockLocker sign evidence (Draft vectors)
 
 - BLOCKLOCKER-LIVE-01: a currently loaded Paper Sign exposes a verified physical block position, wall-sign facing or standing-sign support, and the four front-side Adventure text components. These components are converted to plain visible text and passed to the independently verified identity/Everyone resolver.
@@ -152,6 +154,8 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - COMPANION-WWC-01: a loaded chicken carrying the current WhatAWonderfulChicken marker and a canonical UUID in its `follow_target` PDC may supply positive commander/follow-target identity evidence. An absent or malformed follow target is UNKNOWN, never proof of FREE ownership.
 - COMPANION-WWC-02: unavailable/disabled WWC plugin, unsupported data version or unreadable PDC yields UNKNOWN. The adapter does not infer a vanilla tame owner for chickens, enumerate unloaded entities or claim that every WWC chicken has a commander.
 - COMPANION-WWC-03: this is a current-version PDC evidence adapter, not an external plugin's stable API guarantee. A real WWC/Paper integration test and full settlement owner policy remain required.
+
+**検証済みソース境界（WWC `main` `6d4ddb1050bfa6ecafacefd2738b0a4fce03af70`）**: `WonderfulChickenStore` は `type` マーカー値 `wonderful_chicken` と `follow_target` PDC文字列を使用し、読込時にはUUIDとして復元を試みる。これは「現在保存されているfollow先」の正の証拠候補であり、所有者・commanderの確定的な外部API契約ではない。実配備版のPDC互換性と未ロード個体の網羅性は未検証。参照: [WonderfulChickenStore](https://github.com/surumeneco/WhatAWonderfulChicken/blob/6d4ddb1050bfa6ecafacefd2738b0a4fce03af70/src/main/java/co/surumene/whatawonderfulchicken/service/WonderfulChickenStore.java)。
 
 ## Coherent saved-sign candidate assembly (Draft vectors)
 
