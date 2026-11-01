@@ -71,6 +71,10 @@ public final class StoredEntityInventoryAssets {
                         throw new IOException("Unexpected Slot in unslotted Entity inventory: " + key);
                     index = position;
                 }
+                // A chest minecart exposes 27 physical slots (0 through 26).
+                // Reject fabricated saved positions before valuing any currency.
+                if (slotted && id.equals("minecraft:chest_minecart") && index >= 27)
+                    throw new IOException("Chest minecart inventory slot outside physical range: " + key + ":" + index);
                 position++;
                 if (!occupiedSlots.add(index))
                     throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
