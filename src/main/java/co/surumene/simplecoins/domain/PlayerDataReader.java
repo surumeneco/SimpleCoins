@@ -31,7 +31,9 @@ public final class PlayerDataReader {
             throw new IOException("Not a playerdata file: " + file);
         String stem = name.substring(0, name.length() - 4);
         try {
-            if (!UUID.fromString(stem).toString().equalsIgnoreCase(stem))
+            // The authoritative server filename is the exact lowercase UUID.
+            // Case aliases must not bypass discovery's physical-source identity check.
+            if (!UUID.fromString(stem).toString().equals(stem))
                 throw new IOException("Non-canonical playerdata UUID: " + file);
         } catch (IllegalArgumentException invalid) {
             throw new IOException("Invalid playerdata UUID: " + file, invalid);
