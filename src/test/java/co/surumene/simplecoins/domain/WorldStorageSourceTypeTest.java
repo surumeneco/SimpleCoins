@@ -55,4 +55,26 @@ class WorldStorageSourceTypeTest {
         assertEquals(region.toAbsolutePath(), manifest.worldFiles().getFirst().path());
         assertEquals(playerdata.toAbsolutePath(), manifest.playerDataFiles().get(player));
     }
+
+    @Test void modernEntityRegionDirectoryCannotMasqueradeAsZeroEntities() throws Exception {
+        Path world = directory.resolve("world");
+        Files.createDirectories(world.resolve(
+                "dimensions/minecraft/the_nether/entities/r.0.0.mca"));
+        assertThrows(IOException.class, () -> discover(world));
+    }
+
+    @Test void legacyPlayerdataDirectoryCannotMasqueradeAsZeroPlayers() throws Exception {
+        Path world = directory.resolve("world");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        Files.createDirectories(world.resolve("players/data/" + player + ".dat"));
+        assertThrows(IOException.class, () -> discover(world));
+    }
+
+    @Test void excludedWorldRegionDirectoryIsNotAnAccountingSource() throws Exception {
+        Path world = directory.resolve("world");
+        Files.createDirectories(world.resolve("region/r.0.0.mca"));
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", world), new WorldScope(false, Set.of(), Set.of("world")), 100);
+        assertTrue(manifest.worldFiles().isEmpty());
+    }
 }
