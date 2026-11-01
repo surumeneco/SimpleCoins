@@ -16,3 +16,9 @@ This is an **in-memory publication boundary**, not persistent storage, a world f
 - SETTLEMENT-GEN-04: no generation overflow or null staging input can silently replace a published result.
 
 Formal CAT machine Gates and Paper/live-world integration are not-run.
+
+## Persist-before-visibility boundary (Draft vectors)
+
+- SETTLEMENT-GEN-05: a caller-supplied durable persistence operation receives only a fully committed candidate generation; readers do not observe it until persistence returns successfully. An IOException leaves the prior generation intact.
+- SETTLEMENT-GEN-06: stale expected generations and null persistence reject before the callback; a subsequent fresh, independently staged generation can be persisted and published exactly once.
+- This callback boundary does not itself implement disk serialization, fsync, restart replay, multi-process locking or source freeze. Only a verified durable writer can supply the durability guarantee; in-memory `publish` remains explicitly non-durable.
