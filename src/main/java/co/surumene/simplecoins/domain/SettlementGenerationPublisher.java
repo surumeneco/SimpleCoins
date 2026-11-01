@@ -17,6 +17,7 @@ public final class SettlementGenerationPublisher {
     }
 
     private Published current;
+    private boolean durableUncertain;
 
     public synchronized Optional<Published> current() {
         return Optional.ofNullable(current);
@@ -24,6 +25,7 @@ public final class SettlementGenerationPublisher {
 
     public synchronized Published publish(long expectedGeneration,
                                           SettlementAccumulator pending) {
+        checkDurableKnown();
         if (expectedGeneration < 0)
             throw new IllegalArgumentException("Negative expected settlement generation");
         Objects.requireNonNull(pending, "pending");
@@ -50,6 +52,7 @@ public final class SettlementGenerationPublisher {
     public synchronized Published publishDurably(long expectedGeneration,
                                                  SettlementAccumulator pending,
                                                  DurableWriter writer) throws IOException {
+        checkDurableKnown();
         if (expectedGeneration < 0)
             throw new IllegalArgumentException("Negative expected settlement generation");
         Objects.requireNonNull(pending, "pending");
@@ -59,9 +62,22 @@ public final class SettlementGenerationPublisher {
             throw new IllegalStateException("Stale settlement generation");
         long next = Math.addExact(actual, 1);
         Published candidate = new Published(next, pending.commit());
-        writer.persist(candidate);
+        try {
+            writer.persist(candidate);
+        } catch (IOException | RuntimeException uncertain) {
+            // The writer may have committed before throwing. Refuse further
+            // publication until restart recovery reconciles the durable head.
+            durableUncertain = true;
+            throw uncertain;
+        }
         current = candidate;
         return candidate;
+    }
+
+    private void checkDurableKnown() {
+        if (durableUncertain)
+            throw new IllegalStateException(
+                    "Durable settlement generation is uncertain; reload and reconcile before publishing");
     }
 
 }
