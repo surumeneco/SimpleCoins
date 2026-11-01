@@ -74,6 +74,15 @@ public final class SettlementGenerationPublisher {
         return candidate;
     }
 
+    /** Recover the authoritative generation from verified durable bytes. */
+    public static SettlementGenerationPublisher recoverFrom(SettlementSnapshotStore store)
+            throws IOException {
+        Objects.requireNonNull(store, "store");
+        var publisher = new SettlementGenerationPublisher();
+        publisher.current = store.load().orElse(null);
+        return publisher;
+    }
+
     private void checkDurableKnown() {
         if (durableUncertain)
             throw new IllegalStateException(
