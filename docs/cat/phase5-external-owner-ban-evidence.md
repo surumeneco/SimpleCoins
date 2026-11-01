@@ -63,3 +63,9 @@ This aggregation layer consumes caller-verified header, text/PDC reconciliation 
 The adapter may call Paper APIs only in an appropriate server execution context. Real-server Paper 26.2 API behavior remains an integration gate.
 
 - BLOCKLOCKER-AGG-05: a real saved coin inventory resolved through an attached Everyone protection stages as FREE; missing primary sign yields UNKNOWN and aborts staging/commit instead of silently counting zero. This checks the existing settlement staging boundary without claiming that raw sign text/PDC has been authoritatively decoded.
+
+## Paper IP BAN evidence with verified UUID/address mapping (Draft vectors)
+
+- PAPER-IP-01: when the caller supplies a complete, authoritative set of addresses associated with the target UUID, the Paper IP ban list yields BANNED if any address is banned, otherwise CLEAR only when every address lookup succeeds and is clear.
+- PAPER-IP-02: absent/incomplete address mapping, no known addresses, null/failed address lookup or unavailable IP ban list yields UNKNOWN unless a known associated address is definitively banned (BANNED dominates UNKNOWN).
+- PAPER-IP-03: this adapter does not infer UUID/address associations, query historical addresses or treat the current online IP as a complete identity history. A Paper profile-ban CLEAR and IP-ban UNKNOWN cannot be published as globally CLEAR.
