@@ -185,4 +185,14 @@ class WorldStorageDiscoveryTest {
         pending.completeSource(playerdata.toAbsolutePath().normalize().toString());
         assertEquals(java.math.BigInteger.ZERO, pending.commit().statistics().worldTotal());
     }
+
+    @Test void manualManifestMustRejectBlankWorldIdentity() {
+        Path region = directory.resolve("region/r.0.0.mca");
+        assertThrows(IllegalArgumentException.class, () ->
+                new WorldStorageDiscovery.SourceFile("", region, WorldStorageDiscovery.Kind.REGION));
+        assertThrows(IllegalArgumentException.class, () ->
+                new WorldStorageDiscovery.SourceFile("  ", region, WorldStorageDiscovery.Kind.REGION));
+        assertEquals("world", new WorldStorageDiscovery.SourceFile(
+                "world", region, WorldStorageDiscovery.Kind.REGION).world());
+    }
 }
