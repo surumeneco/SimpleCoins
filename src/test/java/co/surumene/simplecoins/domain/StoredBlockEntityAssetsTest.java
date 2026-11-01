@@ -26,6 +26,22 @@ class StoredBlockEntityAssetsTest {
         assertEquals(BigInteger.valueOf(300), assets.get("24,70,-9:1"));
     }
 
+    @Test void chestCannotAccountForCurrencyInNonexistentSlotTwentySeven() {
+        Map<String,Object> chest = Map.of(
+                "id", "minecraft:chest", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(27, 1)));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(chest))));
+    }
+
+    @Test void lastPhysicalChestSlotRemainsCountable() throws Exception {
+        Map<String,Object> chest = Map.of(
+                "id", "minecraft:chest", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(26, 1)));
+        assertEquals(Map.of("0,64,0:26", BigInteger.valueOf(100)),
+                StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(chest))));
+    }
+
     @Test void decoratedPotSingleItemStackIsIncludedInPhysicalAssets() throws Exception {
         Map<String,Object> pot = Map.of(
                 "id", "minecraft:decorated_pot", "x", 5, "y", 70, "z", -2,
