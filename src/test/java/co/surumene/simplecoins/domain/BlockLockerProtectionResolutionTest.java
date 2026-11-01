@@ -91,4 +91,35 @@ class BlockLockerProtectionResolutionTest {
         assertThrows(IOException.class, () -> BlockLockerProtectionResolution.doubleChest(
                 left, notAdjacent, List.of(signOnRight)));
     }
+    @Test void resolvedEveryoneStagesRealCoinAsFreeButMissingPrimaryBlocksCommit()
+            throws Exception {
+        var coin = java.util.Map.of("Slot", (byte) 0,
+                "id", "minecraft:paper", "count", 1,
+                "components", java.util.Map.of("minecraft:custom_data",
+                        java.util.Map.of("PublicBukkitValues",
+                                java.util.Map.of("simplecoins:denomination", 100))));
+        var chest = java.util.Map.of("id", "minecraft:chest",
+                "x", 0, "y", 64, "z", 0, "Items", java.util.List.of(coin));
+        var chunk = java.util.Map.of("block_entities", java.util.List.of(chest));
+        var verifiedFree = BlockLockerProtectionResolution.single(CHEST,
+                List.of(primary(ExternalOwnerDecision.personal(OWNER)), everyone(1, 0)));
+        var accumulator = new SettlementAccumulator(
+                new WorldScope(true, java.util.Set.of(), java.util.Set.of()),
+                java.util.Set.of("region:file"));
+        BlockEntitySettlementImport.stageChunk(accumulator, "region:file", "world", chunk,
+                position -> ExternalOwnerDecision.toBlock(verifiedFree, null, false));
+        accumulator.completeSource("region:file");
+        assertEquals(java.math.BigInteger.valueOf(100), accumulator.commit().free());
+
+        var unknown = BlockLockerProtectionResolution.single(CHEST,
+                List.of(everyone(1, 0)));
+        var incomplete = new SettlementAccumulator(
+                new WorldScope(true, java.util.Set.of(), java.util.Set.of()),
+                java.util.Set.of("region:file"));
+        assertThrows(IOException.class, () -> BlockEntitySettlementImport.stageChunk(
+                incomplete, "region:file", "world", chunk,
+                position -> ExternalOwnerDecision.toBlock(unknown, null, false)));
+        assertThrows(IllegalStateException.class, incomplete::commit);
+    }
+
 }
