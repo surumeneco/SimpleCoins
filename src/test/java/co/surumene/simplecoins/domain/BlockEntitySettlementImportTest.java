@@ -111,4 +111,19 @@ class BlockEntitySettlementImportTest {
         settlement.completeSource("region:file");
         assertEquals(Map.of(owner, BigInteger.ZERO), settlement.commit().personalBalances());
     }
+
+    @Test void emptyProtectedColoredShulkerWithoutItemsTagRetainsOwner() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        Map<String,Object> shulker = Map.of(
+                "id", "minecraft:red_shulker_box", "x", 10, "y", 64, "z", 2);
+        BlockEntitySettlementImport.stageChunk(settlement, "region:file", "world",
+                Map.of("block_entities", List.of(shulker)),
+                position -> new BlockEntitySettlementImport.Ownership(owner, false, false, true));
+        settlement.completeSource("region:file");
+        var result = settlement.commit();
+        assertEquals(Map.of(owner, BigInteger.ZERO), result.personalBalances());
+        assertEquals(1, result.statistics().registeredPlayers());
+    }
 }
