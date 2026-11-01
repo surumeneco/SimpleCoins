@@ -21,8 +21,8 @@ language: ja
 | --- | --- | --- | --- | --- |
 | legacy.root.nonempty | 走査要求 | `入力.root_tile_entities == "nonempty"` | 1 | `出力.visit = 偽; 出力.error = 真` |
 | legacy.root.malformed | 走査要求 | `入力.root_tile_entities == "malformed"` | 1 | `出力.visit = 偽; 出力.error = 真` |
-| legacy.level.nonempty | 走査要求 | `入力.level_tile_entities == "nonempty"` | 1 | `出力.visit = 偽; 出力.error = 真` |
-| legacy.level.malformed | 走査要求 | `入力.level_tile_entities == "malformed"` | 1 | `出力.visit = 偽; 出力.error = 真` |
+| legacy.level.nonempty | 走査要求 | `(入力.root_tile_entities == "absent" または 入力.root_tile_entities == "empty") かつ 入力.level_tile_entities == "nonempty"` | 1 | `出力.visit = 偽; 出力.error = 真` |
+| legacy.level.malformed | 走査要求 | `(入力.root_tile_entities == "absent" または 入力.root_tile_entities == "empty") かつ 入力.level_tile_entities == "malformed"` | 1 | `出力.visit = 偽; 出力.error = 真` |
 | legacy.empty | 走査要求 | `(入力.root_tile_entities == "absent" または 入力.root_tile_entities == "empty") かつ (入力.level_tile_entities == "absent" または 入力.level_tile_entities == "empty")` | 1 | `出力.visit = 真; 出力.error = 偽` |
 
 ## 適用境界と未決定事項
