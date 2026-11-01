@@ -23,10 +23,11 @@
 | P5-OWNER-09 / OWNER-EVIDENCE-04,05,06 | UNKNOWN owner/BANの保護下に実貨幣を置き、決算stagingと公開状態を確認 | 不確定証拠をゼロ扱いせず、未完了決算の公開を拒否。既存の公開済み世代を破壊しない |
 | P5-OWNER-10 / COMPANION-WCL-01,02,03 | WCL providerのloaded/保存済み個体に対してSuccess(空/非空)、NotFound、Failureを発生させ、relationshipsのowner/commander根拠を検査 | NotFound/Failureを空資産や所有者不在とみなさない。provider固有のrelationship契約が未検証ならUNKNOWN。providerが未導入ならblockedと記録 |
 | P5-OWNER-11 / BLOCKLOCKER-SNAPSHOT-01,02,03 | チャンク境界に跨る保護看板とダブルチェストを作り、隣接チャンクの保存看板/パレット候補を一部欠落させる | 完全な隣接候補集合の証明なしにFREE/個人を確定しない。両半分の相互連結・同一snapshotを別途検証 |
+| P5-OWNER-12 / COMPANION-WCL-04,05 | WCLの隔離テストproviderで`Success`を返し、要求entity UUID・world UUID・選択済みprovider IDの各1項目を独立に不一致とする。全項目一致の対照群も用意する | 不一致または照合元不明なら収納額・owner/commander証拠を採用せずUNKNOWN/未完了とする。一致した場合もrelationshipsの意味とsource網羅性は別に検証 |
 
 ## 実行境界と未決事項
 
 - 各ケースは **not-run / pass / fail / blocked** とし、対応する保存NBT・看板座標・UUID・外部API結果・server log・対象commitを紐付ける。テスト中に所有者/保護を変えた場合は、保存前後のsnapshot世代を分ける。
-- WCL `develop`の`WonderfulStorageReader`・`StorageReadResult`・`StorageSnapshot`の型は静的確認済みだが、実配備版、WWC/WWW provider登録、relationshipsのowner/commander意味、未ロード個体の完全性は**実機・対象版の現物で検証するまで未確定**。NotFoundとFailureを空収納へ変換しない。未導入のプラグインを検証済みとしない。
+- WCL `develop`の`WonderfulStorageReader`・`StorageReadResult`・`StorageSnapshot`の型は静的確認済み。`Success`のentity/world/provider IDを要求元の独立した権威証拠と照合する必要があるが、現時点で実装・実機検証済みとはしない。実配備版、WWC/WWW provider登録、relationshipsのowner/commander意味、未ロード個体の完全性は**実機・対象版の現物で検証するまで未確定**。NotFoundとFailureを空収納へ変換しない。未導入のプラグインを検証済みとしない。
 - 外部BANプラグインの権威一覧、UUID/IPの完全対応、未ロードWWC/WWWの保存データ契約は未確定。各検証をblocked/not-runのまま保持し、必要な外部ソースを勝手に省略しない。
 - 正式CAT Process/PI/TCEの規範確認・機械Gate、Paper 26.2・BlockLocker・WWC/WWW/WCL実機、loaded/disk同一時点性、決算公開は未実施。**本書の作成は実機テスト成功ではない。**
