@@ -44,3 +44,12 @@ This is a contract boundary, not an authoritative world snapshot or completed ex
 - COMPANION-OWNER-02: a verified absence of commander permits a known owner; verified absence of both permits FREE.
 - COMPANION-OWNER-03: an unavailable/unloaded/unknown commander must not silently fall back to an owner or FREE. If commander absence is verified but owner state is unknown, the result is UNKNOWN.
 - COMPANION-OWNER-04: null or internally inconsistent identity evidence is invalid. The resolver consumes already verified WWC/WWW/WCL evidence; it does not claim an external plugin API is connected or that unloaded entities were scanned.
+
+## Verified protection-sign aggregation (Draft vectors)
+
+- BLOCKLOCKER-AGG-01: only a physically attached PRIVATE sign can establish the primary ownership decision. Unattached signs and MORE_USERS-only evidence cannot assign ownership.
+- BLOCKLOCKER-AGG-02: any physically attached MORE_USERS/PRIVATE sign with verified Everyone overrides a verified personal owner to FREE; an unattached Everyone sign has no effect.
+- BLOCKLOCKER-AGG-03: a reciprocal double chest accepts a sign attached to either half and produces one ownership decision. Invalid/nonreciprocal chest geometry is an error, not two independently owned containers.
+- BLOCKLOCKER-AGG-04: duplicate attached PRIVATE signs or inconsistent sign evidence fail closed. A verified legacy owner-unresolvable FREE decision is distinct from UNKNOWN due to unreadable/unavailable sign data.
+
+This aggregation layer consumes caller-verified header, text/PDC reconciliation and physical block states. It is not a complete saved-sign parser, live BlockLocker API adapter or settled-world snapshot.
