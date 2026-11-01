@@ -40,6 +40,20 @@ class GrantLedgerRootLifecycleTest {
         assertThrows(IllegalStateException.class, () -> ledger.pending(PLAYER));
     }
 
+    @Test void samePathDirectoryReplacementWithCopiedHeadCannotReuseLiveLedger() throws Exception {
+        Path root = directory.resolve("journal");
+        var ledger = new GrantLedger(root);
+        ledger.reserve(PLAYER, 100, "admin");
+        Path original = directory.resolve("original-journal");
+        Files.move(root, original);
+        Files.createDirectory(root);
+        Files.copy(original.resolve("head"), root.resolve("head"));
+        assertThrows(IllegalStateException.class, () -> ledger.pending(PLAYER));
+        assertThrows(IllegalStateException.class, () -> ledger.reserve(PLAYER, 100, "admin"));
+        assertFalse(Files.exists(root.resolve("2.grant")));
+        assertEquals(1, new GrantLedger(original).pending(PLAYER).size());
+    }
+
     @Test void intactJournalStillPermitsEmptyPendingAndZeroReceipt() throws Exception {
         var ledger = new GrantLedger(directory.resolve("healthy"));
         assertTrue(ledger.pending(PLAYER).isEmpty());
