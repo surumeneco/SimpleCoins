@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -104,11 +106,12 @@ public final class AnvilRegionReader {
                 }
 
                 byte[] payload;
+                Path sidecar = null;
+                SidecarStamp sidecarBefore = null;
                 if (external) {
-                    Path sidecar = regionFile.resolveSibling("c." + x + "." + z + ".mcc");
-                    if (!Files.isRegularFile(sidecar, LinkOption.NOFOLLOW_LINKS))
-                        throw new IOException("Missing or symbolic external Anvil chunk: " + sidecar);
-                    long sidecarSize = Files.size(sidecar);
+                    sidecar = regionFile.resolveSibling("c." + x + "." + z + ".mcc");
+                    sidecarBefore = sidecarStamp(sidecar);
+                    long sidecarSize = sidecarBefore.size();
                     if (sidecarSize < 1 || sidecarSize > maxCompressedBytes)
                         throw new IOException("External chunk exceeds input budget: " + sidecar);
                     // Size is only a preflight check: bound the actual stream as
@@ -158,9 +161,30 @@ public final class AnvilRegionReader {
                         }
                     }
                     callback.accept(new Chunk(x, z, nbt));
+                    if (sidecar != null) requireUnchangedSidecar(sidecar, sidecarBefore);
                 }
             }
         }
+    }
+
+    /**
+     * Detect observable sidecar replacement/mutation during decode and callback.
+     * This is not a substitute for a stable world snapshot.
+     */
+    private record SidecarStamp(Object fileKey, long size, FileTime created, FileTime modified) {}
+
+    private static SidecarStamp sidecarStamp(Path path) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attrs.isRegularFile())
+            throw new IOException("Missing or symbolic external Anvil chunk: " + path);
+        return new SidecarStamp(attrs.fileKey(), attrs.size(),
+                attrs.creationTime(), attrs.lastModifiedTime());
+    }
+
+    private static void requireUnchangedSidecar(Path path, SidecarStamp before) throws IOException {
+        if (!before.equals(sidecarStamp(path)))
+            throw new IOException("External Anvil chunk changed during scan: " + path);
     }
 
     /** Stream-bound external chunk input; size() alone cannot prevent growth races. */
