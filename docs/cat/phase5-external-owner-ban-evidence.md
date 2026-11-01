@@ -88,6 +88,7 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 
 - BLOCKLOCKER-TEXT-05: a coordinate-keyed saved sign evidence pair must pass all four raw front components through a caller-supplied verified text-component decoder before applying visible-sign identity rules. A text-only legacy sign is eligible for authoritative identity lookup; PDC-only evidence is not sufficient to classify ownership.
 - BLOCKLOCKER-TEXT-06: missing raw text, null decoder output or a decoder error blocks owner classification. An evidence pair containing neither stream is not a protection sign. This handoff does not itself implement a JSON component decoder, verify the sign's palette index or establish a world snapshot.
+- BLOCKLOCKER-TEXT-07 (Red): a runtime-localized visible Everyone tag with legacy color/reset formatting and outer whitespace must be normalized consistently with BlockLocker header matching; valid visible `[Everyone]` is not silently treated as a different personal profile. Nonmatching tags still do not grant public ownership.
 
 ## Paper tameable owner evidence (Draft vectors)
 
