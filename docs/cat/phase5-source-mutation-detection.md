@@ -17,6 +17,7 @@ This is a **best-effort mutation detector**, not a stable-snapshot protocol. An 
 
 - SC-SOURCE-STABILITY-05 (Red): a referenced external `.mcc` sidecar changed during the decoded chunk callback must cause the Anvil reader to throw IOException.
 - SC-SOURCE-STABILITY-06 (Regression): a valid unchanged external sidecar is still readable.
+- SC-SOURCE-STABILITY-07 (Red): an external sidecar that was already decoded is changed by a *later chunk* callback in the same region; the reader must revalidate all previously observed sidecars before successful return.
 
 External sidecars are physical payloads referenced by the region header. They must receive the same best-effort no-follow metadata check. This does not detect all same-size/same-timestamp races or establish a consistent Paper snapshot.
 
