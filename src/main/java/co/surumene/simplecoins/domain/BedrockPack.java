@@ -17,8 +17,12 @@ public final class BedrockPack {
             if (images.get(d) == null || images.get(d).length == 0 || names.get(d) == null)
                 throw new IllegalArgumentException("Missing denomination " + d);
         }
+        requireSafeOutput(pack);
+        requireSafeOutput(mapping);
         Files.createDirectories(pack.toAbsolutePath().getParent());
         Files.createDirectories(mapping.toAbsolutePath().getParent());
+        requireSafeOutput(pack);
+        requireSafeOutput(mapping);
         Path temporary = Files.createTempFile(pack.toAbsolutePath().getParent(), "bedrock-", ".zip");
         Path temporaryMapping = Files.createTempFile(mapping.toAbsolutePath().getParent(), "mapping-", ".json");
         try {
@@ -62,12 +66,27 @@ public final class BedrockPack {
                 put(zip, "textures/item_texture.json", textures.append("}}").toString().getBytes(StandardCharsets.UTF_8));
             }
             Files.writeString(temporaryMapping, definitions.append("]}}").toString(), StandardCharsets.UTF_8);
-            Files.move(temporary, pack, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            Files.move(temporaryMapping, mapping, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            // Validate both destinations before either atomic replacement.
+            requireSafeOutput(pack);
+            requireSafeOutput(mapping);
+            PackArchivePublication.publish(temporary, pack);
+            PackArchivePublication.publish(temporaryMapping, mapping);
         } finally {
             Files.deleteIfExists(temporary);
             Files.deleteIfExists(temporaryMapping);
         }
+    }
+
+    private static void requireSafeOutput(Path output) throws IOException {
+        if (output == null)
+            throw new IOException("Missing Bedrock pack output path");
+        Path absolute = output.toAbsolutePath();
+        for (Path part : absolute)
+            if ("..".equals(part.toString()))
+                throw new IOException("Bedrock pack output cannot traverse parents");
+        for (Path part = absolute.normalize(); part != null; part = part.getParent())
+            if (Files.isSymbolicLink(part))
+                throw new IOException("Bedrock pack output contains a symbolic link: " + part);
     }
 
     private static void put(ZipOutputStream zip, String name, byte[] bytes) throws IOException {
