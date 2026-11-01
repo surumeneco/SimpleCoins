@@ -100,6 +100,15 @@ def main() -> None:
             assert "URL redacted" in unsafe.stderr
             assert f"127.0.0.1:{port}" not in unsafe.stderr + unsafe.stdout
 
+            direct_file = subprocess.run(
+                ["bash", str(script), str(generated)],
+                input=f"file://{generated}\n", capture_output=True, text=True,
+                timeout=20, env=env, check=False,
+            )
+            assert direct_file.returncode == 1
+            assert "URL redacted" in direct_file.stderr
+            assert str(generated) not in direct_file.stderr + direct_file.stdout
+
             symlink = run("generated.zip", linked)
             assert symlink.returncode == 2
             assert "Usage:" in symlink.stderr
@@ -112,7 +121,7 @@ def main() -> None:
             assert empty_url.returncode == 2
             assert "No URL supplied" in empty_url.stderr
 
-            print("PASS 9/9 Java pack verifier HTTP and failure-path checks")
+            print("PASS 10/10 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
