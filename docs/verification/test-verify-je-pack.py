@@ -36,6 +36,11 @@ def main() -> None:
                 pass
 
             def do_GET(self) -> None:
+                if self.path == "/safe-redirect":
+                    self.send_response(302)
+                    self.send_header("Location", "/generated.zip")
+                    self.end_headers()
+                    return
                 if self.path == "/unsafe-redirect":
                     self.send_response(302)
                     self.send_header("Location", "file:///etc/passwd")
@@ -67,6 +72,10 @@ def main() -> None:
             assert identical.returncode == 0, identical.stderr
             assert "Verified identical bytes" in identical.stdout
 
+            safe_redirect = run("safe-redirect")
+            assert safe_redirect.returncode == 0, safe_redirect.stderr
+            assert "Verified identical bytes" in safe_redirect.stdout
+
             changed = run("changed.zip")
             assert changed.returncode == 1
             assert "differs byte-for-byte" in changed.stderr
@@ -87,7 +96,15 @@ def main() -> None:
             assert symlink.returncode == 2
             assert "Usage:" in symlink.stderr
 
-            print("PASS 6/6 Java pack verifier HTTP and failure-path checks")
+            empty_url = subprocess.run(
+                ["bash", str(script), str(generated)],
+                input="\n", capture_output=True, text=True, timeout=20,
+                env=env, check=False,
+            )
+            assert empty_url.returncode == 2
+            assert "No URL supplied" in empty_url.stderr
+
+            print("PASS 8/8 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
