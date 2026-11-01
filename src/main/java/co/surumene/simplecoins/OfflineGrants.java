@@ -50,7 +50,10 @@ public final class OfflineGrants implements Listener {
     @EventHandler(priority=EventPriority.MONITOR) public void close(InventoryCloseEvent event){
         if(event.getPlayer() instanceof Player player)schedule(player);
     }
-    private long get(Player player,NamespacedKey key){return player.getPersistentDataContainer().getOrDefault(key,PersistentDataType.LONG,0L);}
+    private long get(Player player, NamespacedKey key) throws IOException {
+        var pdc = player.getPersistentDataContainer();
+        return GrantReceiptValue.read(pdc.has(key), pdc.get(key, PersistentDataType.LONG));
+    }
     private void set(Player player,NamespacedKey key,long value){player.getPersistentDataContainer().set(key,PersistentDataType.LONG,value);}
 
     private void deliver(Player player) {
