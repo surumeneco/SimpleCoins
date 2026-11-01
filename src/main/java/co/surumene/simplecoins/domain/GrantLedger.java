@@ -30,6 +30,8 @@ public final class GrantLedger {
     public GrantLedger(Path directory) throws IOException {
         this.directory = directory;
         Files.createDirectories(directory);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Issuance journal root is not a real directory: " + directory);
         try (var listing = Files.list(directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
