@@ -25,3 +25,7 @@ The terrain adapter must expose display-text evidence from **every** sign with a
 - BL-TEXT-06 Red: a legacy text-only sign appears in `extractTextCandidates`, while `extract` still returns no PDC owner hint.
 - BL-TEXT-07: modern front/back text is available at the same physical key as the PDC hint.
 - BL-TEXT-08: duplicate physical sign entries and out-of-chunk coordinates fail closed before returning a text candidate.
+
+## Raw NBT integration (verification vector)
+
+- BL-TEXT-09: a serialized named-root NBT terrain chunk with a text-only modern sign is decoded through `NbtReader` and `extractTextCandidates`. Preserve all four raw messages and return no saved-PDC owner hint. This tests the real NBT tag shape, not just hand-built Java maps.
