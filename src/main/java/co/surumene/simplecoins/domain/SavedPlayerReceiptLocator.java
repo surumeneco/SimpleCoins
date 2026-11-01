@@ -31,7 +31,15 @@ public final class SavedPlayerReceiptLocator {
                 throw new IOException("Saved receipt world root is unavailable: " + root);
             if (!visited.add(root)) continue;
             for (String layout : new String[]{"players/data", "playerdata"}) {
-                Path candidate = root.resolve(layout).resolve(player + ".dat");
+                Path folder = root;
+                for (String component : layout.split("/")) {
+                    folder = folder.resolve(component);
+                    rejectSymbolicAncestors(folder);
+                    if (Files.exists(folder, LinkOption.NOFOLLOW_LINKS) &&
+                            !Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS))
+                        throw new IOException("Saved receipt layout component is not a directory: " + folder);
+                }
+                Path candidate = folder.resolve(player + ".dat");
                 rejectSymbolicAncestors(candidate);
                 if (!Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) continue;
                 if (!Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS))
