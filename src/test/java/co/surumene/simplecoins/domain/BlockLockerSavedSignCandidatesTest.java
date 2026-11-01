@@ -154,4 +154,33 @@ class BlockLockerSavedSignCandidatesTest {
                 .extractTextCandidates(Map.of("block_entities", List.of(sign, sign))));
     }
 
+    @Test void textOnlyModernSignSurvivesRealNbtParsing() throws Exception {
+        List<String> front = List.of("{\\\"text\\\":\\\"[Private]\\\"}",
+                "{\\\"text\\\":\\\"Alice\\\"}", "{\\\"text\\\":\\\"\\\"}",
+                "{\\\"text\\\":\\\"\\\"}");
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var out = new java.io.DataOutputStream(bytes)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(9); out.writeUTF("block_entities");
+            out.writeByte(10); out.writeInt(1);
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:sign");
+            out.writeByte(3); out.writeUTF("x"); out.writeInt(1);
+            out.writeByte(3); out.writeUTF("y"); out.writeInt(64);
+            out.writeByte(3); out.writeUTF("z"); out.writeInt(2);
+            out.writeByte(10); out.writeUTF("front_text");
+            out.writeByte(9); out.writeUTF("messages");
+            out.writeByte(8); out.writeInt(4);
+            for (String line : front) out.writeUTF(line);
+            out.writeByte(0); // front_text compound
+            out.writeByte(0); // sign block entity
+            out.writeByte(0); // root
+        }
+        var parsed = NbtReader.read(
+                new java.io.ByteArrayInputStream(bytes.toByteArray()), 8192);
+        assertTrue(BlockLockerSavedSignCandidates.extract(parsed).isEmpty());
+        var text = BlockLockerSavedSignCandidates.extractTextCandidates(parsed);
+        assertEquals(front, text.get("1,64,2").front());
+        assertTrue(text.get("1,64,2").back().isEmpty());
+    }
+
 }
