@@ -12,7 +12,8 @@ At the traversal boundary, capture each world-root directory's physical identity
 
 - SC-ROOT-01 (Red): replacing an empty second world root during another world's playerdata callback must abort even if the discovered source-file set is unchanged.
 - SC-ROOT-02 (Regression): unchanged roots and source files return the existing successful traversal Report.
-- SC-ROOT-03 (Regression): a missing or symbolic world root fails closed before any visitor callback.
+- SC-ROOT-03 (Red): two differently spelled world roots resolving to the same physical directory must fail before any callback, even if both are empty.
+- SC-ROOT-04 (Regression): a missing or symbolic world root fails closed before any visitor callback.
 
 ## Gate status
 
