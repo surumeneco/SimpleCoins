@@ -80,6 +80,8 @@ public final class StoredEntityInventoryAssets {
                         (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
                 if (slotted && chestBoat && index >= 27)
                     throw new IOException("Chest boat inventory slot outside physical range: " + key + ":" + index);
+                if (slotted && id.equals("minecraft:hopper_minecart") && index >= 5)
+                    throw new IOException("Hopper minecart inventory slot outside physical range: " + key + ":" + index);
                 position++;
                 if (!occupiedSlots.add(index))
                     throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
