@@ -84,7 +84,8 @@ public final class CoinCommand implements CommandExecutor, TabCompleter {
             var known = java.util.Arrays.stream(Bukkit.getOfflinePlayers())
                     .map(p -> new co.surumene.simplecoins.domain.KnownOfflineRecipient.Identity(
                             p.getUniqueId(), p.getName(), p.hasPlayedBefore())).toList();
-            recipients.put(co.surumene.simplecoins.domain.KnownOfflineRecipient.resolve(input, known), null);
+            var uuid = co.surumene.simplecoins.domain.KnownOfflineRecipient.resolve(input, known);
+            recipients.put(uuid, Bukkit.getPlayer(uuid));
         }
         return recipients;
     }
