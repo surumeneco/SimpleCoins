@@ -27,6 +27,7 @@ jobs:
         run: |
           python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
             docs/cat/phase7-atomic-java-pack-publication.md \
+            docs/cat/phase7-admin-asset-query.md \
             docs/cat/phase7-bedrock-output-path-integrity.md \
             docs/cat/phase7-je-pack-url-validation.md \
             docs/cat/phase7-managed-resource-ancestor-integrity.md \
