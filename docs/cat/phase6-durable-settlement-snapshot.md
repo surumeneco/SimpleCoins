@@ -25,5 +25,6 @@ For the first generation, write and durably confirm the initialization marker be
 - SETTLEMENT-STORE-11 (Red): initialization marker is durable before the first snapshot write; a failed initial snapshot replacement cannot silently reset to generation zero after the obstructing file is removed.
 - SETTLEMENT-STORE-12 (Red): a present snapshot with its required initialization marker missing must fail closed on load and successor persist.
 - SETTLEMENT-STORE-13 (Red): if a durable writer commits and then throws an Error, the publisher must rethrow that Error and poison further in-process publication until a fresh durable recovery; the failure must never be treated as a successful acknowledgement.
+- SETTLEMENT-STORE-14 (Red): while a durable writer callback is active, reentrant in-memory or durable publication on the same publisher is rejected; the outer publication must not be overwritten by a nested generation.
 
 Formal CAT machine Gates, real-world source consistency, and Paper fault-injection integration: **not-run**. Do not promote this Draft to Confirmed without an authorized decision.
