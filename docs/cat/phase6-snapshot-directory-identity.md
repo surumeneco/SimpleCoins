@@ -1,6 +1,33 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.snapshot-directory-identity
+status: draft
+process: simplecoins.settlement
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: durable settlement root directory identity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-005.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.settlement | durable snapshot rootの物理identity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| snapshot.root.replaced | 既存rootを別directoryへ置換したとき | 古いstoreのloadは空世代を返さずIOExceptionで拒否する | SC-SNAPSHOT-ROOT-ID-01 |
+| snapshot.root.persist | 既存rootを置換した後にpersistするとき | 代替rootへsnapshot/markerを書かず拒否する | SC-SNAPSHOT-ROOT-ID-02 |
+| snapshot.root.fresh | 正規のrootにfresh storeを構築したとき | 空rootと永続化済みgenerationを正しく区別する | SC-SNAPSHOT-ROOT-ID-03 |
+| snapshot.root.race | pre-write hook中にrootが置換されたとき | 代替rootへpayloadを書き込む前に拒否する | SC-SNAPSHOT-ROOT-ID-04 |
 
 ## Process / PI
 
