@@ -3,6 +3,10 @@ package co.surumene.simplecoins.domain;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -45,4 +49,30 @@ class ExternalOwnerDecisionTest {
         assertThrows(IllegalArgumentException.class, () ->
                 new ExternalOwnerDecision.Evidence(ExternalOwnerDecision.Kind.FREE, OWNER));
     }
+    @Test void unknownOwnerOfRealCoinInventoryAbortsSettlementInsteadOfCountingZero() throws Exception {
+        Map<String,Object> coin = Map.of("Slot", (byte) 0,
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> chest = Map.of("id", "minecraft:chest",
+                "x", 1, "y", 64, "z", 2, "Items", List.of(coin));
+        Map<String,Object> chunk = Map.of("block_entities", List.of(chest));
+
+        var unknownSettlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        assertThrows(IOException.class, () -> BlockEntitySettlementImport.stageChunk(
+                unknownSettlement, "region:file", "world", chunk,
+                position -> ExternalOwnerDecision.toBlock(ExternalOwnerDecision.unknown(),
+                        BanEvidence.Status.UNKNOWN, false)));
+        assertThrows(IllegalStateException.class, unknownSettlement::commit);
+
+        var freeSettlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("region:file"));
+        BlockEntitySettlementImport.stageChunk(freeSettlement, "region:file", "world", chunk,
+                position -> ExternalOwnerDecision.toBlock(ExternalOwnerDecision.free(),
+                        BanEvidence.Status.UNKNOWN, false));
+        freeSettlement.completeSource("region:file");
+        assertEquals(BigInteger.valueOf(100), freeSettlement.commit().free());
+    }
+
 }
