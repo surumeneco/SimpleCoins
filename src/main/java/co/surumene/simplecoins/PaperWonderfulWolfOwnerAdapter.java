@@ -2,7 +2,6 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.CompanionOwnerResolution;
 import co.surumene.simplecoins.domain.ExternalOwnerDecision;
-import java.lang.reflect.ReflectiveOperationException;
 import java.util.Optional;
 import java.util.UUID;
 import org.bukkit.Bukkit;
