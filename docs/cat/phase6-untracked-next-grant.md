@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.untracked-next-grant
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: prevent overwriting untracked issuance records (CAT Draft)
 
 Status: **Draft**, not Confirmed. Leaf: `TASK-20261101-005`.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | 未追跡の次sequence grant記録の保護 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| grant.next.existing | 起動後に次sequenceのgrant pathが現れたとき | 既存bytesを上書きせずledgerをunhealthyにして拒否する | SC-JOURNAL-NEXT-01 |
+| grant.next.link | 次sequence pathがdangling symlinkのとき | NOFOLLOW_LINKSで存在を検出し予約を拒否する | SC-JOURNAL-NEXT-02 |
+| grant.next.absent | 次sequence pathが正当に不在のとき | 一回のreservationを許可する | SC-JOURNAL-NEXT-03 |
 
 ## Process / PI
 
