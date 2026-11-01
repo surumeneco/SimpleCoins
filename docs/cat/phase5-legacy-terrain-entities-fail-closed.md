@@ -25,6 +25,7 @@ language: ja
 | legacy.entity.root | terrain Kind.REGIONのroot Entitiesに非空Listがあるとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-01 |
 | legacy.entity.level | terrain Kind.REGIONのLevel.Entitiesに非空Listがあるとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-02 |
 | legacy.entity.malformed | terrainのEntitiesが非Listのとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-03 |
+| legacy.entity.level-shape | terrain chunkの`Level`タグが存在するがcompoundではなく、内部Entity有無を判定できないとき | 未確認のlegacy Entitiesを空と推定せずIOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-06 (Draft) |
 | legacy.entity.empty | terrainのroot/Level両Entitiesが空Listまたは欠損のとき | 通常の走査を許可する | SC-LEGACY-ENT-04 |
 | legacy.entity.dedicated | 専用entity-region fileのEntitiesを扱うとき | terrainのlegacy guardを適用せずSavedEntityUuidIntegrityを維持する | SC-LEGACY-ENT-05 |
 | legacy.entity.scope | legacy terrain内のEntity資産の完全なowner/asset adapterが未整備のとき | 未読取資産をゼロとせず、全件決算を公開しない | SC-LEGACY-ENT-01, SC-LEGACY-ENT-02 |
