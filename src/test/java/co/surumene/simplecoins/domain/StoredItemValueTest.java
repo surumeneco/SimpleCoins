@@ -212,4 +212,16 @@ class StoredItemValueTest {
         assertEquals(BigInteger.ZERO, StoredItemValue.value(
                 Map.of("id", "minecraft:stone", "count", 1)));
     }
+
+    @Test void explicitlyNullNestedStorageComponentsCannotHideAssets() {
+        for (String key : java.util.List.of(
+                "minecraft:bundle_contents", "minecraft:container")) {
+            Map<String,Object> components = new java.util.HashMap<>();
+            components.put(key, null);
+            Map<String,Object> container = Map.of(
+                    "id", "minecraft:bundle", "count", 1, "components", components);
+            assertThrows(java.io.IOException.class,
+                    () -> StoredItemValue.value(container), key);
+        }
+    }
 }
