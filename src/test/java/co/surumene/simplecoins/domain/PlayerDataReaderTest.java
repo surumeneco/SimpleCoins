@@ -74,4 +74,12 @@ class PlayerDataReaderTest {
             // Some CI filesystems do not permit symbolic links.
         }
     }
+
+    @Test void uppercaseUuidFilenameIsNotAnAuthoritativePlayerdataAlias() throws Exception {
+        Path canonical = playerData(11);
+        Path alias = directory.resolve("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA.dat");
+        Files.move(canonical, alias);
+        assertThrows(IOException.class, () -> PlayerDataReader.read(alias, 1024, 1024),
+                "Only the exact canonical lowercase UUID path is authoritative");
+    }
 }
