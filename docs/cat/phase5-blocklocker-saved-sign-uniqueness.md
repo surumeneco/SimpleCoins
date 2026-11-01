@@ -1,4 +1,31 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.saved-sign-uniqueness
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved sign physical-coordinate uniqueness (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | Verified saved/live BlockLocker evidence boundary |
+| simplecoins.settlement | No ownership publication from partial evidence |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| sign.duplicate-pdc-text | PDC-bearing and text-only signs share one physical coordinate | Reject duplicate entries regardless of input order | BL-SIGN-UNIQUE-01 |
+| sign.duplicate-text | two text-only signs share one physical coordinate | Reject duplicate physical sign identity | BL-SIGN-UNIQUE-02 |
+| sign.text-only | distinct text-only signs have no BlockLocker PDC | Preserve physical uniqueness check without manufacturing owner hints | BL-SIGN-UNIQUE-03 |
+| sign.distinct-pdc | PDC-bearing signs occupy different positions | Preserve distinct coordinate-keyed candidate hints | BL-SIGN-UNIQUE-04 |
 
 Status: Draft, not Confirmed. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md (BlockLocker 1.14.1), existing saved terrain candidate reader.
 
