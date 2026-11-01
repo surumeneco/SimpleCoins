@@ -1,6 +1,7 @@
 package co.surumene.simplecoins.domain;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -110,7 +111,14 @@ public final class AnvilRegionReader {
                     long sidecarSize = Files.size(sidecar);
                     if (sidecarSize < 1 || sidecarSize > maxCompressedBytes)
                         throw new IOException("External chunk exceeds input budget: " + sidecar);
-                    payload = Files.readAllBytes(sidecar);
+                    // Size is only a preflight check: bound the actual stream as
+                    // well, since an external chunk may change between calls.
+                    try (InputStream sidecarInput = Files.newInputStream(sidecar,
+                            StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                        payload = readBoundedExternal(sidecarInput, maxCompressedBytes);
+                    }
+                    if (payload.length != sidecarSize)
+                        throw new IOException("External chunk changed while reading: " + sidecar);
                 } else {
                     int payloadSize = length - 1;
                     if (payloadSize < 1 || payloadSize > maxCompressedBytes)
@@ -153,6 +161,21 @@ public final class AnvilRegionReader {
                 }
             }
         }
+    }
+
+    /** Stream-bound external chunk input; size() alone cannot prevent growth races. */
+    static byte[] readBoundedExternal(InputStream input, int maximumBytes) throws IOException {
+        Objects.requireNonNull(input);
+        if (maximumBytes < 1) throw new IllegalArgumentException("External chunk budget must be positive");
+        var output = new ByteArrayOutputStream(Math.min(maximumBytes, 8192));
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            if (count > maximumBytes - output.size())
+                throw new IOException("External chunk exceeds compressed-byte budget");
+            output.write(buffer, 0, count);
+        }
+        return output.toByteArray();
     }
 
     private static InputStream decompressor(int compression, byte[] bytes) throws IOException {
