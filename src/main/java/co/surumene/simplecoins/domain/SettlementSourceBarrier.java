@@ -103,6 +103,8 @@ public final class SettlementSourceBarrier {
         Objects.requireNonNull(admission, "admission");
         try {
             admission.run();
+            if (state != State.OPEN)
+                throw new IllegalStateException("Admission invalidated settlement readiness");
         } catch (RuntimeException | Error uncertain) {
             // A partially applied admission may have changed world state.
             state = State.FAILED;
