@@ -147,6 +147,16 @@ public final class GrantLedger {
     }
     private void checkHealthy() {
         if (failed) throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
+        try {
+            requireRealAncestors(directory);
+        } catch (IOException unsafePath) {
+            failed = true;
+            throw new IllegalStateException("Issuance journal root became unsafe", unsafePath);
+        }
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            failed = true;
+            throw new IllegalStateException("Issuance journal root missing or replaced");
+        }
     }
     private void persist(Grant grant) throws IOException {
         try { DurableFile.write(directory.resolve(grant.sequence() + ".grant"), encode(grant)); }
