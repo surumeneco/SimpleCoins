@@ -99,6 +99,12 @@ public final class GrantLedger {
                                CoinDenomination denomination, long coinCount) throws IOException {
         checkHealthy();
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
+        // An untracked record may have been left by a different writer or an
+        // interrupted operation. Atomic replacement must not erase it.
+        if (Files.exists(directory.resolve(next + ".grant"), LinkOption.NOFOLLOW_LINKS)) {
+            failed = true;
+            throw new IOException("Untracked issuance journal record at next sequence");
+        }
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
         persist(grant);
