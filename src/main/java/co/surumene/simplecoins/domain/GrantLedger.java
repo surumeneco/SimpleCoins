@@ -106,8 +106,18 @@ public final class GrantLedger {
     }
     public synchronized boolean wasApplied(Grant grant, long savedReceipt) {
         checkHealthy();
-        validateReceipt(grant.player(), savedReceipt);
-        return savedReceipt >= grant.sequence();
+        Objects.requireNonNull(grant, "grant");
+        Grant current = grants.get(grant.sequence());
+        if (current == null || !current.id().equals(grant.id()) ||
+                !current.player().equals(grant.player()) ||
+                current.amount() != grant.amount() ||
+                !current.issuer().equals(grant.issuer()) ||
+                current.createdMillis() != grant.createdMillis() ||
+                current.denomination() != grant.denomination() ||
+                current.coinCount() != grant.coinCount())
+            throw new IllegalStateException("Grant does not match the current issuance journal");
+        validateReceipt(current.player(), savedReceipt);
+        return savedReceipt >= current.sequence();
     }
     public synchronized void validateReceipt(UUID player, long receipt) {
         checkHealthy();
