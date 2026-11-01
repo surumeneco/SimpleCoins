@@ -102,6 +102,25 @@ public final class WorldSnapshotTraversal {
             throw new IOException("Authoritative saved-source set changed during traversal");
     }
 
+    /**
+     * An unhandled legacy Entity list is an incomplete asset source, not a
+     * successful empty scan. Empty lists do not contribute assets.
+     */
+    private static void requireNoUnaccountedTerrainEntities(Map<String, Object> chunk)
+            throws IOException {
+        requireEmptyTerrainEntities(chunk.get("Entities"), "root");
+        Object level = chunk.get("Level");
+        if (level instanceof Map<?, ?> legacy)
+            requireEmptyTerrainEntities(legacy.get("Entities"), "Level");
+    }
+
+    private static void requireEmptyTerrainEntities(Object value, String location)
+            throws IOException {
+        if (value == null) return;
+        if (!(value instanceof List<?> entities) || !entities.isEmpty())
+            throw new IOException("Unaccounted legacy terrain Entities at " + location);
+    }
+
     public static Report traverse(WorldStorageDiscovery.Manifest manifest,
                                   int maximumCompressedBytes,
                                   int maximumInflatedBytes,
@@ -152,7 +171,13 @@ public final class WorldSnapshotTraversal {
             final int[] fileChunks = {0};
             AnvilRegionReader.scan(source.path(), maximumCompressedBytes, maximumInflatedBytes,
                     chunk -> {
-                        if (source.kind() == WorldStorageDiscovery.Kind.ENTITY) {
+                        if (source.kind() == WorldStorageDiscovery.Kind.REGION) {
+                            // Legacy terrain chunks may embed Entities rather than
+                            // using the modern dedicated entity-region source.
+                            // Until they have an authoritative accounting adapter,
+                            // refuse to silently treat them as zero-valued.
+                            requireNoUnaccountedTerrainEntities(chunk.nbt());
+                        } else if (source.kind() == WorldStorageDiscovery.Kind.ENTITY) {
                             for (UUID uuid : SavedEntityUuidIntegrity.identities(chunk.nbt())) {
                                 if (!savedEntityIds.add(uuid))
                                     throw new IOException("Duplicate saved Entity UUID across chunks: " + uuid);
