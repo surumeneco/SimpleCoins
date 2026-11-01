@@ -2,9 +2,6 @@ package co.surumene.simplecoins;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.nio.file.Files;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -15,11 +12,7 @@ public final class PackDelivery implements Listener {
 
     public PackDelivery(SimpleCoinsPlugin plugin, Path archive) throws IOException {
         this.plugin = plugin;
-        try {
-            this.hash = MessageDigest.getInstance("SHA-1").digest(Files.readAllBytes(archive));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-1 unavailable", impossible);
-        }
+        this.hash = co.surumene.simplecoins.domain.ResourcePackHash.sha1(archive);
     }
 
     @EventHandler
