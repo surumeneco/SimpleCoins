@@ -7,6 +7,22 @@ if [[ $# -ne 1 || ! -f "$1" || -L "$1" ]]; then
   exit 2
 fi
 archive=$1
+# PACK-HASH-02: reject symlinks in every path prefix, not only the ZIP entry.
+# This is a read-time check, not a guarantee against concurrent path swaps.
+source_component=$archive
+while :; do
+  if [[ -L "$source_component" ]]; then
+    printf 'Generated archive path contains a symbolic link.\n' >&2
+    exit 2
+  fi
+  [[ "$source_component" == "." || "$source_component" == "/" ]] && break
+  parent=${source_component%/*}
+  if [[ "$parent" == "$source_component" ]]; then
+    source_component="."
+  else
+    source_component=${parent:-/}
+  fi
+done
 if ! command -v curl >/dev/null || ! command -v cmp >/dev/null || \
    ! command -v sha1sum >/dev/null || ! command -v unzip >/dev/null; then
   printf 'Required verification tools are missing.\n' >&2
