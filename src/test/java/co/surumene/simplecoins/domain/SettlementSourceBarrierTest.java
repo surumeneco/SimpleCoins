@@ -97,4 +97,24 @@ class SettlementSourceBarrierTest {
         assertThrows(IOException.class, () -> mismatch.openAfterDurableReadback(store, other));
         assertEquals(SettlementSourceBarrier.State.FAILED, mismatch.state());
     }
+    @Test void nestedAdmissionFailsClosedBeforeNestedCallback() throws Exception {
+        var store = new SettlementSnapshotStore(directory.resolve("nested-snapshots"));
+        var expected = new SettlementGenerationPublisher.Published(1, complete().commit());
+        store.persist(expected);
+        var gate = new SettlementSourceBarrier(Set.of("disk"));
+        gate.beginStaging();
+        gate.completeSource("disk");
+        gate.openAfterDurableReadback(store, expected);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        assertThrows(IllegalStateException.class, () -> gate.withJoinPermit(() -> {
+            calls.incrementAndGet();
+            gate.withJoinPermit(calls::incrementAndGet);
+        }));
+        assertEquals(1, calls.get(), "nested admission callback must not run");
+        assertEquals(SettlementSourceBarrier.State.FAILED, gate.state());
+        assertThrows(IllegalStateException.class,
+                () -> gate.withJoinPermit(calls::incrementAndGet));
+        assertEquals(1, calls.get());
+    }
+
 }
