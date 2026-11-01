@@ -43,6 +43,8 @@ class AssetDomainTest {
                         AssetOwner.DeadReason.CURRENT_BAN));
         assertThrows(IllegalArgumentException.class, () ->
                 new AssetOwner.Result(AssetOwner.Kind.DEAD, owner, null));
+        assertThrows(IllegalArgumentException.class, () ->
+                new AssetOwner.Result(null, owner, null));
         assertEquals(AssetOwner.Kind.FREE,
                 new AssetOwner.Result(AssetOwner.Kind.FREE, null, null).kind());
         assertEquals(AssetOwner.Kind.PERSONAL,
