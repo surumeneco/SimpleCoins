@@ -1,6 +1,35 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.durable-settlement-snapshot
+status: draft
+process: simplecoins.settlement
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: restart-safe settlement snapshot generations (CAT Draft)
 
 Status: **Draft**, not Confirmed. Leaf `TASK-20261101-005`.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.settlement | 永続snapshotのgeneration・検証・再起動 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| snapshot.restart | commit後にpublisher/storeを再生成するとき | 全残高・dead locationsを復元し統計を再計算する | SETTLEMENT-STORE-01 |
+| snapshot.sequence | successor生成または同時writer競合があるとき | stale/飛越generation・同時commitを拒否し有界lockを維持する | SETTLEMENT-STORE-02, SETTLEMENT-STORE-07, SETTLEMENT-STORE-08 |
+| snapshot.invalid | 永続recordが破損・未知版・不正合計・重複UUID・不正pathのとき | 空世代へのfallbackを許さずfail-closedとする | SETTLEMENT-STORE-03, SETTLEMENT-STORE-05, SETTLEMENT-STORE-06 |
+| snapshot.staging | 未完了stagingまたは永続化後のmemory-only publicationがあるとき | 完了した入力だけ永続化し以後の非永続publicationを禁止する | SETTLEMENT-STORE-04, SETTLEMENT-STORE-09 |
+| snapshot.initialization | 初回世代のmarkerとsnapshotを書き込むとき | marker先行durabilityを要求し、marker欠損や失敗後の世代0再初期化を拒否する | SETTLEMENT-STORE-10, SETTLEMENT-STORE-11, SETTLEMENT-STORE-12 |
+| snapshot.ambiguous | writerがcommit後にErrorを投げるか再入publicationがあるとき | 元Errorを伝播してpublisherをpoisonし、同一publisherで再入更新を許さない | SETTLEMENT-STORE-13, SETTLEMENT-STORE-14 |
 
 ## Process / PI
 
