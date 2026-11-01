@@ -17,6 +17,28 @@ import java.util.Set;
 public final class StoredBlockEntityAssets {
     private StoredBlockEntityAssets() {}
 
+    private static final Set<String> SUPPORTED_ITEMS_HOLDERS = Set.of(
+            "minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel",
+            "minecraft:hopper", "minecraft:dispenser", "minecraft:dropper",
+            "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker",
+            "minecraft:brewing_stand", "minecraft:crafter",
+            "minecraft:campfire", "minecraft:soul_campfire",
+            "minecraft:chiseled_bookshelf");
+    private static final Set<String> SHULKER_COLORS = Set.of(
+            "white", "orange", "magenta", "light_blue", "yellow", "lime",
+            "pink", "gray", "light_gray", "cyan", "purple", "blue",
+            "brown", "green", "red", "black");
+
+    private static boolean supportsItems(String id) {
+        if (SUPPORTED_ITEMS_HOLDERS.contains(id) || id.equals("minecraft:shulker_box"))
+            return true;
+        if (!id.startsWith("minecraft:") || !id.endsWith("_shulker_box"))
+            return false;
+        String color = id.substring("minecraft:".length(),
+                id.length() - "_shulker_box".length());
+        return SHULKER_COLORS.contains(color);
+    }
+
     public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
         if (chunk == null || !(chunk.get("block_entities") instanceof List<?> blockEntities))
             throw new IOException("Missing modern chunk block_entities list");
@@ -62,6 +84,8 @@ public final class StoredBlockEntityAssets {
                 throw new IOException("Unexpected decorated pot inventory format at " + pos);
 
             if (!entity.containsKey("Items")) continue;
+            if (!supportsItems(id))
+                throw new IOException("Unsupported saved block inventory holder: " + id);
             Object rawInventory = entity.get("Items");
             if (!(rawInventory instanceof List<?> inventory))
                 throw new IOException("Malformed block entity Items at " + pos);
