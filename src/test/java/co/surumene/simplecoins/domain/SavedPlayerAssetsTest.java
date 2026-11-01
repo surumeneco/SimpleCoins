@@ -146,4 +146,14 @@ class SavedPlayerAssetsTest {
         assertEquals(BigInteger.valueOf(100),
                 SavedPlayerAssets.extract(valid).get("equipment:head"));
     }
+
+    @Test void explicitlyNullPlayerEquipmentCannotMasqueradeAsAbsent() throws Exception {
+        Map<String,Object> malformed = new java.util.HashMap<>();
+        malformed.put("Inventory", List.of());
+        malformed.put("EnderItems", List.of());
+        malformed.put("equipment", null);
+        assertThrows(IOException.class, () -> SavedPlayerAssets.extract(malformed));
+        assertTrue(SavedPlayerAssets.extract(
+                Map.of("Inventory", List.of(), "EnderItems", List.of())).isEmpty());
+    }
 }
