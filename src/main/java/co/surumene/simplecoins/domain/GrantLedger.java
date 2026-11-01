@@ -75,14 +75,32 @@ public final class GrantLedger {
                 issuer, denomination, count);
     }
 
+    @FunctionalInterface
+    interface AfterRecordPersist {
+        void run() throws IOException;
+    }
+
+    /** Deterministic post-record fault injection; production always uses no-op. */
+    synchronized Grant reserveWithAfterRecordHook(UUID player, long amount, String issuer,
+                                                  AfterRecordPersist hook) throws IOException {
+        return reserveTyped(player, amount, issuer, null, 0, hook);
+    }
+
     private Grant reserveTyped(UUID player, long amount, String issuer,
                                CoinDenomination denomination, long coinCount) throws IOException {
+        return reserveTyped(player, amount, issuer, denomination, coinCount, () -> {});
+    }
+
+    private Grant reserveTyped(UUID player, long amount, String issuer,
+                               CoinDenomination denomination, long coinCount,
+                               AfterRecordPersist hook) throws IOException {
         checkHealthy();
+        Objects.requireNonNull(hook, "hook");
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
         persist(grant);
-        try { writeHead(next); }
+        try { hook.run(); writeHead(next); }
         catch (IOException failure) { failed = true; throw failure; }
         grants.put(next, grant);
         return grant;
