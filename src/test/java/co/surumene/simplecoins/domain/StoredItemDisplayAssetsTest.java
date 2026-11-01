@@ -46,4 +46,26 @@ class StoredItemDisplayAssetsTest {
         assertThrows(java.io.IOException.class, () ->
                 StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display))));
     }
+
+    @Test void zeroCountAirDisplayWithCurrencyComponentsMustFailClosed() {
+        Map<String,Object> hidden = Map.of(
+                "id", "minecraft:air", "count", 0,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues",
+                                Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> display = Map.of(
+                "id", "minecraft:item_display", "UUID", new int[]{0, 0, 0, 53},
+                "item", hidden);
+        assertThrows(java.io.IOException.class, () ->
+                StoredItemDisplayAssets.extract(Map.of("Entities", List.of(display))));
+    }
+
+    @Test void zeroCountAirDisplayWithEmptyComponentsRemainsEmpty() throws Exception {
+        Map<String,Object> display = Map.of(
+                "id", "minecraft:item_display", "UUID", new int[]{0, 0, 0, 54},
+                "item", Map.of("id", "minecraft:air", "count", 0,
+                        "components", Map.of()));
+        assertTrue(StoredItemDisplayAssets.extract(
+                Map.of("Entities", List.of(display))).isEmpty());
+    }
 }
