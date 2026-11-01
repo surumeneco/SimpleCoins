@@ -46,6 +46,10 @@ public final class StoredItemValue {
                 count.longValue() <= 0 || count.longValue() > 99)
             throw new IOException("Invalid stored item identity or count");
         long quantity = count.longValue();
+        // Air is not a physical saved inventory stack. An air identifier
+        // cannot legitimately carry hidden nested assets or a coin balance.
+        if ("minecraft:air".equals(id))
+            throw new IOException("Nonphysical stored air item");
 
         if (!item.containsKey("components")) return BigInteger.ZERO;
         Object rawComponents = item.get("components");
