@@ -51,4 +51,27 @@ class ResolvedEntitySettlementImportTest {
                         Map.of("Entities", List.of(wolf)), Map.of()));
         assertThrows(IllegalStateException.class, settlement::commit);
     }
+
+    @Test void sameEntityUuidAcrossEquipmentAndInventoryCannotStageTwice() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper",
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> equipped = Map.of("id", "minecraft:wolf",
+                "UUID", new int[]{0, 0, 0, 70},
+                "equipment", Map.of("mainhand", coin));
+        Map<String,Object> container = Map.of("id", "minecraft:oak_chest_boat",
+                "UUID", new int[]{0, 0, 0, 70},
+                "Items", List.of(Map.of("Slot", (byte) 0, "id", "minecraft:paper",
+                        "components", coin.get("components"))));
+        var settlement = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("entities:file"));
+        var owner = UUID.fromString("00000000-0000-0000-0000-00000000002a");
+        var ownership = Map.of("00000000-0000-0000-0000-000000000046",
+                new ResolvedEntitySettlementImport.Ownership(owner, false, true));
+        assertThrows(java.io.IOException.class, () ->
+                ResolvedEntitySettlementImport.stageChunk(settlement, "entities:file", "world",
+                        Map.of("Entities", List.of(equipped, container)), ownership));
+        assertThrows(IllegalStateException.class, settlement::commit,
+                "Duplicate saved Entity identities must invalidate the entire settlement");
+    }
 }
