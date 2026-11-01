@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.item-frame-saved-assets
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved item-frame representation integrity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| saved item_frame/glow_item_frame Entity | 表示Itemと競合inventoryの排除 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| frame.single | 通常/発光frameがItemを表示するか空のとき | 単一stack計上と空frameのゼロ計上を維持する | SC-FRAME-01, SC-FRAME-02 |
+| frame.competing | frameがItemsまたはInventoryを持つとき（空listを含む） | frame extractorとinventory extractorの両方で競合表現を拒否する | SC-FRAME-03, SC-FRAME-04 |
+| frame.invalid | Item不正またはUUID重複があるとき | fail-closedを維持し無関係Entityの抽出と混同しない | SC-FRAME-05 |
 
 ## Process / PI
 
