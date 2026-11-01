@@ -47,8 +47,8 @@ public final class StoredItemValue {
             throw new IOException("Invalid stored item identity or count");
         long quantity = count.longValue();
 
+        if (!item.containsKey("components")) return BigInteger.ZERO;
         Object rawComponents = item.get("components");
-        if (rawComponents == null) return BigInteger.ZERO;
         if (!(rawComponents instanceof Map<?,?> components))
             throw new IOException("Invalid stored item components");
         // A single physical item cannot expose two independent views of the
@@ -129,14 +129,14 @@ public final class StoredItemValue {
 
         BigInteger nested = BigInteger.ZERO;
         Object rawBundle = components.get("minecraft:bundle_contents");
-        if (rawBundle != null) {
+        if (components.containsKey("minecraft:bundle_contents")) {
             if (!(rawBundle instanceof List<?> contents))
                 throw new IOException("Invalid bundle contents");
             for (Object child : contents)
                 nested = nested.add(value(itemMap(child), depth + 1));
         }
         Object rawContainer = components.get("minecraft:container");
-        if (rawContainer != null) {
+        if (components.containsKey("minecraft:container")) {
             if (!(rawContainer instanceof List<?> contents))
                 throw new IOException("Invalid container contents");
             Set<Integer> occupiedSlots = new HashSet<>();
