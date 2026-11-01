@@ -26,7 +26,7 @@ public final class BlockLockerEveryoneText {
                     name.contains("[") || name.contains("]"))
                 throw new IOException("Malformed runtime Everyone tag alias");
         }
-        String displayed = LEGACY_COLOR.matcher(displayedProfile.trim()).replaceAll("");
+        String displayed = LEGACY_COLOR.matcher(displayedProfile).replaceAll("").trim();
         for (String name : localizedTagNames)
             if (displayed.equalsIgnoreCase("[" + name + "]"))
                 return true;
