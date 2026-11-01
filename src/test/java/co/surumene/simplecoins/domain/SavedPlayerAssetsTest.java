@@ -128,4 +128,22 @@ class SavedPlayerAssetsTest {
                 "equipment", Map.of("mainhand", item));
         assertThrows(IOException.class, () -> SavedPlayerAssets.extract(root));
     }
+
+    @Test void playerCannotCountMobOnlyBodyOrSaddleEquipment() throws Exception {
+        Map<String,Object> equippedCoin = Map.of(
+                "id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        for (String slot : List.of("body", "saddle")) {
+            Map<String,Object> invalid = Map.of(
+                    "Inventory", List.of(), "EnderItems", List.of(),
+                    "equipment", Map.of(slot, equippedCoin));
+            assertThrows(IOException.class, () -> SavedPlayerAssets.extract(invalid), slot);
+        }
+        Map<String,Object> valid = Map.of(
+                "Inventory", List.of(), "EnderItems", List.of(),
+                "equipment", Map.of("head", equippedCoin));
+        assertEquals(BigInteger.valueOf(100),
+                SavedPlayerAssets.extract(valid).get("equipment:head"));
+    }
 }
