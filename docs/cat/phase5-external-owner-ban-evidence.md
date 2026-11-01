@@ -99,3 +99,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - COMPANION-WWW-01: an enabled WhatAWonderfulWolf plugin's public `loadedIndividuals().find(wolfUuid)` returns a loaded individual whose `commanderId()` and `ownerId()` are Optional UUIDs. A verified commander takes precedence; verified absence of commander permits owner fallback.
 - COMPANION-WWW-02: missing/disabled plugin, unloaded wolf (empty find), invalid reflection contract, malformed Optional or lookup exception yields UNKNOWN, not FREE or an inferred commander absence.
 - COMPANION-WWW-03: the adapter uses the current public WWW API without a mandatory build-time dependency, and is read-only on the Paper server thread. Saved/unloaded WWW identity, WWC/WCL APIs and full settlement integration remain separate acceptance gates.
+
+## Live Paper BlockLocker sign evidence (Draft vectors)
+
+- BLOCKLOCKER-LIVE-01: a currently loaded Paper Sign exposes a verified physical block position, wall-sign facing or standing-sign support, and the four front-side Adventure text components. These components are converted to plain visible text and passed to the independently verified identity/Everyone resolver.
+- BLOCKLOCKER-LIVE-02: unsupported hanging-sign block data, null/malformed sign state, unavailable front text or invalid orientation fails closed. The caller must still prove sign attachment and use the configured BlockLocker localization aliases and authoritative name-to-UUID lookup.
+- BLOCKLOCKER-LIVE-03: the adapter reads current Paper state only and does not load missing chunks, inspect offline signs, infer absent BlockLocker protection, or claim an atomic world snapshot. Real Paper/BlockLocker 1.14.1 server behavior remains an integration gate.
