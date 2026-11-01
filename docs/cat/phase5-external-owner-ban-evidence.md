@@ -105,3 +105,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - BLOCKLOCKER-LIVE-01: a currently loaded Paper Sign exposes a verified physical block position, wall-sign facing or standing-sign support, and the four front-side Adventure text components. These components are converted to plain visible text and passed to the independently verified identity/Everyone resolver.
 - BLOCKLOCKER-LIVE-02: unsupported hanging-sign block data, null/malformed sign state, unavailable front text or invalid orientation fails closed. The caller must still prove sign attachment and use the configured BlockLocker localization aliases and authoritative name-to-UUID lookup.
 - BLOCKLOCKER-LIVE-03: the adapter reads current Paper state only and does not load missing chunks, inspect offline signs, infer absent BlockLocker protection, or claim an atomic world snapshot. Real Paper/BlockLocker 1.14.1 server behavior remains an integration gate.
+
+## Optional WWC loaded chicken follow-target evidence (Draft vectors)
+
+- COMPANION-WWC-01: a loaded chicken carrying the current WhatAWonderfulChicken marker and a canonical UUID in its `follow_target` PDC may supply positive commander/follow-target identity evidence. An absent or malformed follow target is UNKNOWN, never proof of FREE ownership.
+- COMPANION-WWC-02: unavailable/disabled WWC plugin, unsupported data version or unreadable PDC yields UNKNOWN. The adapter does not infer a vanilla tame owner for chickens, enumerate unloaded entities or claim that every WWC chicken has a commander.
+- COMPANION-WWC-03: this is a current-version PDC evidence adapter, not an external plugin's stable API guarantee. A real WWC/Paper integration test and full settlement owner policy remain required.
