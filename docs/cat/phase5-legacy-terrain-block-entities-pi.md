@@ -6,7 +6,8 @@ status: draft
 process: simplecoins.terrainlegacy
 source_refs:
   - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
-refs: []
+refs:
+  - simplecoins.terrainlegacy
 semantic_contract: markdown-v2
 language: ja
 ---
