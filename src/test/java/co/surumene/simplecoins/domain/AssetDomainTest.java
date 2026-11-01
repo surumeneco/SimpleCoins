@@ -35,4 +35,20 @@ class AssetDomainTest {
         assertEquals(AssetOwner.Kind.PERSONAL, AssetOwner.resolve(u, false, false, true).kind());
         assertEquals(u, AssetOwner.mobOwner(u, UUID.randomUUID()));
     }
+
+    @Test void assetOwnerResultCannotRepresentContradictoryClassification() {
+        UUID owner = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class, () ->
+                new AssetOwner.Result(AssetOwner.Kind.PERSONAL, owner,
+                        AssetOwner.DeadReason.CURRENT_BAN));
+        assertThrows(IllegalArgumentException.class, () ->
+                new AssetOwner.Result(AssetOwner.Kind.DEAD, owner, null));
+        assertEquals(AssetOwner.Kind.FREE,
+                new AssetOwner.Result(AssetOwner.Kind.FREE, null, null).kind());
+        assertEquals(AssetOwner.Kind.PERSONAL,
+                new AssetOwner.Result(AssetOwner.Kind.PERSONAL, owner, null).kind());
+        assertEquals(AssetOwner.Kind.DEAD,
+                new AssetOwner.Result(AssetOwner.Kind.DEAD, owner,
+                        AssetOwner.DeadReason.CURRENT_BAN).kind());
+    }
 }
