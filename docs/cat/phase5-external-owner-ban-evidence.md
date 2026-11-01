@@ -111,3 +111,9 @@ The adapter may call Paper APIs only in an appropriate server execution context.
 - COMPANION-WWC-01: a loaded chicken carrying the current WhatAWonderfulChicken marker and a canonical UUID in its `follow_target` PDC may supply positive commander/follow-target identity evidence. An absent or malformed follow target is UNKNOWN, never proof of FREE ownership.
 - COMPANION-WWC-02: unavailable/disabled WWC plugin, unsupported data version or unreadable PDC yields UNKNOWN. The adapter does not infer a vanilla tame owner for chickens, enumerate unloaded entities or claim that every WWC chicken has a commander.
 - COMPANION-WWC-03: this is a current-version PDC evidence adapter, not an external plugin's stable API guarantee. A real WWC/Paper integration test and full settlement owner policy remain required.
+
+## Coherent saved-sign candidate assembly (Draft vectors)
+
+- BLOCKLOCKER-SNAPSHOT-01: a caller-supplied complete, coherent set of coordinate-keyed saved sign evidence and matching verified palette states can be decoded into physical mount/position and authoritative visible ownership evidence before single-container aggregation.
+- BLOCKLOCKER-SNAPSHOT-02: a verified reciprocal double chest aggregates signs on either half once, including visible Everyone overrides; duplicate/malformed/missing palette state or noncanonical coordinate keys fail closed.
+- BLOCKLOCKER-SNAPSHOT-03: the assembly does not enumerate neighboring chunks, prove candidate-set completeness, freeze the world or supply a name-to-UUID authority. The caller must establish all of these before using its result for settlement; an empty candidate set is UNKNOWN rather than an inferred FREE.
