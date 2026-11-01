@@ -100,11 +100,11 @@ public final class SettlementSourceBarrier {
     public synchronized void openAfterDurableReadback(
             SettlementSnapshotStore store,
             SettlementGenerationPublisher.Published expected) throws IOException {
-        openAfterDurableReadback(() -> Objects.requireNonNull(store, "store").load(), expected);
+        openAfterDurableReadbackUsing(() -> Objects.requireNonNull(store, "store").load(), expected);
     }
 
     /** Testable readback boundary; production always delegates to the durable store. */
-    synchronized void openAfterDurableReadback(
+    synchronized void openAfterDurableReadbackUsing(
             DurableReadback readback,
             SettlementGenerationPublisher.Published expected) throws IOException {
         requireStaging();
