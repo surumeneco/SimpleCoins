@@ -69,11 +69,11 @@ public final class StoredItemValue {
 
         Map<?,?> pdc = null;
         Object rawCustom = components.get("minecraft:custom_data");
-        if (rawCustom != null) {
+        if (components.containsKey("minecraft:custom_data")) {
             if (!(rawCustom instanceof Map<?,?> custom))
                 throw new IOException("Invalid stored custom data");
             Object rawPdc = custom.get("PublicBukkitValues");
-            if (rawPdc != null) {
+            if (custom.containsKey("PublicBukkitValues")) {
                 if (!(rawPdc instanceof Map<?,?> values))
                     throw new IOException("Invalid Bukkit persistent data");
                 pdc = values;
