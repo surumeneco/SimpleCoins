@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -159,5 +160,21 @@ class WorldStorageDiscoveryTest {
         assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
                 Map.of("world", world),
                 new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
+    @Test void manifestRequiredSourcesUseCanonicalPathsAndRejectDuplicates() throws Exception {
+        Path region = directory.resolve("world/region/r.0.0.mca");
+        UUID player = UUID.randomUUID();
+        Path playerdata = directory.resolve("world/playerdata/" + player + ".dat");
+        var source = new WorldStorageDiscovery.SourceFile(
+                "world", region, WorldStorageDiscovery.Kind.REGION);
+        var manifest = new WorldStorageDiscovery.Manifest(
+                List.of(source), Map.of(player, playerdata));
+        assertEquals(Set.of(region.toAbsolutePath().normalize().toString(),
+                        playerdata.toAbsolutePath().normalize().toString()),
+                manifest.requiredSourceIds());
+        var duplicate = new WorldStorageDiscovery.Manifest(
+                List.of(source), Map.of(player, region));
+        assertThrows(IOException.class, duplicate::requiredSourceIds);
     }
 }
