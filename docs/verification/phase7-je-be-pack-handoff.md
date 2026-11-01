@@ -12,15 +12,15 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 2. Host the **generated** Java ZIP at the configured HTTP(S) URL. From a separate network, download it with the **exact** configured URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
 
    ```bash
+   set -euo pipefail
    read -r -s -p 'Pack URL: ' PACK_URL; printf '\n'
-   tmp=$(mktemp -d) || exit 1
+   tmp=$(mktemp -d)
+   trap 'rm -rf -- "$tmp"; unset PACK_URL' EXIT
    curl --proto '=http,https' --proto-redir '=http,https' -fsSL \
      --output "$tmp/downloaded.zip" "$PACK_URL"
    cmp plugins/SimpleCoins/SimpleCoins-java.zip "$tmp/downloaded.zip"
    sha1sum plugins/SimpleCoins/SimpleCoins-java.zip "$tmp/downloaded.zip"
    unzip -t "$tmp/downloaded.zip"
-   rm -rf -- "$tmp"
-   unset PACK_URL
    ```
 
    Run the comparison commands only after a successful download; any nonzero exit is a failed gate. Record the two hashes, HTTP result and the tested artifact identity, not the secret URL. A successful GitHub CI build does not prove external reachability.
