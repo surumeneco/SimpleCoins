@@ -30,6 +30,18 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 2. Verify Geyser's Bedrock mapping/pack comes from an explicitly configured conversion/delegation path (e.g. Scaffolding). **Do not infer that Nexo's Java pack is automatically converted by Geyser.** If no verified conversion exists, mark BE as blocked/not-run rather than passed.
 3. Repeat JE and BE denomination/model checks, preserving the same currency PDC identities and amounts as the Nexo-absent case.
 
+## Admin command and offline grant acceptance (disposable server only)
+
+The current `plugin.yml` exposes `/simplecoins` (alias `/sc`) with `simplecoins.admin` permission. `CoinCommand` implements `give`; the read-only balance/dead-asset location and reason query requested by TASK-20261101-006 is **not implemented** in the inspected command handler. Do not mark the admin-query acceptance complete based on the issuance tests below.
+
+1. On a disposable Paper 26.2 server, confirm a non-privileged sender cannot reserve or issue currency; grant `simplecoins.admin` to a test operator and record the command result. Do not use production playerdata or journal files.
+2. Use an existing, previously joined test player who is currently offline. Run `/sc give <player-uuid> 100`. Record the reservation ID and issuance journal entry; before login, no physical coins should be delivered. On login, verify the exact total and persisted receipt; disconnect/reconnect and restart the disposable server, then verify no duplicate delivery.
+3. With an online test player, run `/sc give <player-name> 50 3`. Verify exactly three denomination-50 coins are reserved and delivered, not a minimum-coin decomposition of 150. Repeat reconnect/restart checks.
+4. Fill all 36 player storage slots before a reserved grant is delivered. Verify no coin is dropped or falsely acknowledged and the reservation remains pending; free space, trigger delivery again, and verify the total is neither lost nor duplicated. Record the saved playerdata receipt and journal state.
+5. In a disposable copy only, inject a corrupt/missing journal record or an unconfirmed saved receipt, restart, and verify issuance fails closed rather than replaying an uncertain grant. Keep this separate from a successful delivery case; do not induce failure on production.
+
+Record each case as pass/fail/not-run with the tested commit, Paper version, journal/receipt evidence and observed inventory totals. The command-source inspection is **not** a Paper execution result. The missing read-only admin query, real Paper failure injection, and JE/BE client acceptance remain open.
+
 ## Negative cases and release gate
 
 - Blank public URL: no JE pack request; operator warning remains visible.
