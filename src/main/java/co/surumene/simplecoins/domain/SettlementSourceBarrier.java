@@ -92,16 +92,28 @@ public final class SettlementSourceBarrier {
      * Open only after exact durable readback of the completed generation.
      * This verifies the persisted result, not world-wide source quiescence.
      */
+    @FunctionalInterface
+    interface DurableReadback {
+        java.util.Optional<SettlementGenerationPublisher.Published> load() throws IOException;
+    }
+
     public synchronized void openAfterDurableReadback(
             SettlementSnapshotStore store,
+            SettlementGenerationPublisher.Published expected) throws IOException {
+        openAfterDurableReadback(() -> Objects.requireNonNull(store, "store").load(), expected);
+    }
+
+    /** Testable readback boundary; production always delegates to the durable store. */
+    synchronized void openAfterDurableReadback(
+            DurableReadback readback,
             SettlementGenerationPublisher.Published expected) throws IOException {
         requireStaging();
         if (!completedSources.equals(requiredSources))
             throw new IllegalStateException("Authoritative settlement sources remain incomplete");
         try {
-            Objects.requireNonNull(store, "store");
+            Objects.requireNonNull(readback, "readback");
             Objects.requireNonNull(expected, "expected");
-            var actual = store.load().orElseThrow(
+            var actual = readback.load().orElseThrow(
                     () -> new IOException("Durable settlement generation is missing"));
             if (!actual.equals(expected))
                 throw new IOException("Durable settlement generation differs from staged result");
