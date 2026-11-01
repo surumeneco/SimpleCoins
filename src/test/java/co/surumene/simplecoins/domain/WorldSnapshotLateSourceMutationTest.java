@@ -3,7 +3,7 @@ package co.surumene.simplecoins.domain;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
-import java.io.GZIPOutputStream;
+import java.util.zip.GZIPOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
