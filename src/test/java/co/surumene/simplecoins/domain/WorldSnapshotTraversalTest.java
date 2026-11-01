@@ -59,6 +59,53 @@ class WorldSnapshotTraversalTest {
         return path;
     }
 
+    private Path savedEntityRegion(String folder, int uuidTail) throws IOException {
+        Path path = directory.resolve(folder).resolve("r.0.0.mca");
+        Files.createDirectories(path.getParent());
+        var nbt = new ByteArrayOutputStream();
+        try (var out = new DataOutputStream(nbt)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(9); out.writeUTF("Entities");
+            out.writeByte(10); out.writeInt(1);
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:wolf");
+            out.writeByte(11); out.writeUTF("UUID");
+            out.writeInt(4);
+            out.writeInt(0); out.writeInt(0); out.writeInt(0); out.writeInt(uuidTail);
+            out.writeByte(0); // end Entity compound
+            out.writeByte(0); // end root compound
+        }
+        var compressed = new ByteArrayOutputStream();
+        try (var deflate = new DeflaterOutputStream(compressed)) {
+            deflate.write(nbt.toByteArray());
+        }
+        byte[] payload = compressed.toByteArray();
+        byte[] region = new byte[3 * 4096];
+        var head = ByteBuffer.wrap(region);
+        head.putInt(0, (2 << 8) | 1);
+        head.putInt(8192, payload.length + 1);
+        region[8196] = 2;
+        System.arraycopy(payload, 0, region, 8197, payload.length);
+        Files.write(path, region);
+        return path;
+    }
+
+    @Test void duplicateSavedEntityUuidAcrossDifferentChunksMustFailTraversal() throws Exception {
+        Path first = savedEntityRegion("entities", 70);
+        Path second = savedEntityRegion("other/entities", 70);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", first, WorldStorageDiscovery.Kind.ENTITY),
+                new WorldStorageDiscovery.SourceFile("other", second, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of());
+        var visitor = new WorldSnapshotTraversal.Visitor() {
+            @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                        AnvilRegionReader.Chunk chunk) {}
+            @Override public void player(UUID player, Map<String,Object> data) {}
+        };
+        assertThrows(IOException.class, () ->
+                WorldSnapshotTraversal.traverse(manifest, 4096, 4096, visitor),
+                "The same physical Entity UUID must not be accounted in two saved chunks");
+    }
+
     @Test void readsEachDiscoveredRegionAndPlayerWithoutSilentlySkippingSources() throws Exception {
         Path terrain = region("region", 10);
         Path entities = region("entities", 20);
