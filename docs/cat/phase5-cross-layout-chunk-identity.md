@@ -16,3 +16,8 @@ Do not conflate different worlds, dimensions or terrain/entity kinds: each is a 
 - SC-CHUNK-04: different logical world names at the same coordinate remain separate.
 
 Formal CAT machine gates not-run; Draft is not Confirmed. No release/settlement publication is authorized.
+
+## Additional cross-kind and custom-dimension vectors
+
+- SC-CHUNK-05: `DIM1/entities` and `dimensions/minecraft/the_end/entities` for the same world and chunk coordinates are one logical Entity chunk, so the second must fail.
+- SC-CHUNK-06: distinct custom namespaces such as `dimensions/alpha/sky` and `dimensions/beta/sky` are separate dimensions even at the same x/z.
