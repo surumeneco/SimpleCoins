@@ -16,7 +16,7 @@ class StoredItemValueTest {
         Map<String,Object> coin = item("minecraft:paper", 3,
                 Map.of("simplecoins:denomination", 100));
         Map<String,Object> wallet = item("minecraft:bundle", 1,
-                Map.of("simplecoins:wallet_id", "stable-id", "simplecoins:wallet_balance", 975L));
+                Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000001", "simplecoins:wallet_balance", 975L));
         assertEquals(BigInteger.valueOf(300), StoredItemValue.value(coin));
         assertEquals(BigInteger.valueOf(975), StoredItemValue.value(wallet));
         assertEquals(BigInteger.ZERO, StoredItemValue.value(Map.of("id", "minecraft:paper", "count", 64)));
@@ -31,7 +31,7 @@ class StoredItemValueTest {
         Map<String,Object> coin = item("minecraft:paper", 2,
                 Map.of("simplecoins:denomination", 5));
         Map<String,Object> wallet = item("minecraft:bundle", 1,
-                Map.of("simplecoins:wallet_id", "nested-wallet", "simplecoins:wallet_balance", 21L));
+                Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000002", "simplecoins:wallet_balance", 21L));
         Map<String,Object> bundle = Map.of("id", "minecraft:bundle", "count", 1,
                 "components", Map.of("minecraft:bundle_contents", java.util.List.of(coin, wallet)));
         Map<String,Object> shulker = Map.of("id", "minecraft:shulker_box", "count", 1,
@@ -46,7 +46,7 @@ class StoredItemValueTest {
         Map<String,Object> wallet = Map.of("id", "minecraft:bundle", "count", 1,
                 "components", Map.of(
                         "minecraft:custom_data", Map.of("PublicBukkitValues",
-                                Map.of("simplecoins:wallet_id", "wallet",
+                                Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000003",
                                        "simplecoins:wallet_balance", 1000L)),
                         "minecraft:bundle_contents", java.util.List.of(hidden)));
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(wallet));
