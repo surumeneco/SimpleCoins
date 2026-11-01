@@ -52,13 +52,39 @@ public final class WorldSnapshotTraversal {
         Objects.requireNonNull(scope, "scope");
         // Freeze the caller's root inventory for this pair of checks.
         Map<String, Path> roots = Map.copyOf(worldFolders);
+        // A stable list of saved files does not prove that an empty world root
+        // has not been replaced while another world's sources are traversed.
+        Map<String, RootIdentity> rootIdentities = new HashMap<>();
+        for (var entry : roots.entrySet())
+            rootIdentities.put(entry.getKey(), rootIdentity(entry.getValue()));
         requireSameSources(manifest,
                 WorldStorageDiscovery.discover(roots, scope, maximumEntries));
+        requireSameRoots(roots, rootIdentities);
         Report staged = traverse(manifest, maximumCompressedBytes,
                 maximumInflatedBytes, visitor);
         requireSameSources(manifest,
                 WorldStorageDiscovery.discover(roots, scope, maximumEntries));
+        requireSameRoots(roots, rootIdentities);
         return staged;
+    }
+
+    /** Physical root identity is required even when a root has no saved files. */
+    private record RootIdentity(Object fileKey, FileTime created) {}
+
+    private static RootIdentity rootIdentity(Path root) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(root, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attrs.isDirectory() || attrs.fileKey() == null)
+            throw new IOException("World root identity unavailable or symbolic: " + root);
+        return new RootIdentity(attrs.fileKey(), attrs.creationTime());
+    }
+
+    private static void requireSameRoots(Map<String, Path> roots,
+                                         Map<String, RootIdentity> expected) throws IOException {
+        for (var entry : roots.entrySet()) {
+            if (!expected.get(entry.getKey()).equals(rootIdentity(entry.getValue())))
+                throw new IOException("World root changed during traversal: " + entry.getKey());
+        }
     }
 
     private static void requireSameSources(WorldStorageDiscovery.Manifest expected,
