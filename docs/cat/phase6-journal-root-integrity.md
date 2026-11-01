@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase6.journal-root-integrity
+status: draft
+process: simplecoins.grant
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: issuance journal root directory integrity (CAT Draft)
 
 Status: **Draft** (not Confirmed). Leaf TASK-20261101-005.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant | journal rootとancestorのsymlink拒否 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| journal.root.symlink | journal rootがsymlinkのとき | read/replay/writeより前にIOExceptionで拒否する | SC-JOURNAL-ROOT-01 |
+| journal.root.valid | 通常のreal directoryを使うとき | restartを跨いだ正常なjournal操作を維持する | SC-JOURNAL-ROOT-02 |
+| journal.root.ancestor | journal rootまでのancestorにsymlinkがあるとき | directory/head生成前に拒否し通常のnested pathは維持する | SC-JOURNAL-ROOT-03 |
 
 ## Process / PI
 
