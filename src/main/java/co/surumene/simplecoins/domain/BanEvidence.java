@@ -17,6 +17,23 @@ public final class BanEvidence {
     public enum Status { BANNED, CLEAR, UNKNOWN }
     public record Source(String id, Status status) {}
 
+    /**
+     * An unforgeable-in-ordinary-code BAN decision produced from declared
+     * required sources and observations. A raw Status is not settlement proof.
+     */
+    public static final class Decision {
+        private final Status status;
+
+        private Decision(Status status) { this.status = status; }
+
+        public Status status() { return status; }
+    }
+
+    public static Decision evaluate(Set<String> requiredSourceIds, List<Source> sources)
+            throws IOException {
+        return new Decision(combine(requiredSourceIds, sources));
+    }
+
     public static Status combine(Set<String> requiredSourceIds, List<Source> sources)
             throws IOException {
         if (requiredSourceIds == null || requiredSourceIds.isEmpty() || sources == null)
