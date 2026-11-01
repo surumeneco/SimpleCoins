@@ -18,9 +18,11 @@
 | P6-03 / SETTLEMENT-STORE-10,11,12 | 初回初期化markerの永続化後、最初のsnapshot書込みを失敗させる。逆にsnapshotだけ残しmarkerを除去 | 再起動後に勝手に世代0へ再初期化せず、権威不明を拒否 |
 | P6-04 / SETTLEMENT-GEN-01,05,07 | 完了前staging、durable callbackの書込み前失敗、commit後例外を別々に注入 | 途中値を可視化せず、commit後の結果不明はpublisherをpoisonし、再読込前の再公開を拒否 |
 | P6-05 / SETTLEMENT-STORE-07,08 | 同じ世代へ2writer、保持中のwriter lock、stale expected generation | 二重commitを許さず、lock取得待ちを無期限にしない |
-| P6-06 / SC-JOURNAL-ACK-01,02,03 | 2件以上の発行予約を作成。古い未承認 `<sequence>.grant` を欠損・破損・別内容にして承認を試行 | 古い対象レコードを上書き復元せず、承認を拒否し、ledgerを不健全として後続発行を止める |
-| P6-07 / SC-JOURNAL-ACK-03 | 同じ古い予約が有効なdurable record・一致する保存済みreceiptを持つ | 承認は一度だけ成立し、再起動・再ログインで同じ貨幣を二重配布しない |
+| P6-06 / SC-JOURNAL-ACK-04,05 | sequence 1と2を予約し、head・tail 2を正常なまま非tail `1.grant` を欠損・破損・別Grantへ置換してsequence 1をacknowledge | 対象のdurable recordを再読込し、承認記録を書かず拒否。破損ファイルを上書き復元せず、ledgerをunhealthyとして後続発行を止める |
+| P6-07 / SC-JOURNAL-ACK-06 | sequence 1/2のhead・tailと非tail `1.grant`が健全で、sequence 1の保存済みreceiptが一致する | sequence 1だけがdeliveredへ遷移し、sequence 2のpendingを維持。再起動後も両者の状態が一致し、二重配布しない |
 | P6-08 / source-readiness-barrier / manifest-source-closure | 対象worldのEntity source欠落、未ロードsourceの変更、走査中の他Pluginによる変更 | 未確認を0資産としない。成功した決算世代を公開せず、参加受付再開を早めない |
+
+非tail故障注入では、**操作前の`1.grant`のbytes/ハッシュ、注入直後のbytes/ハッシュ、承認失敗後のbytes/ハッシュ**を個別に保存する。`head`とtail 2が健全なままでも古い対象のdurable内容が不正なら拒否されることを確認する。正常系はsequence 2のpendingが不変であることを再起動後にも照合する。これらは既存Draftベクトルの検証準備であり、未実行のRed/Greenを合格扱いしない。
 
 ## 実行・判定の記録
 
