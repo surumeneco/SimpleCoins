@@ -30,6 +30,8 @@ def main() -> None:
         invalid.write_bytes(b"not-a-zip")
         linked = root / "linked.zip"
         linked.symlink_to(generated)
+        linked_dir = root / "linked-dir"
+        linked_dir.symlink_to(served, target_is_directory=True)
 
         class Handler(http.server.SimpleHTTPRequestHandler):
             def __init__(self, *args, **kwargs):
@@ -115,6 +117,13 @@ def main() -> None:
             assert symlink.returncode == 2
             assert "Usage:" in symlink.stderr
 
+            # PACK-HASH-02: a regular ZIP reached through a symlinked
+            # ancestor must not become a trusted generated archive.
+            ancestor_link = run("generated.zip", linked_dir / "generated.zip")
+            assert ancestor_link.returncode == 2
+            assert "contains a symbolic link" in ancestor_link.stderr
+            assert "Verified identical bytes" not in ancestor_link.stdout
+
             empty_url = subprocess.run(
                 ["bash", str(script), str(generated)],
                 input="\n", capture_output=True, text=True, timeout=20,
@@ -158,7 +167,7 @@ def main() -> None:
                 assert "Generated archive changed during verification." in mutated.stderr
                 assert "Verified identical bytes" not in mutated.stdout
 
-            print("PASS 12/12 Java pack verifier HTTP and failure-path checks")
+            print("PASS 13/13 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
