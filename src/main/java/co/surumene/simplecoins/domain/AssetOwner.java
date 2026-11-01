@@ -11,10 +11,14 @@ public final class AssetOwner {
 
     public record Result(Kind kind, UUID player, DeadReason reason) {
         public Result {
+            if (kind == null)
+                throw new IllegalArgumentException("Owner classification kind required");
             if (kind == Kind.FREE && (player != null || reason != null))
-                throw new IllegalArgumentException("Free assets have no owner");
-            if (kind != Kind.FREE && player == null)
-                throw new IllegalArgumentException("Owner UUID required");
+                throw new IllegalArgumentException("Free assets have no owner or dead reason");
+            if (kind == Kind.PERSONAL && (player == null || reason != null))
+                throw new IllegalArgumentException("Personal assets require an owner and no dead reason");
+            if (kind == Kind.DEAD && (player == null || reason == null))
+                throw new IllegalArgumentException("Dead assets require an owner and a dead reason");
         }
     }
 
