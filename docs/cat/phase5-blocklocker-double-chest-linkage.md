@@ -1,4 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.double-chest-linkage
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: verified double-chest linkage geometry (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | Verified saved/live BlockLocker evidence boundary |
+| simplecoins.settlement | No ownership publication from partial evidence |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| chest.reciprocal | two verified chest halves cross a chunk boundary | Require reciprocal LEFT/RIGHT, same facing and kind, and exact adjacent coordinates | BL-CHEST-01, BL-CHEST-02 |
+| chest.invalid | facing, kind, half or distance mismatch | Reject as unlinked rather than infer economic ownership | BL-CHEST-03 |
+| chest.single-overflow | SINGLE half or coordinate arithmetic overflow | Never form a pair; reject overflow with IOException | BL-CHEST-04 |
+| chest.sign-attachment | validated pair has a wall or standing sign near either half | Evaluate physical attachment to both halves, including cross-chunk adjacency | BL-CHEST-05, BL-CHEST-06 |
+| chest.nonreciprocal | sign attachment requested for nonreciprocal pair | Fail closed before interpreting sign or owner | BL-CHEST-07 |
 
 Status: Draft, not Confirmed. Sources: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md; BlockLocker v1.14.1 BlockFinder and SeparateContainersBlockFinder.
 
