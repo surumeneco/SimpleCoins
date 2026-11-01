@@ -42,6 +42,29 @@ class AnvilExternalSidecarMutationTest {
                 chunk -> Files.write(sidecar, new byte[]{42}, StandardOpenOption.APPEND)));
     }
 
+
+    @Test void laterChunkCallbackChangingEarlierExternalSidecarMustAbort() throws Exception {
+        Path file = region();
+        Path sidecar = file.resolveSibling("c.0.0.mcc");
+        ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+        try (DeflaterOutputStream output = new DeflaterOutputStream(compressed)) {
+            output.write(new byte[]{10, 0, 0, 0});
+        }
+        byte[] payload = compressed.toByteArray();
+        byte[] bytes = java.util.Arrays.copyOf(Files.readAllBytes(file), 4 * 4096);
+        ByteBuffer.wrap(bytes).putInt(4, (3 << 8) | 1); // slot 1, sector 3
+        ByteBuffer.wrap(bytes).putInt(3 * 4096, payload.length + 1);
+        bytes[3 * 4096 + 4] = 2;
+        System.arraycopy(payload, 0, bytes, 3 * 4096 + 5, payload.length);
+        Files.write(file, bytes);
+
+        assertThrows(IOException.class, () -> AnvilRegionReader.scan(
+                file, 4096, 4096, chunk -> {
+                    if (chunk.x() == 1)
+                        Files.write(sidecar, new byte[]{42}, StandardOpenOption.APPEND);
+                }));
+    }
+
     @Test void unchangedExternalChunkRemainsReadable() throws Exception {
         Path file = region();
         AtomicInteger observed = new AtomicInteger();
