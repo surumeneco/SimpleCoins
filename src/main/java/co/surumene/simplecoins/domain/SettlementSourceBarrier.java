@@ -71,7 +71,6 @@ public final class SettlementSourceBarrier {
     }
 
     public synchronized void failSource(String source) {
-        requireStaging();
         if (!requiredSources.contains(source)) {
             state = State.FAILED;
             throw new IllegalArgumentException("Unknown failed settlement source");
