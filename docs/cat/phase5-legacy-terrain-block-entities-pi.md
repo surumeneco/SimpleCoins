@@ -36,7 +36,7 @@ language: ja
 | 式 |
 | --- |
 
-入力はterrain chunk内の各legacy tagを分類した仕様上の観測値であり、Java/NBTの内部表現をPIの状態として定義するものではない。分類不能はmalformedとして扱う。
+入力はterrain chunk内の各legacy tagを分類した仕様上の観測値であり、Java/NBTの内部表現をPIの状態として定義するものではない。分類不能はmalformedとして扱う。特に`Level`タグ自体が存在してcompoundでない場合、`Level.TileEntities`を安全に列挙できないため`入力.level_tile_entities = malformed`と分類する。`Level`欠損は`absent`と区別し、未知の内容を空Listと推定しない。
 
 出力はJavaの戻り値ではなく、legacy guard境界の観測結果を表す。`出力.error = 真` はvisitorへの引渡し前に`IOException`で拒否すること、`出力.visit = 偽` はvisitorを呼び出さないことを意味する。`出力.visit = 真` はlegacy guardが引渡しを許可することだけを表し、後続のdecode・visitor・他sourceの検証まで成功する保証ではない。`出力.error = 偽` もこのguard自身が拒否しないという限定的な意味である。
 
