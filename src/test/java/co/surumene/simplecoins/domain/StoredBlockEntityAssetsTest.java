@@ -218,4 +218,20 @@ class StoredBlockEntityAssetsTest {
         assertEquals(Map.of("0,64,0:26", BigInteger.valueOf(100)),
                 StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(shulker))));
     }
+
+    @Test void chiseledBookshelfSlotSixMustFailClosed() {
+        Map<String,Object> shelf = Map.of(
+                "id", "minecraft:chiseled_bookshelf", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(6, 1)));
+        assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                Map.of("block_entities", List.of(shelf))));
+    }
+
+    @Test void chiseledBookshelfLastPhysicalSlotRemainsCountable() throws Exception {
+        Map<String,Object> shelf = Map.of(
+                "id", "minecraft:chiseled_bookshelf", "x", 0, "y", 64, "z", 0,
+                "Items", List.of(coin(5, 1)));
+        assertEquals(Map.of("0,64,0:5", BigInteger.valueOf(100)),
+                StoredBlockEntityAssets.extract(Map.of("block_entities", List.of(shelf))));
+    }
 }
