@@ -16,6 +16,11 @@ public final class SavedEntityUuidIntegrity {
     private SavedEntityUuidIntegrity() {}
 
     public static void validate(Map<String, Object> chunk) throws IOException {
+        identities(chunk);
+    }
+
+    /** Return the validated identities so a traversal can detect cross-chunk aliases. */
+    public static Set<UUID> identities(Map<String, Object> chunk) throws IOException {
         if (chunk == null || !(chunk.get("Entities") instanceof List<?> entities))
             throw new IOException("Missing saved entity chunk Entities list");
 
@@ -32,5 +37,6 @@ public final class SavedEntityUuidIntegrity {
             if (!seen.add(uuid))
                 throw new IOException("Duplicate saved Entity UUID: " + uuid);
         }
+        return Set.copyOf(seen);
     }
 }
