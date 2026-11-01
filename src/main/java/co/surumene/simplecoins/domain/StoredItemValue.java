@@ -96,7 +96,8 @@ public final class StoredItemValue {
                 }
             }
             if (pdc.containsKey("simplecoins:wallet_id")) {
-                if (!(id.equals("minecraft:bundle") || id.endsWith("_bundle")) || quantity != 1 ||
+                if (!(id.equals("minecraft:bundle") ||
+                        (id.startsWith("minecraft:") && id.endsWith("_bundle"))) || quantity != 1 ||
                         !(pdc.get("simplecoins:wallet_id") instanceof String walletId) ||
                         walletId.isBlank() ||
                         !(pdc.get("simplecoins:wallet_balance") instanceof Long balance) || balance < 0)
