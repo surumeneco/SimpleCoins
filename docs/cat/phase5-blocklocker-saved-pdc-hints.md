@@ -28,3 +28,11 @@ A read-only terrain-chunk adapter may enumerate `minecraft:sign` and `minecraft:
 - BL-PDC-07 regression: a sign without PDC yields no hint, not a free-asset ownership decision.
 - BL-PDC-08: malformed sign PDC and duplicate saved candidate positions throw IOException.
 - Formal CAT machine Gates remain not-run; Draft not Confirmed.
+
+## Declaring chunk coordinate integrity (additional Draft vector)
+
+When a terrain chunk declares `xPos` and `zPos`, a saved sign candidate's block coordinates must lie inside that chunk. An out-of-chunk candidate cannot safely be associated with a nearby protected container. If either chunk coordinate is present, require both as integer NBT scalars and validate floorDiv(blockX, 16) and floorDiv(blockZ, 16). This is the same physical-source invariant already enforced for saved block inventories, not a new protection rule.
+
+- BL-PDC-09 Red: sign at block x=16 inside a chunk declaring xPos=0 must throw IOException.
+- BL-PDC-10 regression: sign at block x=15 inside chunk xPos=0 remains a candidate.
+- Formal CAT machine Gates remain not-run; Draft not Confirmed.
