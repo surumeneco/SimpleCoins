@@ -19,6 +19,8 @@ During bounded, non-symlink discovery, reject a non-regular entry at an authorit
 - SC-SOURCE-TYPE-07: a region-shaped directory in a world excluded by WorldScope remains outside the world asset scan.
 
 - SC-SOURCE-TYPE-08 (Red): a hard link shared by an Anvil region file and a canonical playerdata file is a single physical source masquerading as two different authority categories; reject it even though each category has no internal duplicate.
+- SC-SOURCE-TYPE-09 (Red): two distinct referenced external chunk `.mcc` paths that are hard links to one physical payload cannot be treated as independent authoritative inputs during snapshot traversal.
+- SC-SOURCE-TYPE-10 (Regression): two genuinely distinct external sidecars remain readable and count as two independent chunks.
 
 ## Gate status
 
