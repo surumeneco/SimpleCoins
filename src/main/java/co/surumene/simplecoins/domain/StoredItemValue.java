@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Read-only value extraction for stored 26.x Java item components, including
@@ -100,6 +101,12 @@ public final class StoredItemValue {
                         walletId.isBlank() ||
                         !(pdc.get("simplecoins:wallet_balance") instanceof Long balance) || balance < 0)
                     throw new IOException("Malformed stored wallet");
+                try {
+                    if (!UUID.fromString(walletId).toString().equals(walletId))
+                        throw new IOException("Noncanonical wallet UUID");
+                } catch (IllegalArgumentException invalid) {
+                    throw new IOException("Invalid wallet UUID", invalid);
+                }
                 for (String childKey : List.of("minecraft:bundle_contents", "minecraft:container")) {
                     Object children = components.get(childKey);
                     if (children != null && (!(children instanceof List<?> list) || !list.isEmpty()))
