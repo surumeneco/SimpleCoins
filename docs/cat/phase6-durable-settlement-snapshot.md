@@ -23,5 +23,6 @@ For the first generation, write and durably confirm the initialization marker be
 - SETTLEMENT-STORE-09: after durable publication or verified restart recovery, memory-only publication is forbidden; new generations must pass the durable writer.
 - SETTLEMENT-STORE-10: a durable initialization marker prevents a deleted snapshot from being misread as a fresh generation-zero store.
 - SETTLEMENT-STORE-11 (Red): initialization marker is durable before the first snapshot write; a failed initial snapshot replacement cannot silently reset to generation zero after the obstructing file is removed.
+- SETTLEMENT-STORE-12 (Red): a present snapshot with its required initialization marker missing must fail closed on load and successor persist.
 
 Formal CAT machine Gates, real-world source consistency, and Paper fault-injection integration: **not-run**. Do not promote this Draft to Confirmed without an authorized decision.
