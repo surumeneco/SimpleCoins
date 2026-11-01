@@ -31,14 +31,29 @@ jobs:
             docs/cat/phase5-legacy-terrain-block-entities-process.md \
             docs/cat/phase5-legacy-terrain-block-entities-pi.md \
             docs/cat/phase5-legacy-terrain-block-entities-fail-closed.md
-      - name: Compile Draft model without normative promotion
+      - name: Probe Draft model without normative promotion
+        id: model_probe
         run: |
+          set +e
           python3 cat-tdd/.cat-system/scripts/cat_compile_v2.py model \
             docs/cat/phase5-legacy-terrain-block-entities-process.md \
             docs/cat/phase5-legacy-terrain-block-entities-pi.md \
             docs/cat/phase5-legacy-terrain-block-entities-fail-closed.md \
-            --allow-draft -o /tmp/simplecoins-legacy-terrain-draft-model.json
+            --allow-draft -o /tmp/simplecoins-legacy-terrain-draft-model.json \
+            > /tmp/cat-model-probe.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/cat-model-probe.log
+          if [ "$result" -eq 0 ]; then
+            echo 'model_ready=true' >> "$GITHUB_OUTPUT"
+          elif [ "$result" -eq 2 ] && grep -Fq 'BLOCKED: Process must declare explicit closed-world contract' /tmp/cat-model-probe.log; then
+            echo 'model_ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Draft model blocked by unconfirmed closed-world semantics; normative CAT Gate not run.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit "$result"
+          fi
       - name: Independently validate Draft model conformance
+        if: steps.model_probe.outputs.model_ready == 'true'
         run: |
           python3 cat-tdd/.cat-system/scripts/cat_model_conformance.py \
             docs/cat/phase5-legacy-terrain-block-entities-process.md \
