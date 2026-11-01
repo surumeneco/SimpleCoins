@@ -151,6 +151,20 @@ class StoredItemValueTest {
         assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
     }
 
+    @Test void walletTagsOnNonVanillaBundleMustFailClosed() {
+        Map<String,Object> invalid = item("example:fake_bundle", 1,
+                Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000001",
+                        "simplecoins:wallet_balance", 100L));
+        assertThrows(java.io.IOException.class, () -> StoredItemValue.value(invalid));
+    }
+
+    @Test void dyedVanillaBundleRetainsItsWalletBalance() throws Exception {
+        Map<String,Object> valid = item("minecraft:blue_bundle", 1,
+                Map.of("simplecoins:wallet_id", "00000000-0000-0000-0000-000000000001",
+                        "simplecoins:wallet_balance", 100L));
+        assertEquals(BigInteger.valueOf(100), StoredItemValue.value(valid));
+    }
+
     @Test void savedWalletIdentityMustBeCanonicalUuid() {
         for (String invalidId : java.util.List.of("not-a-uuid", "1-1-1-1-1",
                 "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")) {
