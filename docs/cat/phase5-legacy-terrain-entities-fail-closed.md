@@ -1,21 +1,34 @@
-# Phase 5: legacy terrain-embedded Entity assets (CAT Draft)
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.legacy-terrain-entities
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
 
-Status: **Draft**, not Confirmed. Leaf: `TASK-20261101-003`.
+# DomainSpec: legacy terrain内Entity資産のfail-closed境界
 
-## Process / PI
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.snapshot | terrain Kind.REGIONのroot/Level Entities |
+| simplecoins.entity | 専用entity-regionのUUID一意性と資産抽出 |
 
-A modern Paper world stores saved Entities in the dedicated `entities/*.mca` source, which is scanned and checked for UUID uniqueness. Older Anvil terrain chunks may instead contain an `Entities` list at the root or under `Level`. The current terrain visitor does not establish a complete, independently validated owner/asset path for those embedded Entities.
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| legacy.entity.root | terrain Kind.REGIONのroot Entitiesに非空Listがあるとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-01 |
+| legacy.entity.level | terrain Kind.REGIONのLevel.Entitiesに非空Listがあるとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-02 |
+| legacy.entity.malformed | terrainのEntitiesが非Listのとき | IOExceptionで拒否しvisitor呼出し0件 | SC-LEGACY-ENT-03 |
+| legacy.entity.empty | terrainのroot/Level両Entitiesが空Listまたは欠損のとき | 通常の走査を許可する | SC-LEGACY-ENT-04 |
+| legacy.entity.dedicated | 専用entity-region fileのEntitiesを扱うとき | terrainのlegacy guardを適用せずSavedEntityUuidIntegrityを維持する | SC-LEGACY-ENT-05 |
+| legacy.entity.scope | legacy terrain内のEntity資産の完全なowner/asset adapterが未整備のとき | 未読取資産をゼロとせず、全件決算を公開しない | SC-LEGACY-ENT-01, SC-LEGACY-ENT-02 |
 
-When a terrain (`Kind.REGION`) chunk contains a nonempty `Entities` list in either representation, reject the entire staged traversal before passing the chunk to a settlement visitor. A present but non-list `Entities` value is also invalid. Empty lists are permitted; dedicated entity-region chunks retain their existing UUID validation. Do not silently treat unsupported legacy Entity assets as zero, or publish a partial settlement. Full legacy entity extraction is a separate integration requirement.
+## 境界と状態
 
-## TCE / acceptance vectors
-
-- SC-LEGACY-ENT-01: root-level terrain `Entities` with one compound -> `IOException`, zero visitor callbacks.
-- SC-LEGACY-ENT-02: `Level.Entities` with one compound -> `IOException`, zero visitor callbacks.
-- SC-LEGACY-ENT-03: malformed non-list `Entities` -> `IOException`, zero visitor callbacks.
-- SC-LEGACY-ENT-04: both terrain lists empty -> ordinary successful traversal.
-- SC-LEGACY-ENT-05: a dedicated entity-region file remains subject to `SavedEntityUuidIntegrity` and is not classified as terrain.
-
-## Gate boundary
-
-This is a defensive fail-closed guard, not a complete legacy asset reader, authoritative Paper root inventory, loaded/disk snapshot reconciliation, or permission to publish economic totals. Formal CAT machine Gates remain not-run until executed against the canonical routing and confirmed artifacts.
+既存SC-LEGACY-ENT-01〜05を意味変更せず構造化したTASK-20261101-003のCAT Draft。非空legacy Entitiesはvisitorに渡す前に拒否する。完全なlegacy decoder、全権威source、loaded/disk整合、決算公開は別の受入条件。正式CAT Process/PI/TCE・機械Gateはnot-run。Confirmed・マージ・デプロイを意味しない。
