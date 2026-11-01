@@ -25,3 +25,11 @@ Vanilla shulker boxes have 27 physical inventory slots, indexed 0..26. A saved `
 Modern saved NBT may omit `components` for an untagged item, which contributes zero currency. An explicitly present `components: null` is not a valid NBT compound and must not be silently interpreted as absence; reject it with `IOException`. This prevents malformed source data from being accepted as a verified zero-value item.
 
 Exploratory vectors: (1) `components` key present with null fails closed; (2) key absent remains a valid zero-value ordinary item; (3) a valid tagged coin remains countable; (4) `minecraft:bundle_contents` or `minecraft:container` present with null fails closed instead of silently dropping a potentially unreadable nested inventory. (5) `minecraft:custom_data` or nested `PublicBukkitValues` present with null is malformed, not an untagged item; absence remains valid. Formal CAT gates remain not-run.
+
+## Wallet early-return malformed nested component (additional Draft vector)
+
+A valid wallet identity and balance do not exempt its saved item components from structural validation. If `minecraft:bundle_contents` or `minecraft:container` is explicitly present with `null`, the saved wallet must fail closed, even though the wallet balance itself is valid. Omitted nested component keys and explicitly empty lists remain valid for an otherwise well-formed wallet. This is a data-integrity refinement of the existing malformed-components invariant, not a new ownership or settlement-publication policy.
+
+- Red: wallet with a canonical UUID and a valid Long balance, but one nested component key mapped to `null`, must throw `IOException` for each key.
+- Regression: same wallet with both nested keys absent or with one empty list retains its numeric balance.
+- Formal CAT machine gates: not-run; Draft is not Confirmed.
