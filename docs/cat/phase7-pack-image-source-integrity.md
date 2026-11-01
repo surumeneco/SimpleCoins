@@ -1,6 +1,33 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.pack-image-source-integrity
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 7: generated Java pack image source integrity (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-006.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | 生成Java pack用PNGのsource path integrity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| image.root | images directoryがsymlinkのとき | archive/default image生成前に拒否する | SC-PACK-IMAGE-01 |
+| image.png | 選択されたPNGがsymlinkのとき | 外部sourceを読み込まず拒否する | SC-PACK-IMAGE-02 |
+| image.default | default画像出力名がsymlinkで既存のとき | 上書きせず拒否する | SC-PACK-IMAGE-03 |
+| image.valid | 正当な実directoryとPNG/default pathを使うとき | 有効なsourceを受け入れる | SC-PACK-IMAGE-04 |
 
 ## Process / PI
 
