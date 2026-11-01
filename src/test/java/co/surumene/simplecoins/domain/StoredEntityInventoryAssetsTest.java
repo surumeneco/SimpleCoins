@@ -52,6 +52,28 @@ class StoredEntityInventoryAssetsTest {
                 StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(villager))));
     }
 
+    @Test void ninthVillagerInventoryEntryCannotBecomeFictitiousCurrency() {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> villager = Map.of("id", "minecraft:villager",
+                "UUID", new int[]{0, 0, 0, 40},
+                "Inventory", java.util.Collections.nCopies(9, coin));
+        assertThrows(java.io.IOException.class, () ->
+                StoredEntityInventoryAssets.extract(Map.of("Entities", List.of(villager))));
+    }
+
+    @Test void eightVillagerInventoryEntriesHaveDistinctPhysicalPositions() throws Exception {
+        Map<String,Object> coin = Map.of("id", "minecraft:paper", "count", 1,
+                "components", Map.of("minecraft:custom_data",
+                        Map.of("PublicBukkitValues", Map.of("simplecoins:denomination", 100))));
+        Map<String,Object> villager = Map.of("id", "minecraft:villager",
+                "UUID", new int[]{0, 0, 0, 40},
+                "Inventory", java.util.Collections.nCopies(8, coin));
+        assertEquals(8, StoredEntityInventoryAssets.extract(
+                Map.of("Entities", List.of(villager))).size());
+    }
+
     @Test void ambiguousSlottedAndUnslottedInventoryCannotBeCountedAsIndependent() {
         Map<String, Object> coin = Map.of("id", "minecraft:paper", "count", 1,
                 "Slot", (byte) 0,
