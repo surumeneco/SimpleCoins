@@ -1,6 +1,32 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.snapshot.slotted-entity-holder-domain
+status: draft
+process: simplecoins.snapshot
+source_refs:
+  - https://drive.google.com/file/d/173sQAGgr2JuL36ixCPtJ23daGfoOYNYQ/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: saved slotted Entity holder domain (CAT Draft)
 
 Status: **Draft**, not Confirmed. Parent: TASK-20261031-SIMPLECOINS-100; leaf: TASK-20261101-003.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| saved Entity Items | 対応するvanilla holderの物理slot topology |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| holder.unsupported | 未対応Entityや架空chest_boat型がItemsを持つとき | 実在しない物理inventoryを推測で計上せず拒否する | SC-ENTITY-SLOT-HOLDER-01, SC-ENTITY-SLOT-HOLDER-02, SC-ENTITY-SLOT-HOLDER-05 |
+| holder.supported | 既知chest/hopper minecart、chest boat、bamboo chest raftを読むとき | 確認済み物理slot上限を維持する | SC-ENTITY-SLOT-HOLDER-03, SC-ENTITY-SLOT-HOLDER-06 |
+| holder.unslotted | villager/allayのInventoryまたはinventoryのないEntityを読むとき | 独立したunslotted契約と非対象の境界を維持する | SC-ENTITY-SLOT-HOLDER-04 |
 
 ## Process / PI
 
