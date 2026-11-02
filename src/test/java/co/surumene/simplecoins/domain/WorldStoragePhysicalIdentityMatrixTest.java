@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * TASK-20261101-003 / SC-PHYSICAL-01..04 (CAT Draft).
+ * TASK-20261101-003 / SC-PHYSICAL-01..06 (CAT Draft).
  * Isolated regression for the already implemented physical source identity rule.
  * CAT semantic Gates and Paper acceptance are not yet complete.
  */
@@ -35,8 +36,10 @@ class WorldStoragePhysicalIdentityMatrixTest {
         Files.writeString(first, "same physical player data");
         Files.createLink(second, first);
 
-        assertThrows(IOException.class, () -> discover(
+        IOException failure = assertThrows(IOException.class, () -> discover(
                 Map.of("world", root), new WorldScope(true, Set.of(), Set.of())));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"),
+                "Reject physical alias specifically, not an unrelated filesystem error");
     }
 
     @Test void regionAndEntityHardlinkFailClosed() throws Exception {
@@ -48,8 +51,10 @@ class WorldStoragePhysicalIdentityMatrixTest {
         Files.write(region, new byte[8192]);
         Files.createLink(entity, region);
 
-        assertThrows(IOException.class, () -> discover(
+        IOException failure = assertThrows(IOException.class, () -> discover(
                 Map.of("world", root), new WorldScope(true, Set.of(), Set.of())));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"),
+                "Reject physical alias specifically, not an unrelated filesystem error");
     }
 
     @Test void identicalBytesInIndependentFilesRemainSeparateSources() throws Exception {
@@ -102,9 +107,11 @@ class WorldStoragePhysicalIdentityMatrixTest {
         Files.writeString(first, "physical source");
         Files.createLink(alias, first);
 
-        assertThrows(IOException.class, () -> discover(
+        IOException failure = assertThrows(IOException.class, () -> discover(
                 Map.of("world-a", a, "world-b", b),
                 new WorldScope(true, Set.of(), Set.of())));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"),
+                "Reject physical alias specifically, not an unrelated filesystem error");
     }
 
     @Test void excludedWorldPlayerdataAliasToIncludedRegionFailsClosed() throws Exception {
@@ -118,8 +125,10 @@ class WorldStoragePhysicalIdentityMatrixTest {
         Files.write(region, new byte[8192]);
         Files.createLink(alias, region);
 
-        assertThrows(IOException.class, () -> discover(
+        IOException failure = assertThrows(IOException.class, () -> discover(
                 Map.of("included", included, "excluded", excluded),
                 new WorldScope(true, Set.of(), Set.of("excluded"))));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"),
+                "Reject physical alias specifically, not an unrelated filesystem error");
     }
 }
