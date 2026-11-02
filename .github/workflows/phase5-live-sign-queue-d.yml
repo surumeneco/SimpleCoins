@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - feature/phase5-paper-live-sign-boundary-20261103-queue-d
+  pull_request:
+    branches:
+      - feature/owner-evidence-20261101
 permissions:
   contents: read
 jobs:
