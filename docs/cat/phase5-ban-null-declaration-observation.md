@@ -24,16 +24,16 @@ Characterize the existing pure-Java `BanEvidence.combine` validation boundary on
 | `BanEvidence.combine` | Required source declarations and observation validation |
 | `BanEvidenceNullDeclarationTest` | Six source-exact boundary vectors |
 
-## Non-overlapping characterization vectors
+## Rules
 
-| Vector | Input | Observed fail-closed expectation |
-| --- | --- | --- |
-| BAN-NULL-01 | null required-source set, otherwise valid evidence | `IOException` |
-| BAN-NULL-02 | valid required-source set, null observation list | `IOException` |
-| BAN-NULL-03 | required-source set containing a null member | `IOException` |
-| BAN-NULL-04 | required-source set containing a blank member | `IOException` |
-| BAN-NULL-05 | observation list containing a null `Source` after a positive BANNED observation | `IOException` rather than BANNED |
-| BAN-NULL-06 | observation with null ID after a positive BANNED observation | `IOException` rather than BANNED |
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| BAN-NULL-01 | null required-source set, otherwise valid evidence | `IOException` | `nullSourceDeclarationOrObservationContainerIsRejected` |
+| BAN-NULL-02 | valid required-source set, null observation list | `IOException` | `nullSourceDeclarationOrObservationContainerIsRejected` |
+| BAN-NULL-03 | required-source set containing a null member | `IOException` | `nullOrBlankMemberOfRequiredSourceDeclarationIsRejected` |
+| BAN-NULL-04 | required-source set containing a blank member | `IOException` | `nullOrBlankMemberOfRequiredSourceDeclarationIsRejected` |
+| BAN-NULL-05 | observation list containing a null `Source` after a positive BANNED observation | `IOException` rather than BANNED | `malformedObservationAfterPositiveBanMustNotBeIgnored` |
+| BAN-NULL-06 | observation with null ID after a positive BANNED observation | `IOException` rather than BANNED | `malformedObservationAfterPositiveBanMustNotBeIgnored` |
 
 Existing `BanEvidenceTest` already covers empty declarations, blank observation IDs, null statuses, normalized duplicates, and missing required evidence; `PR #107` covers other malformed observation permutations. Those cases are deliberately not reimplemented here.
 
