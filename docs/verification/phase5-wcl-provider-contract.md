@@ -87,6 +87,20 @@ The WCL `StorageSnapshot` constructor itself enforces non-null identities, immut
 
 The exact three WCL `develop` API blobs above were independently reproduced and matched with `git hash-object`. Java 21 compiled them without Paper dependencies; a focused direct harness passed **16/16 assertions** for the three result variants, empty-but-successful snapshot distinction, identity fields, defensive copies, duplicate slots, malformed failures and invalid positions. This validates only the pure Java value contract. It is **not** a Gradle/JUnit run against WWC/WWW or a Paper server test.
 
+## Paper runtime proof collection (not yet executed)
+
+The source-derived vectors above are insufficient to declare a live provider usable. Collect the following **on the actual server** before using WCL evidence in settlement; keep each observation tied to a single server start, world and installed JAR set. No observation in this section is presently marked as passed.
+
+| Evidence | Capture method | Required interpretation |
+| --- | --- | --- |
+| Deployed artifacts | Record the server start timestamp, Paper version and `sha256sum` of the **installed** WCL, WWC, WWW and WGL JARs; inspect each JAR's `plugin.yml` with `unzip -p <jar> plugin.yml` | A Git tree filename, README version or build artifact alone does not prove which bytes Paper loaded |
+| Plugin lifecycle | Capture Paper startup/enable logs and enabled plugin identities after startup and after any reload | A JAR present on disk does not establish an enabled plugin or an active service |
+| Complete registration set | On the **primary thread**, a temporary diagnostic consumer built against the deployed WCL API calls `Bukkit.getServicesManager().getRegistrations(WonderfulStorageReader.class)`; for **every** `RegisteredServiceProvider`, record `getPlugin().getName()`, `getPlugin().isEnabled()`, `getPriority()`, `getProvider().providerId()` | Expect distinct, enabled, owner-matched `wwc` and `www` registrations only if those compatible providers are actually deployed. A single `load(...)` result is insufficient; missing, duplicate or unexpected registrations are incomplete evidence |
+| Provider read results | For independently identified loaded entity UUIDs and world UUIDs, capture `readLoaded` result variant and any snapshot IDs/slots; separately obtain saved PDC through a read-only source and call `readStored` on the primary thread | `NotFound` and `Failure` do not mean empty; `Success(items=[])` proves only that provider's verified snapshot is empty. Wrong entity/world/provider identity is rejected |
+| Coverage and reconciliation | Record the authoritative loaded and saved source inventories, which identities were scanned, snapshot timestamps and any loaded/saved duplicate or disagreement | A provider returning successful snapshots does not establish catalog completeness; unresolved or unscanned identities block settlement publication |
+
+For the diagnostic consumer, do **not** load chunks, mutate PDC, call a Paper API off-thread, or substitute a guessed PDC for an independently obtained saved record. Record exact result variants and the registered plugin owner, not just a count of registrations. If the deployed WCL API is absent or incompatible, mark the provider path **not available / incomplete** rather than inventing a zero-asset result. This protocol is a handoff, **not** a claim that a diagnostic plugin has been built or executed.
+
 ## Remaining implementation and acceptance boundary
 
 1. Draft/confirm the SimpleCoins WCL integration CAT Process/PI/TCE, run the required deterministic pre-implementation Gates, and create a separate adapter implementation Work on an uncontended feature branch.
