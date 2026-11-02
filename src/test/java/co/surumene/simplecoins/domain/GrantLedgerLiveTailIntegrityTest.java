@@ -124,4 +124,35 @@ class GrantLedgerLiveTailIntegrityTest {
         ledger.acknowledge(grant, grant.sequence());
         assertTrue(ledger.pending(player).isEmpty());
     }
+
+    @Test void idempotentOlderAcknowledgementMustRecheckMissingDurableRecord() throws Exception {
+        // SC-JOURNAL-ACK-07: delivered state in memory is not durable proof.
+        Path root = directory.resolve("idempotent-missing-older");
+        var ledger = new GrantLedger(root);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000054");
+        var older = ledger.reserve(player, 100, "console");
+        ledger.reserve(player, 200, "console");
+        ledger.acknowledge(older, older.sequence());
+        Path olderFile = root.resolve(older.sequence() + ".grant");
+        Files.delete(olderFile);
+
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(older, older.sequence()));
+        assertFalse(Files.exists(olderFile),
+                "Idempotent acknowledgement must not recreate missing durable evidence");
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player),
+                "An unsafe durable target must poison the live journal");
+    }
+
+    @Test void idempotentOlderAcknowledgementWithIntactDurableRecordIsAllowed()
+            throws Exception {
+        // SC-JOURNAL-ACK-03: valid non-tail durable target remains idempotent.
+        var ledger = new GrantLedger(directory.resolve("idempotent-intact"));
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000055");
+        var older = ledger.reserve(player, 100, "console");
+        var newer = ledger.reserve(player, 200, "console");
+        ledger.acknowledge(older, older.sequence());
+        assertDoesNotThrow(() -> ledger.acknowledge(older, older.sequence()));
+        assertEquals(java.util.List.of(newer), ledger.pending(player));
+    }
 }
