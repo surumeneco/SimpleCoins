@@ -89,4 +89,37 @@ class WorldStoragePhysicalIdentityMatrixTest {
                 Set.copyOf(manifest.worldFiles()));
         assertEquals(1, manifest.requiredSourceIds().size());
     }
+
+    @Test void crossWorldPlayerdataHardlinkFailsClosed() throws Exception {
+        Path a = directory.resolve("world-a");
+        Path b = directory.resolve("world-b");
+        UUID firstUuid = UUID.fromString("00000000-0000-0000-0000-000000000063");
+        UUID secondUuid = UUID.fromString("00000000-0000-0000-0000-000000000064");
+        Path first = a.resolve("playerdata/" + firstUuid + ".dat");
+        Path alias = b.resolve("playerdata/" + secondUuid + ".dat");
+        Files.createDirectories(first.getParent());
+        Files.createDirectories(alias.getParent());
+        Files.writeString(first, "physical source");
+        Files.createLink(alias, first);
+
+        assertThrows(IOException.class, () -> discover(
+                Map.of("world-a", a, "world-b", b),
+                new WorldScope(true, Set.of(), Set.of())));
+    }
+
+    @Test void excludedWorldPlayerdataAliasToIncludedRegionFailsClosed() throws Exception {
+        Path included = directory.resolve("included");
+        Path excluded = directory.resolve("excluded");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000065");
+        Path region = included.resolve("region/r.0.0.mca");
+        Path alias = excluded.resolve("playerdata/" + player + ".dat");
+        Files.createDirectories(region.getParent());
+        Files.createDirectories(alias.getParent());
+        Files.write(region, new byte[8192]);
+        Files.createLink(alias, region);
+
+        assertThrows(IOException.class, () -> discover(
+                Map.of("included", included, "excluded", excluded),
+                new WorldScope(true, Set.of(), Set.of("excluded"))));
+    }
 }
