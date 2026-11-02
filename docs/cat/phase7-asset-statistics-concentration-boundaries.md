@@ -15,6 +15,23 @@ language: ja
 
 Status: Draft, not Confirmed. Regression test preparation for the already integrated `AssetStatistics` pure-domain calculation, not an implemented admin query.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.admin.asset-statistics | Existing complete-snapshot arithmetic, registered population and concentration boundaries |
+
+## Rules
+
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| STATS-BOUNDARY-01 | Free assets dominate an ordinary total | Free is a concentration subject but not a registered player | freeAssetsAreAConcentrationSubjectButNotARegisteredPlayer |
+| STATS-BOUNDARY-02 | First subject owns exactly half of total | Inclusive half threshold selects one subject | exactHalfThresholdIncludesTheFirstSubject |
+| STATS-BOUNDARY-03 | Fractional averages with three registered players | Arithmetic rounds HALF_UP to eight decimals without division by zero | fractionalAveragesAndConcentrationUseEightDecimalHalfUp |
+| STATS-BOUNDARY-04 | Personal and free assets exceed signed 64-bit range | BigInteger arithmetic remains exact and dead stays separate | hugeValuesRemainExactAndDeadAssetsStaySeparate |
+| STATS-BOUNDARY-05 | Registered population is empty | Undefined population metrics are null, not fabricated zero | absentRegisteredPopulationHasNoInventedAverages |
+| STATS-BOUNDARY-06 | Map or amount is null, or registered value is null | Malformed input is rejected before report publication | malformedPopulationAndAmountsAreRejected |
+
 | ID | Input | Expected |
 | --- | --- | --- |
 | STATS-BOUNDARY-01 | Two registered players hold 1 each, free assets hold 8 | Ordinary total 10; free counts as one concentration subject; half-share subject count 1, percentage 50% using registered population N=2; max-world percentage 10% |
