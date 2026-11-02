@@ -1,0 +1,48 @@
+name: Phase 5 symlink traversal boundary verification
+
+on:
+  push:
+    branches:
+      - feature/phase5-symlink-boundary-verification-20261102-queue-c
+    paths:
+      - 'docs/cat/phase5-discovery-symlink-boundary-verification.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageSymlinkBoundaryVerificationTest.java'
+      - '.github/workflows/phase5-symlink-boundary-verification.yml'
+
+  pull_request:
+    branches:
+      - develop
+      - feature/phase5-world-storage-discovery-20261102-queue-b
+    paths:
+      - 'docs/cat/phase5-discovery-symlink-boundary-verification.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageSymlinkBoundaryVerificationTest.java'
+      - '.github/workflows/phase5-symlink-boundary-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD Draft syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: CAT Draft syntax lint (not formal Gate)
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-discovery-symlink-boundary-verification.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Full Gradle JUnit suite
+        run: gradle --no-daemon clean test jar
