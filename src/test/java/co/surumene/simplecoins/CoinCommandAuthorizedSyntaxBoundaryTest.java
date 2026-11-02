@@ -67,10 +67,10 @@ class CoinCommandAuthorizedSyntaxBoundaryTest {
                 "Descriptor must have distinct commands and permissions sections");
         String commands = descriptor.substring(commandsStart, permissionsStart);
         String permissions = descriptor.substring(permissionsStart);
-        assertTrue(commands.contains("\n  simplecoins:\n"));
-        assertTrue(commands.contains("\n    permission: simplecoins.admin\n"));
-        assertTrue(permissions.contains("\n  simplecoins.admin:\n"));
-        assertTrue(permissions.contains("\n    default: op\n"),
+        assertTrue(commands.lines().anyMatch("  simplecoins:"::equals));
+        assertTrue(commands.lines().anyMatch("    permission: simplecoins.admin"::equals));
+        assertTrue(permissions.lines().anyMatch("  simplecoins.admin:"::equals));
+        assertTrue(permissions.lines().anyMatch("    default: op"::equals),
                 "Admin permission must not be granted by default");
     }
 
