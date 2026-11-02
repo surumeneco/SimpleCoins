@@ -37,8 +37,9 @@ class WorldStorageDualPlayerdataAuthorityTest {
         writePlayer(world, "playerdata", FIRST);
         writePlayer(world, "players/data", FIRST);
 
-        assertThrows(IOException.class,
+        IOException failure = assertThrows(IOException.class,
                 () -> scan(world, new WorldScope(true, Set.of(), Set.of())));
+        assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
     }
 
     @Test void independentUuidsAcrossBothLayoutsRemainDiscoverable() throws Exception {
@@ -59,8 +60,9 @@ class WorldStorageDualPlayerdataAuthorityTest {
         writePlayer(world, "playerdata", FIRST);
         writePlayer(world, "players/data", FIRST);
 
-        assertThrows(IOException.class,
+        IOException failure = assertThrows(IOException.class,
                 () -> scan(world, new WorldScope(false, Set.of(), Set.of("world"))));
+        assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
     }
 
     @Test void precedingRegionDoesNotPermitPartialManifestPublication() throws Exception {
@@ -71,7 +73,8 @@ class WorldStorageDualPlayerdataAuthorityTest {
         writePlayer(world, "playerdata", FIRST);
         writePlayer(world, "players/data", FIRST);
 
-        assertThrows(IOException.class,
+        IOException failure = assertThrows(IOException.class,
                 () -> scan(world, new WorldScope(true, Set.of(), Set.of())));
+        assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
     }
 }
