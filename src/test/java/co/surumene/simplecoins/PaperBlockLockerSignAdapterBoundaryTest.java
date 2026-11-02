@@ -84,6 +84,26 @@ class PaperBlockLockerSignAdapterBoundaryTest {
         assertEquals(0, calls.get());
     }
 
+    @Test
+    void liveEveryoneNeedsResolvedPrimaryBeforePublicOwnership() throws Exception {
+        WallSign wallData = proxy(WallSign.class, (method, args) -> {
+            if (method.equals("getFacing")) return BlockFace.NORTH;
+            throw new AssertionError(method);
+        });
+        Sign publicSign = sign(wallData, 0, 64, -1,
+                text("[Private]", "Alice", "[Everyone]", ""), false);
+        var known = PaperBlockLockerSignAdapter.readPaper(publicSign,
+                PRIVATE, MORE, EVERYONE, name -> ExternalOwnerDecision.personal(OWNER))
+                .orElseThrow();
+        var unknown = PaperBlockLockerSignAdapter.readPaper(publicSign,
+                PRIVATE, MORE, EVERYONE, name -> ExternalOwnerDecision.unknown())
+                .orElseThrow();
+        assertEquals(ExternalOwnerDecision.Kind.FREE,
+                BlockLockerProtectionResolution.single(CHEST, List.of(known)).kind());
+        assertEquals(ExternalOwnerDecision.Kind.UNKNOWN,
+                BlockLockerProtectionResolution.single(CHEST, List.of(unknown)).kind());
+    }
+
     private static BlockLockerProtectionResolution.VerifiedSign read(Sign sign)
             throws IOException {
         return PaperBlockLockerSignAdapter.readPaper(sign, PRIVATE, MORE, EVERYONE,
