@@ -59,3 +59,4 @@ class BanEvidenceTest {
         assertThrows(IOException.class, () -> BanEvidence.combine(
                 Set.of("paper", " PAPER "), List.of()));
     }
+}
