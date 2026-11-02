@@ -49,4 +49,17 @@ class BlockLockerSignTextTest {
         assertThrows(IOException.class, () -> BlockLockerEveryoneText.matches(
                 null, Set.of("Everyone")));
     }
+
+    @Test void malformedRuntimeAliasesCannotBeIgnoredAfterAnEarlyMatch() {
+        // Validate the entire runtime localization set before trusting any
+        // positive text match: a partial match is not ownership evidence.
+        assertThrows(IOException.class, () -> BlockLockerHeaderMatcher.match(
+                "[Private]", Set.of("[Private]", "§a"), MORE));
+        assertThrows(IOException.class, () -> BlockLockerHeaderMatcher.match(
+                "[Private]", PRIVATE, Set.of("[More Users]", " §r ")));
+        assertThrows(IOException.class, () -> BlockLockerEveryoneText.matches(
+                "[Everyone]", Set.of("Everyone", "[Malformed]")));
+        assertThrows(IOException.class, () -> BlockLockerEveryoneText.matches(
+                "[Other]", Set.of("Everyone", "")));
+    }
 }
