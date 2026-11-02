@@ -1,0 +1,46 @@
+name: Phase 5 root ancestor alias Red verification
+
+on:
+  push:
+    branches:
+      - feature/phase5-root-ancestor-alias-red-20261102-queue-c
+    paths:
+      - 'docs/cat/phase5-root-ancestor-alias-red.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageRootAncestorAliasRedTest.java'
+      - '.github/workflows/phase5-root-ancestor-alias-red.yml'
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'docs/cat/phase5-root-ancestor-alias-red.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageRootAncestorAliasRedTest.java'
+      - '.github/workflows/phase5-root-ancestor-alias-red.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD Draft syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: CAT Draft syntax lint (not formal Gate)
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-root-ancestor-alias-red.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Full Gradle JUnit suite (two expected Red vectors)
+        run: gradle --no-daemon clean test jar
