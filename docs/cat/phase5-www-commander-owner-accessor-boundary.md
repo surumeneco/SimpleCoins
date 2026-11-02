@@ -15,6 +15,13 @@ language: ja
 
 The accepted owner precedence in 02A is commander, then owner, then free. This Draft records a candidate discrepancy between the existing reflection adapter and the pure CompanionOwnerResolution resolver. It does not authorize production changes or a CAT Confirmed promotion.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| `PaperWonderfulWolfOwnerAdapter.readPlugin` | Loaded WWW reflection and lower-priority owner lookup failure |
+| `CompanionOwnerResolution.resolve` | Known commander precedence over unknown fallback evidence |
+
 ## Rules
 
 | ID | Condition | Requirement | Verification |
