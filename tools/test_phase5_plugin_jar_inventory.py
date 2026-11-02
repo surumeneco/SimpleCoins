@@ -110,6 +110,17 @@ class PluginJarInventoryTest(unittest.TestCase):
         self.assertEqual(2, main(["--plugins-dir", str(link)]))
 
 
+    def test_large_jar_spools_without_changing_digest_or_descriptor(self):
+        import hashlib
+        path = self.directory / "large.jar"
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("plugin.yml", "name: Large\\n")
+            archive.writestr("data.bin", b"X" * (9 * 1024 * 1024))
+        result = inventory(self.directory)
+        self.assertTrue(result["scan_complete"])
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), result["entries"][0]["sha256"])
+        self.assertEqual(["plugin.yml"], result["entries"][0]["descriptors"])
+
     def test_symlink_in_ancestor_directory_is_rejected(self):
         nested = self.directory / "real"
         nested.mkdir()
