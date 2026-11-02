@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Candidate CAT Draft SC-PRESENCE-01..04.
- * A manually constructed manifest must not claim source closure for
- * missing, non-regular, or symbolic authoritative files.
+ * Candidate CAT Draft SC-PRESENCE-01..05.
+ * A manifest must not claim source closure for missing, non-regular,
+ * symbolic, or subsequently deleted authoritative files.
  */
 class WorldStorageManifestSourcePresenceTest {
     @TempDir Path directory;
