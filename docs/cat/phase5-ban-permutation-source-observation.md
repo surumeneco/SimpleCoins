@@ -17,6 +17,13 @@ language: ja
 
 This code-to-spec verification extends the existing `phase5-ban-decision-evidence-matrix.md` without replacing its rules. The subject is the already implemented, pure-Java `BanEvidence.evaluate` on `develop`. It does not discover plugins, prove that the required source list is complete, or authorize an owner settlement.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| `BanEvidence.evaluate` | Declared four-source evidence precedence and order invariance |
+| `BanEvidencePermutationAndMissingSourceTest` | Exhaustive permutations and malformed-source rejection |
+
 ## Additional verification vectors
 
 | ID | Existing behavior to verify | Test coverage |
