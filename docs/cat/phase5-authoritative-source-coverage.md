@@ -62,7 +62,7 @@ language: ja
 
 ## 実装前に決定・検証する事項
 
-1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。 catalogの走査前後での同一性と、変更時の失敗・再試行境界も未決定。
+1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。**確認済みAPI候補**：Paperの`Bukkit.getWorlds()`は稼働中に認識されるWorld一覧と`World.getWorldFolder()`を提供するが、Multiverseの未ロード登録worldを網羅する根拠にはならない。Multiverse-Core **5.8.2** の`WorldManager.getWorlds()`はロード済み・未ロード双方を列挙し、呼出しごとに新しいスナップショットを返す。5.8.2の`MultiverseWorld.getOfflineWorldFolder()`は未ロード時の候補パスであり、Paper 26.1+の新配置を考慮する一方、実際の格納先と一致する保証がないため、ロード済みでは`World.getWorldFolder()`を優先する。対象サーバーのMultiverse実導入版とのAPI互換性、未ロードworldのパス実在性、非Multiverse worldとの集合統合、重複物理root、catalogの前後同一性と変更時の再試行境界は**未決定・未実機検証**。参照：`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/WorldManager.html`、`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/MultiverseWorld.html`、`https://jd.papermc.io/paper/1.21.3/org/bukkit/Bukkit.html`。
 2. 保存sourceのディレクトリ不存在が「その版では正当な空」と「想定sourceの未検出」のどちらかを識別する規則。空ディレクトリを必須とする仕様はここでは採用しない。
 3. legacyと26.xの同時存在時に、別実体・別保存版・同一物理資産を区別する権威選択。任意の優先順位をこのDraftから導入しない。 world rootの外にあるworld非依存playerdataをどの権威情報から取得するかも未決定。
 4. loaded-vs-diskの同一時点性・APIスレッド制約・停止/保存バリアはPhase 6の正本で決定する。ここで凍結方式や再適用方式を勝手に確定しない。
