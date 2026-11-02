@@ -27,7 +27,7 @@ class WorldSnapshotLegacyTerrainBlockEntitiesTest {
 
     private enum Layout {
         ROOT_NONEMPTY, LEVEL_NONEMPTY, ROOT_WRONG_TYPE, LEVEL_WRONG_TYPE,
-        LEVEL_NOT_COMPOUND, ROOT_EMPTY, LEVEL_EMPTY, ABSENT
+        LEVEL_NOT_COMPOUND, ROOT_EMPTY, LEVEL_EMPTY, ROOT_EMPTY_LEVEL_NONEMPTY, ROOT_NONEMPTY_LEVEL_EMPTY, ABSENT
     }
 
     private static void tileEntities(DataOutputStream out, boolean occupied)
@@ -52,6 +52,12 @@ class WorldSnapshotLegacyTerrainBlockEntitiesTest {
                     out.writeByte(3); out.writeUTF("TileEntities"); out.writeInt(1);
                 }
                 case ROOT_EMPTY -> tileEntities(out, false);
+                case ROOT_EMPTY_LEVEL_NONEMPTY, ROOT_NONEMPTY_LEVEL_EMPTY -> {
+                    tileEntities(out, layout == Layout.ROOT_NONEMPTY_LEVEL_EMPTY);
+                    out.writeByte(10); out.writeUTF("Level");
+                    tileEntities(out, layout == Layout.ROOT_EMPTY_LEVEL_NONEMPTY);
+                    out.writeByte(0);
+                }
                 case LEVEL_NONEMPTY, LEVEL_WRONG_TYPE, LEVEL_EMPTY -> {
                     out.writeByte(10); out.writeUTF("Level"); // nested compound
                     if (layout == Layout.LEVEL_WRONG_TYPE) {
@@ -120,6 +126,14 @@ class WorldSnapshotLegacyTerrainBlockEntitiesTest {
 
     @Test void nonCompoundLevelCannotBeTreatedAsAbsent() throws Exception {
         assertRejected(Layout.LEVEL_NOT_COMPOUND);
+    }
+
+    @Test void emptyRootCannotMaskNonemptyLevelList() throws Exception {
+        assertRejected(Layout.ROOT_EMPTY_LEVEL_NONEMPTY);
+    }
+
+    @Test void nonemptyRootCannotBeMaskedByEmptyLevelList() throws Exception {
+        assertRejected(Layout.ROOT_NONEMPTY_LEVEL_EMPTY);
     }
 
     private void assertRejected(Layout layout) throws Exception {
