@@ -67,6 +67,15 @@ class WorldStorageSymlinkBoundaryVerificationTest {
         assertSymbolicFailure(reject(root, allWorlds()));
     }
 
+    @Test void symbolicRegionDirectoryIsRejected() throws Exception {
+        Path root = temp.resolve("world");
+        Path externalRegion = temp.resolve("external-region");
+        write(externalRegion.resolve("r.0.0.mca"));
+        Files.createDirectories(root);
+        Files.createSymbolicLink(root.resolve("region"), externalRegion);
+        assertSymbolicFailure(reject(root, allWorlds()));
+    }
+
     @Test void symbolicBackupDirectoryIsRejected() throws Exception {
         Path root = temp.resolve("world");
         Path backup = temp.resolve("external-backup");
