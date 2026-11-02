@@ -78,6 +78,57 @@ class WorldStorageDiscoveryTest {
         assertEquals(playerData.toAbsolutePath(), files.playerDataFiles().get(player));
     }
 
+    @Test void excludedCustomDimensionMustNotSuppressIndependentPlayerdata() throws Exception {
+        // SC-COVERAGE-04: WorldScope excludes world-owned terrain and Entity
+        // sources, never the world-independent playerdata candidate.
+        Path included = directory.resolve("included");
+        Path excluded = directory.resolve("excluded");
+        Path includedRegion = included.resolve("region/r.0.0.mca");
+        Path excludedRegion = excluded.resolve("dimensions/custom/moon/region/r.0.0.mca");
+        Path excludedEntities = excluded.resolve("dimensions/custom/moon/entities/r.0.0.mca");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000046");
+        Path excludedPlayer = excluded.resolve("playerdata/" + player + ".dat");
+        for (Path file : new Path[]{includedRegion, excludedRegion, excludedEntities, excludedPlayer}) {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("included", included, "excluded", excluded),
+                new WorldScope(true, Set.of(), Set.of("excluded")), 100);
+        assertEquals(List.of(new WorldStorageDiscovery.SourceFile(
+                "included", includedRegion.toAbsolutePath(), WorldStorageDiscovery.Kind.REGION)),
+                manifest.worldFiles());
+        assertEquals(Map.of(player, excludedPlayer.toAbsolutePath()), manifest.playerDataFiles());
+    }
+
+    @Test void excludedWorldPlayerdataConflictStillFailsClosed() throws Exception {
+        // SC-COVERAGE-03/04: an excluded world is not an authority override.
+        // Identical UUIDs across world roots cannot be arbitrarily selected.
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000047");
+        Path included = directory.resolve("included");
+        Path excluded = directory.resolve("excluded");
+        for (Path root : new Path[]{included, excluded}) {
+            Path file = root.resolve("playerdata/" + player + ".dat");
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("included", included, "excluded", excluded),
+                new WorldScope(true, Set.of(), Set.of("excluded")), 100));
+    }
+
+    @Test void excludedWorldNonRegularPlayerdataStillFailsClosed() throws Exception {
+        // An invalid mandatory playerdata source is not equivalent to zero
+        // assets merely because its containing world is excluded.
+        Path excluded = directory.resolve("excluded");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000048");
+        Files.createDirectories(excluded.resolve("playerdata/" + player + ".dat"));
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("excluded", excluded),
+                new WorldScope(false, Set.of(), Set.of("excluded")), 100));
+    }
+
     @Test void duplicatedPlayerdataMustBeResolvedBeforeAccounting() throws Exception {
         UUID player = UUID.randomUUID();
         Path a = directory.resolve("a"), b = directory.resolve("b");
