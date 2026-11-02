@@ -1,6 +1,6 @@
 # Phase 5 — BlockLocker localized runtime alias contract
 
-Status: **source-verified integration evidence and an open Red defect**, not a Confirmed CAT specification or Paper runtime acceptance. This document records the common source contract for existing Draft Red PRs [#49](https://github.com/surumeneco/SimpleCoins/pull/49) and [#53](https://github.com/surumeneco/SimpleCoins/pull/53) without merging their test-only changes or modifying their branches.
+Status: **source-verified integration evidence and an open Red defect**, not a Confirmed CAT specification or Paper runtime acceptance. This document records the common source contract for existing Draft Red PRs [#49](https://github.com/surumeneco/SimpleCoins/pull/49), [#53](https://github.com/surumeneco/SimpleCoins/pull/53), and [#68](https://github.com/surumeneco/SimpleCoins/pull/68) without merging their test-only changes or modifying their branches.
 
 ## Source-of-truth distinction
 
@@ -30,8 +30,10 @@ The exact SimpleCoins `develop` Git blobs above were reproduced and matched usin
 | Colliding PRIVATE/MORE_USERS aliases | Green (throws `IOException`) |
 | Colored runtime Everyone alias `§aEveryone` | **Expected Red:** malformed alias not rejected |
 | Colored runtime PRIVATE alias `§a[Private]` | **Expected Red:** malformed alias normalized into a valid header match |
+| Formatting-only Everyone alias alongside valid runtime alias | **Expected Red:** malformed alias set accepted on positive match |
+| Whitespace and formatting-only Everyone alias alongside valid runtime alias | **Expected Red:** malformed alias set accepted on negative match |
 
-Result: **6/6 passing controls and 2/2 reproduced expected Red cases**. These are standalone direct Java assertions, not JUnit, Gradle, CAT machine Gates, or Paper integration. Existing Draft PRs #49/#53 contain related JUnit Red evidence; their branches remain independent.
+The original direct harness reproduced 6 Green controls and 2 expected Red cases. A separate exact-source Java probe for PR #68 reproduced 1 Green control and 2 additional expected Red cases. Exact-head Actions run 41393085051 passed CAT Draft syntax lint and completed 63 JUnit tests with exactly 2 intended Red failures. These are not normative CAT Gates or Paper runtime acceptance; all related test branches remain independent.
 
 ## Implementation and acceptance boundary
 
