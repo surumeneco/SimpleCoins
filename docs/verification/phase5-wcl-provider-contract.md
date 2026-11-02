@@ -15,6 +15,18 @@ Status: **source-verified integration evidence**, not a CAT Confirmed artifact a
 
 The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` blob `fa44e58119d05b04c784d48d68e1692e0b79cce6`; WWW registration at `WhatAWonderfulWolfPlugin.java` blob `c381d36a113cc57854e17e9b89324731dd2e3172`. **Both register the same `WonderfulStorageReader.class` service interface** with `ServicePriority.Normal`, each owned by its respective plugin, and unregister on disable. Consequently a single `ServicesManager.load(WonderfulStorageReader.class)` is not a complete two-provider inventory. A future SimpleCoins adapter must enumerate registrations, validate owner/enabled status and `providerId()`, and reject missing/duplicate/ambiguous required providers; it must not infer that one loaded registration represents both species.
 
+### WWW public loaded-owner API visibility (source verification)
+
+The optional SimpleCoins reflection path `loadedIndividuals() → find(UUID) → commanderId()/ownerId()` was checked against actual WWW `develop` source, rather than a synthetic Java visibility fixture:
+
+| WWW source | Exact Git blob SHA | Verified declaration |
+| --- | --- | --- |
+| `co.surumene.www.WhatAWonderfulWolfPlugin` | `c381d36a113cc57854e17e9b89324731dd2e3172` | `public final class`, `public WonderfulWolfLoadedIndividuals loadedIndividuals()` |
+| `co.surumene.www.persistence.WonderfulWolfLoadedIndividuals` | `61c417d6866dd3ed3c756e3bc8252388ad1c14ca` | `public final class`, `public Optional<WonderfulWolfIndividual> find(UUID)` |
+| `co.surumene.www.individual.WonderfulWolfIndividual` | `ad2bd722d6e3ba7e5ddaec457f17e834b9b560a9` | `public record` with `Optional<UUID> commanderId` and `ownerId` public record accessors |
+
+Consequently, the package-private implementation classes in SimpleCoins [PR #98](https://github.com/surumeneco/SimpleCoins/pull/98) are a **hypothetical compatibility fixture**, not a reproduced visibility defect in the inspected WWW source. Its two expected-Red cases do not justify a production reflection change for the currently inspected API. The source verification does **not** establish which WWW JAR is installed, plugin enabled state, a loaded individual, saved/offline completeness, or real Paper reflection success. Those remain runtime acceptance conditions. Missing/failed lookup is UNKNOWN, not verified FREE.
+
 ## Required fail-closed decision matrix for SimpleCoins
 
 | Evidence case | Safe interpretation |
