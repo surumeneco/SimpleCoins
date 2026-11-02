@@ -26,8 +26,8 @@ language: ja
 
 | ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
-| everyone.alias.normalized | runtime alias が実行時の無色名であり、表示行だけが旧式色コードを含む | 表示行の色コードを除去して角括弧付き alias と比較する | BL-EVERYONE-ALIAS-01 |
-| everyone.alias.blank-after-format | runtime alias に旧式色コードが含まれる（書式のみを含む場合も同様） | BlockLocker の無色 alias 契約に反するため、他の有効 alias が一致しても IOException で拒否する | BL-EVERYONE-ALIAS-02 |
+| everyone.alias.uncolored | runtime alias が実行時の無色名であり、表示行だけが旧式色コードを含む | 表示行の色コードを除去して角括弧付き alias と比較する | BL-EVERYONE-ALIAS-01 |
+| everyone.alias.formatted-input | runtime alias に旧式色コードが含まれる（書式のみを含む場合も同様） | BlockLocker の無色 alias 契約に反するため、他の有効 alias が一致しても IOException で拒否する | BL-EVERYONE-ALIAS-02 |
 | everyone.alias.exact | 正規化後に未知の可視名や余分な文字がある | Everyone と推定しない。実行時 alias 以外の英語名を補完しない | BL-EVERYONE-ALIAS-03 |
 
 ## Test model / TCE
