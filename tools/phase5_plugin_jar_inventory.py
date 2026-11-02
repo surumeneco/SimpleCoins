@@ -40,12 +40,18 @@ def inventory(plugin_dir: Path) -> dict:
             errors.append({"jar": path.name, "reason": "not_a_regular_file"})
             continue
         try:
+            before = path.stat()
             digest = sha256_file(path)
             with zipfile.ZipFile(path) as archive:
                 descriptors = sorted(DESCRIPTORS.intersection(archive.namelist()))
+            after = path.stat()
+            identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            if identity(before) != identity(after):
+                errors.append({"jar": path.name, "reason": "changed_during_scan"})
+                continue
             entries.append({
                 "jar": path.name,
-                "size_bytes": path.stat().st_size,
+                "size_bytes": after.st_size,
                 "sha256": digest,
                 "descriptors": descriptors,
             })
