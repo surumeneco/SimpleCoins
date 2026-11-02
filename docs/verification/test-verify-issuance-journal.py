@@ -2,6 +2,8 @@
 """Offline tests for SimpleCoins' read-only issuance journal verifier."""
 import hashlib
 import importlib.util
+import shutil
+import subprocess
 from pathlib import Path
 import struct
 import tempfile
@@ -132,6 +134,26 @@ class VerifyIssuanceJournalTest(unittest.TestCase):
         self.record(1)
         with self.assertRaises(verifier.InvalidJournal):
             verifier.verify(self.path)
+
+    def test_real_java_grant_ledger_writer_compatibility(self):
+        root = Path(__file__).resolve().parents[2]
+        sources = [
+            root / "src/main/java/co/surumene/simplecoins/domain/DurableFile.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/GrantLedger.java",
+            root / "docs/verification/IssuanceJournalVerifierFixture.java",
+        ]
+        if not all(path.is_file() for path in sources) or not shutil.which("javac") or not shutil.which("java"):
+            self.skipTest("actual Java sources and JDK required")
+        classes = Path(self.tmp.name) / "classes"
+        classes.mkdir()
+        subprocess.run(["javac", "-d", str(classes), *map(str, sources)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run(["java", "-cp", str(classes), "IssuanceJournalVerifierFixture",
+                        str(self.path)], check=True, capture_output=True, text=True)
+        result = verifier.verify(self.path)
+        self.assertEqual((2, 1, 2, []),
+                         (result["records"], result["pending"], result["head"], result["warnings"]))
 
     def test_no_identity_leak(self):
         private_grant_id, private_player_id = uuid.uuid4(), uuid.uuid4()
