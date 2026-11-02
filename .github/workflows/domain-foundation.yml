@@ -16,5 +16,5 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.2.1"
-      - name: Test isolated URL validation domain
+      - name: Test isolated domain foundation
         run: gradle --no-daemon clean test jar
