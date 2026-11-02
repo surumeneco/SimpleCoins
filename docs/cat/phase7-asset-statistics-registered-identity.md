@@ -15,6 +15,21 @@ language: ja
 
 The `AssetStatistics.calculate(Map<UUID, BigInteger>, free, dead)` input represents **registered personal owners**. A null UUID is not a registered player and must not be converted into a personal account or counted as part of the registered population. Verified free assets use the separate `free` argument; unresolved ownership must remain outside a published complete snapshot.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.admin.registered-identity | Registered-player UUID integrity before personal asset statistics publication |
+
+## Rules
+
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| STATS-IDENTITY-01 | Registered-player map contains a null UUID key | Reject invalid identity instead of counting a personal owner | nullRegisteredUuidCannotBecomeAPersonalAssetOwner |
+| STATS-IDENTITY-02 | Registered-player map contains a valid UUID and amount | Preserve valid personal statistics and ordinary total | validRegisteredUuidStillProducesPersonalAssetStatistics |
+
+## Test vectors
+
 | ID | Input | Required result |
 | --- | --- | --- |
 | STATS-IDENTITY-01 (Red) | Mutable map containing `null -> 100`, free/dead 0 | Reject the malformed registered identity before any report publication; do not report one registered player and 100 personal assets |
