@@ -1,5 +1,12 @@
 name: Phase 5 manifest copy verification (Draft)
 on:
+  pull_request:
+    branches:
+      - feature/phase5-world-storage-discovery-20261102-queue-b
+    paths:
+      - 'docs/cat/phase5-manifest-copy-verification.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageManifestCopyVerificationTest.java'
+      - '.github/workflows/phase5-manifest-copy-verification.yml'
   push:
     branches:
       - feature/phase5-manifest-copy-contract-20261102-queue-b
