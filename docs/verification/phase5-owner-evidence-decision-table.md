@@ -40,4 +40,10 @@
 
 `BanEvidence`は宣言されたBANソースの集約器、`AssetOwner`（Draft PR #48）は**検証後**の分類器であり、どちらも外部情報の完全性を自動証明しない。未確認のowner UUIDを`null`として`AssetOwner.resolve()`へ渡すとFREEになるため、呼出側は`INCOMPLETE`と検証済み不在を型・分岐で分離する必要がある。
 
+### 現行Draft実装との差分（未解決）
+
+[PR #8](https://github.com/surumeneco/SimpleCoins/pull/8) の`BlockLockerVisibleSignResolver`（Git blob `bb66cebd22557796c3a240b8013e04a16e17acd0`）は、PRIVATE看板のidentity adapterが返す`FREE`を`UNKNOWN`へ変換する。`BlockLockerProtectionResolution`（blob `447be76aa545134b91bf0ca4abe16fd09a06a949`）は`FREE`をPRIVATE primaryとして拒否し、`UNKNOWN` primaryの集約結果も`UNKNOWN`とする。これは読取不能を誤ってFREEにしないための局所guardだが、**正常に読取・解析できた旧看板でUUIDだけを特定できないOE-03**と、**看板・提供元の読取が失敗したOE-04**を現在のprimary表現だけでは区別できない。
+
+02Bの「UUIDを特定できない旧看板はフリー」と「実体を読めない場合は決算未完了」は両立する。解決時には`FREE`をPRIVATE primaryに直接流し込むのではなく、**看板・保護の検証完了**と**本人UUIDの検証済み不在**を独立した証拠として表現できるか、既存の[PRIVATE primary CAT Draft](https://github.com/surumeneco/SimpleCoins/blob/feature/owner-evidence-20261101/docs/cat/phase5-private-sign-primary-kind.md)を規範仕様と照合する。Draftの「lookup不明は常にUNKNOWN」を旧看板の検証済み不在に無条件適用してはならず、逆にlookup失敗をFREEへ読み替えてもならない。両者の境界を表すTCE/PIベクトルと正式Gateは**未実施**であり、ここで仕様確定や実装修正を宣言しない。
+
 各OEベクトルは、正本CATの決定・Gate、外部プラグインの実機統合、決算公開制御の検証で対応付ける。表の記載だけでテスト成功・CAT Confirmed・Paper受入完了とは扱わない。
