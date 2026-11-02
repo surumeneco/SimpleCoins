@@ -51,6 +51,45 @@ class GrantLedgerLiveTailIntegrityTest {
         assertTrue(recovered.wasApplied(first, first.sequence()));
     }
 
+    @Test void missingNonTailTargetMustNotBeRecreatedByAcknowledgement() throws Exception {
+        // SC-JOURNAL-ACK-01: the current durable tail cannot prove an older
+        // reservation is still present. Fail closed without repairing it.
+        Path root = directory.resolve("missing-older-target");
+        var ledger = new GrantLedger(root);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000050");
+        var older = ledger.reserve(player, 100, "console");
+        ledger.reserve(player, 200, "console");
+        Path olderFile = root.resolve(older.sequence() + ".grant");
+        Files.delete(olderFile);
+
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(older, older.sequence()));
+        assertFalse(Files.exists(olderFile),
+                "Acknowledgement must never recreate a missing durable target");
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player),
+                "A missing target must poison the live journal until recovery");
+    }
+
+    @Test void corruptNonTailTargetMustNotBeOverwrittenByAcknowledgement() throws Exception {
+        // SC-JOURNAL-ACK-02: even a valid head and tail do not authorize
+        // overwriting a corrupt older record with in-memory state.
+        Path root = directory.resolve("corrupt-older-target");
+        var ledger = new GrantLedger(root);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000051");
+        var older = ledger.reserve(player, 100, "console");
+        ledger.reserve(player, 200, "console");
+        Path olderFile = root.resolve(older.sequence() + ".grant");
+        byte[] damaged = new byte[]{1, 2, 3, 4};
+        Files.write(olderFile, damaged);
+
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(older, older.sequence()));
+        assertArrayEquals(damaged, Files.readAllBytes(olderFile),
+                "Acknowledgement must preserve corrupt evidence for recovery");
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player),
+                "A corrupt target must poison the live journal until recovery");
+    }
+
     @Test void intactTailSupportsReceiptAcknowledgement() throws Exception {
         var ledger = new GrantLedger(directory.resolve("journal"));
         UUID player = UUID.randomUUID();
