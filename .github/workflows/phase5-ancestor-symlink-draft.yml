@@ -1,0 +1,39 @@
+name: Phase 5 ancestor-symlink Draft Red
+
+on:
+  push:
+    branches:
+      - feature/phase5-ancestor-symlink-red-20261102-queue-b
+    paths:
+      - 'docs/cat/phase5-world-root-ancestor-symlink.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageAncestorSymlinkTest.java'
+      - '.github/workflows/phase5-ancestor-symlink-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Validate Draft syntax and explicit references (not normative Gate)
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-world-root-ancestor-symlink.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run full JUnit regression on exact Draft HEAD
+        run: gradle --no-daemon clean test jar
