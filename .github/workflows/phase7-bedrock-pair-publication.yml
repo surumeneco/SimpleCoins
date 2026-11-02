@@ -1,0 +1,41 @@
+name: Phase 7 Bedrock pair-publication fault injection (Draft Red)
+on:
+  pull_request:
+    branches:
+      - feature/initial-domain-20261027
+    paths:
+      - 'docs/cat/phase7-bedrock-pair-publication.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackPairPublicationTest.java'
+      - '.github/workflows/phase7-bedrock-pair-publication.yml'
+  push:
+    branches:
+      - feature/phase7-bedrock-pack-publish-atomicity-red-20261102-queue-c
+    paths:
+      - 'docs/cat/phase7-bedrock-pair-publication.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackPairPublicationTest.java'
+      - '.github/workflows/phase7-bedrock-pair-publication.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD Draft syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Validate Draft syntax only (not normative Gate)
+        run: python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase7-bedrock-pair-publication.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact-head Gradle JUnit (one expected Red)
+        run: gradle --no-daemon clean test jar
