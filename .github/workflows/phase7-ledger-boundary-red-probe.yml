@@ -1,0 +1,23 @@
+name: Temporary Phase 7 GrantLedger symlink Red probe
+on:
+  push:
+    branches:
+      - feature/phase7-grant-ledger-directory-symlink-red-20261103-queue-d
+    paths:
+      - .github/workflows/phase7-ledger-boundary-red-probe.yml
+permissions:
+  contents: read
+jobs:
+  exact-source-junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run only GrantLedger directory boundary regression
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.GrantLedgerDirectoryBoundaryTest
