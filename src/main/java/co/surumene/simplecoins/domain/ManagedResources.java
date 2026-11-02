@@ -13,7 +13,9 @@ public final class ManagedResources {
     public ManagedResources(Path root) { this.root = root.toAbsolutePath().normalize(); }
 
     public void replace(Map<String, byte[]> desired) throws IOException {
+        requireRealAncestors(root);
         Files.createDirectories(root);
+        requireRealAncestors(root);
         Path manifest = root.resolve("simplecoins-managed-resources");
         Map<String,String> previous = new TreeMap<>();
         if (Files.exists(manifest)) {
@@ -60,9 +62,15 @@ public final class ManagedResources {
         if (!name.matches("(?:packs/simplecoins-generated\\.mcpack|custom_mappings/simplecoins-generated\\.json|packs/simplecoins\\.mcpack|custom_mappings/simplecoins\\.json)"))
             throw new IOException("Not a managed resource path: " + name);
         Path target = root.resolve(name);
-        if (Files.isSymbolicLink(root) || Files.isSymbolicLink(target.getParent()) || Files.isSymbolicLink(target))
-            throw new IOException("Managed resource cannot be a symbolic link");
+        requireRealAncestors(target);
         return target;
+    }
+
+    private static void requireRealAncestors(Path path) throws IOException {
+        for (Path part = path; part != null; part = part.getParent()) {
+            if (Files.isSymbolicLink(part))
+                throw new IOException("Managed resource path contains a symbolic link: " + part);
+        }
     }
 
     private static String digest(byte[] content) {

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Read-only external verification of a hosted SimpleCoins Java resource pack.
+set -euo pipefail
+
+if [[ $# -ne 1 || ! -f "$1" || -L "$1" ]]; then
+  printf 'Usage: %s <generated-regular-zip>\n' "$0" >&2
+  exit 2
+fi
+archive=$1
+# PACK-HASH-02: reject symlinks in every path prefix, not only the ZIP entry.
+# This is a read-time check, not a guarantee against concurrent path swaps.
+source_component=$archive
+while :; do
+  if [[ -L "$source_component" ]]; then
+    printf 'Generated archive path contains a symbolic link.\n' >&2
+    exit 2
+  fi
+  [[ "$source_component" == "." || "$source_component" == "/" ]] && break
+  parent=${source_component%/*}
+  if [[ "$parent" == "$source_component" ]]; then
+    source_component="."
+  else
+    source_component=${parent:-/}
+  fi
+done
+if ! command -v curl >/dev/null || ! command -v cmp >/dev/null || \
+   ! command -v sha1sum >/dev/null || ! command -v unzip >/dev/null; then
+  printf 'Required verification tools are missing.\n' >&2
+  exit 2
+fi
+
+printf 'Exact hosted HTTP(S) pack URL (not logged): ' >&2
+IFS= read -r -s pack_url || { printf '\nURL input unavailable.\n' >&2; exit 2; }
+printf '\n' >&2
+if [[ -z "$pack_url" ]]; then
+  printf 'No URL supplied.\n' >&2
+  exit 2
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"; unset pack_url' EXIT
+if ! curl --proto '=http,https' --proto-redir '=http,https' \
+    --fail --silent --show-error --location --max-time 90 \
+    --output "$tmp/hosted.zip" -- "$pack_url" 2>"$tmp/curl.err"; then
+  printf 'Hosted pack download failed (URL redacted).\n' >&2
+  exit 1
+fi
+if ! cmp -s -- "$archive" "$tmp/hosted.zip"; then
+  printf 'Hosted pack differs byte-for-byte from the generated archive.\n' >&2
+  exit 1
+fi
+if ! unzip -tq "$tmp/hosted.zip" >/dev/null; then
+  printf 'Hosted bytes are not a valid ZIP archive.\n' >&2
+  exit 1
+fi
+# A generated archive can change after cmp but before digest evidence.
+# Re-read both byte streams and reject divergent hashes (not an atomic snapshot).
+generated_hash=$(sha1sum < "$archive")
+hosted_hash=$(sha1sum < "$tmp/hosted.zip")
+if [[ "$generated_hash" != "$hosted_hash" ]]; then
+  printf 'Generated archive changed during verification.\n' >&2
+  exit 1
+fi
+printf 'Verified identical bytes and ZIP integrity. SHA-1 evidence:\n'
+printf '%s  generated\n%s  hosted\n' "${generated_hash%% *}" "${hosted_hash%% *}"

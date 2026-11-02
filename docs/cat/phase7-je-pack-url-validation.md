@@ -1,0 +1,49 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.phase7.je-pack-url-validation
+status: draft
+process: simplecoins.pack
+source_refs:
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
+# Phase 7: Java resource-pack URL validation (CAT Draft)
+
+Status: Draft, not Confirmed. Leaf TASK-20261101-006. Source: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/03_運営設定・コマンド.md.
+
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.pack | JE pack URLと生成ZIP hashの検証 |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| pack.url.invalid | 非HTTP(S)、userinfo、fragment、不完全URLが指定されたとき | Paper resource-pack APIへ渡さず拒否する | PACK-URL-01 |
+| pack.url.valid | 正当なHTTP(S) URLとqueryが指定されたとき | URL文字列を変更せず維持する | PACK-URL-02 |
+| pack.url.empty | URLが空または空白のみのとき | 配布未設定として送信しない | PACK-URL-03 |
+| pack.url.join | join時にpack URLを使用するとき | 検証済みURLのみPaper APIへ渡す | PACK-URL-04 |
+| pack.hash.regular | 生成ZIPをSHA-1計算するとき | 正規の非symlink通常ファイルを有界メモリでhashする | PACK-HASH-01 |
+| pack.hash.ancestor | ZIPへのancestorにsymlinkがあるとき | 外部へredirectされたsourceをhashしない | PACK-HASH-02 |
+| pack.hosted-stability | 外部検証中に生成ZIPが変化するとき | 取得時のbyte一致だけで成功扱いせず、hash時点の不一致を拒否する（原子的snapshot保証ではない） | PACK-HOSTED-01 |
+
+## Process / PI
+
+When Nexo is absent, SimpleCoins generates a Java resource-pack ZIP and advertises the configured public URL on player join. An empty URL means the operator has not configured hosting, so the plugin sends nothing. A non-empty URL must be a syntactically valid absolute HTTP(S) URI with a nonempty host, no userinfo and no fragment; a valid path/query (including signed URLs) is retained unchanged. Invalid configuration must not be passed to Paper's resource-pack API. The advertised SHA-1 must be computed from a real, non-symlinked generated ZIP using bounded-memory streaming, and missing/non-regular archives must fail before join delivery. Validation does not prove that the URL is reachable or serves the generated ZIP matching its SHA-1; that remains an external deployment/JE-client test.
+
+## Test model / TCE
+
+- PACK-URL-01 Red: a bare `https://`, malformed URL, unsupported scheme, userinfo, or fragment is rejected.
+- PACK-URL-02: valid HTTP(S) URLs including query strings are preserved verbatim; a valid host is mandatory.
+- PACK-URL-03: an empty or whitespace-only URL is absent, not a pack delivery attempt.
+- PACK-URL-04: `PackDelivery.onJoin` calls the Paper resource-pack method only after successful validation; malformed configuration is logged and skipped.
+- PACK-HASH-01: hash the exact generated ZIP with bounded-memory streaming; reject absent, directory, or symbolic-link archive paths before distribution.
+- PACK-HASH-02 (Red): reject a generated ZIP reached through any symbolic-link ancestor directory, even when the final ZIP is a regular file. Do not hash a redirected source.
+- PACK-HOSTED-01 (verification-helper regression): if the generated archive changes after initial byte comparison but before SHA-1 evidence, reject the external verification instead of reporting identical hosted bytes.
+
+Formal CAT machine gates, Paper/JE/Geyser/BE client delivery, real hosted deployment/JE-client validation and Nexo delegation remain not-run. PACK-HOSTED-01 is an isolated helper regression, not a coherent world/pack publication snapshot.

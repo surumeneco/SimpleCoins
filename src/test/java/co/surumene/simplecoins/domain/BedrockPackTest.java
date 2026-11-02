@@ -34,6 +34,46 @@ class BedrockPackTest {
         }
     }
 
+    private static Map<CoinDenomination, byte[]> sampleImages() {
+        var images = new EnumMap<CoinDenomination, byte[]>(CoinDenomination.class);
+        for (var d : CoinDenomination.values()) images.put(d, new byte[]{1, 2, 3});
+        return images;
+    }
+
+    private static Map<CoinDenomination, String> sampleNames() {
+        var names = new EnumMap<CoinDenomination, String>(CoinDenomination.class);
+        for (var d : CoinDenomination.values()) names.put(d, d.value() + " Coin");
+        return names;
+    }
+
+    @Test void linkedPackParentCannotRedirectGeneratedArchive() throws Exception {
+        Path outside = Files.createDirectory(directory.resolve("outside"));
+        Path link = Files.createSymbolicLink(directory.resolve("linked"), outside);
+        assertThrows(java.io.IOException.class, () -> BedrockPack.write(
+                link.resolve("coins.mcpack"), directory.resolve("safe/coins.json"),
+                sampleImages(), sampleNames()));
+        assertFalse(Files.exists(outside.resolve("coins.mcpack")));
+    }
+
+    @Test void linkedMappingParentCannotPublishPartialPack() throws Exception {
+        Path outside = Files.createDirectory(directory.resolve("outside"));
+        Path link = Files.createSymbolicLink(directory.resolve("linked"), outside);
+        Path pack = directory.resolve("safe/coins.mcpack");
+        assertThrows(java.io.IOException.class, () -> BedrockPack.write(
+                pack, link.resolve("coins.json"), sampleImages(), sampleNames()));
+        assertFalse(Files.exists(pack));
+        assertFalse(Files.exists(outside.resolve("coins.json")));
+    }
+
+    @Test void linkedDestinationFileCannotBeReplaced() throws Exception {
+        Path outside = Files.writeString(directory.resolve("outside.txt"), "original");
+        Path pack = Files.createSymbolicLink(directory.resolve("coins.mcpack"), outside);
+        assertThrows(java.io.IOException.class, () -> BedrockPack.write(
+                pack, directory.resolve("coins.json"), sampleImages(), sampleNames()));
+        assertTrue(Files.isSymbolicLink(pack));
+        assertEquals("original", Files.readString(outside));
+    }
+
     @Test void refusesIncompletePackBeforeReplacingPublishedFiles() throws Exception {
         Path pack = directory.resolve("coins.mcpack");
         Path mapping = directory.resolve("coins.json");
