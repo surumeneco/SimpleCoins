@@ -36,6 +36,7 @@ language: ja
 | LIVE-SIGN-04 | 未対応BlockData | IOExceptionで拒否する既存分岐 | malformedFrontOrUnsupportedStateFailsClosed |
 | LIVE-SIGN-05 | Paper Sign APIの実行時例外 | IOExceptionで拒否する既存分岐 | malformedFrontOrUnsupportedStateFailsClosed |
 | LIVE-SIGN-06 | BlockLocker見出しと不一致 | 候補なし、identity API非呼出の既存分岐 | unrelatedSignDoesNotResolvePrimaryIdentity |
+| LIVE-SIGN-07 | PRIVATE看板のEveryone表示、既知/不明の主所有者 | 主所有者が既知ならFREE、不明ならUNKNOWNの既存分岐 | liveEveryoneNeedsResolvedPrimaryBeforePublicOwnership |
 
 ## 未検証・非目標
 
