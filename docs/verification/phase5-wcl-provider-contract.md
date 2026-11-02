@@ -15,6 +15,12 @@ Status: **source-verified integration evidence**, not a CAT Confirmed artifact a
 
 The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` blob `fa44e58119d05b04c784d48d68e1692e0b79cce6`; WWW registration at `WhatAWonderfulWolfPlugin.java` blob `c381d36a113cc57854e17e9b89324731dd2e3172`. **Both register the same `WonderfulStorageReader.class` service interface** with `ServicePriority.Normal`, each owned by its respective plugin, and unregister on disable. Consequently a single `ServicesManager.load(WonderfulStorageReader.class)` is not a complete two-provider inventory. A future SimpleCoins adapter must enumerate registrations, validate owner/enabled status and `providerId()`, and reject missing/duplicate/ambiguous required providers; it must not infer that one loaded registration represents both species.
 
+### WWC main persisted follow-target boundary (source verification)
+
+The WWC `main` source [`WonderfulChickenStore.java`](https://github.com/surumeneco/WhatAWonderfulChicken/blob/main/src/main/java/co/surumene/whatawonderfulchicken/service/WonderfulChickenStore.java) (blob `28086b60eac4796c2e51123e76f41859bb8aaf5d`) writes PDC `type=wonderful_chicken`, `follow_target` as a UUID string when present, and `data_version=2` for legacy/no-Genome data or `4` for the current external-Genome payload. Its `main` README (blob `db97d56612b1cef545f29e5e40c6661afb93a852`) describes WWC **2.0.1**. The candidate SimpleCoins `PaperWonderfulChickenOwnerAdapter` (PR #8, blob `40eef1263f49ce25edd280842ca64c0972f03958`) recognizes these key/value forms and permits versions 2–4, but treats missing or malformed evidence as UNKNOWN.
+
+This confirms **source-level field compatibility**, not that a follow target is an authoritative owner, that a loaded/saved chicken catalog is complete, or that the tracked WWC JAR implements the inspected source. WWC `main` PDC observations and WCL `develop` provider-service results remain separate evidence paths; an absent `follow_target` cannot establish FREE or zero assets.
+
 ### WWW public loaded-owner API visibility (source verification)
 
 The optional SimpleCoins reflection path `loadedIndividuals() → find(UUID) → commanderId()/ownerId()` was checked against the actual WWW `main` and `develop` source, rather than a synthetic Java visibility fixture:
