@@ -154,4 +154,27 @@ class WorldSnapshotSourceSetClosureTest {
         assertTrue(Files.isRegularFile(newRegion),
                 "SC-CLOSURE-07: new authoritative region must be visible to re-discovery");
     }
+
+    @Test void excludedWorldRegionAddedDuringCallbackMustNotInvalidatePlayerdata() throws Exception {
+        player(FIRST);
+        var roots = Map.of("world", directory.resolve("world"));
+        var scope = new WorldScope(false, Set.of(), Set.of("world"));
+        var manifest = WorldStorageDiscovery.discover(roots, scope, 100);
+        Path excludedRegion = directory.resolve("world/region/r.0.0.mca");
+
+        var report = WorldSnapshotTraversal.traverseWithClosure(
+                manifest, roots, scope, 100, 4096, 4096,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {}
+                    @Override public void player(UUID uuid, Map<String, Object> data)
+                            throws IOException {
+                        Files.createDirectories(excludedRegion.getParent());
+                        Files.write(excludedRegion, new byte[8192]);
+                    }
+                });
+        assertEquals(new WorldSnapshotTraversal.Report(0, 0, 1), report,
+                "SC-CLOSURE-08: excluded world data must not hide independent playerdata");
+        assertTrue(Files.isRegularFile(excludedRegion));
+    }
 }
