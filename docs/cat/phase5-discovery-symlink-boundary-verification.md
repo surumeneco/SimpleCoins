@@ -24,7 +24,7 @@ language: ja
 PR #34 HEAD `b88cee565e78376f0161965cc9fdf7ad3b196915` の既存実装について、実装が宣言する「bounded, non-symlink traversal」を実際の Linux ファイルシステム上で回帰検証する独立した verification Work。CAT Draft は承認済み規範ではなく、テストが Green でも正規 Process/PI/TCE Gate の代わりにはならない。手動 Manifest の `requiredSourceIds()` に関する PR #71 の候補契約とは対象を分離する。
 
 ## 規則
-| ID | 条件 | 現行実装で検証する振る舞い | テスト |
+| ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
 | SC-LINK-01 | world root 自体がシンボリックリンク | IOException で manifest 非公開 | symbolicWorldRootIsRejected |
 | SC-LINK-02 | 正規 region/r.0.0.mca が通常ファイルへのシンボリックリンク | IOException で manifest 非公開 | symbolicAuthoritativeRegionIsRejected |
