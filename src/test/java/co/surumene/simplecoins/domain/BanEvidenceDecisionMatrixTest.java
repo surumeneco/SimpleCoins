@@ -57,4 +57,18 @@ class BanEvidenceDecisionMatrixTest {
             }
         }
     }
+    @Test void malformedEvidenceCannotBeHiddenBehindPositiveBan() throws Exception {
+        List<BanEvidence.Source> validBan = List.of(
+                new BanEvidence.Source("paper", BanEvidence.Status.BANNED));
+        for (BanEvidence.Source invalid : new BanEvidence.Source[]{
+                null, new BanEvidence.Source("external", null),
+                new BanEvidence.Source("unexpected", BanEvidence.Status.CLEAR),
+                new BanEvidence.Source("paper", BanEvidence.Status.CLEAR)}) {
+            List<BanEvidence.Source> observations = new ArrayList<>(validBan);
+            observations.add(invalid);
+            org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                    () -> BanEvidence.evaluate(REQUIRED, observations));
+        }
+    }
+
 }
