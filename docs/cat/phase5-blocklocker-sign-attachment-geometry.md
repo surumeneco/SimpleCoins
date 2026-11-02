@@ -1,4 +1,31 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.blocklocker.sign-attachment-geometry
+status: draft
+process: simplecoins.blocklocker
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 5: BlockLocker 1.14.1 sign attachment geometry (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | Verified saved/live BlockLocker evidence boundary |
+| simplecoins.settlement | No ownership publication from partial evidence |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| geometry.wall-north | wall sign faces north | Support block is south-adjacent, not north-adjacent | BL-GEO-01 |
+| geometry.wall-other | wall sign faces east, south or west | Resolve support in opposite cardinal direction | BL-GEO-02 |
+| geometry.standing | standing sign has verified physical state | Support block must be directly below | BL-GEO-03 |
+| geometry.invalid | container nonadjacent or coordinate overflow | Do not attach; overflow rejects rather than wrapping | BL-GEO-04 |
 
 Status: Draft, not Confirmed. Sources: forGPT/XPlayServer/OriginalPlugins/SimpleCoins/02B_データ収集・決算処理.md; BlockLocker v1.14.1 BlockFinder.java.
 

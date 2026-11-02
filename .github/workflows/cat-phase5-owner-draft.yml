@@ -1,0 +1,44 @@
+name: CAT Draft syntax validation (Phase 5 owner evidence)
+
+on:
+  push:
+    branches:
+      - feature/owner-evidence-20261101
+    paths:
+      - 'docs/cat/phase5-blocklocker-*.md'
+      - 'docs/cat/phase5-external-owner-ban-evidence.md'
+      - 'docs/cat/phase5-asset-owner-result-invariants.md'
+      - '.github/workflows/cat-phase5-owner-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout pinned CAT-TDD runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Canonical Draft syntax, identifiers and explicit references
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-external-owner-ban-evidence.md \
+            docs/cat/phase5-asset-owner-result-invariants.md \
+            docs/cat/phase5-blocklocker-primary-text-normalization.md \
+            docs/cat/phase5-blocklocker-sign-state-completeness.md \
+            docs/cat/phase5-blocklocker-saved-pdc-hints.md \
+            docs/cat/phase5-blocklocker-saved-sign-text.md \
+            docs/cat/phase5-blocklocker-double-chest-linkage.md \
+            docs/cat/phase5-blocklocker-saved-sign-uniqueness.md \
+            docs/cat/phase5-blocklocker-sign-attachment-geometry.md \
+            docs/cat/phase5-blocklocker-everyone-text.md \
+            docs/cat/phase5-blocklocker-localized-header.md
+      - name: Declare evidence boundary
+        run: |
+          echo 'Syntax lint only: DomainSpecs remain Draft, no normative confirmation or semantic CAT Gate.' >> "$GITHUB_STEP_SUMMARY"
