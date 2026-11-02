@@ -26,6 +26,7 @@ language: ja
 | BAN-DEC-02 | 必須ソースが1つ欠落 | BANNEDの証拠がなければUNKNOWN、存在すればBANNED | BAN-MATRIX-02 |
 | BAN-DEC-03 | IDが大文字・空白で表記揺れする | 同一の必須ソースとして正規化し、二重登録を拒否する | BAN-MATRIX-03 |
 | BAN-DEC-04 | 未宣言のソースやnullの証拠が混入 | IOExceptionでfail-closedし、Decisionを生成しない | BAN-MATRIX-04 |
+| BAN-DEC-05 | 3つの証拠の列挙順が変わる | BAN/UNKNOWN/CLEARの決定は入力順に依存しない | BAN-MATRIX-05 |
 
 ## 出典と適用範囲
 SimpleCoins `develop` commit `a6005ffa5ed1bb1438c3790da8633205507d40db`、`BanEvidence.java` blob `0e3f29c2a85fca1d711a928b9db7637193805299` を検証対象とする。これは既存純Javaコードの**verification** Workであり、BAN/IP BANプラグインの検出、IPからUUIDへの対応付け、Bukkit APIの実行、完全なprovider宣言の証明を行わない。呼出元が完全な必須ソース集合を宣言したという前提自体は、このクラス単独では検証できない。
