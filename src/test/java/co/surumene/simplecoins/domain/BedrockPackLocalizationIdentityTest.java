@@ -105,7 +105,7 @@ class BedrockPackLocalizationIdentityTest {
         Path pack = directory.resolve("escaped.mcpack");
         Path mapping = directory.resolve("escaped.json");
         var nameMap = names();
-        nameMap.put(CoinDenomination.values()[0], "quote\" slash\\ tab\t nul\u0000");
+        nameMap.put(CoinDenomination.values()[0], "quote\" slash\\ tab\t nul" + (char) 0);
         BedrockPack.write(pack, mapping, images(), nameMap);
         String json = Files.readString(mapping);
         assertFalse(json.contains(String.valueOf((char) 0)),
