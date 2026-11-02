@@ -17,16 +17,25 @@ language: ja
 
 固定ソース `PaperBlockLockerSignAdapter.java`（Git blob `c8439b8f320a84f3802515e6bd1b4e14baf4e289`）の既存分岐を、Paper APIのインターフェースを模したテストで観測する。現行コードのcharacterizationであり、規範CAT Confirmedや実機検証ではない。ライブ看板のブロック状態とフロント4行を呼出側が一貫したスナップショットとして取得する義務は変わらない。
 
-## 観測ベクトル
+## 対象
 
-| ID | 固定ソース上の条件 | 期待される観測 |
-| --- | --- | --- |
-| LIVE-SIGN-01 | NORTH向きの壁看板・PRIVATE見出し・既知の主所有者 | 支持位置が一致するコンテナへPERSONALの主所有者証拠を渡す |
-| LIVE-SIGN-02 | 立看板・PRIVATE見出し・既知の主所有者 | 直下のコンテナへPERSONALの主所有者証拠を渡す |
-| LIVE-SIGN-03 | FRONTの行数不足 | `IOException`として拒否し、所有者を推定しない |
-| LIVE-SIGN-04 | 壁看板でも立看板でもないブロック状態 | `IOException`として拒否する |
-| LIVE-SIGN-05 | ライブ看板APIが実行時例外を返す | `IOException`として拒否する |
-| LIVE-SIGN-06 | BlockLocker見出しと一致しない看板 | 候補なしを返し、主所有者APIを呼ばない |
+| 参照 | 観点 |
+| --- | --- |
+| `PaperBlockLockerSignAdapter.readPaper` | Paper SignのFRONTテキストとBlockDataの読取境界 |
+| `BlockLockerProtectionResolution.single` | 検証済み壁・立看板のコンテナ支持位置への集約 |
+
+## 規則
+
+以下は固定コードの**観測条件**であり、規範仕様としての新しい要求ではない。
+
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| LIVE-SIGN-01 | NORTH向き壁看板・PRIVATE・既知の主所有者 | 支持先コンテナにPERSONALを渡す既存分岐 | wallAndStandingSignGeometryRetainVerifiedOwner |
+| LIVE-SIGN-02 | 立看板・PRIVATE・既知の主所有者 | 直下コンテナにPERSONALを渡す既存分岐 | wallAndStandingSignGeometryRetainVerifiedOwner |
+| LIVE-SIGN-03 | FRONT行数不足 | IOExceptionで拒否する既存分岐 | malformedFrontOrUnsupportedStateFailsClosed |
+| LIVE-SIGN-04 | 未対応BlockData | IOExceptionで拒否する既存分岐 | malformedFrontOrUnsupportedStateFailsClosed |
+| LIVE-SIGN-05 | Paper Sign APIの実行時例外 | IOExceptionで拒否する既存分岐 | malformedFrontOrUnsupportedStateFailsClosed |
+| LIVE-SIGN-06 | BlockLocker見出しと不一致 | 候補なし、identity API非呼出の既存分岐 | unrelatedSignDoesNotResolvePrimaryIdentity |
 
 ## 未検証・非目標
 
