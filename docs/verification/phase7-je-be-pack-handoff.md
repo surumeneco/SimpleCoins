@@ -30,17 +30,41 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 2. Verify Geyser's Bedrock mapping/pack comes from an explicitly configured conversion/delegation path (e.g. Scaffolding). **Do not infer that Nexo's Java pack is automatically converted by Geyser.** If no verified conversion exists, mark BE as blocked/not-run rather than passed.
 3. Repeat JE and BE denomination/model checks, preserving the same currency PDC identities and amounts as the Nexo-absent case.
 
+### 実機配布の判定マトリクス
+
+上記の具体的な操作を以下のケース単位で記録する。**起動成功・オフラインZIP検証・CI成功だけではクライアント受信成功としない**。
+
+| Case | Nexo | 経路 | 合格の観測条件 |
+| --- | --- | --- | --- |
+| DIST-01 | なし | JE | HTTP(S)の生成ZIPと公開バイトが一致し、9額面のモデル・名称・テクスチャが実クライアントで表示される |
+| DIST-02 | なし | BE / Geyser-Spigot | Geyser custom content有効、生成mcpackとv2 mappingの実配布、9額面の表示が一致する |
+| DIST-03 | なし | JE + BE | 同じ額面と財布GUIを両クライアントで操作し、識別子・表示・スタックの差異を記録する |
+| DIST-04 | あり | JE / Nexo | SimpleCoins独自ZIPが送られないことを確認し、Nexo側の定義・配布が検証されるまではBLOCKED |
+| DIST-05 | あり | BE / Geyser | Nexo→BEの変換/マッピングを別途実証し、自己管理Geyserファイルが他者の資産を上書きしない |
+| DIST-06 | なし | BE / Geyserなし | BE経路なし。対象外をPASSに数えない |
+
+各行に `PASS / FAIL / BLOCKED / NOT-RUN`、JAR SHA-256、Paper/Geyser/Nexo版、JE/BEクライアント版、配布物SHA、設定、関連ログ、実表示を対応付ける。個人識別情報・署名付きURLの秘密値は記録しない。
+
 ## Admin command and offline grant acceptance (disposable server only)
 
-The current `plugin.yml` exposes `/simplecoins` (alias `/sc`) with `simplecoins.admin` permission. `CoinCommand` implements `give`; the read-only balance/dead-asset location and reason query requested by TASK-20261101-006 is **not implemented** in the inspected command handler. Do not mark the admin-query acceptance complete based on the issuance tests below.
+The current `plugin.yml` exposes `/simplecoins` (alias `/sc`) with `simplecoins.admin` permission. `CoinCommand` implements `give`; the read-only balance/dead-asset location and reason query requested by TASK-20261101-006 is **not implemented** in the inspected command handler. Do not mark admin-query acceptance complete based on issuance tests.
 
-1. On a disposable Paper 26.2 server, confirm a non-privileged sender cannot reserve or issue currency; grant `simplecoins.admin` to a test operator and record the command result. Do not use production playerdata or journal files.
-2. Use an existing, previously joined test player who is currently offline. Run `/sc give <player-uuid> 100`. Record the reservation ID and issuance journal entry; before login, no physical coins should be delivered. On login, verify the exact total and persisted receipt; disconnect/reconnect and restart the disposable server, then verify no duplicate delivery.
-3. With an online test player, run `/sc give <player-name> 50 3`. Verify exactly three denomination-50 coins are reserved and delivered, not a minimum-coin decomposition of 150. Repeat reconnect/restart checks.
-4. Fill all 36 player storage slots before a reserved grant is delivered. Verify no coin is dropped or falsely acknowledged and the reservation remains pending; free space, trigger delivery again, and verify the total is neither lost nor duplicated. Record the saved playerdata receipt and journal state.
-5. In a disposable copy only, inject a corrupt/missing journal record or an unconfirmed saved receipt, restart, and verify issuance fails closed rather than replaying an uncertain grant. Keep this separate from a successful delivery case; do not induce failure on production.
+Use a disposable Paper 26.2-compatible server, a previously joined known test player A, privileged sender B and unprivileged sender C. Before each case, preserve a **same-stop** backup of `plugins/SimpleCoins/issuance/` and the test world's `playerdata/`, and record physical coin amount, pending grant sequence, `delivered`, and saved PDC `simplecoins:grant_completed`, `simplecoins:grant_active`, `simplecoins:grant_paid`. Test data must not be real player assets. Keep wallet issuance separate from the durable money-grant path.
 
-Record each case as pass/fail/not-run with the tested commit, Paper version, journal/receipt evidence and observed inventory totals. The command-source inspection is **not** a Paper execution result. The missing read-only admin query, real Paper failure injection, and JE/BE client acceptance remain open.
+| Case | 操作 | 合格の観測条件 |
+| --- | --- | --- |
+| GRANT-01 | 無権限Cが `/sc give A 100` と補完を実行 | 拒否され、台帳連番・物理コインが変化しない |
+| GRANT-02 | Aがオフライン中にBが `/sc give <known-player-uuid> 100` | 一意の予約を記録し、ログイン前の物理額は不変。次回ログインで100相当を受領し台帳とPDCが整合 |
+| GRANT-03 | GRANT-02完了後、退出→正常停止→再起動→再ログイン | 同じ予約の再配布がなく、完了受領値と物理額が維持される |
+| GRANT-04 | 36収納スロット満杯で予約し、ログイン後に空きを作る | 未配布予約が消えず、分割受領 `active/paid` が整合し、再起動後も総額が予約を超えない |
+| GRANT-05 | 未知/曖昧な名前、オフラインへの `wallet 1` または額面 `50 3` | 不正・未対応経路は拒否され、副作用がない。wallet/額面指定はオンライン限定 |
+| GRANT-06 | オンラインAへ `/sc give A 50 3`、別途 `/sc give A wallet 1` | 額面50の3枚を予約・受領。walletは新規IDの直接配布であり、オフライン予約の一回性と混同しない |
+| GRANT-07 | Aへ連続した異なる金額の予約、再接続・再起動 | 各予約が順序どおり一度だけ反映され、未配布の古い予約を受領連番が飛び越さない |
+| GRANT-08 | **停止時の隔離コピーだけ**で台帳欠損/受領巻戻りを注入 | 安全停止または明示的な不整合検出。故障注入不可ならNOT-RUN、本番データを編集しない |
+
+`GRANT-04` の満杯時は `inserted == 0` なら保留される設計だが、再試行時刻は実測する。`GRANT-08` は正常再起動試験と独立した障害復旧試験。いずれも、予約額・実物理額・PDC受領値・台帳状態・ログを同時に照合する。発行永続化エラー、保存playerdata候補の不一致、PDC/台帳不整合が起きた場合は再発行で隠さずFAILとし、停止時バックアップとログを保全する。
+
+停止後の同一時点コピーで `docs/verification/verify-issuance-journal.py` を実行する場合は、PR #116 の `docs/verification/phase7-issuance-journal-offline-check.md` に従う。`ok` は台帳局所整合のみで、Paperの `saveData` とインベントリの永続化を証明しない。各Caseは `PASS / FAIL / BLOCKED / NOT-RUN` と実際のJAR SHA-256・Paper版・再起動/ログ・物理額で記録する。
 
 ## 管理照会の受入マトリクス（CAT Draft・未実行）
 
