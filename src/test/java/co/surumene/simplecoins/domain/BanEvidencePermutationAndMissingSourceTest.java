@@ -50,4 +50,16 @@ class BanEvidencePermutationAndMissingSourceTest {
         }
         assertEquals(162,count);
     }
+
+    @Test void invalidSourceEvidenceNeverOverridesValidation() {
+        var banned = new BanEvidence.Source("paper", BanEvidence.Status.BANNED);
+        var undeclared = new BanEvidence.Source("unlisted", BanEvidence.Status.CLEAR);
+        var duplicate = new BanEvidence.Source(" PAPER ", BanEvidence.Status.CLEAR);
+        var nullStatus = new BanEvidence.Source("ip", null);
+        for (var invalid : List.of(undeclared, duplicate, nullStatus)) {
+            assertThrows(java.io.IOException.class, () -> BanEvidence.evaluate(REQUIRED, List.of(banned, invalid)));
+            assertThrows(java.io.IOException.class, () -> BanEvidence.evaluate(REQUIRED, List.of(invalid, banned)));
+        }
+    }
+
 }
