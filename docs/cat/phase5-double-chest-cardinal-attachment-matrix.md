@@ -22,7 +22,7 @@ language: ja
 | ID | 条件 | 観測する既存実装の振る舞い | 検証 |
 | --- | --- | --- | --- |
 | geometry.cardinal | NORTH/EAST/SOUTH/WEST、CHEST/TRAPPED_CHEST、両半分の相互検証 | 正しい reciprocal pair は左右いずれの順でも linked と判定 | SC-BL-GEOM-MATRIX-01 |
-| geometry.support | 各半分に実際に支持された壁看板・立て看板 | 物理的に支持される看板だけが pair に attaches と判定 | SC-BL-GEOM-MATRIX-01 |
+| geometry.support | 各半分に実際に支持された4方向の壁看板・立て看板 | 物理的に支持される看板だけが pair に attaches と判定 | SC-BL-GEOM-MATRIX-01 |
 | geometry.decoy | 同一ワールド内の遠隔看板 | pair の所有権証拠として接続されない | SC-BL-GEOM-MATRIX-01 |
 | geometry.invalid | 同じ half または異なる CHEST/TRAPPED_CHEST | linked は false、signAttachedToPair は IOException で fail-closed | SC-BL-GEOM-MATRIX-02 |
 
