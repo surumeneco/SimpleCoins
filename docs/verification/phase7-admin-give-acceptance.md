@@ -41,7 +41,9 @@ TaskQueue `TASK-20261101-006` の運営機能について、実装・実機検�
 | 証拠 | 実測した範囲 | 本書の受入への効力 |
 | --- | --- | --- |
 | [PR #125](https://github.com/surumeneco/SimpleCoins/pull/125)、HEAD `ca0e09032e071904c31ed46dca1f382511b00d4a`、[Actions #41499593007](https://github.com/surumeneco/SimpleCoins/actions/runs/41499593007) | `develop`から独立したDraftに既存`GrantLedger`とJUnitテストを同一blobで抽出し、当該HEADのGradleテストがSUCCESS。CATはCandidateのまま | 永続台帳の純Java単体テスト証拠。AG-06〜10のPaper/playerdata/クラッシュ後一回性を証明しない |
-| [PR #126](https://github.com/surumeneco/SimpleCoins/pull/126)、HEAD `07284a2f4cc44c621e9f39d6b3fa0c110627cdfe` | PR #125に積み重ねたCAT Candidateと2つのJUnitケース。Java 21のNIO／`DurableFile.write`相当の直接probeで、シンボリックリンクされた`issuance`ディレクトリを介したroot外`head`作成を再現。**対象JUnitの正規実行は未実施** | 未解決の安全性境界を示す期待Red。正式CAT Gate、修正Green、AG-07〜10の合格を意味しない |
+| [PR #126](https://github.com/surumeneco/SimpleCoins/pull/126)、最終HEAD `56acb329ccced8e735df0c5716e9c7e899c95aeb`、[Actions #41513802057](https://github.com/surumeneco/SimpleCoins/actions/runs/41513802057) | PR #125上のCAT CandidateとJUnit。Java 21のNIO直接probeに加え、一時workflow付きコミット `b73ccd5d0e720b8285d21bba1e91162a42eb87d8` でGradle/JUnitの期待Redを実行。workflow削除後の最終HEADではテストblobは不変 | シンボリックリンク経由のroot外`head`書込みを示す未修正の期待Red。Actionsの総合結果はFAILUREであり、CAT Gate/Green/AG-07〜10の合格ではない |
+
+| [PR #131](https://github.com/surumeneco/SimpleCoins/pull/131)、最終HEAD `90338a340c4f6dfddfe170b84dd867559cdfff17`、[Actions #41536363845](https://github.com/surumeneco/SimpleCoins/actions/runs/41536363845) | PR #125上のCAT Draftと3件のJUnit。`GrantLedger`のSCG2チェックサム付き台帳で額面500×枚数`Long.MAX_VALUE`を再読込すると、想定`IOException`ではなく未捕捉`ArithmeticException`が発生することを実行確認。ActionsではCAT Draft構文Lint成功、Gradle/JUnitは2件Green・1件期待Red（総合FAILURE）。最終HEADは一時workflow削除後でテストblob不変 | 破損台帳の例外分類に関する未確定CAT候補。正式Gate/Green、再起動時一回性、AG-10の統合受入は未実施 |
 
 上記は**ソース・単体テストの証拠**であり、受入マトリクスのPaper実機・故障注入・権限試験のステータスとは別管理する。現行`develop`には両Draft PRの変更が含まれていない。既存のJE/BE配布証拠と隔離実機手順は[JE/BE/Nexo受入手順](phase7-je-be-nexo-acceptance.md)および[配布引渡し](phase7-je-be-pack-handoff.md)を正本とし、本書へ重複複製しない。
 
