@@ -31,6 +31,7 @@ PR #34 HEAD `b88cee565e78376f0161965cc9fdf7ad3b196915` の既存実装につい�
 | SC-LINK-03 | playerdata/UUID.dat が通常ファイルへのシンボリックリンク | IOException で manifest 非公開 | symbolicPlayerdataIsRejected |
 | SC-LINK-04 | world root 内のバックアップディレクトリがシンボリックリンク | バックアップを辿らず IOException で中断 | symbolicBackupDirectoryIsRejected |
 | SC-LINK-05 | scope 対象外 world にシンボリックリンクがある | scope 除外をリンク走査の許可としない | excludedWorldDoesNotBypassSymbolicLinkRejection |
+| SC-LINK-06 | root/region ディレクトリ自体がシンボリックリンク | リンク先を走査せず IOException で中断 | symbolicRegionDirectoryIsRejected |
 
 ## 実行境界
 - `@EnabledOnOs(OS.LINUX)` を用い、シンボリックリンク生成可能な Linux runner 上で実測する。Gradle/JUnit の Green と CAT Draft syntax lint を区別して記録する。
