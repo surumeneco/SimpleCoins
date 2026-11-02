@@ -1,0 +1,45 @@
+name: Verify Bedrock pack pair offline
+on:
+  pull_request:
+    paths:
+      - 'docs/verification/verify-be-pack.py'
+      - 'docs/verification/test-verify-be-pack.py'
+      - 'docs/verification/BedrockPackVerifierFixture.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/BedrockPack.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/PackArchivePublication.java'
+      - 'docs/verification/phase7-je-be-nexo-acceptance.md'
+      - '.github/workflows/verify-be-pack.yml'
+permissions:
+  contents: read
+jobs:
+  offline-pair-verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile verifier and tests
+        run: python3 -m py_compile docs/verification/verify-be-pack.py docs/verification/test-verify-be-pack.py
+      - name: Run isolated Bedrock artifact fault tests
+        run: python3 docs/verification/test-verify-be-pack.py
+      - name: Generate actual Java BedrockPack output and verify matching pair
+        run: |
+          mkdir -p "$RUNNER_TEMP/be-classes" "$RUNNER_TEMP/be-output"
+          javac -d "$RUNNER_TEMP/be-classes" \
+            src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java \
+            src/main/java/co/surumene/simplecoins/domain/PackArchivePublication.java \
+            src/main/java/co/surumene/simplecoins/domain/BedrockPack.java \
+            docs/verification/BedrockPackVerifierFixture.java
+          java -cp "$RUNNER_TEMP/be-classes" BedrockPackVerifierFixture "$RUNNER_TEMP/be-output"
+          mkdir -p "$RUNNER_TEMP/be-installed"
+          cp "$RUNNER_TEMP/be-output/SimpleCoins.mcpack" "$RUNNER_TEMP/be-installed/SimpleCoins.mcpack"
+          cp "$RUNNER_TEMP/be-output/simplecoins.json" "$RUNNER_TEMP/be-installed/simplecoins.json"
+          python3 docs/verification/verify-be-pack.py \
+            "$RUNNER_TEMP/be-output/SimpleCoins.mcpack" \
+            "$RUNNER_TEMP/be-output/simplecoins.json" \
+            "$RUNNER_TEMP/be-installed/SimpleCoins.mcpack" \
+            "$RUNNER_TEMP/be-installed/simplecoins.json"
