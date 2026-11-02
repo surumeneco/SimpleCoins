@@ -17,6 +17,13 @@ language: ja
 
 Characterize the existing pure-Java `BanEvidence.combine` validation boundary on SimpleCoins `develop` commit `755b179b984a216c56722de3ad8d6ffaa7909115`, source Git blob `0e3f29c2a85fca1d711a928b9db7637193805299`. No new provider-ID grammar, BAN source discovery, external provider completeness, or owner settlement rule is proposed. This is a code-to-spec observation, **not** a Confirmed normative CAT artifact.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| `BanEvidence.combine` | Required source declarations and observation validation |
+| `BanEvidenceNullDeclarationTest` | Six source-exact boundary vectors |
+
 ## Non-overlapping characterization vectors
 
 | Vector | Input | Observed fail-closed expectation |
