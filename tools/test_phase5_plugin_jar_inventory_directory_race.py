@@ -27,6 +27,14 @@ class PluginDirectoryRaceTest(unittest.TestCase):
             archive.writestr("plugin.yml", "name: " + identity + "\nversion: 1.0\n")
         return path
 
+    def test_control_static_directory_scans_only_expected_jar(self):
+        result = subject.inventory(self.plugins)
+        expected = hashlib.sha256((self.plugins / "same.jar").read_bytes()).hexdigest()
+        outside = hashlib.sha256(self.outside_jar.read_bytes()).hexdigest()
+        self.assertTrue(result["scan_complete"])
+        self.assertEqual([expected], [entry["sha256"] for entry in result["entries"]])
+        self.assertNotEqual(expected, outside)
+
     def test_parent_directory_swap_before_open_must_not_attest_outside_jar(self):
         real_open = subject.os.open
         swapped = False
