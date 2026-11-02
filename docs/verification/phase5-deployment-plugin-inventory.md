@@ -35,6 +35,20 @@ The 22 tracked root-level JAR filenames contain **no explicitly named external B
 
 Source comparison: [upstream `v1.14.1`](https://github.com/rutgerkok/BlockLocker/tree/v1.14.1/src/main/java/nl/rutgerkok/blocklocker) and [`v1.15`](https://github.com/rutgerkok/BlockLocker/tree/v1.15/src/main/java/nl/rutgerkok/blocklocker). Identical source blobs support parity for **only these files**. They do not establish binary identity, all-version API compatibility, plugin configuration behavior, or actual Paper 26.2 runtime correctness.
 
+### `connectContainers: false` and double-chest semantics (source verification)
+
+The tracked BlockLocker configuration has `connectContainers: false`, but **this does not disable double-chest grouping**. The upstream [`BlockFinder.create`](https://github.com/rutgerkok/BlockLocker/blob/v1.15/src/main/java/nl/rutgerkok/blocklocker/impl/blockfinder/BlockFinder.java) (blob `27db22ebfb6bd32b5e383eff54d0ac579843d46b`) selects `SeparateContainersBlockFinder` when false. Its [`findContainerNeighbors`](https://github.com/rutgerkok/BlockLocker/blob/v1.15/src/main/java/nl/rutgerkok/blocklocker/impl/blockfinder/SeparateContainersBlockFinder.java) (blob `f056b5333411074599fb42e06d499356beaf8de7`) returns the starting block for a single chest, or **both halves** when the starting chest's `LEFT/RIGHT` block state identifies a neighbor. It does not search a wider same-material container chain.
+
+With `connectContainers: true`, upstream [`ConnectedContainersBlockFinder`](https://github.com/rutgerkok/BlockLocker/blob/v1.15/src/main/java/nl/rutgerkok/blocklocker/impl/blockfinder/ConnectedContainersBlockFinder.java) (blob `2da4ea03d5ff69543f1ac470768149c581ff2cd7`) additionally searches contiguous same-material containers along cardinal and vertical directions, with a per-direction search bound of 10 blocks. The two modes therefore differ in **extended container adjacency**, not whether a vanilla double chest can have a second half.
+
+| Source-backed case | `connectContainers: false` | Settlement implication |
+| --- | --- | --- |
+| Single chest (`Type.SINGLE`) | One starting block | Do not infer neighboring unrelated chests belong to the same protected unit |
+| Double chest (`Type.LEFT/RIGHT`) | Starting block plus its calculated adjacent half | Inspect attached protection signs on **both** halves; `false` is not permission to omit the other half |
+| Adjacent non-paired containers | No chain traversal | Do not merge them merely because they touch; verify the actual reciprocal chest state independently |
+
+This is a **pinned upstream source/configuration interpretation**, not a Paper runtime assertion. The tracked server config may differ from the live config, and `SeparateContainersBlockFinder` does not itself prove that a neighboring block has a reciprocal chest state. The SimpleCoins geometry/ownership validation and saved/live completeness remain separate gates.
+
 ## WCL provider deployment boundary (source verification, not runtime attestation)
 
 The current [WonderfulCoreLibrary `develop` README](https://github.com/surumeneco/WonderfulCoreLibrary/blob/develop/README.md) (Git blob `5f44c0407a2a3ebe98e3c898fba5d43f6851000a`) describes **WCL 0.1.0 as an unreleased integration candidate**, alongside WWC **2.1.0** and WWW **1.1.0**. It explicitly says that `main` remains unchanged and live Paper/JE/BE and performance acceptance is outstanding. The only intended WCL deployable is `WonderfulCoreLibrary-0.1.0.jar` from `wcl-plugin`; the API and core JARs are not separate server plugins. WCL exposes a Bukkit service and read-only storage snapshot/result contracts, but **does not own consumer Entity/PDC identity, ownership policy, or world scans**.
