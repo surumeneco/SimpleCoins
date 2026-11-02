@@ -37,4 +37,31 @@ class BanEvidenceDecisionMatrixTest {
         assertEquals(BanEvidence.Status.BANNED, BanEvidence.evaluate(required, List.of(
                 new BanEvidence.Source("paper", BanEvidence.Status.BANNED))).status());
     }
+    @Test void sourceIdNormalizationDoesNotCreateIndependentDuplicateAuthorities() throws Exception {
+        assertEquals(BanEvidence.Status.CLEAR, BanEvidence.evaluate(
+                Set.of(" PAPER ", "EXTERNAL", "moderation"),
+                List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
+                        new BanEvidence.Source(" external ", BanEvidence.Status.CLEAR),
+                        new BanEvidence.Source("MODERATION", BanEvidence.Status.CLEAR))).status());
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(
+                Set.of("paper", " PAPER "), List.of()));
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(
+                Set.of("paper"), List.of(
+                        new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
+                        new BanEvidence.Source(" PAPER ", BanEvidence.Status.CLEAR))));
+    }
+
+    @Test void undeclaredOrMalformedEvidenceDoesNotProduceTypedDecision() {
+        var required = Set.of("paper", "external");
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(required,
+                List.of(new BanEvidence.Source("unregistered", BanEvidence.Status.CLEAR))));
+        var malformed = new java.util.ArrayList<BanEvidence.Source>();
+        malformed.add(null);
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(required, malformed));
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(required,
+                List.of(new BanEvidence.Source("paper", null))));
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(null, List.of()));
+        assertThrows(IOException.class, () -> BanEvidence.evaluate(required, null));
+    }
+
 }
