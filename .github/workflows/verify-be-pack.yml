@@ -1,0 +1,20 @@
+name: Verify Bedrock pack pair offline
+on:
+  pull_request:
+    paths:
+      - 'docs/verification/verify-be-pack.py'
+      - 'docs/verification/test-verify-be-pack.py'
+      - 'docs/verification/phase7-je-be-nexo-acceptance.md'
+      - '.github/workflows/verify-be-pack.yml'
+permissions:
+  contents: read
+jobs:
+  offline-pair-verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile verifier and tests
+        run: python3 -m py_compile docs/verification/verify-be-pack.py docs/verification/test-verify-be-pack.py
+      - name: Run isolated Bedrock artifact fault tests
+        run: python3 docs/verification/test-verify-be-pack.py
