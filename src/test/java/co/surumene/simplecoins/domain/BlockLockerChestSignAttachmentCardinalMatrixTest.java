@@ -23,12 +23,24 @@ class BlockLockerChestSignAttachmentCardinalMatrixTest {
                 assertTrue(BlockLockerChestLinkage.linked(right, left));
                 for (var half : new BlockLockerChestLinkage.Part[] {left, right}) {
                     var position = half.position();
-                    var wall = new BlockLockerSignAttachment.Position(
-                            position.x(), position.y(), position.z() - 1);
+                    var walls = new Object[][] {
+                            {BlockLockerSignAttachment.Mount.WALL_NORTH,
+                                    position.x(), position.y(), position.z() - 1},
+                            {BlockLockerSignAttachment.Mount.WALL_EAST,
+                                    position.x() + 1, position.y(), position.z()},
+                            {BlockLockerSignAttachment.Mount.WALL_SOUTH,
+                                    position.x(), position.y(), position.z() + 1},
+                            {BlockLockerSignAttachment.Mount.WALL_WEST,
+                                    position.x() - 1, position.y(), position.z()}
+                    };
+                    for (var wall : walls) {
+                        assertTrue(BlockLockerChestLinkage.signAttachedToPair(
+                                new BlockLockerSignAttachment.Position(
+                                        (int) wall[1], (int) wall[2], (int) wall[3]),
+                                (BlockLockerSignAttachment.Mount) wall[0], left, right));
+                    }
                     var standing = new BlockLockerSignAttachment.Position(
                             position.x(), position.y() + 1, position.z());
-                    assertTrue(BlockLockerChestLinkage.signAttachedToPair(wall,
-                            BlockLockerSignAttachment.Mount.WALL_NORTH, left, right));
                     assertTrue(BlockLockerChestLinkage.signAttachedToPair(standing,
                             BlockLockerSignAttachment.Mount.STANDING, right, left));
                 }
