@@ -11,6 +11,12 @@ status: **verification-plan / not-run**
 3. クライアントはJEとBEを別々に用意する。BEはGeyser-Spigot同居構成と外部Geyser構成を混同しない。キャッシュの影響を識別するため、初回接続・再接続・パック変更後を分けて記録する。
 4. 各ケースの結果は`pass / fail / blocked / not-run`のいずれかとし、`pass`にはログ・実機画面・実ファイル・コマンド結果等の再確認可能な証拠を添える。JUnit/CI成功を実機合格へ転記しない。
 
+### 既存サーバーリポジトリの静的プレフライト（実機とは別）
+
+2026-11-02に [MineCraftXPlayServer `main` の固定コミット `97ab138d53f457b7053ee87da49bd1f5d4cf1c8b`](https://github.com/surumeneco/MineCraftXPlayServer/tree/97ab138d53f457b7053ee87da49bd1f5d4cf1c8b) の追跡Gitツリー（161エントリ）を確認した。直下の`plugins/`に22件のJARがあり、`Geyser-Spigot.jar`（Git blob `b2e27eced86b0cfbd9f28cb851cae0b48a498357`）と`floodgate-spigot.jar`（`80ad474586a5f5e7f01afdc0c900a8a628c2bf3c`）は存在する。一方、追跡ツリーには`SimpleCoins`・`Nexo`を含むパス、Geyserの`config.yml`、`.mcpack`、`custom_mappings/`のファイルが見つからない。
+
+**これはGitで追跡されるファイルだけの観測である。** 未追跡の実配備JAR・Geyser設定・生成済みパック、ロード済みプラグイン、実際の配布状況を否定しない。したがってJE/BE/Nexo/giveの受入結果は変えず、すべて`not-run`のままとする。実機検証を始める際は、隔離サーバーの`/plugins`・Geyser設定・生成物/配置物のSHA-256・実際のロード状態を、上記Gitスナップショットと**別々に**取得する。Gitに見当たらないことを「未導入」や「配布失敗」の証拠にしない。
+
 ### BE生成物のオフライン事前検証（実機受入とは別）
 
 隔離環境で生成された2ファイルのコピーに対して、次を実行する。元の生成物は変更しない。
