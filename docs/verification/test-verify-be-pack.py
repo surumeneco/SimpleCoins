@@ -158,6 +158,34 @@ class VerifyBedrockArtifactsTest(unittest.TestCase):
         with self.assertRaises(verifier.VerificationError):
             verifier.verify(link / self.pack.name, self.mapping)
 
+    def test_installed_pair_matches_generated_bytes(self):
+        installed_pack = self.root / "installed.mcpack"
+        installed_mapping = self.root / "installed.json"
+        installed_pack.write_bytes(self.pack.read_bytes())
+        installed_mapping.write_bytes(self.mapping.read_bytes())
+        result = verifier.verify(self.pack, self.mapping, installed_pack, installed_mapping)
+        self.assertTrue(result["installed_pair_identical"])
+
+    def test_installed_mapping_drift_is_rejected(self):
+        installed_pack = self.root / "installed.mcpack"
+        installed_mapping = self.root / "installed.json"
+        installed_pack.write_bytes(self.pack.read_bytes())
+        installed_mapping.write_bytes(self.mapping.read_bytes() + b" ")
+        with self.assertRaises(verifier.VerificationError):
+            verifier.verify(self.pack, self.mapping, installed_pack, installed_mapping)
+
+    def test_installed_symlink_is_rejected(self):
+        installed_pack = self.root / "installed.mcpack"
+        installed_mapping = self.root / "installed.json"
+        installed_pack.symlink_to(self.pack)
+        installed_mapping.write_bytes(self.mapping.read_bytes())
+        with self.assertRaises(verifier.VerificationError):
+            verifier.verify(self.pack, self.mapping, installed_pack, installed_mapping)
+
+    def test_partial_installed_pair_is_rejected(self):
+        with self.assertRaises(verifier.VerificationError):
+            verifier.verify(self.pack, self.mapping, self.root / "installed.mcpack", None)
+
     def test_invalid_json_is_rejected(self):
         self.mapping.write_bytes(b"not-json")
         self.reject()
