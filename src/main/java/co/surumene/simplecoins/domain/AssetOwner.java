@@ -2,7 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.util.UUID;
 
-/** Owner resolution is separate from disk traversal and BAN-source adapters. */
+/** Post-validation classification only; unknown ownership or BAN evidence must fail closed upstream. */
 public final class AssetOwner {
     private AssetOwner() {}
 
@@ -29,7 +29,7 @@ public final class AssetOwner {
         return new Result(Kind.PERSONAL, owner, null);
     }
 
-    /** WWC/WWW: commander, then tame owner, else Free; unknown UUID must not be guessed. */
+    /** Prevalidated WWC/WWW hints: commander, then tame owner. Null is not proof of FREE. */
     public static UUID mobOwner(UUID commander, UUID tameOwner) {
         return commander != null ? commander : tameOwner;
     }
