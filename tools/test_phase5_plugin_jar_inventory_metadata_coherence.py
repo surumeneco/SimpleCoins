@@ -90,7 +90,7 @@ class PluginJarMetadataCoherenceTest(unittest.TestCase):
                         archive.read(descriptor)
                 result = subject.inventory(self.directory)
                 self.assertFalse(result["scan_complete"], "CRC-invalid descriptor must not be attested")
-                self.assertIn("unreadable_or_invalid_jar", [e["reason"] for e in result["errors"])
+                self.assertIn("unreadable_or_invalid_jar", [e["reason"] for e in result["errors"]])
 
 
 if __name__ == "__main__":
