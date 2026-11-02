@@ -17,6 +17,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Validate Draft syntax and explicit references (not normative Gate)
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase5-world-root-ancestor-symlink.md
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
