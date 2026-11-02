@@ -15,7 +15,7 @@ public final class BedrockPackVerifierFixture {
         Path output = Path.of(args[0]);
         Files.createDirectories(output);
         byte[] pixel = Base64.getDecoder().decode(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Yw5AHMAAAAASUVORK5CYII=");
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==");
         Map<CoinDenomination, byte[]> images = new EnumMap<>(CoinDenomination.class);
         Map<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
         for (CoinDenomination denomination : CoinDenomination.values()) {
