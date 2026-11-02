@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic offline tests for verify-be-pack.py; no Paper/Geyser client."""
 import importlib.util
+import base64
 import json
 import stat
 from pathlib import Path
@@ -22,8 +23,9 @@ class VerifyBedrockArtifactsTest(unittest.TestCase):
         self.pack = self.root / "SimpleCoins.mcpack"
         self.mapping = self.root / "simplecoins.json"
         self.names = {value: f"Coin {value}" for value in verifier.DENOMINATIONS}
-        self.images = {value: b"PNG" + value.to_bytes(4, "big")
-                       for value in verifier.DENOMINATIONS}
+        self.images = {value: base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")
+            for value in verifier.DENOMINATIONS}
         self.build()
 
     def build(self, *, entries=None, mapping=None, manifest=None):
@@ -76,9 +78,16 @@ class VerifyBedrockArtifactsTest(unittest.TestCase):
         self.reject()
 
     def test_changed_image_without_manifest_update_is_rejected(self):
-        self.images[1] = b"changed image"
+        self.images[1] = self.images[1][:-1] + bytes([self.images[1][-1] ^ 1])
         old_manifest = json.loads(zipfile.ZipFile(self.pack).read("manifest.json"))
         self.build(manifest=old_manifest)
+        self.reject()
+
+    def test_corrupted_png_chunk_crc_is_rejected(self):
+        corrupted = bytearray(self.images[1])
+        corrupted[48] ^= 1
+        self.images[1] = bytes(corrupted)
+        self.build()
         self.reject()
 
     def test_missing_png_is_rejected(self):
