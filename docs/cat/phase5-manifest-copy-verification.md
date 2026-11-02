@@ -23,7 +23,7 @@ language: ja
 
 ## Rules
 
-| ID | Condition | Observed contract to verify | Verification |
+| ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
 | SC-COPY-01 | Caller mutates the source list after constructing Manifest | Existing worldFiles are unchanged | callerListMutationCannotChangeManifest |
 | SC-COPY-02 | Caller mutates the player map after constructing Manifest | Existing playerDataFiles are unchanged | callerMapMutationCannotChangeManifest |
