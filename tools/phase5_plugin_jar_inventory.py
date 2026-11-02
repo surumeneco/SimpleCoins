@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 import sys
 import zipfile
@@ -16,11 +18,10 @@ import zipfile
 DESCRIPTORS = frozenset({"plugin.yml", "paper-plugin.yml"})
 
 
-def sha256_file(path: Path) -> str:
+def sha256_stream(stream) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
     return digest.hexdigest()
 
 
@@ -40,12 +41,21 @@ def inventory(plugin_dir: Path) -> dict:
             errors.append({"jar": path.name, "reason": "not_a_regular_file"})
             continue
         try:
-            before = path.stat()
-            digest = sha256_file(path)
-            with zipfile.ZipFile(path) as archive:
-                descriptors = sorted(DESCRIPTORS.intersection(archive.namelist()))
-            after = path.stat()
-            identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            # Open once with O_NOFOLLOW so a symlink swap cannot redirect the
+            # hash or descriptor read to another file after the initial check.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(path, flags)
+            with os.fdopen(fd, "rb") as stream:
+                before = os.fstat(stream.fileno())
+                if not stat.S_ISREG(before.st_mode):
+                    errors.append({"jar": path.name, "reason": "not_a_regular_file"})
+                    continue
+                digest = sha256_stream(stream)
+                stream.seek(0)
+                with zipfile.ZipFile(stream) as archive:
+                    descriptors = sorted(DESCRIPTORS.intersection(archive.namelist()))
+                after = os.fstat(stream.fileno())
+            identity = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
             if identity(before) != identity(after):
                 errors.append({"jar": path.name, "reason": "changed_during_scan"})
                 continue
