@@ -14,6 +14,7 @@ import struct
 import sys
 import uuid
 import zipfile
+import zlib
 
 DENOMINATIONS = (1, 5, 10, 50, 100, 500, 1000, 5000, 10000)
 
@@ -58,6 +59,32 @@ def java_name_uuid(value: str) -> str:
     raw[6] = (raw[6] & 0x0F) | 0x30
     raw[8] = (raw[8] & 0x3F) | 0x80
     return str(uuid.UUID(bytes=bytes(raw)))
+
+
+def verify_png(data: bytes) -> None:
+    require(data.startswith(b"\x89PNG\r\n\x1a\n"), "Invalid PNG signature")
+    offset = 8
+    kinds = []
+    while offset < len(data):
+        require(offset + 12 <= len(data), "Truncated PNG chunk header")
+        size = struct.unpack_from(">I", data, offset)[0]
+        require(size <= 16 * 1024 * 1024 and offset + 12 + size <= len(data),
+                "Truncated or oversized PNG chunk")
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + size]
+        expected = struct.unpack_from(">I", data, offset + 8 + size)[0]
+        require(zlib.crc32(kind + payload) == expected, "PNG chunk CRC mismatch")
+        kinds.append(kind)
+        if kind == b"IHDR":
+            require(len(kinds) == 1 and size == 13, "Invalid PNG IHDR")
+            width, height = struct.unpack_from(">II", payload)
+            require(width > 0 and height > 0, "Invalid PNG dimensions")
+        offset += size + 12
+        if kind == b"IEND":
+            require(size == 0 and offset == len(data), "Invalid PNG end marker")
+            break
+    require(kinds and kinds[0] == b"IHDR" and kinds.count(b"IHDR") == 1
+            and b"IDAT" in kinds and kinds[-1] == b"IEND", "Incomplete PNG image")
 
 
 def verify(pack: Path, mapping: Path) -> dict:
@@ -126,7 +153,7 @@ def verify(pack: Path, mapping: Path) -> dict:
         require(texture_data[model] == {"textures": [f"textures/items/coin_{value}"]},
                 "Geyser texture mapping differs from pack")
         image = images[value]
-        require(len(image) > 0, "Empty denomination texture")
+        verify_png(image)
         try:
             name_bytes = name.encode("utf-8")
         except UnicodeError as error:
