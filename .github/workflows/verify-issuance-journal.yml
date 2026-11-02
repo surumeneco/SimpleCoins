@@ -5,6 +5,8 @@ on:
       - 'docs/verification/verify-issuance-journal.py'
       - 'docs/verification/test-verify-issuance-journal.py'
       - 'docs/verification/IssuanceJournalVerifierFixture.java'
+      - 'docs/verification/IssuanceJournalMutf8WriterFixture.java'
+      - 'docs/verification/test-issuance-journal-mutf8-writer.py'
       - 'src/main/java/co/surumene/simplecoins/domain/GrantLedger.java'
       - 'src/main/java/co/surumene/simplecoins/domain/DurableFile.java'
       - 'src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java'
@@ -14,6 +16,8 @@ on:
       - 'docs/verification/verify-issuance-journal.py'
       - 'docs/verification/test-verify-issuance-journal.py'
       - 'docs/verification/IssuanceJournalVerifierFixture.java'
+      - 'docs/verification/IssuanceJournalMutf8WriterFixture.java'
+      - 'docs/verification/test-issuance-journal-mutf8-writer.py'
       - 'src/main/java/co/surumene/simplecoins/domain/GrantLedger.java'
       - 'src/main/java/co/surumene/simplecoins/domain/DurableFile.java'
       - 'src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java'
@@ -31,4 +35,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify journal and actual Java writer compatibility
-        run: python3 docs/verification/test-verify-issuance-journal.py -v
+        run: |
+          python3 docs/verification/test-verify-issuance-journal.py -v
+          python3 docs/verification/test-issuance-journal-mutf8-writer.py -v
