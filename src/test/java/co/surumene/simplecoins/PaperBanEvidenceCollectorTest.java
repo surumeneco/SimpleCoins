@@ -42,6 +42,29 @@ class PaperBanEvidenceCollectorTest {
                 true, Map.of("external-plugin", id -> true)).status());
     }
 
+    @Test void confirmedExternalBanDominatesIncompletePluginInventory() throws Exception {
+        // BAN-COLLECT-01/03: missing plugin inventory prevents CLEAR, but
+        // must not erase an independently verified positive BAN result.
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var decision = PaperBanEvidenceCollector.read(
+                OWNER, profile(BanEvidence.Status.CLEAR), ip(BanEvidence.Status.UNKNOWN),
+                false, Map.of("verified-plugin", uuid -> {
+                    assertEquals(OWNER, uuid);
+                    calls.incrementAndGet();
+                    return true;
+                }));
+        assertEquals(BanEvidence.Status.BANNED, decision.status());
+        assertEquals(1, calls.get(), "A required plugin should be queried once per UUID");
+    }
+
+    @Test void incompletePluginInventoryWithClearLookupsRemainsUnknown() throws Exception {
+        // BAN-COLLECT-02: a known plugin's CLEAR cannot prove all plugins clear
+        // when the authoritative plugin inventory itself is incomplete.
+        assertEquals(BanEvidence.Status.UNKNOWN, PaperBanEvidenceCollector.read(
+                OWNER, profile(BanEvidence.Status.CLEAR), ip(BanEvidence.Status.CLEAR),
+                false, Map.of("verified-plugin", uuid -> false)).status());
+    }
+
     @Test void unavailableOrDuplicateExternalSourcesFailClosed() throws Exception {
         Map<String, Function<UUID, Boolean>> missing = new HashMap<>();
         missing.put("external-plugin", null);
