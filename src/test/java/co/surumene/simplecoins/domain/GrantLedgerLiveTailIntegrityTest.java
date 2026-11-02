@@ -90,6 +90,31 @@ class GrantLedgerLiveTailIntegrityTest {
                 "A corrupt target must poison the live journal until recovery");
     }
 
+    @Test void substitutedNonTailTargetMustNotBeSilentlyAcknowledged() throws Exception {
+        // SC-JOURNAL-ACK-03: a well-formed, checksummed record from a
+        // different ledger is not durable evidence for this reservation.
+        Path root = directory.resolve("substituted-target");
+        var ledger = new GrantLedger(root);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000052");
+        var older = ledger.reserve(player, 100, "console");
+        ledger.reserve(player, 200, "console");
+
+        Path otherRoot = directory.resolve("independent-ledger");
+        var unrelated = new GrantLedger(otherRoot);
+        unrelated.reserve(UUID.fromString("00000000-0000-0000-0000-000000000053"),
+                300, "console");
+        Path olderFile = root.resolve(older.sequence() + ".grant");
+        byte[] substituted = Files.readAllBytes(otherRoot.resolve("1.grant"));
+        Files.write(olderFile, substituted);
+
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(older, older.sequence()));
+        assertArrayEquals(substituted, Files.readAllBytes(olderFile),
+                "Acknowledgement must preserve the substituted durable evidence");
+        assertThrows(IllegalStateException.class, () -> ledger.pending(player),
+                "A substituted non-tail record must poison the live journal");
+    }
+
     @Test void intactTailSupportsReceiptAcknowledgement() throws Exception {
         var ledger = new GrantLedger(directory.resolve("journal"));
         UUID player = UUID.randomUUID();
