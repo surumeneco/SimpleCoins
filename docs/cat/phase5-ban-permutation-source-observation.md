@@ -28,9 +28,9 @@ This code-to-spec verification extends the existing `phase5-ban-decision-evidenc
 
 | ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
-| BAN-PERM-01 | With four declared sources, BANNED dominates; otherwise UNKNOWN dominates; only four CLEAR observations produce CLEAR, independently of observation order | All 3^4 status tuples × 4! permutations = 1,944 assertions | `fourSourceTruthTableIsOrderIndependent` |
-| BAN-PERM-02 | If one of four required sources is absent, a positive BANNED still dominates; otherwise the result stays UNKNOWN regardless of observation order | All 3^3 observed status tuples × 3! permutations = 162 assertions | `missingFourthSourceNeverProvesClear` |
-| BAN-PERM-03 | An undeclared source, duplicate source, or null status must throw IOException even if another observation is BANNED, regardless of their order | 6 exception checks | `invalidSourceEvidenceNeverOverridesValidation` |
+| BAN-PERM-01 | Four declared sources with complete observations in any order | BANNED dominates; otherwise UNKNOWN dominates; only all CLEAR yields CLEAR | `fourSourceTruthTableIsOrderIndependent` (1,944 cases) |
+| BAN-PERM-02 | One of four required sources absent; three observed sources in any order | Positive BANNED still dominates; otherwise UNKNOWN, never CLEAR | `missingFourthSourceNeverProvesClear` (162 cases) |
+| BAN-PERM-03 | Undeclared, duplicate, or null-status source before or after a BANNED observation | Reject with IOException rather than returning BANNED | `invalidSourceEvidenceNeverOverridesValidation` (6 cases) |
 
 ## Evidence boundary
 
