@@ -29,6 +29,24 @@ The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` bl
 | Stored `shulker` / `cargo` bytes | Preserve PDC and nested contents; decode with the correct Paper item codec and count nested items exactly once |
 | Saved and loaded representations of the same entity | Reconcile by canonical entity/world identity and source snapshot consistency; do not double count or publish on unresolved conflict |
 
+### Registration and provider-result acceptance vectors
+
+The following are **source-derived handoff vectors**, not live-service observations or a Confirmed CAT TestModel. They narrow the existing decision matrix without assuming that either plugin is installed on the target Paper server.
+
+| Vector | Observed registration/result | Required consumer behavior |
+| --- | --- | --- |
+| WCL-REG-01 | WWC and WWW each register `WonderfulStorageReader.class` at `ServicePriority.Normal` | Enumerate **all** registrations; `ServicesManager.load` alone cannot establish the two-provider inventory |
+| WCL-REG-02 | One expected enabled provider is missing or disabled | Mark that source incomplete/UNKNOWN, not a verified empty inventory; preserve other provider evidence separately |
+| WCL-REG-03 | Two registrations claim the same expected `providerId` | Reject ambiguous provider selection even if one returns `Success` |
+| WCL-REG-04 | Registration owner/plugin identity disagrees with the expected WWC/WWW source, or `providerId` is unexpected | Reject the untrusted source; a matching string alone is insufficient proof of provider authority |
+| WCL-REG-05 | Provider returns `Success` but snapshot entity/world/provider differs from the independently verified request | Reject without counting the items; do not substitute another provider's snapshot |
+| WCL-REG-06 | `readLoaded` returns `NotFound` | Do not infer offline absence; consult the independently verified saved source and reconcile loaded/saved identity |
+| WCL-REG-07 | WWC `readStored` sees its marker but no `data_version` | Current WWC source permits legacy success; **do not** equate that with a verified commander/owner, which requires separate evidence |
+| WCL-REG-08 | WWW `readStored` sees its marker but no schema or runtime bytes | Current WWW source returns `Failure(MISSING_DATA)`; do not convert this into zero stored assets |
+| WCL-REG-09 | WWW `readLoaded` finds a wolf entity but no registered loaded individual | Current WWW source returns `Failure(MISSING_DATA)`, not `NotFound` or verified empty storage |
+
+For WCL-REG-01–04, verify the actual Bukkit `RegisteredServiceProvider` owner, provider identity and enabled state on the primary thread, then compare against a caller-declared complete expected-provider inventory. A static source check cannot prove the deployed JAR versions or registration lifecycle. WWC source blob `fed4ea0ef3b0d9f8bbea23f14db7ee2e8cd1bed0` and WWW source blob `37e35aff978686183056bbc090b54e9b44e20ac9` support the distinct result semantics in WCL-REG-07–09.
+
 The WCL `StorageSnapshot` constructor itself enforces non-null identities, immutable relationships/items and unique slots. It does **not** independently establish the completeness of the world/entity catalog, source freshness, canonical owner UUID, or Paper/WWC/WWW runtime compatibility. Those are caller obligations.
 
 ## Direct reproducible evidence
