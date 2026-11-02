@@ -1,4 +1,31 @@
+---
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.settlement.readonly-staging
+status: draft
+process: simplecoins.settlement
+source_refs:
+  - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
+refs: []
+semantic_contract: markdown-v2
+language: ja
+---
+
 # Phase 6: Read-only settlement source staging coordinator (CAT Draft)
+
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.settlement | Read-only source staging and fail-closed settlement boundary |
+| simplecoins.snapshot | Verified saved-source manifest and closure identity |
+
+## 規則
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| staging.playerdata | manifest includes playerdata and an empty world source | Stage playerdata and mark both source IDs complete only after successful reads | SC-STAGING-01 |
+| staging.failure | playerdata malformed or ownership resolver returns unknown | Abort without returning a publishable staged result | SC-STAGING-02 |
+| staging.world-completion | world source contains multiple chunks | Mark complete after entire source traversal, never after one chunk | SC-STAGING-03 |
+| staging.no-publication | read-only staging coordinator executes | Do not invoke SettlementAccumulator.commit or mutate Paper world | SC-STAGING-04 |
 
 Status: Draft, not Confirmed. Sources: SimpleCoins 02A, 02B, 05_1.0.0_実装計画.md (G0, A02/A03).
 

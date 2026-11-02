@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.*;
 
@@ -24,13 +25,25 @@ public final class GrantLedger {
                 true, denomination, coinCount); }
     }
     private final Path directory;
+    private final Object directoryFileKey;
     private final TreeMap<Long, Grant> grants = new TreeMap<>();
     private boolean failed;
 
     public GrantLedger(Path directory) throws IOException {
-        this.directory = directory;
-        Files.createDirectories(directory);
-        try (var listing = Files.list(directory)) {
+        if (directory == null) throw new IOException("Missing issuance journal directory");
+        this.directory = directory.toAbsolutePath().normalize();
+        requireRealAncestors(this.directory);
+        Files.createDirectories(this.directory);
+        requireRealAncestors(this.directory);
+        if (!Files.isDirectory(this.directory, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Issuance journal root is not a real directory: " + this.directory);
+        // A live journal instance cannot be rebound to a different directory
+        // simply because a new folder reuses its original pathname.
+        directoryFileKey = Files.readAttributes(this.directory, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS).fileKey();
+        if (directoryFileKey == null)
+            throw new IOException("Stable issuance journal root identity is unavailable");
+        try (var listing = Files.list(this.directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
                 Grant grant = decode(DurableFile.read(file, 8192));
                 if (!file.getFileName().toString().equals(grant.sequence() + ".grant") ||
@@ -45,8 +58,8 @@ public final class GrantLedger {
                 throw new IOException("Missing or duplicate issuance journal record");
         }
         long last = grants.isEmpty() ? 0 : grants.lastKey();
-        Path head = directory.resolve("head");
-        if (Files.exists(head)) {
+        Path head = this.directory.resolve("head");
+        if (Files.exists(head, LinkOption.NOFOLLOW_LINKS)) {
             byte[] bytes = DurableFile.read(head, 8);
             if (bytes.length != 8) throw new IOException("Invalid journal head");
             long expectedLast = java.nio.ByteBuffer.wrap(bytes).getLong();
@@ -59,6 +72,13 @@ public final class GrantLedger {
             writeHead(0);
         }
     }
+    private static void requireRealAncestors(Path path) throws IOException {
+        for (Path current = path; current != null; current = current.getParent()) {
+            if (Files.isSymbolicLink(current))
+                throw new IOException("Issuance journal path contains a symbolic link: " + current);
+        }
+    }
+
     private void writeHead(long sequence) throws IOException {
         DurableFile.write(directory.resolve("head"), java.nio.ByteBuffer.allocate(8).putLong(sequence).array());
     }
@@ -79,6 +99,12 @@ public final class GrantLedger {
                                CoinDenomination denomination, long coinCount) throws IOException {
         checkHealthy();
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
+        // An untracked record may have been left by a different writer or an
+        // interrupted operation. Atomic replacement must not erase it.
+        if (Files.exists(directory.resolve(next + ".grant"), LinkOption.NOFOLLOW_LINKS)) {
+            failed = true;
+            throw new IOException("Untracked issuance journal record at next sequence");
+        }
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
         persist(grant);
@@ -89,15 +115,27 @@ public final class GrantLedger {
     }
     public synchronized List<Grant> pending(UUID player) {
         checkHealthy();
+        if (player == null) throw new IllegalArgumentException("Missing grant recipient UUID");
         return grants.values().stream().filter(g -> g.player().equals(player) && !g.delivered()).toList();
     }
     public synchronized boolean wasApplied(Grant grant, long savedReceipt) {
         checkHealthy();
-        validateReceipt(grant.player(), savedReceipt);
-        return savedReceipt >= grant.sequence();
+        Objects.requireNonNull(grant, "grant");
+        Grant current = grants.get(grant.sequence());
+        if (current == null || !current.id().equals(grant.id()) ||
+                !current.player().equals(grant.player()) ||
+                current.amount() != grant.amount() ||
+                !current.issuer().equals(grant.issuer()) ||
+                current.createdMillis() != grant.createdMillis() ||
+                current.denomination() != grant.denomination() ||
+                current.coinCount() != grant.coinCount())
+            throw new IllegalStateException("Grant does not match the current issuance journal");
+        validateReceipt(current.player(), savedReceipt);
+        return savedReceipt >= current.sequence();
     }
     public synchronized void validateReceipt(UUID player, long receipt) {
         checkHealthy();
+        if (player == null) throw new IllegalArgumentException("Missing receipt recipient UUID");
         if (receipt < 0 || (receipt != 0 && (!grants.containsKey(receipt) ||
                 !grants.get(receipt).player().equals(player))))
             throw new IllegalStateException("Receipt does not belong to this player's journal");
@@ -123,6 +161,32 @@ public final class GrantLedger {
     }
     private void checkHealthy() {
         if (failed) throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
+        try {
+            requireRealAncestors(directory);
+            BasicFileAttributes current = Files.readAttributes(directory,
+                    BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (!current.isDirectory() || !directoryFileKey.equals(current.fileKey()))
+                throw new IOException("Issuance journal physical root changed");
+            if (!Files.isRegularFile(directory.resolve("head"), LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Issuance journal durable head missing or replaced");
+            byte[] head = DurableFile.read(directory.resolve("head"), 8);
+            long expectedLast = grants.isEmpty() ? 0 : grants.lastKey();
+            if (head.length != 8 || java.nio.ByteBuffer.wrap(head).getLong() != expectedLast)
+                throw new IOException("Issuance journal durable head differs from live state");
+            // The durable head is only a sequence marker. A deleted or
+            // corrupted tail record must not leave a live ledger issuing from
+            // its in-memory copy without durable reservation evidence.
+            if (!grants.isEmpty()) {
+                Grant tail = grants.lastEntry().getValue();
+                Grant durableTail = decode(DurableFile.read(
+                        directory.resolve(tail.sequence() + ".grant"), 8192));
+                if (!tail.equals(durableTail))
+                    throw new IOException("Issuance journal durable tail differs from live state");
+            }
+        } catch (IOException unsafe) {
+            failed = true;
+            throw new IllegalStateException("Issuance journal root became unsafe", unsafe);
+        }
     }
     private void persist(Grant grant) throws IOException {
         try { DurableFile.write(directory.resolve(grant.sequence() + ".grant"), encode(grant)); }
@@ -164,6 +228,8 @@ public final class GrantLedger {
                     createdMillis, delivered, denomination, coinCount);
             if (in.available() != 0) throw new IOException("Trailing journal data");
             return result;
-        } catch (IllegalArgumentException ex) { throw new IOException("Invalid journal", ex); }
+        } catch (IllegalArgumentException | ArithmeticException ex) {
+            throw new IOException("Invalid journal", ex);
+        }
     }
 }

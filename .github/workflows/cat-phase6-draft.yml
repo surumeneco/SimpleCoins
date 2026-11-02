@@ -1,0 +1,51 @@
+name: CAT Draft syntax validation (Phase 6 snapshot and journal)
+
+on:
+  push:
+    branches:
+      - feature/settlement-world-identity-20261101-queue-b
+    paths:
+      - 'docs/cat/phase6-*.md'
+      - '.github/workflows/cat-phase6-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout pinned CAT-TDD runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Canonical Draft syntax and explicit reference validation
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/phase6-dangling-journal-head.md \
+            docs/cat/phase6-durable-settlement-snapshot.md \
+            docs/cat/phase6-fatal-source-read.md \
+            docs/cat/phase6-grant-ack-durable-target.md \
+            docs/cat/phase6-grant-ack-pi.md \
+            docs/cat/phase6-grant-ack-process.md \
+            docs/cat/phase6-grant-ack-tce.md \
+            docs/cat/phase6-grant-directory-identity.md \
+            docs/cat/phase6-grant-player-identity.md \
+            docs/cat/phase6-grant-root-lifecycle.md \
+            docs/cat/phase6-journal-arithmetic-integrity.md \
+            docs/cat/phase6-journal-root-integrity.md \
+            docs/cat/phase6-live-grant-tail-integrity.md \
+            docs/cat/phase6-manifest-source-closure.md \
+            docs/cat/phase6-readonly-staging-coordinator.md \
+            docs/cat/phase6-settlement-generation-publication.md \
+            docs/cat/phase6-snapshot-directory-identity.md \
+            docs/cat/phase6-snapshot-root-lifecycle.md \
+            docs/cat/phase6-source-readiness-barrier.md \
+            docs/cat/phase6-untracked-next-grant.md
+      - name: Declare evidence boundary
+        run: |
+          echo 'Syntax/reference lint only. Phase6 Drafts are not Confirmed and formal semantic CAT Gates are not run.' >> "$GITHUB_STEP_SUMMARY"
