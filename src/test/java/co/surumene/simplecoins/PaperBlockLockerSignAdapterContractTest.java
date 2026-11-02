@@ -90,6 +90,26 @@ class PaperBlockLockerSignAdapterContractTest {
                 CHEST, List.of(verified)).owner());
     }
 
+    @Test void allWallFacingsAndStandingMountRetainPhysicalOrientation() throws Exception {
+        var identity = (co.surumene.simplecoins.domain.BlockLockerVisibleSignResolver.PrimaryIdentity)
+                name -> ExternalOwnerDecision.personal(OWNER);
+        var faces = List.of(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST);
+        var mounts = List.of(BlockLockerSignAttachment.Mount.WALL_NORTH,
+                BlockLockerSignAttachment.Mount.WALL_EAST,
+                BlockLockerSignAttachment.Mount.WALL_SOUTH,
+                BlockLockerSignAttachment.Mount.WALL_WEST);
+        for (int i = 0; i < faces.size(); i++) {
+            var verified = read(sign(wall(faces.get(i)),
+                    lines("[Private]", "Alice", "", "")), identity).orElseThrow();
+            assertEquals(mounts.get(i), verified.mount());
+        }
+        BlockData standing = proxy(org.bukkit.block.data.type.Sign.class,
+                (self, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        assertEquals(BlockLockerSignAttachment.Mount.STANDING,
+                read(sign(standing, lines("[Private]", "Alice", "", "")),
+                        identity).orElseThrow().mount());
+    }
+
     @Test void everyoneRequiresVerifiedPrimaryAndPhysicalAttachment() throws Exception {
         var verified = read(sign(wall(BlockFace.NORTH),
                 lines("[Private]", "Alice", "[Everyone]", "")),
@@ -125,6 +145,13 @@ class PaperBlockLockerSignAdapterContractTest {
                 good.subList(0, 3)), identity));
         assertThrows(IOException.class, () -> read(sign(wall(BlockFace.NORTH),
                 null), identity));
+        assertThrows(IOException.class, () -> read(sign(wall(BlockFace.NORTH),
+                java.util.Arrays.asList(Component.text("[Private]"), null,
+                        Component.text(""), Component.text(""))), identity));
+        Sign throwing = proxy(Sign.class, (self, method, args) -> {
+            throw new IllegalStateException("Paper state unavailable");
+        });
+        assertThrows(IOException.class, () -> read(throwing, identity));
     }
 
     @Test void failedPrimaryLookupCannotPublishPersonalOrFree() {
