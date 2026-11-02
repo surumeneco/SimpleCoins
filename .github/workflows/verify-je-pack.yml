@@ -1,0 +1,20 @@
+name: Verify Java pack handoff helper
+on:
+  pull_request:
+    paths:
+      - 'docs/verification/verify-je-pack.sh'
+      - 'docs/verification/test-verify-je-pack.py'
+      - 'docs/verification/phase7-je-be-pack-handoff.md'
+      - '.github/workflows/verify-je-pack.yml'
+permissions:
+  contents: read
+jobs:
+  offline-helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check verifier shell syntax
+        run: bash -n docs/verification/verify-je-pack.sh
+      - name: Run isolated HTTP verifier smoke tests
+        run: python3 docs/verification/test-verify-je-pack.py
