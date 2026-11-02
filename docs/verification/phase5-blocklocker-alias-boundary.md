@@ -31,7 +31,7 @@ The exact SimpleCoins `develop` Git blobs above were reproduced and matched usin
 | Colored runtime Everyone alias `§aEveryone` | **Expected Red:** malformed alias not rejected |
 | Colored runtime PRIVATE alias `§a[Private]` | **Expected Red:** malformed alias normalized into a valid header match |
 
-Result: **6/6 passing controls and 2/2 reproduced expected Red cases**. These are standalone direct Java assertions, not JUnit, Gradle, CAT machine Gates, or Paper integration. Existing Draft PRs #49/#53 contain related JUnit Red evidence; their branches remain independent.
+The original direct harness reproduced 6 Green controls and 2 expected Red cases. A separate exact-source Java probe for PR #68 reproduced 1 Green control and 2 additional expected Red cases. Exact-head Actions run 41393085051 passed CAT Draft syntax lint and completed 63 JUnit tests with exactly 2 intended Red failures. These are not normative CAT Gates or Paper runtime acceptance; all related test branches remain independent.
 
 ## Implementation and acceptance boundary
 
