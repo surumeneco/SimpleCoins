@@ -11,9 +11,14 @@ import org.junit.jupiter.api.Test;
  * These are text-boundary tests, not evidence of attached BlockLocker protection.
  */
 class BlockLockerEveryoneAliasIntegrityTest {
-    @Test void colorFormattedRuntimeAliasUsesSameNormalizationAsVisibleLine() throws Exception {
+    @Test void formattedVisibleLineMatchesUncoloredRuntimeAlias() throws Exception {
         assertTrue(BlockLockerEveryoneText.matches(
-                " §b[EVERYONE]§r ", Set.of("§aEveryone")));
+                " §b[EVERYONE]§r ", Set.of("Everyone")));
+    }
+
+    @Test void colorFormattedRuntimeAliasInvalidatesEntireAliasSet() {
+        assertThrows(IOException.class, () -> BlockLockerEveryoneText.matches(
+                "[Everyone]", Set.of("Everyone", "§aOther")));
     }
 
     @Test void formattingOnlyRuntimeAliasInvalidatesEntireAliasSet() {
