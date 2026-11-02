@@ -25,4 +25,23 @@ class AssetStatisticsTest {
         assertEquals(1, s.halfShareSubjects());
         assertEquals(0, s.minMinusShared().compareTo(new BigDecimal("-50")));
     }
+
+    @Test void zeroTotalHasNoConcentration() {
+        var a = UUID.fromString("00000000-0000-0000-0000-000000000033");
+        var s = AssetStatistics.calculate(Map.of(a, BigInteger.ZERO),
+                BigInteger.ZERO, BigInteger.TEN);
+        assertEquals(BigInteger.ZERO, s.worldTotal());
+        assertNull(s.maxWorldPercent());
+        assertNull(s.halfShareSubjects());
+    }
+
+    @Test void negativeValuesAreRejectedBeforeReportPublication() {
+        var a = UUID.fromString("00000000-0000-0000-0000-000000000044");
+        assertThrows(IllegalArgumentException.class, () -> AssetStatistics.calculate(
+                Map.of(a, BigInteger.valueOf(-1)), BigInteger.ZERO, BigInteger.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> AssetStatistics.calculate(
+                Map.of(), BigInteger.valueOf(-1), BigInteger.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> AssetStatistics.calculate(
+                Map.of(), BigInteger.ZERO, BigInteger.valueOf(-1)));
+    }
 }
