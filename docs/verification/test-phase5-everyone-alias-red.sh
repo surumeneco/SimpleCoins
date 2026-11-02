@@ -14,9 +14,15 @@ public final class EveryoneAliasProbe {
     public static void main(String[] args) throws Exception {
         int expectedRed = 0;
         if (!BlockLockerEveryoneText.matches(
-                " §b[EVERYONE]§r ", Set.of("§aEveryone"))) {
+                " §b[EVERYONE]§r ", Set.of("Everyone")))
+            throw new AssertionError("uncolored runtime alias baseline did not match");
+        try {
+            BlockLockerEveryoneText.matches(
+                    "[Everyone]", Set.of("Everyone", "§aOther"));
             expectedRed++;
-            System.out.println("EXPECTED RED: formatted runtime alias was not normalized");
+            System.out.println("EXPECTED RED: colored runtime alias was accepted");
+        } catch (IOException expected) {
+            System.out.println("NOT RED: colored alias rejected");
         }
         try {
             BlockLockerEveryoneText.matches(
