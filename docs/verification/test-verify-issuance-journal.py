@@ -164,6 +164,25 @@ class VerifyIssuanceJournalTest(unittest.TestCase):
                 self.assertEqual(1, verifier.verify(self.path)["records"])
                 (self.path / "1.grant").unlink()
 
+    def test_real_java_writer_accepts_nonbreaking_issuer(self):
+        # Compile the actual GrantLedger writer, not just a Python SCG2 fixture.
+        root = Path(__file__).resolve().parents[2]
+        sources = [
+            root / "src/main/java/co/surumene/simplecoins/domain/DurableFile.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/GrantLedger.java",
+            root / "docs/verification/IssuanceJournalBlankIssuerFixture.java",
+        ]
+        if not all(path.is_file() for path in sources) or not shutil.which("javac") or not shutil.which("java"):
+            self.skipTest("actual Java sources and JDK required")
+        classes = Path(self.tmp.name) / "blank-issuer-classes"
+        classes.mkdir()
+        subprocess.run(["javac", "-d", str(classes), *map(str, sources)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run(["java", "-cp", str(classes), "IssuanceJournalBlankIssuerFixture",
+                        str(self.path)], check=True, capture_output=True, text=True)
+        self.assertEqual(1, verifier.verify(self.path)["records"])
+
     def test_java_blank_unicode_issuer_is_rejected(self):
         # Java String.isBlank() returns true for these inputs.
         for issuer in ("\u2003", " ", "\t", "\u001c"):
