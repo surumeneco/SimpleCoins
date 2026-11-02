@@ -35,7 +35,7 @@ class GrantLedgerLiveTailIntegrityTest {
     }
 
     @Test void intactOlderGrantAcknowledgementPreservesNewerPendingAfterRestart() throws Exception {
-        // SC-JOURNAL-ACK-06 positive baseline: a non-tail durable target can
+        // SC-JOURNAL-ACK-03 positive baseline: a non-tail durable target can
         // be acknowledged without acknowledging the newer reservation.
         Path root = directory.resolve("journal");
         var ledger = new GrantLedger(root);
@@ -91,7 +91,7 @@ class GrantLedgerLiveTailIntegrityTest {
     }
 
     @Test void substitutedNonTailTargetMustNotBeSilentlyAcknowledged() throws Exception {
-        // SC-JOURNAL-ACK-03: a well-formed, checksummed record from a
+        // SC-JOURNAL-ACK-02 substitution variant: a well-formed record from a
         // different ledger is not durable evidence for this reservation.
         Path root = directory.resolve("substituted-target");
         var ledger = new GrantLedger(root);
