@@ -13,7 +13,21 @@ Status: **source-verified integration evidence**, not a CAT Confirmed artifact a
 | WWC `.../service/WonderfulChickenStorageReader.java` | `fed4ea0ef3b0d9f8bbea23f14db7ee2e8cd1bed0` | `providerId=wwc`; `relationships.follow_target` is positive-only UUID evidence; slots `carpet`, `shulker`, `head`; missing marker returns NotFound, corrupt/unsupported data returns Failure |
 | WWW `.../persistence/WonderfulWolfStorageReader.java` | `37e35aff978686183056bbc090b54e9b44e20ac9` | `providerId=www`; `relationships.commander` and `owner`; slots `weapon` and `cargo:<index>`; missing loaded individual state is Failure, not verified empty inventory |
 
-The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` blob `fa44e58119d05b04c784d48d68e1692e0b79cce6`; WWW registration at `WhatAWonderfulWolfPlugin.java` blob `c381d36a113cc57854e17e9b89324731dd2e3172`. **Both register the same `WonderfulStorageReader.class` service interface** with `ServicePriority.Normal`, each owned by its respective plugin, and unregister on disable. Consequently a single `ServicesManager.load(WonderfulStorageReader.class)` is not a complete two-provider inventory. A future SimpleCoins adapter must enumerate registrations, validate owner/enabled status and `providerId()`, and reject missing/duplicate/ambiguous required providers; it must not infer that one loaded registration represents both species.
+The WWC `develop` plugin registration is verified at `WhatAWonderfulChickenPlugin.java` blob `fa44e58119d05b04c784d48d68e1692e0b79cce6`; WWW `develop` registration at `WhatAWonderfulWolfPlugin.java` blob `c381d36a113cc57854e17e9b89324731dd2e3172`. **These two `develop` implementations register the same `WonderfulStorageReader.class` service interface** with `ServicePriority.Normal`, each owned by its respective plugin, and unregister on disable. Consequently a single `ServicesManager.load(WonderfulStorageReader.class)` is not a complete two-provider inventory *when both develop providers are deployed*. A future SimpleCoins adapter must enumerate registrations, validate owner/enabled status and `providerId()`, and reject missing/duplicate/ambiguous required providers; it must not infer that one loaded registration represents both species.
+
+### Source branch versus deployed-service availability
+
+The WCL reader contract above is **not present in the inspected `main` branches**. This is a compatibility boundary, not merely a missing runtime observation. At the pinned refs below, WCL `main` contains only `README.md` (no API, plugin module or reader); WWC/WWW `main` do not register `WonderfulStorageReader` and do not declare a WCL dependency. Their `develop` counterparts do both.
+
+| Repository | Pinned `main` tree / source blob | Pinned `develop` tree / source blob | Service/dependency evidence |
+| --- | --- | --- | --- |
+| WCL | tree `9597014917d2a979ebf78eab3f967e1e05a7ff7b` (README only) | tree `9362625c64ff8ecc8666212c313ff442e3848ccc`; reader `0c0d1b5eb37e31f3aeebdbd6efe2c7214916322a` | WCL service API/implementation exists only in inspected `develop` |
+| WWC | plugin class `e3fa69e531a6d22d935db83d2f37dacdfaaca944`; `plugin.yml` `3626bcd83c6ecf34a771877e160b33111e8fc834` | plugin class `fa44e58119d05b04c784d48d68e1692e0b79cce6`; `plugin.yml` `36d76cc6dff737c142b7a1af1cb5c0b8e1a23d5b` | `main`: no storage-reader registration, `depend: [WonderfulGenomeLib]`; `develop`: storage-reader registration and WCL hard dependency |
+| WWW | plugin class `09b1d2a4719258118a93711b23bc575a8e43606f`; `plugin.yml` `cba422c371b335856555dfe1669018e53102753c` | plugin class `c381d36a113cc57854e17e9b89324731dd2e3172`; `plugin.yml` `9e1b04fb8062da827abd58d912bb011406335de6` | `main`: no storage-reader registration, only WGL hard dependency; `develop`: storage-reader registration and WCL hard dependency |
+
+**Deployment gate:** a WCL-backed SimpleCoins reader cannot assume that a server running WWC/WWW builds corresponding to these `main` sources exposes either provider. First identify the exact deployed JARs, verify their WCL API compatibility and service registrations on Paper's primary thread, and distinguish absent service from empty storage. A `develop` source contract does not prove that those builds were released or installed. The separate WWW `loadedIndividuals()` reflection API exists in the inspected `main` source; it is **not** a substitute for WCL stored-inventory enumeration.
+
+This table is based on pinned GitHub source and `plugin.yml` reads, not a runtime probe or a statement about the currently installed JARs.
 
 ### WWC main persisted follow-target boundary (source verification)
 
@@ -55,7 +69,7 @@ The following are **source-derived handoff vectors**, not live-service observati
 
 | Vector | Observed registration/result | Required consumer behavior |
 | --- | --- | --- |
-| WCL-REG-01 | WWC and WWW each register `WonderfulStorageReader.class` at `ServicePriority.Normal` | Enumerate **all** registrations; `ServicesManager.load` alone cannot establish the two-provider inventory |
+| WCL-REG-01 | Inspected WWC/WWW **develop** builds each register `WonderfulStorageReader.class` at `ServicePriority.Normal`; inspected **main** builds do not | Verify deployed versions first, then enumerate **all** registrations; `ServicesManager.load` alone cannot establish the two-provider inventory |
 | WCL-REG-02 | One expected enabled provider is missing or disabled | Mark that source incomplete/UNKNOWN, not a verified empty inventory; preserve other provider evidence separately |
 | WCL-REG-03 | Two registrations claim the same expected `providerId` | Reject ambiguous provider selection even if one returns `Success` |
 | WCL-REG-04 | Registration owner/plugin identity disagrees with the expected WWC/WWW source, or `providerId` is unexpected | Reject the untrusted source; a matching string alone is insufficient proof of provider authority |
