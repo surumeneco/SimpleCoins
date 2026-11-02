@@ -29,6 +29,12 @@ public final class IssuanceJournalMutf8WriterFixture {
         }
         if ("max-utf16".equals(args[1]) && issuer.length() != 1024)
             throw new AssertionError("Wrong Java UTF-16 length");
-        ledger.reserve(UUID.randomUUID(), 100, issuer);
+        UUID player = UUID.randomUUID();
+        GrantLedger.Grant written = ledger.reserve(player, 100, issuer);
+        var reopened = new GrantLedger(Path.of(args[0]));
+        var replayed = reopened.pending(player);
+        if (replayed.size() != 1 || replayed.get(0).sequence() != written.sequence()
+                || !issuer.equals(replayed.get(0).issuer()))
+            throw new AssertionError("Java writer/replay changed the issuer");
     }
 }
