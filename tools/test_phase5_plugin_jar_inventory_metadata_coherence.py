@@ -1,7 +1,8 @@
-"""Code-to-spec Red: matching file metadata cannot prove JAR byte coherence."""
+"""Code-to-spec Red: metadata equality and ZIP listings do not prove JAR integrity."""
 import hashlib
 import io
 import os
+import struct
 from pathlib import Path
 from unittest.mock import patch
 import tempfile
@@ -76,6 +77,18 @@ class PluginJarMetadataCoherenceTest(unittest.TestCase):
                          (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns))
         if result is not None:
             self._assert_coherent(result)
+
+    def test_root_descriptor_crc_mismatch_is_incomplete(self):
+        data = bytearray(self.original)
+        central_offset = struct.unpack_from("<I", data, len(data) - 6)[0]
+        data[central_offset + 16] ^= 1
+        self.path.write_bytes(data)
+        with zipfile.ZipFile(self.path) as archive:
+            with self.assertRaises(zipfile.BadZipFile):
+                archive.read("plugin.yml")
+        result = subject.inventory(self.directory)
+        self.assertFalse(result["scan_complete"], "CRC-invalid descriptor must not be attested")
+        self.assertIn("unreadable_or_invalid_jar", [e["reason"] for e in result["errors"])
 
 
 if __name__ == "__main__":
