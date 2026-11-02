@@ -17,6 +17,8 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 
    The script prompts for the exact URL without echoing it, restricts redirects to HTTP(S), compares the downloaded bytes, checks ZIP integrity and prints both SHA-1 values. It requires `curl`, `cmp`, `sha1sum` and `unzip`. Copy both this script and the generated ZIP to the disposable verification host; the relative paths above are illustrative.
 
+   **Verifier evidence boundary:** byte identity and `unzip -tq` integrity do not validate ZIP member names. A disposable localhost probe against the exact verifier source accepted both `../escape.txt` and `/absolute.txt` entries when the hosted and generated ZIP bytes matched. Record ZIP entry-name safety as **not verified**, not as a passed deployment gate. The stricter rejection policy is a separate CAT Draft in [PR #70](https://github.com/surumeneco/SimpleCoins/pull/70), not a Confirmed requirement or real JE/BE client result.
+
    The helper's local HTTP positive/negative smoke tests can be run with `python3 docs/verification/test-verify-je-pack.py` (15 deterministic cases, including missing/directory local artifact rejection; no real server required). This verifies the verifier only; it does **not** replace the external hosted URL or JE/BE client checks.
 
    Treat any nonzero script exit as a failed gate; the helper does not certify real-client delivery. Record the two hashes, HTTP result and the tested artifact identity, not the secret URL. A successful GitHub CI build does not prove external reachability.
