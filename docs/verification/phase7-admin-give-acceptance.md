@@ -44,7 +44,9 @@ TaskQueue `TASK-20261101-006` の運営機能について、実装・実機検�
 | [PR #126](https://github.com/surumeneco/SimpleCoins/pull/126)、最終HEAD `56acb329ccced8e735df0c5716e9c7e899c95aeb`、[Actions #41513802057](https://github.com/surumeneco/SimpleCoins/actions/runs/41513802057) | PR #125上のCAT CandidateとJUnit。Java 21のNIO直接probeに加え、一時workflow付きコミット `b73ccd5d0e720b8285d21bba1e91162a42eb87d8` でGradle/JUnitの期待Redを実行。workflow削除後の最終HEADではテストblobは不変 | シンボリックリンク経由のroot外`head`書込みを示す未修正の期待Red。Actionsの総合結果はFAILUREであり、CAT Gate/Green/AG-07〜10の合格ではない |
 | [PR #131](https://github.com/surumeneco/SimpleCoins/pull/131)、最終HEAD `90338a340c4f6dfddfe170b84dd867559cdfff17`、[Actions #41536363845](https://github.com/surumeneco/SimpleCoins/actions/runs/41536363845) | PR #125上のCAT Draftと3件のJUnit。`GrantLedger`のSCG2チェックサム付き台帳で額面500×枚数`Long.MAX_VALUE`を再読込すると、想定`IOException`ではなく未捕捉`ArithmeticException`が発生することを実行確認。ActionsではCAT Draft構文Lint成功、Gradle/JUnitは2件Green・1件期待Red（総合FAILURE）。最終HEADは一時workflow削除後でテストblob不変 | 破損台帳の例外分類に関する未確定CAT候補。正式Gate/Green、再起動時一回性、AG-10の統合受入は未実施 |
 
-上記は**ソース・単体テストの証拠**であり、受入マトリクスのPaper実機・故障注入・権限試験のステータスとは別管理する。現行`develop`には両Draft PRの変更が含まれていない。既存のJE/BE配布証拠と隔離実機手順は[JE/BE/Nexo受入手順](phase7-je-be-nexo-acceptance.md)および[配布引渡し](phase7-je-be-pack-handoff.md)を正本とし、本書へ重複複製しない。
+| [PR #140](https://github.com/surumeneco/SimpleCoins/pull/140)、HEAD `aa3d86ce9408af875f1e476a91ab9379e6a5ccd2`、[PR #141](https://github.com/surumeneco/SimpleCoins/pull/141)、最終HEAD `85fb12881be5dc5258e7df92bcf79613117115f6`、[Actions #41548121596](https://github.com/surumeneco/SimpleCoins/actions/runs/41548121596) | PR #125上の既存`GrantLedger`で、typed枚数overflow、0金額、空白issuerの拒否後に`.grant`が生成されず、後続正常予約がsequence 1で再開・再読込できることをJDK25 Gradle/JUnitで実測。初回CAT構文Lintの`Rules/規則`欠落はPR #141で修正し、同一実ソースのJUnitと固定CAT-TDD版のDraft構文Lintが両方SUCCESS。CI用一時workflowは削除済み | 入力拒否時の純Java台帳非永続化に限る。例外型の規範確定、正式CAT意味論Gate、Paperでの受領・再起動・AG-06〜10の統合受入を証明しない |
+
+上記は**ソース・単体テストの証拠**であり、受入マトリクスのPaper実機・故障注入・権限試験のステータスとは別管理する。現行`develop`には上記の未統合Draft PRの変更が含まれていない。既存のJE/BE配布証拠と隔離実機手順は[JE/BE/Nexo受入手順](phase7-je-be-nexo-acceptance.md)および[配布引渡し](phase7-je-be-pack-handoff.md)を正本とし、本書へ重複複製しない。
 
 ## 未実証と引渡し
 
