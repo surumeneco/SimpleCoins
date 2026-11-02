@@ -83,14 +83,19 @@ class PluginJarInventoryTest(unittest.TestCase):
         outside.write_bytes(b"not a plugin")
         real_open = os.open
 
-        def replace_with_link(path, flags):
-            if Path(path) == original:
+        swapped = False
+
+        def replace_with_link(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if Path(path).name == original.name and not swapped:
+                swapped = True
                 original.unlink()
                 original.symlink_to(outside)
-            return real_open(path, flags)
+            return real_open(path, flags, *args, **kwargs)
 
         with patch("phase5_plugin_jar_inventory.os.open", side_effect=replace_with_link):
             result = inventory(self.directory)
+        self.assertTrue(swapped, "JAR-open race injection must actually run")
         self.assertFalse(result["scan_complete"])
         self.assertEqual([], result["entries"])
         self.assertEqual("unreadable_or_invalid_jar", result["errors"][0]["reason"])
@@ -103,6 +108,30 @@ class PluginJarInventoryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             inventory(link)
         self.assertEqual(2, main(["--plugins-dir", str(link)]))
+
+
+    def test_large_jar_spools_without_changing_digest_or_descriptor(self):
+        import hashlib
+        path = self.directory / "large.jar"
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("plugin.yml", "name: Large\\n")
+            archive.writestr("data.bin", b"X" * (9 * 1024 * 1024))
+        result = inventory(self.directory)
+        self.assertTrue(result["scan_complete"])
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), result["entries"][0]["sha256"])
+        self.assertEqual(["plugin.yml"], result["entries"][0]["descriptors"])
+
+    def test_symlink_in_ancestor_directory_is_rejected(self):
+        nested = self.directory / "real"
+        nested.mkdir()
+        plugins = nested / "plugins"
+        plugins.mkdir()
+        with zipfile.ZipFile(plugins / "valid.jar", "w") as archive:
+            archive.writestr("plugin.yml", "name: valid")
+        alias = self.directory / "alias"
+        alias.symlink_to(nested, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            inventory(alias / "plugins")
 
 
 if __name__ == "__main__":
