@@ -30,6 +30,8 @@ This test-only Draft strengthens the existing fail-closed physical-source identi
 | SC-PHYSICAL-02 | A canonical region and entity region source are hard links to the same physical file | Reject manifest discovery with IOException across Kind boundaries | regionAndEntityHardlinkFailClosed |
 | SC-PHYSICAL-03 | Two canonical region files contain identical bytes but are independently allocated | Accept both files; content equality is not physical aliasing | identicalBytesInIndependentFilesRemainSeparateSources |
 | SC-PHYSICAL-04 | An excluded world's region hard-links to an included world's region | Do not count excluded terrain or falsely reject the included authoritative source | excludedWorldRegionDoesNotBecomeMandatoryPhysicalSource |
+| SC-PHYSICAL-05 | Distinct player UUID files in different world roots are hard links | Reject the shared physical source across world boundaries | crossWorldPlayerdataHardlinkFailsClosed |
+| SC-PHYSICAL-06 | Excluded-world playerdata hard-links to included-world region data | Playerdata is still mandatory, so reject the cross-category physical alias | excludedWorldPlayerdataAliasToIncludedRegionFailsClosed |
 
 ## Test vectors
 
@@ -39,6 +41,8 @@ This test-only Draft strengthens the existing fail-closed physical-source identi
 | SC-PHYSICAL-02 | region/r.0.0.mca and entities/r.1.0.mca created with Files.createLink | IOException |
 | SC-PHYSICAL-03 | region/r.0.0.mca and region/r.1.0.mca created with separate Files.write of identical bytes | Two REGION sources |
 | SC-PHYSICAL-04 | included/region/r.0.0.mca and excluded/region/r.0.0.mca hard-linked, with excluded world filtered by WorldScope | One REGION source from included world |
+| SC-PHYSICAL-05 | root-A/playerdata/UUID-A.dat and root-B/playerdata/UUID-B.dat hard-linked | IOException |
+| SC-PHYSICAL-06 | included/region/r.0.0.mca and excluded/playerdata/UUID.dat hard-linked, excluded world filtered | IOException |
 
 ## Scope and verification status
 
