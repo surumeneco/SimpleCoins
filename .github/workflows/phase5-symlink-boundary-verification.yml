@@ -9,6 +9,14 @@ on:
       - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageSymlinkBoundaryVerificationTest.java'
       - '.github/workflows/phase5-symlink-boundary-verification.yml'
 
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'docs/cat/phase5-discovery-symlink-boundary-verification.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageSymlinkBoundaryVerificationTest.java'
+      - '.github/workflows/phase5-symlink-boundary-verification.yml'
+
 permissions:
   contents: read
 
