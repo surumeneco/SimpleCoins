@@ -21,7 +21,7 @@ python3 docs/verification/verify-be-pack.py \
   plugins/SimpleCoins/geyser/simplecoins.json
 ```
 
-この検証は、9額面のPNGとGeyser v2 mappingの対応、manifestの内容由来UUID、ZIPのCRC/危険なエントリ、重複JSONキー、ファイルのシンボリックリンク経路を検査し、検証した2ファイルのSHA-256を出力する。テスト用fixtureによる故障注入は `python3 docs/verification/test-verify-be-pack.py` で実行する。サイズ上限はZIP 64 MiB、mapping 2 MiB、各ZIPエントリ16 MiB。
+この検証は、9額面のPNG構造・チャンクCRCとGeyser v2 mappingの対応、manifestの内容由来UUID、ZIPのCRC/危険なエントリ、重複JSONキー、ファイルのシンボリックリンク経路を検査し、検証した2ファイルのSHA-256を出力する。テスト用fixtureによる故障注入は `python3 docs/verification/test-verify-be-pack.py` で実行する。サイズ上限はZIP 64 MiB、mapping 2 MiB、各ZIPエントリ16 MiB。
 
 **境界**：これはオフラインの構造検証であり、2ファイルの原子的な同時公開、実際のGeyser読込、BEクライアントへの配布・表示、Nexo連携を証明しない。BE-01/BE-05等の実機結果は引き続き `not-run` として別途記録する。
 
