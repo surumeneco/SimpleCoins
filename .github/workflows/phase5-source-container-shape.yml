@@ -6,6 +6,8 @@ on:
     paths:
       - 'docs/cat/phase5-source-container-shape.md'
       - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageSourceContainerShapeTest.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageNestedSourceShapeTest.java'
+      - 'docs/cat/phase5-nested-source-shape.md'
       - '.github/workflows/phase5-source-container-shape.yml'
 permissions:
   contents: read
@@ -21,7 +23,7 @@ jobs:
           path: cat-tdd
           persist-credentials: false
       - name: CAT Draft syntax only, not normative Gate
-        run: python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase5-source-container-shape.md
+        run: python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase5-source-container-shape.md docs/cat/phase5-nested-source-shape.md
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
