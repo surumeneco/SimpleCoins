@@ -36,6 +36,15 @@ TaskQueue `TASK-20261101-006` の運営機能について、実装・実機検�
 4. 各IDに `passed / failed / not-run / inconclusive`、対象SHA、操作手順、観測ログ・台帳／PDCの差分を付ける。直接テスト可能な項目は先に実行し、CIは必要な環境差・ワークフロー検証に限定する。
 5. AG-11〜12はPhase 5の所有者判定・全件走査・Phase 6の整合スナップショットが成立して初めて総合受入可能。未完成の外部アダプターや決算結果をゼロとして成功にしない。
 
+## 直接検証済みの部分と受入未達の境界
+
+| 証拠 | 実測した範囲 | 本書の受入への効力 |
+| --- | --- | --- |
+| [PR #125](https://github.com/surumeneco/SimpleCoins/pull/125)、HEAD `ca0e09032e071904c31ed46dca1f382511b00d4a`、[Actions #41499593007](https://github.com/surumeneco/SimpleCoins/actions/runs/41499593007) | `develop`から独立したDraftに既存`GrantLedger`とJUnitテストを同一blobで抽出し、当該HEADのGradleテストがSUCCESS。CATはCandidateのまま | 永続台帳の純Java単体テスト証拠。AG-06〜10のPaper/playerdata/クラッシュ後一回性を証明しない |
+| [PR #126](https://github.com/surumeneco/SimpleCoins/pull/126)、HEAD `07284a2f4cc44c621e9f39d6b3fa0c110627cdfe` | PR #125に積み重ねたCAT Candidateと2つのJUnitケース。Java 21のNIO／`DurableFile.write`相当の直接probeで、シンボリックリンクされた`issuance`ディレクトリを介したroot外`head`作成を再現。**対象JUnitの正規実行は未実施** | 未解決の安全性境界を示す期待Red。正式CAT Gate、修正Green、AG-07〜10の合格を意味しない |
+
+上記は**ソース・単体テストの証拠**であり、受入マトリクスのPaper実機・故障注入・権限試験のステータスとは別管理する。現行`develop`には両Draft PRの変更が含まれていない。既存のJE/BE配布証拠と隔離実機手順は[JE/BE/Nexo受入手順](phase7-je-be-nexo-acceptance.md)および[配布引渡し](phase7-je-be-pack-handoff.md)を正本とし、本書へ重複複製しない。
+
 ## 未実証と引渡し
 
-この計画の作成だけではAG-01〜12はすべて `not-run`。実装された独立機能は規範CAT Gate、対応テストと安全なPR統合条件を満たしてから `develop` に段階反映する。実機確認用JARと再現手順は、該当機能が揃った後に対象SHAで別途発行する。`main` と本番は利用者のリリース承認まで変更しない。
+AG-01〜12の**統合受入**はすべて `not-run`。実装された独立機能は規範CAT Gate、対応テストと安全なPR統合条件を満たしてから `develop` に段階反映する。実機確認用JARと再現手順は、該当機能が揃った後に対象SHAで別途発行する。`main` と本番は利用者のリリース承認まで変更しない。
