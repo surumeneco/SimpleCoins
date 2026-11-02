@@ -28,12 +28,14 @@ PR #19の `acknowledge` におけるnon-tail record欠損・破損検出とは�
 | --- | --- | --- | --- |
 | journal.receipt.missing-target | head/tail正常、対象の古いgrant recordが欠損 | `wasApplied` はtrueを返さずfail-closedで拒否する | SC-RECEIPT-NONTAIL-01 |
 | journal.receipt.corrupt-target | head/tail正常、対象の古いgrant recordが破損 | `wasApplied` はtrueを返さずfail-closedで拒否する | SC-RECEIPT-NONTAIL-02 |
+| journal.receipt.substituted-target | head/tail正常、対象の古いgrant recordが別台帳の正常なchecksum付きrecordに置換 | `wasApplied` はin-memory UUIDと一致する永続証拠を要求し、trueを返さず拒否する | SC-RECEIPT-NONTAIL-04 |
 | journal.receipt.intact-target | head/tailと対象recordが整合し、receiptが対象を指す | 既存の正当なtrue判定を維持する | SC-RECEIPT-NONTAIL-03 |
 
 ## Test model / TCE
 
 - SC-RECEIPT-NONTAIL-01 (Red): 2件予約後、1件目の永続recordを削除して `wasApplied(first, first.sequence())` を呼ぶと拒否する。
 - SC-RECEIPT-NONTAIL-02 (Red): 1件目の永続recordを破損させて同様に呼ぶと拒否する。
+- SC-RECEIPT-NONTAIL-04 (Red): 別台帳の正常なchecksum付きrecordに1件目を置換しても拒否する。
 - SC-RECEIPT-NONTAIL-03 (Green): 両recordが正常なら、1件目のreceiptをtrueとして扱える。
 
 ## 検証・Gate
