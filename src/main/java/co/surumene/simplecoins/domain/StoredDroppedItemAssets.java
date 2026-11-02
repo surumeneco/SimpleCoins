@@ -29,6 +29,10 @@ public final class StoredDroppedItemAssets {
                     !(entity.get("id") instanceof String id) || id.isBlank())
                 throw new IOException("Malformed saved entity");
             if (!id.equals("minecraft:item")) continue;
+            // A dropped stack has one physical Item, never a second inventory.
+            // Even an empty competing list makes the saved representation ambiguous.
+            if (entity.containsKey("Items") || entity.containsKey("Inventory"))
+                throw new IOException("Conflicting dropped-item inventory representation");
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)

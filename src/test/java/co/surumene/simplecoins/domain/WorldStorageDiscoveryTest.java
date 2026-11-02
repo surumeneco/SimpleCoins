@@ -37,6 +37,31 @@ class WorldStorageDiscoveryTest {
                 "resource", oldRegions.toAbsolutePath(), WorldStorageDiscovery.Kind.REGION)));
     }
 
+    @Test void customNamespaceDimensionSourcesAreDiscoveredWithoutBackupAliases() throws Exception {
+        Path root = directory.resolve("modded");
+        Path region = root.resolve("dimensions/custom/moon/region/r.-2.3.mca");
+        Path entities = root.resolve("dimensions/custom/moon/entities/r.-2.3.mca");
+        Path backup = root.resolve("backups/dimensions/custom/moon/region/r.0.0.mca");
+        for (Path file : new Path[]{region, entities, backup}) {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("modded", root), new WorldScope(true, Set.of(), Set.of()), 100);
+        assertEquals(Set.of(
+                new WorldStorageDiscovery.SourceFile("modded", region.toAbsolutePath(),
+                        WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("modded", entities.toAbsolutePath(),
+                        WorldStorageDiscovery.Kind.ENTITY)), Set.copyOf(manifest.worldFiles()));
+        assertTrue(manifest.playerDataFiles().isEmpty());
+
+        // SC-COVERAGE-02: a directory at an authoritative custom source path
+        // must fail closed instead of being counted as an empty region file.
+        Files.createDirectories(root.resolve("dimensions/custom/moon/entities/r.0.0.mca"));
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("modded", root), new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
     @Test void disabledWorldStillProvidesWorldIndependentPlayerdataCandidate() throws Exception {
         Path excluded = directory.resolve("off");
         UUID player = UUID.randomUUID();
@@ -51,6 +76,57 @@ class WorldStorageDiscoveryTest {
                 new WorldScope(false, Set.of(), Set.of("off")), 100);
         assertTrue(files.worldFiles().isEmpty());
         assertEquals(playerData.toAbsolutePath(), files.playerDataFiles().get(player));
+    }
+
+    @Test void excludedCustomDimensionMustNotSuppressIndependentPlayerdata() throws Exception {
+        // SC-COVERAGE-04: WorldScope excludes world-owned terrain and Entity
+        // sources, never the world-independent playerdata candidate.
+        Path included = directory.resolve("included");
+        Path excluded = directory.resolve("excluded");
+        Path includedRegion = included.resolve("region/r.0.0.mca");
+        Path excludedRegion = excluded.resolve("dimensions/custom/moon/region/r.0.0.mca");
+        Path excludedEntities = excluded.resolve("dimensions/custom/moon/entities/r.0.0.mca");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000046");
+        Path excludedPlayer = excluded.resolve("playerdata/" + player + ".dat");
+        for (Path file : new Path[]{includedRegion, excludedRegion, excludedEntities, excludedPlayer}) {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("included", included, "excluded", excluded),
+                new WorldScope(true, Set.of(), Set.of("excluded")), 100);
+        assertEquals(List.of(new WorldStorageDiscovery.SourceFile(
+                "included", includedRegion.toAbsolutePath(), WorldStorageDiscovery.Kind.REGION)),
+                manifest.worldFiles());
+        assertEquals(Map.of(player, excludedPlayer.toAbsolutePath()), manifest.playerDataFiles());
+    }
+
+    @Test void excludedWorldPlayerdataConflictStillFailsClosed() throws Exception {
+        // SC-COVERAGE-03/04: an excluded world is not an authority override.
+        // Identical UUIDs across world roots cannot be arbitrarily selected.
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000047");
+        Path included = directory.resolve("included");
+        Path excluded = directory.resolve("excluded");
+        for (Path root : new Path[]{included, excluded}) {
+            Path file = root.resolve("playerdata/" + player + ".dat");
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "fixture");
+        }
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("included", included, "excluded", excluded),
+                new WorldScope(true, Set.of(), Set.of("excluded")), 100));
+    }
+
+    @Test void excludedWorldNonRegularPlayerdataStillFailsClosed() throws Exception {
+        // An invalid mandatory playerdata source is not equivalent to zero
+        // assets merely because its containing world is excluded.
+        Path excluded = directory.resolve("excluded");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000048");
+        Files.createDirectories(excluded.resolve("playerdata/" + player + ".dat"));
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("excluded", excluded),
+                new WorldScope(false, Set.of(), Set.of("excluded")), 100));
     }
 
     @Test void duplicatedPlayerdataMustBeResolvedBeforeAccounting() throws Exception {
@@ -195,4 +271,17 @@ class WorldStorageDiscoveryTest {
         assertEquals("world", new WorldStorageDiscovery.SourceFile(
                 "world", region, WorldStorageDiscovery.Kind.REGION).world());
     }
+    @Test void crossCategoryHardlinkCannotBeTwoAuthoritativeSources() throws Exception {
+        Path world = directory.resolve("cross-kind-world");
+        Path region = world.resolve("region/r.0.0.mca");
+        Path playerdata = world.resolve("playerdata/" +
+                UUID.fromString("00000000-0000-0000-0000-000000000045") + ".dat");
+        Files.createDirectories(region.getParent());
+        Files.createDirectories(playerdata.getParent());
+        Files.writeString(region, "shared physical source");
+        Files.createLink(playerdata, region);
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", world), new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
 }

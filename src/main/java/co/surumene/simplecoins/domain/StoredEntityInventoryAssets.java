@@ -15,6 +15,15 @@ import java.util.UUID;
  * owner, loaded-Entity and world snapshot reconciliation remain mandatory.
  */
 public final class StoredEntityInventoryAssets {
+    // Explicit vanilla Entity IDs for the current saved-data adapter.
+    // A matching suffix alone is not proof of physical inventory slots.
+    private static final Set<String> CHEST_BOAT_IDS = Set.of(
+            "minecraft:oak_chest_boat", "minecraft:spruce_chest_boat",
+            "minecraft:birch_chest_boat", "minecraft:jungle_chest_boat",
+            "minecraft:acacia_chest_boat", "minecraft:dark_oak_chest_boat",
+            "minecraft:mangrove_chest_boat", "minecraft:cherry_chest_boat",
+            "minecraft:pale_oak_chest_boat", "minecraft:bamboo_chest_raft");
+
     private StoredEntityInventoryAssets() {}
 
     public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
@@ -29,11 +38,29 @@ public final class StoredEntityInventoryAssets {
                 throw new IOException("Malformed saved entity");
             boolean slotted = entity.containsKey("Items");
             boolean unslotted = entity.containsKey("Inventory");
+            // minecraft:item is handled only by the single-stack dropped-item
+            // extractor. Never allow an invented Items list to count it twice.
+            if (id.equals("minecraft:item") && (slotted || unslotted))
+                throw new IOException("Dropped item cannot expose an Entity inventory");
+            if ((id.equals("minecraft:item_frame") ||
+                    id.equals("minecraft:glow_item_frame")) && (slotted || unslotted))
+                throw new IOException("Item frame cannot expose an Entity inventory");
             if (!slotted && !unslotted) continue;
             if (slotted && unslotted)
                 throw new IOException("Ambiguous Entity inventory representations");
             if (slotted && (id.equals("minecraft:villager") || id.equals("minecraft:allay")))
                 throw new IOException("Villager/Allay must use unslotted Inventory representation");
+            // A saved Items tag is not evidence of physical slots on an arbitrary
+            // Entity. Only the vanilla slotted holder families in this adapter
+            // may contribute currency; custom holders require their own contract.
+            boolean chestBoat = CHEST_BOAT_IDS.contains(id);
+            if (slotted && !id.equals("minecraft:chest_minecart") &&
+                    !id.equals("minecraft:hopper_minecart") && !chestBoat)
+                throw new IOException("Unsupported slotted Entity inventory: " + id);
+            // Only these vanilla entities have a positional, unslotted Inventory.
+            // A fabricated Inventory on a different holder is not a second asset source.
+            if (unslotted && !id.equals("minecraft:villager") && !id.equals("minecraft:allay"))
+                throw new IOException("Unsupported unslotted Entity inventory: " + id);
 
             Object rawUuid = entity.get("UUID");
             if (!(rawUuid instanceof int[] parts) || parts.length != 4)
@@ -81,8 +108,6 @@ public final class StoredEntityInventoryAssets {
                 if (slotted && id.equals("minecraft:chest_minecart") && index >= 27)
                     throw new IOException("Chest minecart inventory slot outside physical range: " + key + ":" + index);
                 // Vanilla chest boats and bamboo chest rafts expose 27 slots.
-                boolean chestBoat = id.startsWith("minecraft:") &&
-                        (id.endsWith("_chest_boat") || id.equals("minecraft:bamboo_chest_raft"));
                 if (slotted && chestBoat && index >= 27)
                     throw new IOException("Chest boat inventory slot outside physical range: " + key + ":" + index);
                 if (slotted && id.equals("minecraft:hopper_minecart") && index >= 5)

@@ -245,4 +245,25 @@ class StoredBlockEntityAssetsTest {
         assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
                 Map.of("block_entities", List.of(chest))));
     }
+    @Test void unknownItemsHolderMustNotCreatePhysicalCurrency() {
+        for (String id : List.of("minecraft:sign", "minecraft:future_storage",
+                "otherplugin:custom_container", "minecraft:ultraviolet_shulker_box")) {
+            Map<String,Object> holder = Map.of("id", id,
+                    "x", 0, "y", 64, "z", 0, "Items", List.of(coin(0, 1)));
+            assertThrows(IOException.class, () -> StoredBlockEntityAssets.extract(
+                    Map.of("block_entities", List.of(holder))), id);
+        }
+    }
+
+    @Test void knownColoredAndUncoloredShulkerItemsRemainCountable() throws Exception {
+        for (String id : List.of("minecraft:shulker_box", "minecraft:red_shulker_box",
+                "minecraft:light_blue_shulker_box")) {
+            Map<String,Object> holder = Map.of("id", id,
+                    "x", 0, "y", 64, "z", 0, "Items", List.of(coin(0, 2)));
+            assertEquals(Map.of("0,64,0:0", BigInteger.valueOf(200)),
+                    StoredBlockEntityAssets.extract(
+                            Map.of("block_entities", List.of(holder))), id);
+        }
+    }
+
 }
