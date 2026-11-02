@@ -70,4 +70,18 @@ class WorldStorageManifestSourcePresenceTest {
                 playerdata.toAbsolutePath().normalize().toString()),
                 manifest.requiredSourceIds());
     }
+    @Test void deletedAfterDiscoveryCannotCloseManifest() throws Exception {
+        Path world = directory.resolve("world");
+        Path region = world.resolve("region/r.0.0.mca");
+        Files.createDirectories(region.getParent());
+        Files.write(region, new byte[]{1, 2, 3});
+        var discovered = WorldStorageDiscovery.discover(
+                Map.of("world", world),
+                new WorldScope(true, Set.of(), Set.of()), 100);
+        assertEquals(1, discovered.worldFiles().size());
+        Files.delete(region);
+        assertFalse(Files.exists(region));
+        assertThrows(IOException.class, discovered::requiredSourceIds);
+    }
+
 }
