@@ -64,4 +64,18 @@ class BanEvidenceDecisionMatrixTest {
         assertThrows(IOException.class, () -> BanEvidence.evaluate(required, null));
     }
 
+    @Test void providerOrderDoesNotChangeDecision() throws Exception {
+        var required = Set.of("paper", "external", "moderation");
+        var rows = List.of(
+            new BanEvidence.Source("paper", BanEvidence.Status.UNKNOWN),
+            new BanEvidence.Source("external", BanEvidence.Status.BANNED),
+            new BanEvidence.Source("moderation", BanEvidence.Status.CLEAR));
+        for (int a = 0; a < 3; a++) for (int b = 0; b < 3; b++) {
+            if (a == b) continue;
+            int c = 3 - a - b;
+            assertEquals(BanEvidence.Status.BANNED, BanEvidence.evaluate(
+                required, List.of(rows.get(a), rows.get(b), rows.get(c))).status());
+        }
+    }
+
 }
