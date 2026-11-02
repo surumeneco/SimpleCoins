@@ -32,6 +32,8 @@ Status: Draft, not Confirmed. Regression test preparation for the already integr
 | STATS-BOUNDARY-05 | Registered population is empty | Undefined population metrics are null, not fabricated zero | absentRegisteredPopulationHasNoInventedAverages |
 | STATS-BOUNDARY-06 | Map or amount is null, or registered value is null | Malformed input is rejected before report publication | malformedPopulationAndAmountsAreRejected |
 
+## Test vectors
+
 | ID | Input | Expected |
 | --- | --- | --- |
 | STATS-BOUNDARY-01 | Two registered players hold 1 each, free assets hold 8 | Ordinary total 10; free counts as one concentration subject; half-share subject count 1, percentage 50% using registered population N=2; max-world percentage 10% |
