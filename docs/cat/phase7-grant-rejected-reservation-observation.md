@@ -18,8 +18,11 @@ language: ja
 | --- | --- |
 | simplecoins.grant | 既存GrantLedgerの入力拒否時のディスク状態・次回再起動境界 |
 
-## 観測・検証対象
-| ID | 条件 | 観測する既存実装の振る舞い | 検証 |
+## 規則
+
+この表の「要求」は既存実装の観測結果を検証するための記述であり、規範仕様への昇格を意味しない。
+
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | grant.invalid.overflow | typed coin count×denominationでlong overflow | 予約前に例外となりgrantファイルを作らず、後続の正常予約はsequence 1 | SC-GRANT-INVALID-01 |
 | grant.invalid.arguments | amount=0または空白issuer | 入力検査で拒否し、空journalの再起動後も正常なsequence 1から予約できる | SC-GRANT-INVALID-02 |
