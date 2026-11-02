@@ -5,6 +5,7 @@ on:
       - feature/phase7-invalid-input-ci-20261103-queue-d
     paths:
       - .github/workflows/verify-phase7-invalid-input-queue-d.yml
+      - docs/cat/phase7-grant-rejected-reservation-observation.md
 permissions:
   contents: read
 jobs:
