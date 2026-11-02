@@ -18,7 +18,7 @@ class GrantLedgerCanonicalUuidReplayTest {
     @TempDir Path directory;
 
     private static final UUID GRANT_ID =
-            UUID.fromString("00000000-0000-0000-0000-000000000061");
+            UUID.fromString("00000000-0000-0000-0000-00000000abcd");
     private static final UUID PLAYER =
             UUID.fromString("00000000-0000-0000-0000-000000000062");
 
