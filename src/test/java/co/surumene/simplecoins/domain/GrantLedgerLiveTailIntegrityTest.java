@@ -34,6 +34,23 @@ class GrantLedgerLiveTailIntegrityTest {
                 () -> ledger.reserve(player, 100, "console"));
     }
 
+    @Test void intactOlderGrantAcknowledgementPreservesNewerPendingAfterRestart() throws Exception {
+        // SC-JOURNAL-ACK-06 positive baseline: a non-tail durable target can
+        // be acknowledged without acknowledging the newer reservation.
+        Path root = directory.resolve("journal");
+        var ledger = new GrantLedger(root);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000049");
+        var first = ledger.reserve(player, 100, "console");
+        var second = ledger.reserve(player, 200, "console");
+        assertEquals(java.util.List.of(first, second), ledger.pending(player));
+
+        ledger.acknowledge(first, first.sequence());
+        assertEquals(java.util.List.of(second), ledger.pending(player));
+        var recovered = new GrantLedger(root);
+        assertEquals(java.util.List.of(second), recovered.pending(player));
+        assertTrue(recovered.wasApplied(first, first.sequence()));
+    }
+
     @Test void intactTailSupportsReceiptAcknowledgement() throws Exception {
         var ledger = new GrantLedger(directory.resolve("journal"));
         UUID player = UUID.randomUUID();
