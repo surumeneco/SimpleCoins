@@ -109,4 +109,49 @@ class WorldSnapshotSourceSetClosureTest {
         assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverseWithClosure(
                 manifest, roots, scope, 1, 4096, 4096, visitor()));
     }
+
+    @Test void earlierPlayerdataRemovedDuringFinalCallbackMustFail() throws Exception {
+        Path first = player(FIRST);
+        player(SECOND);
+        var roots = Map.of("world", directory.resolve("world"));
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(roots, scope, 100);
+        int[] callbacks = {0};
+
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverseWithClosure(
+                manifest, roots, scope, 100, 4096, 4096,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {}
+                    @Override public void player(UUID uuid, Map<String, Object> data)
+                            throws IOException {
+                        callbacks[0]++;
+                        if (SECOND.equals(uuid)) Files.delete(first);
+                    }
+                }));
+        assertEquals(2, callbacks[0],
+                "SC-CLOSURE-06: late deletion must invalidate an already visited player");
+    }
+
+    @Test void regionAddedDuringFinalPlayerCallbackMustFail() throws Exception {
+        player(FIRST);
+        var roots = Map.of("world", directory.resolve("world"));
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(roots, scope, 100);
+        Path newRegion = directory.resolve("world/region/r.0.0.mca");
+
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverseWithClosure(
+                manifest, roots, scope, 100, 4096, 4096,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {}
+                    @Override public void player(UUID uuid, Map<String, Object> data)
+                            throws IOException {
+                        Files.createDirectories(newRegion.getParent());
+                        Files.write(newRegion, new byte[8192]);
+                    }
+                }));
+        assertTrue(Files.isRegularFile(newRegion),
+                "SC-CLOSURE-07: new authoritative region must be visible to re-discovery");
+    }
 }
