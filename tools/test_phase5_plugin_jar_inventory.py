@@ -2,11 +2,12 @@
 
 import hashlib
 from pathlib import Path
+from unittest.mock import patch
 import tempfile
 import unittest
 import zipfile
 
-from phase5_plugin_jar_inventory import inventory, main
+from phase5_plugin_jar_inventory import inventory, main, sha256_file
 
 
 class PluginJarInventoryTest(unittest.TestCase):
@@ -58,6 +59,21 @@ class PluginJarInventoryTest(unittest.TestCase):
         self.assertFalse(result["scan_complete"])
         self.assertEqual(["real.jar"], [e["jar"] for e in result["entries"]])
         self.assertEqual("symlink_not_followed", result["errors"][0]["reason"])
+
+    def test_modified_jar_during_scan_is_rejected(self):
+        path = self.jar("changing.jar", "plugin.yml")
+
+        def mutate_after_hash(target):
+            digest = sha256_file(target)
+            with zipfile.ZipFile(target, "a") as archive:
+                archive.writestr("changed.txt", "new bytes")
+            return digest
+
+        with patch("phase5_plugin_jar_inventory.sha256_file", side_effect=mutate_after_hash):
+            result = inventory(self.directory)
+        self.assertFalse(result["scan_complete"])
+        self.assertEqual([], result["entries"])
+        self.assertEqual("changed_during_scan", result["errors"][0]["reason"])
 
     def test_missing_or_symlink_directory_is_rejected(self):
         with self.assertRaises(ValueError):
