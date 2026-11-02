@@ -21,4 +21,12 @@ class BanEvidenceUnicodeAliasTest {
             List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
                     new BanEvidence.Source(alias, BanEvidence.Status.CLEAR))));
     }
+    @Test void undeclaredEmSpaceObservationCannotCountAsRequiredEvidence() {
+        String alias = "paper" + Character.toString(0x2003);
+        assertThrows(IOException.class, () -> BanEvidence.combine(
+            Set.of("paper"),
+            List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR),
+                    new BanEvidence.Source(alias, BanEvidence.Status.CLEAR))));
+    }
+
 }
