@@ -1,5 +1,13 @@
 name: Phase 5 companion provider parity (scoped verification)
 on:
+  pull_request:
+    branches:
+      - feature/owner-evidence-20261101
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/PaperWonderfulChickenEvidenceParityTest.java'
+      - 'src/test/java/co/surumene/simplecoins/PaperWonderfulWolfReflectionBoundaryTest.java'
+      - 'docs/cat/phase5-companion-provider-contract-parity.md'
+      - '.github/workflows/phase5-companion-provider-parity.yml'
   push:
     branches:
       - feature/phase5-companion-provider-parity-20261102-queue-c
