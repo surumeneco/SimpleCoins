@@ -87,7 +87,8 @@ def verify_png(data: bytes) -> None:
             and b"IDAT" in kinds and kinds[-1] == b"IEND", "Incomplete PNG image")
 
 
-def verify(pack: Path, mapping: Path) -> dict:
+def verify(pack: Path, mapping: Path, installed_pack: Path | None = None,
+           installed_mapping: Path | None = None) -> dict:
     pack = require_regular_unlinked(pack)
     mapping = require_regular_unlinked(mapping)
     require(not os.path.samefile(pack, mapping), "Pack and mapping are the same physical file")
@@ -175,18 +176,33 @@ def verify(pack: Path, mapping: Path) -> dict:
             "Bedrock manifest UUID does not match content fingerprint")
     require(header.get("version") == [1, 0, 0] and modules[0].get("version") == [1, 0, 0]
             and modules[0].get("type") == "resources", "Invalid Bedrock manifest version/module")
-    return {"pack_sha256": hashlib.sha256(pack_bytes).hexdigest(),
-            "mapping_sha256": hashlib.sha256(mapping_bytes).hexdigest(),
-            "fingerprint": fingerprint, "header_uuid": expected_header,
-            "denominations": len(DENOMINATIONS)}
+    evidence = {"pack_sha256": hashlib.sha256(pack_bytes).hexdigest(),
+                "mapping_sha256": hashlib.sha256(mapping_bytes).hexdigest(),
+                "fingerprint": fingerprint, "header_uuid": expected_header,
+                "denominations": len(DENOMINATIONS)}
+    require((installed_pack is None) == (installed_mapping is None),
+            "Installed pack and mapping must be provided together")
+    if installed_pack is not None:
+        deployed_pack = require_regular_unlinked(installed_pack)
+        deployed_mapping = require_regular_unlinked(installed_mapping)
+        require(not os.path.samefile(pack, deployed_pack)
+                and not os.path.samefile(mapping, deployed_mapping),
+                "Installed files must not alias generated files")
+        require(deployed_pack.read_bytes() == pack_bytes
+                and deployed_mapping.read_bytes() == mapping_bytes,
+                "Installed Geyser pack/mapping differ from generated pair")
+        evidence["installed_pair_identical"] = True
+    return evidence
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        print("Usage: verify-be-pack.py <SimpleCoins.mcpack> <simplecoins.json>", file=sys.stderr)
+    if len(argv) not in (3, 5):
+        print("Usage: verify-be-pack.py <generated.mcpack> <generated.json> "
+              "[<installed.mcpack> <installed.json>]", file=sys.stderr)
         return 2
     try:
-        print(json.dumps(verify(Path(argv[1]), Path(argv[2])), sort_keys=True))
+        installed = (Path(argv[3]), Path(argv[4])) if len(argv) == 5 else (None, None)
+        print(json.dumps(verify(Path(argv[1]), Path(argv[2]), *installed), sort_keys=True))
         return 0
     except (VerificationError, OSError) as error:
         print(f"Bedrock artifact verification failed: {error}", file=sys.stderr)
