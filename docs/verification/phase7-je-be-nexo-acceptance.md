@@ -11,6 +11,20 @@ status: **verification-plan / not-run**
 3. クライアントはJEとBEを別々に用意する。BEはGeyser-Spigot同居構成と外部Geyser構成を混同しない。キャッシュの影響を識別するため、初回接続・再接続・パック変更後を分けて記録する。
 4. 各ケースの結果は`pass / fail / blocked / not-run`のいずれかとし、`pass`にはログ・実機画面・実ファイル・コマンド結果等の再確認可能な証拠を添える。JUnit/CI成功を実機合格へ転記しない。
 
+### BE生成物のオフライン事前検証（実機受入とは別）
+
+隔離環境で生成された2ファイルのコピーに対して、次を実行する。元の生成物は変更しない。
+
+```bash
+python3 docs/verification/verify-be-pack.py \
+  plugins/SimpleCoins/geyser/SimpleCoins.mcpack \
+  plugins/SimpleCoins/geyser/simplecoins.json
+```
+
+この検証は、9額面のPNGとGeyser v2 mappingの対応、manifestの内容由来UUID、ZIPのCRC/危険なエントリ、重複JSONキー、ファイルのシンボリックリンク経路を検査し、検証した2ファイルのSHA-256を出力する。テスト用fixtureによる故障注入は `python3 docs/verification/test-verify-be-pack.py` で実行する。サイズ上限はZIP 64 MiB、mapping 2 MiB、各ZIPエントリ16 MiB。
+
+**境界**：これはオフラインの構造検証であり、2ファイルの原子的な同時公開、実際のGeyser読込、BEクライアントへの配布・表示、Nexo連携を証明しない。BE-01/BE-05等の実機結果は引き続き `not-run` として別途記録する。
+
 ## 検証マトリクス
 
 | ID | 条件と操作 | 期待する確認点 | 必須証拠 |
