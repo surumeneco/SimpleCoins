@@ -15,6 +15,23 @@ language: ja
 
 Status: Draft, not Confirmed. Test preparation for the existing `DurableFile` primitive already in `develop`; no production change or CAT semantic Gate pass is claimed.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.journal.durable-file | Existing checksummed record read/write boundary and input validation |
+
+## Rules
+
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| DURABLE-BOUNDARY-01 | Writing and reading an empty record | The checksum-only record is valid under zero payload budget | emptyPayloadIsAValidChecksummedRecordWithZeroBudget |
+| DURABLE-BOUNDARY-02 | Reading at and below exact payload size | Exact budget succeeds and one byte less fails closed | exactReadBudgetSucceedsButOneByteLessFails |
+| DURABLE-BOUNDARY-03 | Replacing an existing valid record | The new bytes are visible and pending temporary files are removed | atomicReplacementDoesNotLeavePendingRecordOrOldPayload |
+| DURABLE-BOUNDARY-04 | Writing to a missing nested parent | Required parent directories are created before durable record publication | missingNestedParentIsCreatedForRecordWrite |
+| DURABLE-BOUNDARY-05 | Reading a symbolic link or directory as a record | Neither is accepted as a regular checksummed record | liveSymlinkAndDirectoryCannotBeReadAsRecords |
+| DURABLE-BOUNDARY-06 | Reading with negative budgets or null stream | Invalid input is rejected, never interpreted as an empty record | invalidReadBudgetsAndStreamsAreRejected |
+
 ## Boundary and vectors
 
 | ID | Given | Expected |
