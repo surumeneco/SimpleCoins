@@ -28,6 +28,7 @@ language: ja
 | JAR-OBS-03 | JARがsymlink、または指定pluginsディレクトリがsymlink | シンボリックリンクを追跡して外部ファイルを読まない | test_symlink_jar_is_not_followed, test_missing_or_symlink_directory_is_rejected |
 | JAR-OBS-04 | 収集が成功した | 出力はあくまでfilesystem-root-jars-onlyとし、loaded_plugins_verified=falseを明示する | test_sorted_inventory_and_exact_bytes_sha256 |
 | JAR-OBS-05 | 非JARファイルやpluginの設定・BANリストが同ディレクトリにある | 非JARを読まず、実BAN状態や完全な外部source一覧を推論しない | test_sorted_inventory_and_exact_bytes_sha256 |
+| JAR-OBS-06 | SHA計算とZIP descriptor検査の間にJARファイルが変更された | 一貫した単一ファイルの証拠とみなさず、changed_during_scanとして失敗する | test_modified_jar_during_scan_is_rejected |
 
 ## 境界と状態
 
