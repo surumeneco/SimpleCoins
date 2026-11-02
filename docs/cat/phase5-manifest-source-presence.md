@@ -30,6 +30,7 @@ A caller-created `WorldStorageDiscovery.Manifest` may contain paths not returned
 | SC-PRESENCE-02 | A playerdata source path is a directory rather than a regular file | Reject closure with IOException | directoryPlayerdataCannotCloseManifest |
 | SC-PRESENCE-03 | A region source path is a symbolic link to a regular file | Reject closure with IOException, consistent with discover() non-symlink policy | symlinkRegionCannotCloseManifest |
 | SC-PRESENCE-04 | Region and playerdata sources are separate existing regular files | Preserve both source IDs | existingRegularSourcesRemainEligible |
+| SC-PRESENCE-05 | A source discovered successfully is deleted before requiredSourceIds() is evaluated | Reject stale closure with IOException; discovery alone is not a snapshot lock | deletedAfterDiscoveryCannotCloseManifest |
 
 ## Test vectors
 
@@ -39,6 +40,7 @@ A caller-created `WorldStorageDiscovery.Manifest` may contain paths not returned
 | SC-PRESENCE-02 | Manifest(playerdata/UUID.dat) after Files.createDirectories at that path | IOException |
 | SC-PRESENCE-03 | Manifest(REGION=world/region/r.0.0.mca) as Files.createSymbolicLink to a real source | IOException |
 | SC-PRESENCE-04 | Files.write two separate regular sources, then construct Manifest | Two distinct canonical source IDs |
+| SC-PRESENCE-05 | discover() returns a manifest for region/r.0.0.mca, then Files.delete removes that region | IOException at closure evaluation |
 
 ## Status and authority
 
