@@ -24,10 +24,10 @@ def durable(path, payload):
     path.write_bytes(hashlib.sha256(payload).digest() + payload)
 
 
-def grant(seq, grant_id=None, player_id=None, schema=2, amount=100, denom=0, count=0, delivered=False):
+def grant(seq, grant_id=None, player_id=None, schema=2, amount=100, denom=0, count=0, delivered=False, issuer="console"):
     raw = struct.pack(">Iq", 0x53434730 + schema, seq)
     raw += utf(str(grant_id or uuid.uuid4())) + utf(str(player_id or uuid.uuid4()))
-    raw += struct.pack(">q", amount) + utf("console") + struct.pack(">qB", 12345, int(delivered))
+    raw += struct.pack(">q", amount) + utf(issuer) + struct.pack(">qB", 12345, int(delivered))
     if schema == 2:
         raw += struct.pack(">iq", denom, count)
     return raw
@@ -154,6 +154,44 @@ class VerifyIssuanceJournalTest(unittest.TestCase):
         result = verifier.verify(self.path)
         self.assertEqual((2, 1, 2, []),
                          (result["records"], result["pending"], result["head"], result["warnings"]))
+
+    def test_java_nonblank_unicode_issuer_is_accepted(self):
+        # Java String.isBlank() returns false for these four code points.
+        for cp in ("\u00a0", "\u0085", "\u2007", "\u202f"):
+            with self.subTest(codepoint=f"U+{ord(cp):04X}"):
+                self.record(1, issuer=cp)
+                self.head(1)
+                self.assertEqual(1, verifier.verify(self.path)["records"])
+                (self.path / "1.grant").unlink()
+
+    def test_real_java_writer_accepts_nonbreaking_issuer(self):
+        # Compile the actual GrantLedger writer, not just a Python SCG2 fixture.
+        root = Path(__file__).resolve().parents[2]
+        sources = [
+            root / "src/main/java/co/surumene/simplecoins/domain/DurableFile.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/CoinDenomination.java",
+            root / "src/main/java/co/surumene/simplecoins/domain/GrantLedger.java",
+            root / "docs/verification/IssuanceJournalBlankIssuerFixture.java",
+        ]
+        if not all(path.is_file() for path in sources) or not shutil.which("javac") or not shutil.which("java"):
+            self.skipTest("actual Java sources and JDK required")
+        classes = Path(self.tmp.name) / "blank-issuer-classes"
+        classes.mkdir()
+        subprocess.run(["javac", "-d", str(classes), *map(str, sources)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run(["java", "-cp", str(classes), "IssuanceJournalBlankIssuerFixture",
+                        str(self.path)], check=True, capture_output=True, text=True)
+        self.assertEqual(1, verifier.verify(self.path)["records"])
+
+    def test_java_blank_unicode_issuer_is_rejected(self):
+        # Java String.isBlank() returns true for these inputs.
+        for issuer in ("\u2003", " ", "\t", "\u001c"):
+            with self.subTest(issuer=repr(issuer)):
+                self.record(1, issuer=issuer)
+                self.head(1)
+                with self.assertRaises(verifier.InvalidJournal):
+                    verifier.verify(self.path)
+                (self.path / "1.grant").unlink()
 
     def test_no_identity_leak(self):
         private_grant_id, private_player_id = uuid.uuid4(), uuid.uuid4()
