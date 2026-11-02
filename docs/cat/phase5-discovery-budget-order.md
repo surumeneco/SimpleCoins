@@ -20,7 +20,7 @@ language: ja
 | SC-DISCOVERY-ORDER | discovery の結果は入力Mapの反復順と独立した安定順序を持つ |
 
 ## 規則
-| ID | 条件 | 観測される現行動作 | 検証 |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | SC-BUDGET-01 | world rootとregion配下に3個の訪問対象がありmaximumEntries=3 | Manifestを返しregionを1件列挙する | exact-budget JUnit |
 | SC-BUDGET-02 | 同じ入力でmaximumEntries=2 | IOExceptionで中断し部分Manifestを返さない | below-budget JUnit |
