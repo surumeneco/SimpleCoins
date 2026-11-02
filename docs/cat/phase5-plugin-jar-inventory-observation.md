@@ -29,6 +29,7 @@ language: ja
 | JAR-OBS-04 | 収集が成功した | 出力はあくまでfilesystem-root-jars-onlyとし、loaded_plugins_verified=falseを明示する | test_sorted_inventory_and_exact_bytes_sha256 |
 | JAR-OBS-05 | 非JARファイルやpluginの設定・BANリストが同ディレクトリにある | 非JARを読まず、実BAN状態や完全な外部source一覧を推論しない | test_sorted_inventory_and_exact_bytes_sha256 |
 | JAR-OBS-06 | SHA計算とZIP descriptor検査の間にJARファイルが変更された | 一貫した単一ファイルの証拠とみなさず、changed_during_scanとして失敗する | test_modified_jar_during_scan_is_rejected |
+| JAR-OBS-07 | 検査直後にJARのパスがsymlinkへ差し替えられた | LinuxのO_NOFOLLOW付き単一ファイル記述子で読み取り、差替え先を辿らず失敗する | test_symlink_swap_at_open_is_rejected |
 
 ## 境界と状態
 
