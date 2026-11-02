@@ -20,4 +20,13 @@ class WorldScopeTest {
         assertTrue(scope.includes(null));
         assertFalse(scope.includes("world"));
     }
+
+    @Test void capturesImmutableConfiguration() {
+        var selected = new java.util.HashSet<>(Set.of("one"));
+        var scope = new WorldScope(false, selected, Set.of());
+        selected.add("two");
+        assertTrue(scope.includes("one"));
+        assertFalse(scope.includes("two"));
+        assertThrows(UnsupportedOperationException.class, () -> scope.included().add("three"));
+    }
 }
