@@ -13,11 +13,17 @@ language: ja
 
 # Phase 5: WorldStorageDiscovery の順序・予算境界（検証用 Draft）
 
-## 対象と位置付け
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.world-discovery | 入力順とworld sourceの同一性 |
+| simplecoins.world-scope | 除外世界のplayerdataと全訪問予算 |
+
+## 位置付け
 既存 `WorldStorageDiscovery.discover` の現行挙動を、独立した verification Work として固定する。参照ソースは SimpleCoins PR #34 HEAD `b88cee565e78376f0161965cc9fdf7ad3b196915` の `WorldStorageDiscovery.java`（blob `9050e638d5d10c6b4173ae400f62daca5b3edde7`）。これは規範として承認された仕様ではなく、既存コードの検証候補である。
 
-## 検証マトリクス
-| ID | 条件 | 検証対象 | 期待する観測 |
+## 規則
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | SC-ORDER-01 | 同じ2世界を逆順のLinkedHashMapで渡す | worldFiles、playerDataFiles、requiredSourceIds | 値が同一で、worldFilesとsource IDの列挙順が安定する |
 | SC-ORDER-02 | 同じr.0.0.mca座標を持つ独立した2世界 | 世界名を含むSourceFile | 座標一致だけで異世界資産を統合せず、2つのsource IDを維持する |
