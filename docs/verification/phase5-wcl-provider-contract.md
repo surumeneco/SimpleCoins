@@ -17,7 +17,7 @@ The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` bl
 
 ### WWW public loaded-owner API visibility (source verification)
 
-The optional SimpleCoins reflection path `loadedIndividuals() → find(UUID) → commanderId()/ownerId()` was checked against actual WWW `develop` source, rather than a synthetic Java visibility fixture:
+The optional SimpleCoins reflection path `loadedIndividuals() → find(UUID) → commanderId()/ownerId()` was checked against the actual WWW `main` and `develop` source, rather than a synthetic Java visibility fixture:
 
 | WWW source | `develop` blob SHA | `main` blob SHA | Verified public declaration in both branches |
 | --- | --- | --- | --- |
