@@ -28,13 +28,13 @@ This is a candidate error-taxonomy boundary for an offline grant journal. It doe
 | `GrantLedger.decode` | Durable record replay error classification |
 | `GrantLedgerOverflowReplayTest` | Checksummed SCG2 replay controls and expected Red |
 
-## Candidate vectors
+## Rules
 
-| ID | Checksummed SCG2 record | Expected candidate outcome |
-| --- | --- | --- |
-| GRANT-OVERFLOW-01 | denomination 500, coinCount 1, amount 500 | Replay succeeds and pending grant is preserved (Green control) |
-| GRANT-OVERFLOW-02 | denomination 500, coinCount 1, amount 501 | Replay fails with `IOException` (existing Green control) |
-| GRANT-OVERFLOW-03 | denomination 500, coinCount `Long.MAX_VALUE`, amount 500 | Replay fails with `IOException`, not an unchecked `ArithmeticException` (expected Red) |
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| GRANT-OVERFLOW-01 | denomination 500, coinCount 1, amount 500 | Replay succeeds and pending grant is preserved (Green control) | `consistentTypedRecordReplaysSuccessfully` |
+| GRANT-OVERFLOW-02 | denomination 500, coinCount 1, amount 501 | Replay fails with `IOException` (existing Green control) | `ordinaryTypedAmountMismatchIsCheckedCorruption` |
+| GRANT-OVERFLOW-03 | denomination 500, coinCount `Long.MAX_VALUE`, amount 500 | Replay fails with `IOException`, not an unchecked `ArithmeticException` (expected Red) | `overflowingTypedCoinCountMustBeCheckedCorruption` |
 
 The test writes actual checksummed journal bytes through `DurableFile.write`, plus a coherent `head`, and reconstructs `GrantLedger`. It does not mutate the production source or an actual playerdata file. This is distinct from PR #126's directory symlink escape and other receipt sequencing Drafts.
 
