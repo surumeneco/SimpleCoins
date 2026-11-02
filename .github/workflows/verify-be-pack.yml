@@ -35,6 +35,11 @@ jobs:
             src/main/java/co/surumene/simplecoins/domain/BedrockPack.java \
             docs/verification/BedrockPackVerifierFixture.java
           java -cp "$RUNNER_TEMP/be-classes" BedrockPackVerifierFixture "$RUNNER_TEMP/be-output"
+          mkdir -p "$RUNNER_TEMP/be-installed"
+          cp "$RUNNER_TEMP/be-output/SimpleCoins.mcpack" "$RUNNER_TEMP/be-installed/SimpleCoins.mcpack"
+          cp "$RUNNER_TEMP/be-output/simplecoins.json" "$RUNNER_TEMP/be-installed/simplecoins.json"
           python3 docs/verification/verify-be-pack.py \
             "$RUNNER_TEMP/be-output/SimpleCoins.mcpack" \
-            "$RUNNER_TEMP/be-output/simplecoins.json"
+            "$RUNNER_TEMP/be-output/simplecoins.json" \
+            "$RUNNER_TEMP/be-installed/SimpleCoins.mcpack" \
+            "$RUNNER_TEMP/be-installed/simplecoins.json"
