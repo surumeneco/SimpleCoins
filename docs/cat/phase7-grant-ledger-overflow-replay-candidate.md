@@ -20,6 +20,14 @@ On PR #125 pinned HEAD `ca0e09032e071904c31ed46dca1f382511b00d4a`, `GrantLedger.
 
 This is a candidate error-taxonomy boundary for an offline grant journal. It does not authorize a production fix, change the denomination rules, or claim a Confirmed CAT contract.
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| `GrantLedger.Grant` | Typed denomination arithmetic validation |
+| `GrantLedger.decode` | Durable record replay error classification |
+| `GrantLedgerOverflowReplayTest` | Checksummed SCG2 replay controls and expected Red |
+
 ## Candidate vectors
 
 | ID | Checksummed SCG2 record | Expected candidate outcome |
