@@ -124,6 +124,18 @@ def main() -> None:
             assert "contains a symbolic link" in ancestor_link.stderr
             assert "Verified identical bytes" not in ancestor_link.stdout
 
+            # A missing generated ZIP or a directory must fail before URL
+            # intake: neither is a valid artifact to compare or advertise.
+            missing_local_archive = run("generated.zip", root / "absent.zip")
+            assert missing_local_archive.returncode == 2
+            assert "Usage:" in missing_local_archive.stderr
+            assert "Verified identical bytes" not in missing_local_archive.stdout
+
+            directory_local_archive = run("generated.zip", served)
+            assert directory_local_archive.returncode == 2
+            assert "Usage:" in directory_local_archive.stderr
+            assert "Verified identical bytes" not in directory_local_archive.stdout
+
             empty_url = subprocess.run(
                 ["bash", str(script), str(generated)],
                 input="\n", capture_output=True, text=True, timeout=20,
@@ -167,7 +179,7 @@ def main() -> None:
                 assert "Generated archive changed during verification." in mutated.stderr
                 assert "Verified identical bytes" not in mutated.stdout
 
-            print("PASS 13/13 Java pack verifier HTTP and failure-path checks")
+            print("PASS 15/15 Java pack verifier HTTP and failure-path checks")
         finally:
             server.shutdown()
             server.server_close()
