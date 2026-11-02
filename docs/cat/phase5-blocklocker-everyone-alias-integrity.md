@@ -6,21 +6,25 @@ status: draft
 process: simplecoins.blocklocker
 source_refs:
   - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
-refs:
-  - simplecoins.blocklocker.localized-everyone
+refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
 
 # Phase 5: BlockLocker Everyone runtime alias integrity (CAT Draft)
 
-## 適用範囲
+## 対象
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.blocklocker | Runtime Everyone localization aliases and visible text normalization |
+| simplecoins.settlement | Prevent unsupported public ownership from malformed alias evidence |
 
 既存の `BlockLockerEveryoneText.matches` が受け取る、実行時に検証された Everyone ローカライズ名の集合。BlockLocker の看板の実在・付属関係、PDC、primary owner、保存済み/loaded の一貫性は対象外。元の `phase5-blocklocker-everyone-text.md` (PR #8) にある表示テキスト照合規則を補足する独立した入力整合性ベクトルであり、確定済み仕様への昇格ではない。
 
-## 規則 / PI
+## 規則
 
-| ID | 条件 | 要求 | テスト |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | everyone.alias.normalized | runtime alias に旧式色コードが含まれる | 表示行と alias の双方を同一の旧式書式正規化で比較する。ブラケットは runtime alias に含めない | BL-EVERYONE-ALIAS-01 |
 | everyone.alias.blank-after-format | alias が書式コードのみで、正規化後に可視名がない | 他の有効 alias が同時に存在しても、集合全体を不正として IOException で拒否する | BL-EVERYONE-ALIAS-02 |
