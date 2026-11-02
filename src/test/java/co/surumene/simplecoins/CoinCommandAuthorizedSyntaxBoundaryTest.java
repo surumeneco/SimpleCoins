@@ -52,6 +52,28 @@ class CoinCommandAuthorizedSyntaxBoundaryTest {
         assertEquals(List.of(), messages);
     }
 
+    @Test
+    void pluginDescriptorBindsAdminCommandToOpOnlyPermission() throws Exception {
+        String descriptor;
+        try (var stream = CoinCommand.class.getClassLoader()
+                .getResourceAsStream("plugin.yml")) {
+            assertNotNull(stream, "Built plugin descriptor must be on the test classpath");
+            descriptor = new String(stream.readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        int commandsStart = descriptor.indexOf("\ncommands:\n");
+        int permissionsStart = descriptor.indexOf("\npermissions:\n");
+        assertTrue(commandsStart >= 0 && permissionsStart > commandsStart,
+                "Descriptor must have distinct commands and permissions sections");
+        String commands = descriptor.substring(commandsStart, permissionsStart);
+        String permissions = descriptor.substring(permissionsStart);
+        assertTrue(commands.contains("\n  simplecoins:\n"));
+        assertTrue(commands.contains("\n    permission: simplecoins.admin\n"));
+        assertTrue(permissions.contains("\n  simplecoins.admin:\n"));
+        assertTrue(permissions.contains("\n    default: op\n"),
+                "Admin permission must not be granted by default");
+    }
+
     private static CommandSender authorizedSender(List<String> messages) {
         return (CommandSender) Proxy.newProxyInstance(
                 CommandSender.class.getClassLoader(),
