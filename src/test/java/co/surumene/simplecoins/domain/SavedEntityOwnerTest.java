@@ -70,7 +70,7 @@ class SavedEntityOwnerTest {
 
     @Test void signedUuidComponentsPreserveAll128Bits() throws Exception {
         UUID entityId = UUID.fromString("ffffffff-8000-0000-7fff-ffff00000001");
-        UUID ownerId = UUID.fromString("80000000-ffffffff-ffffffff-00000002");
+        UUID ownerId = UUID.fromString("80000000-ffff-ffff-ffff-ffff00000002");
         Map<String, Object> wolf = Map.of("id", "minecraft:wolf",
                 "UUID", new int[]{-1, Integer.MIN_VALUE, Integer.MAX_VALUE, 1},
                 "Owner", new int[]{Integer.MIN_VALUE, -1, -1, 2});
