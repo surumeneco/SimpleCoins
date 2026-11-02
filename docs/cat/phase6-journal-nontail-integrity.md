@@ -20,7 +20,7 @@ language: ja
 | SC-JOURNAL-HEAD | headと最新末尾が正常な場合でも、それより古い記録が失われ得る |
 
 ## 規則
-| ID | 条件 | 要求候補 | 検証 |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | SC-NONTAIL-01 | sequence 1,2を永続化後、1.grantを削除しheadと2.grantを維持 | 次の照会・発行をfail-closedし、追加発行しない | delete-old-record Red |
 | SC-NONTAIL-02 | sequence 1,2を永続化後、1.grantの内容を破損しheadと2.grantを維持 | 次の照会・発行をfail-closedし、追加発行しない | corrupt-old-record Red |
