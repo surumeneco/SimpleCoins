@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import zipfile
 
-from phase5_plugin_jar_inventory import inventory, main, sha256_file
+from phase5_plugin_jar_inventory import inventory, main, sha256_stream
 
 
 class PluginJarInventoryTest(unittest.TestCase):
@@ -63,17 +63,37 @@ class PluginJarInventoryTest(unittest.TestCase):
     def test_modified_jar_during_scan_is_rejected(self):
         path = self.jar("changing.jar", "plugin.yml")
 
-        def mutate_after_hash(target):
-            digest = sha256_file(target)
-            with zipfile.ZipFile(target, "a") as archive:
+        def mutate_after_hash(stream):
+            digest = sha256_stream(stream)
+            with zipfile.ZipFile(path, "a") as archive:
                 archive.writestr("changed.txt", "new bytes")
             return digest
 
-        with patch("phase5_plugin_jar_inventory.sha256_file", side_effect=mutate_after_hash):
+        with patch("phase5_plugin_jar_inventory.sha256_stream", side_effect=mutate_after_hash):
             result = inventory(self.directory)
         self.assertFalse(result["scan_complete"])
         self.assertEqual([], result["entries"])
         self.assertEqual("changed_during_scan", result["errors"][0]["reason"])
+
+    @unittest.skipUnless(getattr(__import__("os"), "O_NOFOLLOW", 0), "Linux O_NOFOLLOW required")
+    def test_symlink_swap_at_open_is_rejected(self):
+        import os
+        original = self.jar("swap.jar", "plugin.yml")
+        outside = self.directory / "other.bin"
+        outside.write_bytes(b"not a plugin")
+        real_open = os.open
+
+        def replace_with_link(path, flags):
+            if Path(path) == original:
+                original.unlink()
+                original.symlink_to(outside)
+            return real_open(path, flags)
+
+        with patch("phase5_plugin_jar_inventory.os.open", side_effect=replace_with_link):
+            result = inventory(self.directory)
+        self.assertFalse(result["scan_complete"])
+        self.assertEqual([], result["entries"])
+        self.assertEqual("unreadable_or_invalid_jar", result["errors"][0]["reason"])
 
     def test_missing_or_symlink_directory_is_rejected(self):
         with self.assertRaises(ValueError):
