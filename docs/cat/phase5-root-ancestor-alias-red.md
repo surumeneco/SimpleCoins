@@ -23,8 +23,8 @@ language: ja
 ## 観測と未確定仕様
 PR #34 HEAD `b88cee565e78376f0161965cc9fdf7ad3b196915` は `Files.isDirectory(root, NOFOLLOW_LINKS)` と `Files.walkFileTree(root)` を用いる。JDK21/Linuxの独立実測では、rootそのものではなく**rootの祖先**にシンボリックリンクがある場合、rootは通常ディレクトリとして判定され、walkFileTreeの属性にもリンクが現れない。これを「物理rootを検証できないので非公開」とするかは未承認の候補契約である。
 
-## 規則候補
-| ID | 条件 | 要求候補 | 検証 |
+## 規則
+| ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
 | SC-ANCESTOR-01 | `alias/world` の `alias` が `real` へのリンクで、`world` は実ディレクトリ | `discover` は IOException を返し、manifest を公開しない | symlinkedAncestorOfWorldRootMustFailClosed |
 | SC-ANCESTOR-02 | 物理的に同一の空worldを実pathと祖先リンク経由で2つのworld名として登録 | 0件のsourceでも物理root別名を拒否する | emptyWorldAliasThroughAncestorMustNotBeIndependent |
