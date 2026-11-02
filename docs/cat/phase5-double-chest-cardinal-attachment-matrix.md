@@ -18,8 +18,11 @@ language: ja
 | --- | --- |
 | simplecoins.blocklocker | 既存の `BlockLockerChestLinkage` と `BlockLockerSignAttachment` の方向・保管先境界 |
 
-## 観測・検証対象
-| ID | 条件 | 観測する既存実装の振る舞い | 検証 |
+## 規則
+
+この表の「要求」は既存コードの観測ベクトルであり、規範CAT仕様のConfirmedへの昇格を意味しない。
+
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | geometry.cardinal | NORTH/EAST/SOUTH/WEST、CHEST/TRAPPED_CHEST、両半分の相互検証 | 正しい reciprocal pair は左右いずれの順でも linked と判定 | SC-BL-GEOM-MATRIX-01 |
 | geometry.support | 各半分に実際に支持された4方向の壁看板・立て看板 | 物理的に支持される看板だけが pair に attaches と判定 | SC-BL-GEOM-MATRIX-01 |
