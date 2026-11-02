@@ -1,0 +1,28 @@
+name: Phase 5 ancestor-symlink Draft Red
+
+on:
+  push:
+    branches:
+      - feature/phase5-ancestor-symlink-red-20261102-queue-b
+    paths:
+      - 'docs/cat/phase5-world-root-ancestor-symlink.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageAncestorSymlinkTest.java'
+      - '.github/workflows/phase5-ancestor-symlink-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run full JUnit regression on exact Draft HEAD
+        run: gradle --no-daemon clean test jar
