@@ -1,0 +1,41 @@
+name: Phase 7 Bedrock localization identity verification (Candidate)
+on:
+  pull_request:
+    branches:
+      - feature/initial-domain-20261027
+    paths:
+      - 'docs/cat/phase7-bedrock-localization-identity.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackLocalizationIdentityTest.java'
+      - '.github/workflows/phase7-bedrock-localization-identity.yml'
+  push:
+    branches:
+      - feature/phase7-bedrock-localization-identity-20261102-queue-d
+    paths:
+      - 'docs/cat/phase7-bedrock-localization-identity.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackLocalizationIdentityTest.java'
+      - '.github/workflows/phase7-bedrock-localization-identity.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned CAT-TDD Candidate syntax validator
+        uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Validate Candidate syntax only (not normative Gate)
+        run: python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase7-bedrock-localization-identity.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact-head Gradle JUnit
+        run: gradle --no-daemon clean test jar
