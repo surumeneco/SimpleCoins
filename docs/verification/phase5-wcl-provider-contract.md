@@ -19,13 +19,15 @@ The WWC plugin registration is verified at `WhatAWonderfulChickenPlugin.java` bl
 
 The optional SimpleCoins reflection path `loadedIndividuals() → find(UUID) → commanderId()/ownerId()` was checked against actual WWW `develop` source, rather than a synthetic Java visibility fixture:
 
-| WWW source | Exact Git blob SHA | Verified declaration |
-| --- | --- | --- |
-| `co.surumene.www.WhatAWonderfulWolfPlugin` | `c381d36a113cc57854e17e9b89324731dd2e3172` | `public final class`, `public WonderfulWolfLoadedIndividuals loadedIndividuals()` |
-| `co.surumene.www.persistence.WonderfulWolfLoadedIndividuals` | `61c417d6866dd3ed3c756e3bc8252388ad1c14ca` | `public final class`, `public Optional<WonderfulWolfIndividual> find(UUID)` |
-| `co.surumene.www.individual.WonderfulWolfIndividual` | `ad2bd722d6e3ba7e5ddaec457f17e834b9b560a9` | `public record` with `Optional<UUID> commanderId` and `ownerId` public record accessors |
+| WWW source | `develop` blob SHA | `main` blob SHA | Verified public declaration in both branches |
+| --- | --- | --- | --- |
+| `co.surumene.www.WhatAWonderfulWolfPlugin` | `c381d36a113cc57854e17e9b89324731dd2e3172` | `09b1d2a4719258118a93711b23bc575a8e43606f` | `public final class`; `public WonderfulWolfLoadedIndividuals loadedIndividuals()` |
+| `co.surumene.www.persistence.WonderfulWolfLoadedIndividuals` | `61c417d6866dd3ed3c756e3bc8252388ad1c14ca` | `e0b31006c841f14c19831fc51eb1efdc3c7d9eed` | `public final class`; `public Optional<WonderfulWolfIndividual> find(UUID)` |
+| `co.surumene.www.individual.WonderfulWolfIndividual` | `ad2bd722d6e3ba7e5ddaec457f17e834b9b560a9` | `ad2bd722d6e3ba7e5ddaec457f17e834b9b560a9` | `public record` with `Optional<UUID> commanderId` and `ownerId` public record accessors |
 
-Consequently, the package-private implementation classes in SimpleCoins [PR #98](https://github.com/surumeneco/SimpleCoins/pull/98) are a **hypothetical compatibility fixture**, not a reproduced visibility defect in the inspected WWW source. Its two expected-Red cases do not justify a production reflection change for the currently inspected API. The source verification does **not** establish which WWW JAR is installed, plugin enabled state, a loaded individual, saved/offline completeness, or real Paper reflection success. Those remain runtime acceptance conditions. Missing/failed lookup is UNKNOWN, not verified FREE.
+The `main` README (blob `7227ece0f88a681dfe3290fa092a814aa1dfe0d8`) describes WWW **1.0.1**, whereas the WCL integration evidence above concerns the newer `develop` candidate. Both inspected source branches expose the reflection method chain expected by `PaperWonderfulWolfOwnerAdapter`; the individual record blob is identical. The differing plugin/registry blobs are **not** binary-compatibility proof for the tracked `WhatAWonderfulWolf-1.0.1.jar` or the loaded Paper instance.
+
+Consequently, the package-private implementation classes in SimpleCoins [PR #98](https://github.com/surumeneco/SimpleCoins/pull/98) are a **hypothetical compatibility fixture**, not a reproduced visibility defect in either inspected WWW branch. Its two expected-Red cases do not justify a production reflection change for the inspected public declarations. Source inspection does **not** establish deployed JAR identity, plugin enabled state, a loaded individual, saved/offline completeness, or real Paper reflection success. Those remain runtime acceptance conditions. Missing/failed lookup is UNKNOWN, not verified FREE.
 
 ## Required fail-closed decision matrix for SimpleCoins
 
