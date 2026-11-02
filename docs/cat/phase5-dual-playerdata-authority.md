@@ -23,7 +23,7 @@ language: ja
 
 ## Rules
 
-| ID | Condition | Observed requirement | Verification |
+| ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
 | SC-DUAL-01 | 同一ワールドの `playerdata/<uuid>.dat` と `players/data/<uuid>.dat` が同じUUIDを持つ | `discover` はIOExceptionで停止し、片方を恣意的に採用しない | sameWorldLegacyAndModernCopiesForOneUuidFailClosed |
 | SC-DUAL-02 | 同一ワールドの二系統に異なるUUIDが存在する | 双方の正規ファイルをmanifestに含む | independentUuidsAcrossBothLayoutsRemainDiscoverable |
