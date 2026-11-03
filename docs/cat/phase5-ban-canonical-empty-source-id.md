@@ -4,21 +4,34 @@ kind: domain-spec
 id: simplecoins.phase5.ban-canonical-empty-source-id
 status: draft
 process: simplecoins.owner-ban-evidence
-source_refs: []
+source_refs:
+  - https://drive.google.com/file/d/1sn-FXbU7nFDr6yc6YxPAe2V6U6mV2CZD/view
 refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# BAN source ID: canonical empty after Java trim (Draft)
+# DomainSpec: BAN source canonical-empty authority (Draft)
 
-The declared and observed BAN source IDs must identify a nonempty authority. Current `BanEvidence.combine` checks `String.isBlank()` **before** `trim().toLowerCase(Locale.ROOT)`. Some C0 control-only strings are not blank under `isBlank()`, but `trim()` reduces them to the empty string. A matching empty normalized required/observed pair can therefore produce `CLEAR`. This is a fail-open evidence declaration boundary, not a real provider lookup.
+## 対象
 
-| Vector | Candidate input | Expected observation | Source-exact direct result |
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.owner-ban-evidence | `BanEvidence.combine/evaluate` のrequired/observed source IDを正規化した後の空文字列境界 |
+
+## 規則
+
+以下は**規範未確定の候補**であり、現行実装が期待どおりに拒否するかを検証する。Java `String.isBlank()`で非空と見えるC0制御文字列が`trim()`後に空となるため、空のauthority keyで`CLEAR`を返す経路を隔離する。
+
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
-| BAN-CEMPTY-01 | Required and observed IDs each contain only U+0000, observed CLEAR | IOException: reject empty normalized authority ID | **Expected Red**: CLEAR |
-| BAN-CEMPTY-02 | Required and observed IDs each contain only U+0001, observed CLEAR | IOException: reject empty normalized authority ID | **Expected Red**: CLEAR |
-| BAN-CEMPTY-03 | Required and observed IDs each contain U+0000 U+0001 U+0000, observed CLEAR | IOException: reject empty normalized authority ID | **Expected Red**: CLEAR |
-| BAN-CEMPTY-04 | Required/observed ID `paper-profile`, observed CLEAR | CLEAR | **Green control**: CLEAR |
+| ban.cempty.nul | requiredとobservedのIDがそれぞれU+0000のみ、観測CLEAR | 正規化後の空authority IDをIOExceptionで拒否する | BAN-CEMPTY-01 |
+| ban.cempty.soh | requiredとobservedのIDがそれぞれU+0001のみ、観測CLEAR | 正規化後の空authority IDをIOExceptionで拒否する | BAN-CEMPTY-02 |
+| ban.cempty.mixed | requiredとobservedのIDがU+0000 U+0001 U+0000、観測CLEAR | 正規化後の空authority IDをIOExceptionで拒否する | BAN-CEMPTY-03 |
+| ban.cempty.control | requiredとobservedのIDが通常の`paper-profile`、観測CLEAR | 有効な単一authorityからCLEARを返す | BAN-CEMPTY-04 |
 
-This Draft does not decide a general Unicode provider-ID grammar or the alias-normalization questions in PR #115. It isolates the narrower invariant that an authority key **after existing normalization** cannot be empty. The exact `develop` `BanEvidence.java` blob `0e3f29c2a85fca1d711a928b9db7637193805299` was compiled with Java 21 (`javac --release 21`) and directly executed on 2026-11-03: 3 expected Red cases, 1 Green control. Formal CAT semantic Gates, real Gradle/JUnit, Paper runtime and production Green are not-run. No specification is promoted to Confirmed by this characterization.
+## 状態・境界
+
+2026-11-03に、`develop`の実ソース`BanEvidence.java` Git blob `0e3f29c2a85fca1d711a928b9db7637193805299`とテストblob `5f0d18e73cadf3e9571c65e909b7d14799ea09ab`を照合し、Java21直接実行で3 expected Red・1 Green controlを観測した。JDK25 Gradle 9.2.1 [Actions #41553574566](https://github.com/surumeneco/SimpleCoins/actions/runs/41553574566)も95件中3件の**期待Red**（いずれも本テスト）で終了した。総合CIはFAILUREであり、Green成功ではない。
+
+これは一般的なUnicode source-ID文法やPR #115のalias方針を決定しない。正式CAT意味論Gate、production Green、Paper実機・決算公開は未実施。DraftをConfirmedへ昇格しない。
