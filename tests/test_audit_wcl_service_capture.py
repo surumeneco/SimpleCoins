@@ -23,7 +23,8 @@ def valid():
         ],
         "registrations": [
             {"provider_id": pid, "owner_plugin": owner, "provider_class": "example.Reader",
-             "owner_enabled": True}
+             "owner_enabled": True,
+             "service_interface": "co.surumene.wcl.plugin.inventory.WonderfulStorageReader"}
             for pid, owner in (("wwc", "WhatAWonderfulChicken"), ("www", "WhatAWonderfulWolf"))
         ],
     }
@@ -53,6 +54,14 @@ class AuditTests(unittest.TestCase):
     def test_wrong_owner(self):
         self.check(lambda v: v["registrations"][0].update(owner_plugin="Unknown"),
                    "incomplete", "PROVIDER_OWNER_MISMATCH")
+
+    def test_wrong_service_interface(self):
+        self.check(lambda v: v["registrations"][0].update(service_interface="example.Untrusted"),
+                   "incomplete", "SERVICE_INTERFACE_MISMATCH")
+
+    def test_missing_service_interface(self):
+        self.check(lambda v: v["registrations"][1].pop("service_interface"),
+                   "incomplete", "SERVICE_INTERFACE_MISMATCH")
 
     def test_duplicate_provider(self):
         self.check(lambda v: v["registrations"].append(copy.deepcopy(v["registrations"][0])),
