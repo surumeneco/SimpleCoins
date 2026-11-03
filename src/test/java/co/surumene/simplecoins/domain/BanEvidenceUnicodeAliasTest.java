@@ -29,4 +29,15 @@ class BanEvidenceUnicodeAliasTest {
                     new BanEvidence.Source(alias, BanEvidence.Status.CLEAR))));
     }
 
+    @Test void asciiWhitespaceDuplicateRequiredSourceMustBeRejected() {
+        assertThrows(IOException.class, () -> BanEvidence.combine(
+            Set.of("paper", " paper "),
+            List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR))));
+    }
+
+    @Test void ordinarySingleSourceClearRemainsValid() throws IOException {
+        org.junit.jupiter.api.Assertions.assertEquals(BanEvidence.Status.CLEAR,
+            BanEvidence.combine(Set.of("paper"),
+                List.of(new BanEvidence.Source("paper", BanEvidence.Status.CLEAR))));
+    }
 }
