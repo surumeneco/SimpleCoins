@@ -76,6 +76,8 @@ def audit(pack, mapping):
         if not isinstance(mapped, dict) or mapped.get("format_version") != 2 or not isinstance(mapped.get("items"), dict):
             errors.add("INVALID_MAPPING")
         else:
+            if set(mapped["items"]) != {"minecraft:paper"}:
+                errors.add("UNEXPECTED_MAPPING_ITEM")
             entries = mapped["items"].get("minecraft:paper")
             if not isinstance(entries, list) or len(entries) != len(VALUES):
                 errors.add("INVALID_MAPPING")
