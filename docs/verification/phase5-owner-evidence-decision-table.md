@@ -46,4 +46,18 @@
 
 02Bの「UUIDを特定できない旧看板はフリー」と「実体を読めない場合は決算未完了」は両立する。解決時には`FREE`をPRIVATE primaryに直接流し込むのではなく、**看板・保護の検証完了**と**本人UUIDの検証済み不在**を独立した証拠として表現できるか、既存の[PRIVATE primary CAT Draft](https://github.com/surumeneco/SimpleCoins/blob/feature/owner-evidence-20261101/docs/cat/phase5-private-sign-primary-kind.md)を規範仕様と照合する。Draftの「lookup不明は常にUNKNOWN」を旧看板の検証済み不在に無条件適用してはならず、逆にlookup失敗をFREEへ読み替えてもならない。両者の境界を表すTCE/PIベクトルと正式Gateは**未実施**であり、ここで仕様確定や実装修正を宣言しない。
 
+### 上流BlockLocker v1.15の「UUIDなし」判定に必要な原データ（ソース検証）
+
+OE-03の**検証済みUUID不在**は、単に上流の`PlayerProfile.getUniqueId().isEmpty()`を観測しただけでは成立しない。上流`v1.15`の実コードでは、欠損と不正なUUID表現が同じ`Optional.empty()`に収束する経路がある。
+
+| 経路 | 上流ソースから確認できること | SimpleCoins側の証拠境界 |
+| --- | --- | --- |
+| 表示テキストからの旧形式解析 | `ProfileFactoryImpl.fromDisplayText`は`name#UUID`を解釈できなければ名前のみの`PlayerProfileImpl(..., Optional.empty())`を生成する。無効な`#UUID`接尾辞も例外を捕捉してこの経路へ進む | 名前のみの解析成功はUUIDの**権威ある照合完了**ではない。旧看板の正常読取と本人照合の結果を別に保持する |
+| 保存PDCのUUID読取 | `NbtSecretSignEntry.getUniqueId("u")`は`long[]`がない場合と長さが2でない場合の双方で`Optional.empty()`を返す。`ProfileFactoryImpl.fromSavedObject`は名前`n`があればそのOptionalでプレイヤープロファイルを生成する | UUIDの不正な配列長を「検証済み不在」に昇格しない。raw PDCのキー有無・型・配列長を検証する |
+| PDCと表示名の不一致 | `SignParserImpl.parseAdvancedSign`は保存プロフィールの表示名が看板文字列と異なると表示テキストから再解析し、`signHadDataMismatch`を立てる。PDCのUUID欠損だけではこのフラグは立たない | 表示名一致や最終OptionalだけでPDCの完全性・一致性を証明しない。raw保存データと表示証拠を別々に検証する |
+
+確認した上流Git blobは`ProfileFactoryImpl.java`=`19ad9bdc4f6af6746df83dc3cd571768e2ad97b5`、`NbtSecretSignEntry.java`=`5254b8782cef222158175f43aef526ac03ffcd75`、`SignParserImpl.java`=`601a9573870153697125281d66f2f96e4f005e77`（いずれも[BlockLocker v1.15](https://github.com/rutgerkok/BlockLocker/tree/v1.15/src/main/java/nl/rutgerkok/blocklocker/impl)）。これはソース上の経路確認であり、配備JAR・Paper実機の証拠ではない。
+
+現行Draft `BlockLockerSavedHints.read`（PR #8、blob `46148bd736d7ec61b82a73b5effb5a7b36ffcb12`）は、存在するUUID値の型・長さ不正を`IOException`で拒否する。一方、`Hints.firstProfileUuid().empty`だけでは、UUIDキーが正常に欠損したのか、主プロフィール自体がないのかを表現できない。したがって[PR #129](https://github.com/surumeneco/SimpleCoins/pull/129)のBL-LEGACY-01/02をGreenへ進める際は、**正常な旧形式・完全な物理的保護・本人照合成功によるUUID不在**を区別できる証拠経路をCATで決定する。raw PDC破損や読取失敗はOE-04として未完了を維持する。
+
 各OEベクトルは、正本CATの決定・Gate、外部プラグインの実機統合、決算公開制御の検証で対応付ける。表の記載だけでテスト成功・CAT Confirmed・Paper受入完了とは扱わない。
