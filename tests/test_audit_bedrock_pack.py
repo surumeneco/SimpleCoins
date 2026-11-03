@@ -3,6 +3,7 @@ import warnings
 import base64
 import json
 import sys
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -136,6 +137,41 @@ class AuditTests(unittest.TestCase):
         with self.mapping.open("ab") as output:
             output.write(b" " * (1024 * 1024 + 1))
         self.assertEqual(["INPUT_TOO_LARGE"], audit(self.pack, self.mapping)["codes"])
+
+    def create_corrupt_deflate_member(self):
+        """Leave ZIP headers intact but corrupt the first compressed member stream."""
+        write(self.pack, self.mapping, self.files, self.data)
+        with zipfile.ZipFile(self.pack, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, value in self.files.items():
+                archive.writestr(name, value)
+        raw = bytearray(self.pack.read_bytes())
+        self.assertEqual(b"PK\x03\x04", raw[:4])
+        name_len = int.from_bytes(raw[26:28], "little")
+        extra_len = int.from_bytes(raw[28:30], "little")
+        offset = 30 + name_len + extra_len
+        self.assertGreater(int.from_bytes(raw[18:22], "little"), 3)
+        raw[offset:offset + 3] = b"\xff\xff\xff"
+        self.pack.write_bytes(raw)
+
+    def test_corrupt_deflate_returns_stable_invalid_code(self):
+        self.create_corrupt_deflate_member()
+        self.assertEqual(
+            {"status": "invalid", "codes": ["UNREADABLE_ARTIFACT"]},
+            audit(self.pack, self.mapping),
+        )
+
+    def test_corrupt_deflate_cli_has_structured_error_and_exit_two(self):
+        self.create_corrupt_deflate_member()
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "audit_bedrock_pack.py"),
+             str(self.pack), str(self.mapping)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertEqual(
+            {"status": "invalid", "codes": ["UNREADABLE_ARTIFACT"]},
+            json.loads(completed.stdout),
+        )
 
     def test_corrupt_zip(self):
         self.pack.write_bytes(b"not-a-zip")
