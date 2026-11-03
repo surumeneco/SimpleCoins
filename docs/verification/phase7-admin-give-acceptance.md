@@ -36,14 +36,26 @@ TaskQueue `TASK-20261101-006` の運営機能について、実装・実機検�
 4. 各IDに `passed / failed / not-run / inconclusive`、対象SHA、操作手順、観測ログ・台帳／PDCの差分を付ける。直接テスト可能な項目は先に実行し、CIは必要な環境差・ワークフロー検証に限定する。
 5. AG-11〜12はPhase 5の所有者判定・全件走査・Phase 6の整合スナップショットが成立して初めて総合受入可能。未完成の外部アダプターや決算結果をゼロとして成功にしない。
 
+### PR #2の保存済み受領照合境界（ソース観測、実機未検証）
+
+[PR #2](https://github.com/surumeneco/SimpleCoins/pull/2) の`OfflineGrants.java`（Git blob `e7ed1299eecefac6bb8e94bb1e8b3a1dfa580c26`）では、予約の現物化後に`player.saveData()`を呼び、`verifySavedReceipt`で保存済みplayerdataとメモリ上の受領情報を照合する。これは**コード上の意図・分岐**であり、クラッシュ時の原子性や実機での保存成功を証明しない。
+
+| 照合点 | ソースで確認した動作 | 隔離Paperで必要な検証 |
+| --- | --- | --- |
+| 保存先の一意性 | 全ワールドの`players/data`・`playerdata`から対象UUIDの`.dat`を探索し、`toRealPath()`で実体を集約。実体がちょうど1件でなければ`IOException` | 保存先0件、実体の異なる2件、同一実体への別パスを区別し、正しいworld/playerdataのみで成功するか確認 |
+| PDC受領の一致 | GZIP NBTの`BukkitValues`から`grant_completed`・`grant_active`・`grant_paid`を`Long`として読み、メモリ上の3値と比較 | キー欠損、型不一致、保存前後の値不一致を個別に注入し、受領済みと誤認しないか確認 |
+| 失敗時の制御 | `verifySavedReceipt`の例外は`deliver`から`fail`へ渡り、発行を停止して`Bukkit.shutdown()`を要求 | 保存失敗後の再起動・台帳再読込・未配布額を照合し、停止要求だけでexactly-once成立と見なさない |
+
+この受入観点はAG-07〜10の既存ケースを具体化するもので、別の確定仕様や新しいタスクを発行しない。実際の保存パス・Bukkit API動作・プラグインの再起動復旧は**not-run**のままとする。
+
 ## 直接検証済みの部分と受入未達の境界
 
 | 証拠 | 実測した範囲 | 本書の受入への効力 |
 | --- | --- | --- |
+| `develop`純Java金額・スタック境界（`CoinMoney` blob `b24011d3512d3531afe34d7c7512515df6ac0f2c`、`CoinDenomination` `f6d8a15fab50c242886f00d35e902289342ea2ef`、`IssuanceBudget` `607b004cfab076143e2add6dd8f470a622abb0c1`） | 2026-11-03に3ソースの`git hash-object`を照合し、Java 21 `javac --release 21`で実コンパイル・直接実行。5200=5000×1+100×2、総価値、64/65枚のスタック境界、複数対象の全体1024スタック上限、0/負数、非対応額面、BigInteger集計の**9/9 assertions成功** | AG-02/03の**純Java計算**に限る。実コマンド、権限、現物配布、予約、Paper実機は未実施 |
 | [PR #125](https://github.com/surumeneco/SimpleCoins/pull/125)、HEAD `ca0e09032e071904c31ed46dca1f382511b00d4a`、[Actions #41499593007](https://github.com/surumeneco/SimpleCoins/actions/runs/41499593007) | `develop`から独立したDraftに既存`GrantLedger`とJUnitテストを同一blobで抽出し、当該HEADのGradleテストがSUCCESS。CATはCandidateのまま | 永続台帳の純Java単体テスト証拠。AG-06〜10のPaper/playerdata/クラッシュ後一回性を証明しない |
 | [PR #126](https://github.com/surumeneco/SimpleCoins/pull/126)、最終HEAD `56acb329ccced8e735df0c5716e9c7e899c95aeb`、[Actions #41513802057](https://github.com/surumeneco/SimpleCoins/actions/runs/41513802057) | PR #125上のCAT CandidateとJUnit。Java 21のNIO直接probeに加え、一時workflow付きコミット `b73ccd5d0e720b8285d21bba1e91162a42eb87d8` でGradle/JUnitの期待Redを実行。workflow削除後の最終HEADではテストblobは不変 | シンボリックリンク経由のroot外`head`書込みを示す未修正の期待Red。Actionsの総合結果はFAILUREであり、CAT Gate/Green/AG-07〜10の合格ではない |
 | [PR #131](https://github.com/surumeneco/SimpleCoins/pull/131)、最終HEAD `90338a340c4f6dfddfe170b84dd867559cdfff17`、[Actions #41536363845](https://github.com/surumeneco/SimpleCoins/actions/runs/41536363845) | PR #125上のCAT Draftと3件のJUnit。`GrantLedger`のSCG2チェックサム付き台帳で額面500×枚数`Long.MAX_VALUE`を再読込すると、想定`IOException`ではなく未捕捉`ArithmeticException`が発生することを実行確認。ActionsではCAT Draft構文Lint成功、Gradle/JUnitは2件Green・1件期待Red（総合FAILURE）。最終HEADは一時workflow削除後でテストblob不変 | 破損台帳の例外分類に関する未確定CAT候補。正式Gate/Green、再起動時一回性、AG-10の統合受入は未実施 |
-
 | [PR #140](https://github.com/surumeneco/SimpleCoins/pull/140)、HEAD `aa3d86ce9408af875f1e476a91ab9379e6a5ccd2`、[PR #141](https://github.com/surumeneco/SimpleCoins/pull/141)、最終HEAD `85fb12881be5dc5258e7df92bcf79613117115f6`、[Actions #41548121596](https://github.com/surumeneco/SimpleCoins/actions/runs/41548121596) | PR #125上の既存`GrantLedger`で、typed枚数overflow、0金額、空白issuerの拒否後に`.grant`が生成されず、後続正常予約がsequence 1で再開・再読込できることをJDK25 Gradle/JUnitで実測。初回CAT構文Lintの`Rules/規則`欠落はPR #141で修正し、同一実ソースのJUnitと固定CAT-TDD版のDraft構文Lintが両方SUCCESS。CI用一時workflowは削除済み | 入力拒否時の純Java台帳非永続化に限る。例外型の規範確定、正式CAT意味論Gate、Paperでの受領・再起動・AG-06〜10の統合受入を証明しない |
 
 上記は**ソース・単体テストの証拠**であり、受入マトリクスのPaper実機・故障注入・権限試験のステータスとは別管理する。現行`develop`には上記の未統合Draft PRの変更が含まれていない。既存のJE/BE配布証拠と隔離実機手順は[JE/BE/Nexo受入手順](phase7-je-be-nexo-acceptance.md)および[配布引渡し](phase7-je-be-pack-handoff.md)を正本とし、本書へ重複複製しない。
