@@ -1,4 +1,5 @@
 import copy
+import base64
 import json
 import sys
 import tempfile
@@ -22,7 +23,7 @@ def fixture(root):
                                                  "texture_data": {name: {"textures": ["textures/items/coin_" + str(n)]}
                                                                   for name, n in zip(ids, VALUES)}}).encode(),
     }
-    files.update({f"textures/items/coin_{n}.png": b"png-placeholder" for n in VALUES})
+    files.update({f"textures/items/coin_{n}.png": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==") for n in VALUES})
     data = {"format_version": 2, "items": {"minecraft:paper": [
         {"type": "definition", "model": name, "bedrock_identifier": name, "display_name": name,
          "bedrock_options": {"icon": name}, "components": {"minecraft:max_stack_size": 64}}
@@ -66,6 +67,10 @@ class AuditTests(unittest.TestCase):
     def test_empty_png(self):
         self.files["textures/items/coin_1.png"] = b""
         self.check("EMPTY_TEXTURE")
+
+    def test_invalid_png_signature(self):
+        self.files["textures/items/coin_1.png"] = b"not-a-png"
+        self.check("INVALID_PNG_SIGNATURE")
 
     def test_invalid_atlas_reference(self):
         atlas = json.loads(self.files["textures/item_texture.json"])
