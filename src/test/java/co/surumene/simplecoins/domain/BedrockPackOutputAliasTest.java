@@ -44,6 +44,17 @@ class BedrockPackOutputAliasTest {
         assertFalse(Files.exists(output), "Reject normalized aliases before publication");
     }
 
+
+    @Test void existingOutputMustSurviveRejectedAlias() throws Exception {
+        Path output = directory.resolve("existing.mcpack");
+        byte[] original = new byte[] {0x50, 0x4b, 0x03, 0x04, 0x11};
+        Files.write(output, original);
+        assertThrows(IOException.class, () -> BedrockPack.write(
+                output, output, images(), names()));
+        assertArrayEquals(original, Files.readAllBytes(output),
+                "Alias rejection must not destroy a previously published artifact");
+    }
+
     @Test void distinctDestinationsStillPublishValidSeparateArtifacts() throws Exception {
         Path pack = directory.resolve("coins.mcpack");
         Path mapping = directory.resolve("coins.json");
