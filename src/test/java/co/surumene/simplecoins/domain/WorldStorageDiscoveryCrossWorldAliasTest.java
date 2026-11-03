@@ -20,6 +20,30 @@ class WorldStorageDiscoveryCrossWorldAliasTest {
     @TempDir Path temporaryDirectory;
 
     @Test
+    void excludedWorldDoesNotMakeItsRegionAnAuthoritativeAlias() throws Exception {
+        Path includedWorld = temporaryDirectory.resolve("included-world");
+        Path excludedWorld = temporaryDirectory.resolve("excluded-world");
+        Path included = includedWorld.resolve("region/r.0.0.mca");
+        Path excluded = excludedWorld.resolve("region/r.0.0.mca");
+        Files.createDirectories(included.getParent());
+        Files.createDirectories(excluded.getParent());
+        Files.writeString(included, "fixture");
+        try {
+            Files.createLink(excluded, included);
+        } catch (UnsupportedOperationException | IOException | SecurityException unsupported) {
+            assumeTrue(false, "Hard links unavailable on this filesystem: " + unsupported);
+        }
+
+        WorldStorageDiscovery.Manifest manifest = WorldStorageDiscovery.discover(
+                Map.of("included", includedWorld, "excluded", excludedWorld),
+                new WorldScope(true, Set.of(), Set.of("excluded")),
+                100);
+        assertTrue(manifest.worldFiles().stream().allMatch(source ->
+                source.world().equals("included")));
+        org.junit.jupiter.api.Assertions.assertEquals(1, manifest.worldFiles().size());
+    }
+
+    @Test
     void hardLinkedRegionAcrossDistinctWorldRootsFailsClosed() throws Exception {
         Path firstWorld = temporaryDirectory.resolve("first-world");
         Path secondWorld = temporaryDirectory.resolve("second-world");
