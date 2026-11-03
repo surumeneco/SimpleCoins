@@ -28,7 +28,7 @@ language: ja
 | BE-AUDIT-01 | ZIPにmanifest、atlas、9額面のPNGが存在し、mappingの9定義とID/texture参照が一致する | valid_structureを返すが、配布・表示成功とは称さない | valid |
 | BE-AUDIT-02 | PNG不足、余剰/危険ZIP member、空PNG、PNG署名不正、重複member | invalidを返す | archive |
 | BE-AUDIT-03 | atlasのtexture参照、mappingのmodel/identifier/icon/stack-sizeが一致しない、または想定外のitem種別が混入する | invalidを返す | mapping |
-| BE-AUDIT-04 | manifestのUUID/モジュール不正、JSON/ZIP破損、展開容量超過 | invalidを返す | malformed |
+| BE-AUDIT-04 | manifestのUUID/モジュール不正、JSON/ZIP破損（ヘッダは正常でもDeflateストリームが不正な場合を含む）、展開容量超過 | invalidを返す。破損Deflateは未捕捉例外ではなくUNREADABLE_ARTIFACTとCLI終了コード2に正規化する（Draft提案） | malformed |
 | BE-AUDIT-05 | ZIPとmappingが別個に正しい構造であっても、生成・公開の原子性とJE/BEクライアント受入は未検証 | valid_structureをリリースGateとして使わない | scope |
 
 ## Process / PI
@@ -39,6 +39,6 @@ Input: two already-generated local files on a disposable verification host. The 
 
 - Valid synthetic pair, missing/extra/empty/non-PNG texture, wrong atlas reference.
 - Missing/duplicate mapping IDs, wrong icon, duplicate manifest UUID.
-- Corrupt ZIP and malformed JSON.
+- Corrupt ZIP and malformed JSON. Malformed Deflate compressed-member data with intact ZIP headers must be surfaced as invalid/UNREADABLE_ARTIFACT through both the Python audit API and JSON CLI (proposal, Draft).
 
 Status: **Draft**. Formal CAT semantic Gates and real Paper/Geyser/JE/BE runtime acceptance are not-run. The independent publication-alias Red candidate is PR #149; this auditor does not repair that defect.
