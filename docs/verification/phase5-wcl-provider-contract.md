@@ -87,6 +87,12 @@ The WCL `StorageSnapshot` constructor itself enforces non-null identities, immut
 
 The exact three WCL `develop` API blobs above were independently reproduced and matched with `git hash-object`. Java 21 compiled them without Paper dependencies; a focused direct harness passed **16/16 assertions** for the three result variants, empty-but-successful snapshot distinction, identity fields, defensive copies, duplicate slots, malformed failures and invalid positions. This validates only the pure Java value contract. It is **not** a Gradle/JUnit run against WWC/WWW or a Paper server test.
 
+### Offline validation of a collected registration snapshot (candidate)
+
+The read-only [WCL service capture auditor](../../tools/audit_wcl_service_capture.py) checks the **structure** of a separately exported JSON snapshot; it does not collect live Paper data or attest that the supplied fields are true. Run `python3 tools/audit_wcl_service_capture.py capture.json` after an independently trusted primary-thread probe has captured the full `WonderfulStorageReader` registration set. The input schema uses `schema_version: 1`; `capture` contains timezone-aware `server_start`/`captured_at`, `paper_version`, boolean `primary_thread` and `registration_list_complete`; `plugins` contains WCL/WWC/WWW names, versions, enabled flags and installed-JAR SHA-256; `registrations` contains `provider_id`, `owner_plugin`, `provider_class`, `owner_enabled` for every observed reader.
+
+The JSON result is `structurally_complete` (exit 0), `incomplete` (exit 2), or `invalid` (exit 3), with stable error codes. **Exit 0 is not a live-service or asset-completeness Gate.** A fabricated capture can pass; loaded/saved entity coverage, provider API identity, trusted provenance, runtime behavior and formal CAT Gates still require independent evidence. No owner UUIDs or inventory items are required by the auditor. The schema and checks are a CAT Draft, not a Confirmed settlement contract.
+
 ## Paper runtime proof collection (not yet executed)
 
 The source-derived vectors above are insufficient to declare a live provider usable. Collect the following **on the actual server** before using WCL evidence in settlement; keep each observation tied to a single server start, world and installed JAR set. No observation in this section is presently marked as passed.
