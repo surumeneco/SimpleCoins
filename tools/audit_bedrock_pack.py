@@ -16,6 +16,7 @@ TEXTURES = {f"textures/items/coin_{n}.png" for n in VALUES}
 MEMBERS = {"manifest.json", "textures/item_texture.json", *TEXTURES}
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_UNCOMPRESSED = 256 * 1024 * 1024
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def audit(pack, mapping):
@@ -39,6 +40,10 @@ def audit(pack, mapping):
                 return {"status": "invalid", "codes": sorted(errors)}
             if any(archive.getinfo(name).file_size == 0 for name in TEXTURES):
                 errors.add("EMPTY_TEXTURE")
+            for name in TEXTURES:
+                with archive.open(name) as image:
+                    if image.read(8) != PNG_SIGNATURE:
+                        errors.add("INVALID_PNG_SIGNATURE")
             manifest = json.loads(archive.read("manifest.json"))
             atlas = json.loads(archive.read("textures/item_texture.json"))
         mapped = json.loads(mapping.read_text(encoding="utf-8"))
