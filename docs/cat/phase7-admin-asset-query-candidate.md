@@ -1,10 +1,16 @@
 ---
-title: Phase 7 admin asset and dormant-property inquiry
-status: Candidate
-flow: code-to-spec
-scope: O01 / TASK-20261101-006
-source_revision: 01a06f9f0fb78c8f941f2aa2e1c3df5e8951d153
-normative_confirmation: decision-required
+cat_version: '0.3'
+kind: domain-spec
+id: simplecoins.admin.asset-inquiry-candidate
+status: candidate
+process: simplecoins.admin
+source_refs:
+  - https://github.com/surumeneco/SimpleCoins/blob/01a06f9f0fb78c8f941f2aa2e1c3df5e8951d153/src/main/java/co/surumene/simplecoins/CoinCommand.java
+  - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
+  - https://drive.google.com/file/d/1KxmgwxYdE5dhBxW6mwzaYezxcRaSWx8o/view
+refs: []
+semantic_contract: markdown-v2
+language: en
 ---
 
 # Phase 7 — administration inquiry (CAT Candidate)
