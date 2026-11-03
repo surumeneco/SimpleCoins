@@ -82,6 +82,10 @@ class AuditTests(unittest.TestCase):
         self.data["items"]["minecraft:paper"].pop()
         self.check("INVALID_MAPPING")
 
+    def test_extra_mapping_item_category(self):
+        self.data["items"]["minecraft:stone"] = []
+        self.check("UNEXPECTED_MAPPING_ITEM")
+
     def test_wrong_mapping_icon(self):
         self.data["items"]["minecraft:paper"][0]["bedrock_options"]["icon"] = "wrong"
         self.check("INVALID_MAPPING_ENTRY")
