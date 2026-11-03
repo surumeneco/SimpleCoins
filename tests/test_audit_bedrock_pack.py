@@ -114,6 +114,29 @@ class AuditTests(unittest.TestCase):
         self.mapping.write_text("{broken", encoding="utf-8")
         self.assertIn("UNREADABLE_ARTIFACT", audit(self.pack, self.mapping)["codes"])
 
+    def test_mapping_root_is_array(self):
+        write(self.pack, self.mapping, self.files, self.data)
+        self.mapping.write_text("[]", encoding="utf-8")
+        self.assertIn("INVALID_MAPPING", audit(self.pack, self.mapping)["codes"])
+
+    def test_manifest_module_is_null(self):
+        manifest = json.loads(self.files["manifest.json"])
+        manifest["modules"] = [None]
+        self.files["manifest.json"] = json.dumps(manifest).encode()
+        self.check("INVALID_MANIFEST")
+
+    def test_texture_atlas_entry_is_null(self):
+        atlas = json.loads(self.files["textures/item_texture.json"])
+        atlas["texture_data"]["simplecoins:coin_1"] = None
+        self.files["textures/item_texture.json"] = json.dumps(atlas).encode()
+        self.check("TEXTURE_REFERENCE_MISMATCH")
+
+    def test_mapping_over_size_limit(self):
+        write(self.pack, self.mapping, self.files, self.data)
+        with self.mapping.open("ab") as output:
+            output.write(b" " * (1024 * 1024 + 1))
+        self.assertEqual(["INPUT_TOO_LARGE"], audit(self.pack, self.mapping)["codes"])
+
     def test_corrupt_zip(self):
         self.pack.write_bytes(b"not-a-zip")
         self.mapping.write_text("{}")
