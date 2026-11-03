@@ -27,6 +27,12 @@ The `addressMappingComplete` and `externalInventoryComplete` booleans are **call
 | Null address within an otherwise complete address set | `UNKNOWN` unless another verified address is BANNED | The set is not a complete valid mapping |
 | Provider lookup result `false` with incomplete discovery | `UNKNOWN` | A negative response from one plugin cannot prove all plugins clear |
 
+### Unicode source-ID alias boundary (Draft; not a decided grammar)
+
+The current `BanEvidence.combine` source (blob `0e3f29c2a85fca1d711a928b9db7637193805299`) uses `raw.isBlank()` for empty-ID rejection, then `raw.trim().toLowerCase(Locale.ROOT)` as its canonical key. Java `String.trim()` does not remove `U+2003` EM SPACE or `U+00A0` NO-BREAK SPACE. Thus `paper` and `paper\u2003` (or `\u00A0paper`) can be counted as **two distinct declared sources** in the current pure-Java aggregator even if they refer to one intended provider. The aggregator has no external provider registry with which to prove that identity.
+
+[Draft PR #115](https://github.com/surumeneco/SimpleCoins/pull/115) records two expected-Red alias tests and one Green undeclared-source control; its earlier direct harness was **not byte-identical** to the production Java source, so it does not establish a formal CAT Gate or Paper runtime result. The proposed choice between rejecting noncanonical Unicode, normalizing a defined subset, or restricting IDs to an explicit grammar remains a **normative CAT decision**, not an implementation authorization. In particular, neither a set of distinct strings nor a returned `CLEAR` proves that the declared source inventory represents distinct authoritative providers.
+
 ## Reproduced direct checks
 
 On 2026-11-02, Java 21.0.12.1 compiled the **exact Git blob bytes** of `BanEvidence`, `PaperBanEvidenceCollector`, and `PaperIpBanEvidenceAdapter`; `git hash-object` matched the three SHAs above. Only Paper-dependent `readPaper` entry points were stubbed; the actual `read`, `combine`, and `evaluate` implementations were executed.
