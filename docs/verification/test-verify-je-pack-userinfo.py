@@ -49,11 +49,14 @@ def main() -> None:
             unsafe = run(f"http://{credentials}@127.0.0.1:{port}/generated.zip")
             combined = unsafe.stdout + unsafe.stderr
             assert credentials not in combined, "Verifier leaked userinfo to output"
-            assert unsafe.returncode != 0, (
-                "Expected Red: verifier accepted a hosted pack URL with embedded credentials"
-            )
-            assert "Verified identical bytes" not in unsafe.stdout
-            print("PASS: userinfo rejected without disclosure; plain HTTP control succeeds")
+            fragment = run(f"http://127.0.0.1:{port}/generated.zip#fragment")
+            failures = []
+            if unsafe.returncode == 0 or "Verified identical bytes" in unsafe.stdout:
+                failures.append("userinfo URL accepted")
+            if fragment.returncode == 0 or "Verified identical bytes" in fragment.stdout:
+                failures.append("fragment URL accepted")
+            assert not failures, "Expected Red: " + ", ".join(failures)
+            print("PASS: userinfo and fragment rejected; plain HTTP control succeeds")
         finally:
             server.shutdown()
             server.server_close()
