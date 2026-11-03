@@ -82,10 +82,15 @@ class AuditTests(unittest.TestCase):
         self.check(lambda v: v["capture"].update(server_start="2026-11-03T00:00:00"),
                    "invalid", "INVALID_CAPTURE_TIME")
 
+    def test_boolean_schema_version_is_invalid(self):
+        self.check(lambda v: v.update(schema_version=True), "invalid", "INVALID_SCHEMA")
+
     def test_cli_exit_codes(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "capture.json"
-            for data, expected in ((valid(), 0), ({"schema_version": 1}, 3)):
+            incomplete = valid()
+            incomplete["registrations"].pop()
+            for data, expected in ((valid(), 0), (incomplete, 2), ({"schema_version": 1}, 3)):
                 path.write_text(json.dumps(data), encoding="utf-8")
                 result = subprocess.run([sys.executable, str(ROOT / "tools" / "audit_wcl_service_capture.py"), str(path)],
                                         capture_output=True, text=True, check=False)
