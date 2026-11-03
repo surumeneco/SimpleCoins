@@ -28,7 +28,7 @@ language: ja
 | WCL-AUDIT-01 | WCL/WWC/WWWが有効、JAR SHA-256と版が記録され、wwc/wwwの登録・owner・primary-thread・全件取得フラグが揃う | structurally_completeを返す。ただしPaper実機証明とは称さない | valid |
 | WCL-AUDIT-02 | 必須プラグインまたはwwc/www登録が欠ける | incompleteを返し、ゼロ資産やFREEを推定しない | missing |
 | WCL-AUDIT-03 | 重複provider ID、重複plugin名、不正な型・フラグ・capture時刻 | invalidを返す | malformed |
-| WCL-AUDIT-04 | providerの登録所有者が期待するWWC/WWWと一致しない、または無効状態 | incompleteを返す | owner |
+| WCL-AUDIT-04 | providerの登録所有者が期待するWWC/WWWと一致しない、無効状態、または固定WCLサービス型と一致しない | incompleteを返す | owner |
 | WCL-AUDIT-05 | primary-thread/全登録取得を確認できない、またはJARハッシュが欠落する | incompleteを返す | provenance |
 | WCL-AUDIT-06 | 解析対象が不正・大容量・読込不能 | invalidとして機械可読な終了コードを返す | cli |
 
@@ -38,7 +38,7 @@ Input: JSON evidence independently exported by an authorized Paper-side probe. T
 
 ## TestModel / TCE
 
-- Valid structural example, missing provider, missing plugin, disabled plugin, wrong owner, duplicate provider.
+- Valid structural example, missing provider, missing plugin, disabled plugin, wrong owner, wrong service interface, duplicate provider.
 - Unverified primary thread, incomplete registration enumeration, missing SHA-256, malformed flags.
 - Timestamp ordering/timezone and CLI status/exit-code boundaries.
 
