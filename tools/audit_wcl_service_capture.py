@@ -15,6 +15,7 @@ EXPECTED = {
     "www": "WhatAWonderfulWolf",
 }
 REQUIRED_PLUGINS = {"WonderfulCoreLibrary", *EXPECTED.values()}
+SERVICE = "co.surumene.wcl.plugin.inventory.WonderfulStorageReader"
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 
 
@@ -76,6 +77,8 @@ def audit(capture):
         if not isinstance(provider, str) or not isinstance(owner, str):
             invalid.add("INVALID_REGISTRATION")
             continue
+        if reg.get("service_interface") != SERVICE:
+            incomplete.add("SERVICE_INTERFACE_MISMATCH")
         if provider in seen:
             invalid.add("DUPLICATE_PROVIDER")
         seen.add(provider)
