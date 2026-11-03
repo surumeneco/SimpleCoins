@@ -27,7 +27,7 @@ language: ja
 | --- | --- | --- | --- |
 | BE-AUDIT-01 | ZIPにmanifest、atlas、9額面のPNGが存在し、mappingの9定義とID/texture参照が一致する | valid_structureを返すが、配布・表示成功とは称さない | valid |
 | BE-AUDIT-02 | PNG不足、余剰/危険ZIP member、空PNG、PNG署名不正、重複member | invalidを返す | archive |
-| BE-AUDIT-03 | atlasのtexture参照、mappingのmodel/identifier/icon/stack-sizeが一致しない | invalidを返す | mapping |
+| BE-AUDIT-03 | atlasのtexture参照、mappingのmodel/identifier/icon/stack-sizeが一致しない、または想定外のitem種別が混入する | invalidを返す | mapping |
 | BE-AUDIT-04 | manifestのUUID/モジュール不正、JSON/ZIP破損、展開容量超過 | invalidを返す | malformed |
 | BE-AUDIT-05 | ZIPとmappingが別個に正しい構造であっても、生成・公開の原子性とJE/BEクライアント受入は未検証 | valid_structureをリリースGateとして使わない | scope |
 
