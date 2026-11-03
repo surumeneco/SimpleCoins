@@ -41,7 +41,7 @@ language: ja
 | coverage.world-inventory | Paper/Multiverseから渡されるworld集合を評価するとき | 決算対象の全worldの権威root一覧とWorldScopeの適用結果。証拠が未確定なら保存走査の完了証明に使わない | SC-COVERAGE-01, SC-COVERAGE-04 |
 | coverage.dimension-layout | 各対象worldのdimension別保存領域を評価するとき | 有効なlegacy/26.x保存配置とterrain/entityのsource種類を判別できること。証拠が未確定なら未認識領域を空とみなさない | SC-COVERAGE-02 |
 | coverage.playerdata | world非依存のプレイヤー保存領域を評価するとき | 現行playerdata正本の所在とUUIDの一意性、複数候補の衝突判定。証拠が未確定なら任意の一方を選ばない | SC-COVERAGE-03, SC-COVERAGE-04, SC-COVERAGE-07 |
-| coverage.catalog-stability | 走査中に権威world catalogが変化するとき | callerが固定したroot集合のclosure成功だけではworld全体の網羅を証明しない。権威catalogの世代・同一性を再照合できなければ全件決算を公開しない | SC-COVERAGE-08 |
+| coverage.catalog-stability | 走査中に権威world catalogが変化するとき | callerが固定したroot集合のclosure成功だけではworld全体の網羅を証明しない。権威catalogの世代・同一性を再照合できなければ全件決算を公開しない | SC-COVERAGE-08, SC-COVERAGE-11, SC-COVERAGE-12 |
 | coverage.source-read | manifestに含めた各保存sourceを評価するとき | 有界読取、NBT/外部sidecarの読取成功、同一物理sourceの重複排除。証拠が未確定なら全体Reportを成功にしない | SC-COVERAGE-02, SC-COVERAGE-06 |
 | coverage.loaded-vs-disk | ロード済み状態との境界を評価するとき | 同じ物理保有資産を一度だけ計上する時点整合の根拠。証拠が未確定ならPhase 6の決算公開を許可しない | SC-COVERAGE-05, SC-COVERAGE-06 |
 
@@ -61,10 +61,12 @@ language: ja
 | SC-COVERAGE-08 | callerのroot集合と保存source集合は固定だが、Paper/Multiverseの権威world catalogに走査中に別worldが追加される | caller rootの前後一致だけでは全world網羅と判定しない。catalog世代の安定性が証明できなければ公開不可 |
 | SC-COVERAGE-09 | 走査開始時の権威catalogに含まれたworldが走査完了前にunloadまたは登録解除され、固定rootの保存ファイルだけは変化しない | 保存source集合の一致だけで全件成功としない。catalogの前後同一性が証明できなければ公開不可 |
 | SC-COVERAGE-10 | PaperとMultiverseが同一の物理world rootを別名で列挙し、双方をcallerが渡す | world数やroot名の一致だけで網羅・独立性を証明せず、物理root同一性を照合する。識別不能なら重複計上も全件公開もしない |
+| SC-COVERAGE-11 | 走査中にworld Aが登録解除され、同じ名前・rootで再登録される。前後のworld名・root文字列集合は一致する | 集合値の単純比較だけではcatalogの同一世代・連続性を証明できない。権威世代または変更履歴を照合できなければ公開不可（ABA） |
+| SC-COVERAGE-12 | 走査中にworld Aの登録rootが別の物理ディレクトリへ差し替わるが、world名と件数は変わらず、旧rootの保存ファイル集合も変化しない | world名・件数・旧rootのsource closureだけでは網羅証拠不足。権威rootの物理同一性とcatalog安定性を再検証できなければ公開不可 |
 
 ## 実装前に決定・検証する事項
 
-1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。**確認済みAPI候補**：Paperの`Bukkit.getWorlds()`は稼働中に認識されるWorld一覧と`World.getWorldFolder()`を提供するが、Multiverseの未ロード登録worldを網羅する根拠にはならない。Multiverse-Core **5.8.2** の`WorldManager.getWorlds()`はロード済み・未ロード双方を列挙し、呼出しごとに新しいスナップショットを返す。5.8.2の`MultiverseWorld.getOfflineWorldFolder()`は未ロード時の候補パスであり、Paper 26.1+の新配置を考慮する一方、実際の格納先と一致する保証がないため、ロード済みでは`World.getWorldFolder()`を優先する。対象サーバーのMultiverse実導入版とのAPI互換性、未ロードworldのパス実在性、非Multiverse worldとの集合統合、重複物理root、catalogの前後同一性と変更時の再試行境界は**未決定・未実機検証**。参照：`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/WorldManager.html`、`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/MultiverseWorld.html`、`https://jd.papermc.io/paper/1.21.3/org/bukkit/Bukkit.html`。
+1. world catalogと実rootの権威取得方法、Multiverse等の独自worldの列挙時点。callerが自称するroot一覧だけでは全world網羅の独立証明にならない。**確認済みAPI候補**：Paperの`Bukkit.getWorlds()`は稼働中に認識されるWorld一覧と`World.getWorldFolder()`を提供するが、Multiverseの未ロード登録worldを網羅する根拠にはならない。Multiverse-Core **5.8.2** の`WorldManager.getWorlds()`はロード済み・未ロード双方を列挙し、呼出しごとに新しいスナップショットを返す。5.8.2の`MultiverseWorld.getOfflineWorldFolder()`は未ロード時の候補パスであり、Paper 26.1+の新配置を考慮する一方、実際の格納先と一致する保証がないため、ロード済みでは`World.getWorldFolder()`を優先する。対象サーバーのMultiverse実導入版とのAPI互換性、未ロードworldのパス実在性、非Multiverse worldとの集合統合、重複物理root、catalogの前後同一性（同名・同root再登録のABAと同名root差替えを含む）と変更時の再試行境界は**未決定・未実機検証**。参照：`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/WorldManager.html`、`https://multiverse.github.io/Multiverse-Core/javadoc/latest/org/mvplugins/multiverse/core/world/MultiverseWorld.html`、`https://jd.papermc.io/paper/1.21.3/org/bukkit/Bukkit.html`。
 2. 保存sourceのディレクトリ不存在が「その版では正当な空」と「想定sourceの未検出」のどちらかを識別する規則。空ディレクトリを必須とする仕様はここでは採用しない。
 3. legacyと26.xの同時存在時に、別実体・別保存版・同一物理資産を区別する権威選択。任意の優先順位をこのDraftから導入しない。 world rootの外にあるworld非依存playerdataをどの権威情報から取得するかも未決定。
 4. loaded-vs-diskの同一時点性・APIスレッド制約・停止/保存バリアはPhase 6の正本で決定する。ここで凍結方式や再適用方式を勝手に確定しない。
