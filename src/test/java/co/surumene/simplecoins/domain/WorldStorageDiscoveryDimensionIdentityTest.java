@@ -29,7 +29,7 @@ class WorldStorageDiscoveryDimensionIdentityTest {
             Files.writeString(file, "fixture");
         }
 
-        var expected = List.of(end, nether, custom, overworld).stream()
+        var expected = List.of(nether, end, custom, overworld).stream()
                 .map(path -> new WorldStorageDiscovery.SourceFile(
                         "world", path.toAbsolutePath(), WorldStorageDiscovery.Kind.REGION))
                 .toList();
