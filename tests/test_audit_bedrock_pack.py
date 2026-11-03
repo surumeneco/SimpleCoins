@@ -1,4 +1,5 @@
 import copy
+import warnings
 import base64
 import json
 import sys
@@ -99,6 +100,19 @@ class AuditTests(unittest.TestCase):
         manifest["modules"][0]["uuid"] = manifest["header"]["uuid"]
         self.files["manifest.json"] = json.dumps(manifest).encode()
         self.check("DUPLICATE_PACK_UUID")
+
+    def test_duplicate_zip_member(self):
+        write(self.pack, self.mapping, self.files, self.data)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with zipfile.ZipFile(self.pack, "a") as archive:
+                archive.writestr("manifest.json", self.files["manifest.json"])
+        self.assertIn("DUPLICATE_ZIP_ENTRY", audit(self.pack, self.mapping)["codes"])
+
+    def test_malformed_mapping_json(self):
+        write(self.pack, self.mapping, self.files, self.data)
+        self.mapping.write_text("{broken", encoding="utf-8")
+        self.assertIn("UNREADABLE_ARTIFACT", audit(self.pack, self.mapping)["codes"])
 
     def test_corrupt_zip(self):
         self.pack.write_bytes(b"not-a-zip")
