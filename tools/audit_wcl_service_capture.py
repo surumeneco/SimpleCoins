@@ -21,7 +21,7 @@ SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 def audit(capture):
     """Return a stable machine-readable status without disclosing player data."""
     invalid, incomplete = set(), set()
-    if not isinstance(capture, dict) or capture.get("schema_version") != 1:
+    if not isinstance(capture, dict) or type(capture.get("schema_version")) is not int or capture["schema_version"] != 1:
         return {"status": "invalid", "codes": ["INVALID_SCHEMA"]}
     meta = capture.get("capture")
     if not isinstance(meta, dict):
