@@ -1,0 +1,26 @@
+name: Phase 5 saved protection order Draft syntax check
+on:
+  push:
+    branches:
+      - feature/phase5-saved-protection-order-20261103-queue-a
+    paths:
+      - 'docs/cat/phase5-blocklocker-saved-protection-order.md'
+      - '.github/workflows/cat-phase5-order-queue-a.yml'
+permissions:
+  contents: read
+jobs:
+  draft-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Canonical CAT Draft markdown-v2 syntax
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase5-blocklocker-saved-protection-order.md
+      - name: Evidence boundary
+        run: echo 'Syntax lint only; no normative CAT semantic Gate or confirmation.' >> "$GITHUB_STEP_SUMMARY"
