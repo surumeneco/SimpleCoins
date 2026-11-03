@@ -28,6 +28,7 @@ language: ja
 | bedrock.alias.same | packとmappingに同一Pathを指定 | 公開前にIOExceptionで拒否し、成功扱いにしない | BE-ALIAS-01 |
 | bedrock.alias.dot | packとmappingが`./`を含む正規化同一宛先 | 公開前にIOExceptionで拒否し、部分生成物を残さない | BE-ALIAS-02 |
 | bedrock.alias.control | 9額面の完全データと別々の2出力先 | ZIPとJSONをそれぞれ生成し、ZIPのmanifestを読める | BE-ALIAS-03 |
+| bedrock.alias.existing | 同一出力先に既存の有効なファイルがある | 衝突を公開前に拒否し、既存ファイルの内容を変更しない | BE-ALIAS-04 |
 
 ## 状態・境界
 
