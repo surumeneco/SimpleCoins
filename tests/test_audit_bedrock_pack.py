@@ -173,6 +173,20 @@ class AuditTests(unittest.TestCase):
             json.loads(completed.stdout),
         )
 
+    def test_mapping_null_bedrock_options_is_invalid(self):
+        self.data["items"]["minecraft:paper"][0]["bedrock_options"] = None
+        self.check("INVALID_MAPPING_ENTRY")
+
+    def test_mapping_invalid_stack_size_is_invalid(self):
+        self.data["items"]["minecraft:paper"][0]["components"]["minecraft:max_stack_size"] = 65
+        self.check("INVALID_MAPPING_ENTRY")
+
+    def test_manifest_missing_header_uuid_is_invalid(self):
+        manifest = json.loads(self.files["manifest.json"])
+        del manifest["header"]["uuid"]
+        self.files["manifest.json"] = json.dumps(manifest).encode()
+        self.check("INVALID_MANIFEST")
+
     def test_corrupt_zip(self):
         self.pack.write_bytes(b"not-a-zip")
         self.mapping.write_text("{}")
