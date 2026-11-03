@@ -6,6 +6,12 @@ Status: **not-run on a real Paper 26.2 server / JE or BE client**. Leaf TASK-202
 
 Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffolding versions, SimpleCoins commit SHA, exact `resource-pack.public-url` (redact signed query tokens), server log and test client versions. Use a disposable test server with a fresh player profile; never change production resources to run this check.
 
+### Offline Bedrock artifact structure audit (candidate)
+
+On a disposable verification host, copy the **generated** `.mcpack` and Geyser mapping JSON as a pair and run `python3 tools/audit_bedrock_pack.py <pack.mcpack> <mapping.json>`. The [read-only auditor](../../tools/audit_bedrock_pack.py) checks ZIP entry integrity, manifest UUIDs, PNG signatures, all nine stable denomination IDs, atlas texture references, and Geyser v2 mapping/model/icon/stack-size consistency. It returns machine-readable `valid_structure` (exit 0) or `invalid` (exit 2). No files are changed.
+
+**Exit 0 is not a client-delivery, publication-atomicity, or live Paper/Geyser Gate.** It does not decode full PNG pixels, establish that Geyser loaded these exact files, prove pack/mapping were atomically published, or verify JE/BE/Nexo UI behavior. The separate output-destination alias Red is [PR #149](https://github.com/surumeneco/SimpleCoins/pull/149); this verifier does not repair it. CAT remains Draft and the real-client cases below remain not-run.
+
 ## Nexo absent — SimpleCoins-owned assets
 
 1. Start Paper 26.2 with SimpleCoins and Geyser/Floodgate, without Nexo. Check `plugins/SimpleCoins/SimpleCoins-java.zip`, `plugins/SimpleCoins/geyser/SimpleCoins.mcpack` and `plugins/SimpleCoins/geyser/simplecoins.json` exist. Check Geyser's managed `packs/simplecoins-generated.mcpack` and `custom_mappings/simplecoins-generated.json` are installed.
