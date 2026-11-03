@@ -1,0 +1,33 @@
+name: Phase 7 Bedrock artifact Draft syntax
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/phase7-bedrock-artifact-audit.md'
+      - '.github/workflows/cat-phase7-bedrock-audit-draft.yml'
+  push:
+    branches:
+      - feature/phase7-bedrock-artifact-audit-20261103-queue-d
+    paths:
+      - 'docs/cat/phase7-bedrock-artifact-audit.md'
+      - '.github/workflows/cat-phase7-bedrock-audit-draft.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  draft-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout pinned CAT-TDD
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: ee929dfa655d0dd738692990bebe7f5de77e4f31
+          path: cat-tdd
+          persist-credentials: false
+      - name: Canonical markdown-v2 Draft syntax
+        run: |
+          python3 cat-tdd/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/phase7-bedrock-artifact-audit.md
