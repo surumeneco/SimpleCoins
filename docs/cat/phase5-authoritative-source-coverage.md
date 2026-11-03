@@ -59,6 +59,8 @@ language: ja
 | SC-COVERAGE-06 | callerが正しい権威world一覧を渡し、対象sourceを全件読み、各種検証も完了 | 保存source網羅性についてのみ合格候補。決算全体の成功を意味しない |
 | SC-COVERAGE-07 | 権威playerdataがworld rootの外側にある`players/data`に存在し、callerがworld rootのみを渡す | world root探索だけでplayerdataが0件と判定されることを許さない。独立のplayerdata正本一覧がなければ網羅証拠不足 |
 | SC-COVERAGE-08 | callerのroot集合と保存source集合は固定だが、Paper/Multiverseの権威world catalogに走査中に別worldが追加される | caller rootの前後一致だけでは全world網羅と判定しない。catalog世代の安定性が証明できなければ公開不可 |
+| SC-COVERAGE-09 | 走査開始時の権威catalogに含まれたworldが走査完了前にunloadまたは登録解除され、固定rootの保存ファイルだけは変化しない | 保存source集合の一致だけで全件成功としない。catalogの前後同一性が証明できなければ公開不可 |
+| SC-COVERAGE-10 | PaperとMultiverseが同一の物理world rootを別名で列挙し、双方をcallerが渡す | world数やroot名の一致だけで網羅・独立性を証明せず、物理root同一性を照合する。識別不能なら重複計上も全件公開もしない |
 
 ## 実装前に決定・検証する事項
 
