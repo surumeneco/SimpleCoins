@@ -21,7 +21,7 @@ jobs:
           gradle-version: '9.2.1'
       - name: Execute targeted JUnit regression
         run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageExcludedWorldEntityAliasTest'
-      - name: Verify all three JUnit cases actually executed without skips
+      - name: Verify all four JUnit cases actually executed without skips
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -34,7 +34,7 @@ jobs:
           cases = root.findall('.//testcase')
           skipped = sum(case.find('skipped') is not None for case in cases)
           failures = sum(case.find('failure') is not None or case.find('error') is not None for case in cases)
-          if len(cases) != 3 or skipped or failures:
-              raise SystemExit(f'Expected 3 passing non-skipped tests; actual={len(cases)}, skipped={skipped}, failures={failures}')
+          if len(cases) != 4 or skipped or failures:
+              raise SystemExit(f'Expected 4 passing non-skipped tests; actual={len(cases)}, skipped={skipped}, failures={failures}')
           print('Verified 3 executed, non-skipped JUnit cases')
           PY
