@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m unittest discover -s tests -p 'test_audit_wcl_capture_timestamp_types_draft.py' -v > timestamp-red.log 2>&1
+          python -m unittest discover -s tests -p 'test_audit_wcl_capture_timestamp_types.py' -v > timestamp-red.log 2>&1
           status=$?
           set -e
           cat timestamp-red.log
