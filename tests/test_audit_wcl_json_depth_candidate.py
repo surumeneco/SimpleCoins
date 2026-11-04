@@ -5,6 +5,7 @@ The paired CAT document is a Candidate, not a Confirmed contract.
 import contextlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -29,6 +30,22 @@ class WclJsonDepthCandidateTests(unittest.TestCase):
         self.assertEqual({"status": "invalid", "codes": ["UNREADABLE_CAPTURE"]},
                          json.loads(stdout.getvalue()))
         self.assertEqual("", stderr.getvalue())
+
+
+    def test_deep_nesting_subprocess_cli_is_structured_invalid(self):
+        # Exercise the real CLI process boundary, including exit status and stderr.
+        payload = "[" * 20000 + "0" + "]" * 20000
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.json"
+            path.write_text(payload, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "audit_wcl_service_capture.py"), str(path)],
+                capture_output=True, text=True, check=False, timeout=15,
+            )
+        self.assertEqual(3, result.returncode)
+        self.assertEqual({"status": "invalid", "codes": ["UNREADABLE_CAPTURE"]},
+                         json.loads(result.stdout))
+        self.assertEqual("", result.stderr)
 
 
 if __name__ == "__main__":
