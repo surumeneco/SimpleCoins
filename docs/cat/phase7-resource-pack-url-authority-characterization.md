@@ -15,22 +15,33 @@ language: ja
 
 # Phase 7: Java リソースパック URL authority の code-to-spec Candidate
 
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.java-resource-pack-url-validation | 既存 `ResourcePackUrl.validate(String)` のHTTP(S) authorityとURL文字列保持のみ |
+| simplecoins.phase7.je-be-acceptance | JE側URLの構文検証だけ。実際の配信・取得・統合版接続・クライアント表示は対象外 |
+
+## Rules
+
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| RPU-AUTH-01 | IPv6 literal authority と署名クエリ | URLを元のまま受理 | `ipv6AuthorityRetainsSignedQueryAndOriginalSpelling` |
+| RPU-AUTH-02 | 大文字HTTPS schemeとpercent-encoded query | URLを元のまま受理 | `uppercaseHttpsAndPercentEncodedQueryArePreserved` |
+| RPU-AUTH-03 | 明示port境界 1・65535・0・65536 | 範囲内受理、範囲外は`IOException` | `explicitPortBoundsAreInclusiveButZeroAndOverflowAreRejected` |
+| RPU-AUTH-04 | IPv6 authorityまたはpercent-encoded userinfo | `IOException`で拒否 | `userInfoIsRejectedForIpv6AndPercentEncodedCredentials` |
+| RPU-AUTH-05 | 空fragment `#` またはfragment本文 | `IOException`で拒否 | `evenEmptyFragmentsAreRejected` |
+| RPU-AUTH-06 | 設定URLの前後ASCII空白 | trim済みURLを返却 | `surroundingConfigurationWhitespaceIsTrimmed` |
+
 ## Observation（既存コードから確認できる振る舞い）
 
-対象は `ResourcePackUrl.validate(String)` の既存実装（Git blob `10ca43e289a0dd1a8bb39038949a9336ea81706a`）。`new URI(value).parseServerAuthority()` を使用し、scheme は大文字小文字を区別せず http/https に制限する。host 必須、userinfo・fragment 不可、明示 port は 1〜65535 の範囲でなければ拒否する。クエリ文字列は検証中に改変しない。呼出し自体はネットワークアクセスを行わない。
+対象は `ResourcePackUrl.validate(String)` の既存実装（Git blob `10ca43e289a0dd1a8bb39038949a9336ea81706a`）。`new URI(value).parseServerAuthority()` を使用し、scheme は大文字小文字を区別せず http/https に制限する。host 必須、userinfo・fragment 不可、明示portは1〜65535の範囲でなければ拒否する。クエリ文字列は検証中に改変しない。呼出し自体はネットワークアクセスを行わない。
 
 既存の `ResourcePackUrlTest` は基本的な誤構文、userinfo、fragment、範囲外port、署名付きHTTPS URLおよび未設定値を試験している。IPv6 authority／範囲両端の明示port／空fragment／percent-encoded userinfo／schemeの大小文字・クエリ保持を独立して網羅したテストは、参照した `develop` HEAD には存在しない。
 
-## Candidate（既存挙動の文字起こし、規範判断ではない）
+## Candidate（規範判断ではない）
 
-| ID | 入力境界 | 既存コードから導かれる観測候補 | 分類 |
-| --- | --- | --- | --- |
-| RPU-AUTH-01 | IPv6 literal authority と正規の署名クエリ | 元URLを変えず受理 | positive |
-| RPU-AUTH-02 | 大文字schemeとPercent-encoded query | 元URLを変えず受理 | positive |
-| RPU-AUTH-03 | 明示port境界 1,65535 と 0,65536 | 範囲内受理、範囲外 `IOException` | boundary |
-| RPU-AUTH-04 | IPv6 authority内のuser情報／percent-encoded user情報 | `IOException` | negative |
-| RPU-AUTH-05 | 空fragment `#` と fragment本文 | `IOException` | negative |
-| RPU-AUTH-06 | ユーザー指定値の前後ASCII空白 | trimしたURLを返す | observation |
+上のRulesは、既存の実装をテスト可能な形で文字起こしした候補である。利用者が新たなURLポリシーとして採用した意味ではない。挙動を変える本番コード変更は含めない。
 
 ## Question（規範未確定）
 
