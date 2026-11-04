@@ -20,4 +20,21 @@ jobs:
         with:
           gradle-version: '9.2.1'
       - name: Execute targeted JUnit regression
-        run: gradle test --tests 'co.surumene.simplecoins.domain.WorldStorageExcludedWorldEntityAliasTest' --no-daemon
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageExcludedWorldEntityAliasTest'
+      - name: Verify all three JUnit cases actually executed without skips
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          reports = list(Path('build/test-results/test').glob('TEST-*WorldStorageExcludedWorldEntityAliasTest.xml'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected exactly one JUnit XML report, got {len(reports)}')
+          root = ET.parse(reports[0]).getroot()
+          cases = root.findall('.//testcase')
+          skipped = sum(case.find('skipped') is not None for case in cases)
+          failures = sum(case.find('failure') is not None or case.find('error') is not None for case in cases)
+          if len(cases) != 3 or skipped or failures:
+              raise SystemExit(f'Expected 3 passing non-skipped tests; actual={len(cases)}, skipped={skipped}, failures={failures}')
+          print('Verified 3 executed, non-skipped JUnit cases')
+          PY
