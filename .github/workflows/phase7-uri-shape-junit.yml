@@ -17,4 +17,4 @@ jobs:
         with:
           gradle-version: '9.2.1'
       - name: Run exact URI shape JUnit
-        run: gradle test --tests 'co.surumene.simplecoins.domain.ResourcePackUrlUriShapeCharacterizationTest' --no-daemon
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.ResourcePackUrlUriShapeCharacterizationTest'
