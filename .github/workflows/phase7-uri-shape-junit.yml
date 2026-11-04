@@ -18,3 +18,11 @@ jobs:
           gradle-version: '9.2.1'
       - name: Run exact URI shape JUnit
         run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.ResourcePackUrlUriShapeCharacterizationTest'
+      - name: Verify four non-skipped JUnit cases in fresh XML
+        run: >-
+          python3 -c 'import glob, xml.etree.ElementTree as ET;
+          p=glob.glob("build/test-results/test/TEST-*ResourcePackUrlUriShapeCharacterizationTest.xml");
+          assert len(p)==1, f"Expected one XML report, found {len(p)}";
+          tests=ET.parse(p[0]).getroot().findall(".//testcase");
+          assert len(tests)==4 and all(c.find("skipped") is None and c.find("failure") is None and c.find("error") is None for c in tests), "Expected four passing, executed JUnit cases";
+          print("Verified 4 executed, non-skipped JUnit cases")'
