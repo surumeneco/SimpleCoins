@@ -19,7 +19,7 @@ Source: GrantLedger.java at stacked PR #166 HEAD fb9838e32f11203d30e23e65c1fc274
 | ID | Setup | Action | Expected |
 | --- | --- | --- | --- |
 | SC-JOURNAL-WRITE-01 | reserve seq 1 and 2; delete 1.grant; head and 2.grant intact | reserve third grant | IllegalStateException; no 3.grant |
-| SC-JOURNAL-WRITE-02 | reserve seq 1 and 2 for one player; delete 1.grant; head and 2.grant intact | acknowledge seq 2 with receipt 2 | IllegalStateException; 2.grant remains undelivered |
+| SC-JOURNAL-WRITE-02 | reserve and acknowledge seq 1; reserve seq 2 for same player; delete 1.grant; head and 2.grant intact | acknowledge seq 2 with receipt 2 | IllegalStateException; 2.grant remains undelivered |
 
 ## Gate and verification state
 Draft only; not Confirmed. Formal CAT process-closure, TestModel generation, model-conformance, vectors and implementation-conformance are not run. These JUnit cases are expected Red against the pinned current code; no production change is authorized solely by this Draft. A successful assertion would require exact-head test evidence.
