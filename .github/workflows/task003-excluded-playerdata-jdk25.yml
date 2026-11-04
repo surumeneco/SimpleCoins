@@ -26,7 +26,7 @@ jobs:
           gradle-version: '9.2.1'
       - name: Run excluded-world playerdata physical alias JUnit tests
         run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldPlayerdataAliasTest
-      - name: Assert all four alias regression cases actually ran (no skips)
+      - name: Assert all five alias regression cases actually ran (no skips)
         run: |
           python3 - <<'PY'
           import pathlib
@@ -39,7 +39,7 @@ jobs:
           cases = root.findall('.//testcase')
           skipped = sum(1 for case in cases if case.find('skipped') is not None)
           failed = sum(1 for case in cases if case.find('failure') is not None or case.find('error') is not None)
-          if len(cases) != 4 or skipped or failed:
-              raise SystemExit(f'Expected 4 executed passing cases: cases={len(cases)} skipped={skipped} failed={failed}')
-          print('Verified 4 executed, non-skipped JUnit cases')
+          if len(cases) != 5 or skipped or failed:
+              raise SystemExit(f'Expected 5 executed passing cases: cases={len(cases)} skipped={skipped} failed={failed}')
+          print('Verified 5 executed, non-skipped JUnit cases')
           PY
