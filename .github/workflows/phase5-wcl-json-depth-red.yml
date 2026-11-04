@@ -28,7 +28,7 @@ jobs:
             echo "Expected exactly one in-process recursion error" >&2
             exit 1
           fi
-          if [ "$(grep -c '^FAIL: test_deep_nesting_subprocess_cli_is_structured_invalid ' candidate.log || true)" -ne 1 ];
+          if [ "$(grep -c '^FAIL: test_deep_nesting_subprocess_cli_is_structured_invalid ' candidate.log || true)" -ne 1 ]; then
             echo "Expected exactly one subprocess CLI failure" >&2
             exit 1
           fi
