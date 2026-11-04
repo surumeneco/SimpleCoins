@@ -1,0 +1,43 @@
+name: Phase6 older acknowledgement Draft Red evidence
+on:
+  push:
+    branches:
+      - feature/phase6-older-ack-red-20261104-queue-b
+  workflow_dispatch:
+jobs:
+  older-ack-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute exact-source targeted JUnit Draft Red
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon test --tests 'co.surumene.simplecoins.domain.GrantLedgerOlderAcknowledgementDurabilityTest' --console=plain > older-ack-red.log 2>&1
+          status=$?
+          set -e
+          cat older-ack-red.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Unexpected Green; do not infer Red.' >&2
+            exit 1
+          fi
+          if ! grep -Eq 'GrantLedgerOlderAcknowledgementDurabilityTest|There were failing tests' older-ack-red.log; then
+            echo 'Failed for an unrelated build/environment reason; Red unverified.' >&2
+            exit 1
+          fi
+          echo 'Candidate JUnit Red observed; inspect test XML for exact assertion failures.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase6-older-ack-red-evidence
+          path: |
+            older-ack-red.log
+            build/test-results/test/*.xml
+          if-no-files-found: warn
