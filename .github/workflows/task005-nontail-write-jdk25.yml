@@ -1,0 +1,27 @@
+name: Phase6 non-tail journal write boundary Red regression
+
+on:
+  push:
+    branches:
+      - test/phase6-nontail-write-jdk25-20261104-queue-c
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantLedgerNonTailWriteBoundaryFaultTest.java'
+      - '.github/workflows/task005-nontail-write-jdk25.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  expected-red-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact-HEAD non-tail write boundary JUnit (expected Red)
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.GrantLedgerNonTailWriteBoundaryFaultTest
