@@ -35,25 +35,25 @@ class EscapedDuplicateMemberDraftTest(unittest.TestCase):
     def test_schema_version_unicode_escape_alias(self):
         self.assert_rejected(
             '"schema_version": 1',
-            '"schema_\\\\u0076ersion": 2, "schema_version": 1',
+            '"schema_\\u0076ersion": 2, "schema_version": 1',
         )
 
     def test_capture_completeness_unicode_escape_alias(self):
         self.assert_rejected(
             '"registration_list_complete": true',
-            '"registration_list_\\\\u0063omplete": false, "registration_list_complete": true',
+            '"registration_list_\\u0063omplete": false, "registration_list_complete": true',
         )
 
     def test_registration_owner_unicode_escape_alias(self):
         self.assert_rejected(
             '"owner_plugin": "WhatAWonderfulChicken"',
-            '"owner_\\\\u0070lugin": "Untrusted", "owner_plugin": "WhatAWonderfulChicken"',
+            '"owner_\\u0070lugin": "Untrusted", "owner_plugin": "WhatAWonderfulChicken"',
         )
 
     def test_plugin_enabled_unicode_escape_alias(self):
         self.assert_rejected(
             '"enabled": true',
-            '"enabl\\\\u0065d": false, "enabled": true',
+            '"enabl\\u0065d": false, "enabled": true',
         )
 
 
