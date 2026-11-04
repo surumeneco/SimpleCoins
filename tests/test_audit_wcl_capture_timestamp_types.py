@@ -33,18 +33,21 @@ class CaptureTimestampTypeSafetyDraftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "capture.json"
             for field in ("server_start", "captured_at"):
-                with self.subTest(field=field):
-                    capture = valid()
-                    capture["capture"][field] = []
-                    path.write_text(json.dumps(capture), encoding="utf-8")
-                    proc = subprocess.run(
-                        [sys.executable, str(ROOT / "tools" / "audit_wcl_service_capture.py"), str(path)],
-                        capture_output=True, text=True, check=False,
-                    )
-                    self.assertEqual(3, proc.returncode)
-                    result = json.loads(proc.stdout)
-                    self.assertEqual("invalid", result["status"])
-                    self.assertIn("INVALID_CAPTURE_TIME", result["codes"])
+                for value in (None, 123, True, [], {}):
+                    with self.subTest(field=field, value=repr(value)):
+                        capture = valid()
+                        capture["capture"][field] = copy.deepcopy(value)
+                        path.write_text(json.dumps(capture), encoding="utf-8")
+                        proc = subprocess.run(
+                            [sys.executable, str(ROOT / "tools" / "audit_wcl_service_capture.py"), str(path)],
+                            capture_output=True, text=True, check=False,
+                        )
+                        self.assertEqual(3, proc.returncode, proc.stderr)
+                        self.assertEqual("", proc.stderr, "CLI must not emit a traceback")
+                        result = json.loads(proc.stdout)
+                        self.assertEqual("invalid", result["status"])
+                        self.assertIn("MISSING_CAPTURE_METADATA", result["codes"])
+                        self.assertIn("INVALID_CAPTURE_TIME", result["codes"])
 
 
 if __name__ == "__main__":
