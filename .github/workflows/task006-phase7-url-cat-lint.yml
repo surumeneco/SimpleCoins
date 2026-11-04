@@ -1,5 +1,8 @@
 name: Task006 Phase7 CAT candidate syntax
 on:
+  push:
+    branches:
+      - test/phase7-pack-url-authority-20261104-chat-boost
   pull_request:
     paths:
       - docs/cat/phase7-resource-pack-url-authority-characterization.md
