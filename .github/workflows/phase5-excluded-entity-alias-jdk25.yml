@@ -36,5 +36,5 @@ jobs:
           failures = sum(case.find('failure') is not None or case.find('error') is not None for case in cases)
           if len(cases) != 4 or skipped or failures:
               raise SystemExit(f'Expected 4 passing non-skipped tests; actual={len(cases)}, skipped={skipped}, failures={failures}')
-          print('Verified 3 executed, non-skipped JUnit cases')
+          print('Verified 4 executed, non-skipped JUnit cases')
           PY
