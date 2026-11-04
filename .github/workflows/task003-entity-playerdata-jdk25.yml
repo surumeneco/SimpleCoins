@@ -1,0 +1,27 @@
+name: Phase5 excluded entity-playerdata physical alias JDK25
+
+on:
+  push:
+    branches:
+      - test/task003-entity-playerdata-jdk25-20261104-queue-c
+    paths:
+      - '.github/workflows/task003-entity-playerdata-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageExcludedWorldEntityAliasTest.java'
+
+permissions:
+  contents: read
+
+jobs:
+  excluded-entity-playerdata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact excluded entity-playerdata alias JUnit tests
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldEntityAliasTest
