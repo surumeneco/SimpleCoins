@@ -24,11 +24,19 @@ jobs:
             echo 'Unexpected Green: inspect test and source before advancing.' >&2
             exit 1
           fi
-          grep -q 'AttributeError' timestamp-red.log || {
-            echo 'Red did not fail for the expected AttributeError boundary.' >&2
+          # Both tests use subTest for two fields x five invalid JSON types.
+          # A single AttributeError is insufficient evidence that all vectors ran.
+          errors=$(grep -c '^ERROR: test_non_string_timestamp_fields_return_structured_invalid ' timestamp-red.log || true)
+          failures=$(grep -c '^FAIL: test_cli_non_string_timestamp_is_json_invalid_not_traceback ' timestamp-red.log || true)
+          if [ "$errors" -ne 10 ] || [ "$failures" -ne 10 ]; then
+            echo "Unexpected Red shape: expected 10 AttributeError cases and 10 CLI failures; got errors=$errors failures=$failures" >&2
             exit 1
-          }
-          echo 'Expected Draft Red observed (nonzero unittest exit and AttributeError).'
+          fi
+          if [ "$(grep -c '^AttributeError:' timestamp-red.log || true)" -ne 10 ]; then
+            echo 'Expected ten AttributeError tracebacks from the direct audit boundary.' >&2
+            exit 1
+          fi
+          echo 'Expected Draft Red observed for all 20 subtest vectors.'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
