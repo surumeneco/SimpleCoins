@@ -1,0 +1,18 @@
+name: TASK006 Bedrock pack audit Python regression
+on:
+  push:
+    branches:
+      - test/task006-bedrock-audit-python-20261104-queue-d
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile auditor and test
+        run: python -m py_compile tools/audit_bedrock_pack.py tests/test_audit_bedrock_pack.py
+      - name: Execute exact-branch unittest (Red is not Green)
+        run: python -m unittest discover -s tests -p 'test_audit_bedrock_pack.py' -v
