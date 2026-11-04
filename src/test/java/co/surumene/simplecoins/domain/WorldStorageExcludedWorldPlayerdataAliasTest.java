@@ -80,6 +80,22 @@ class WorldStorageExcludedWorldPlayerdataAliasTest {
     }
 
     @Test
+    void excludedWorldPlayerdataCannotAliasIncludedEntityRegion() throws Exception {
+        Path included = Files.createDirectory(temp.resolve("included"));
+        Path excluded = Files.createDirectory(temp.resolve("excluded"));
+        Path entities = Files.createDirectory(included.resolve("entities"));
+        Path players = Files.createDirectory(excluded.resolve("playerdata"));
+        Path source = Files.write(entities.resolve("r.0.0.mca"), new byte[] {1});
+        linkOrSkip(players.resolve(PLAYER + ".dat"), source);
+        Map<String, Path> roots = new LinkedHashMap<>();
+        roots.put("included", included);
+        roots.put("excluded", excluded);
+
+        assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(roots, onlyIncludedWorld(), 20));
+    }
+
+    @Test
     void excludedWorldRegionAliasIsNotAuthoritative() throws Exception {
         Path included = Files.createDirectory(temp.resolve("included"));
         Path excluded = Files.createDirectory(temp.resolve("excluded"));
