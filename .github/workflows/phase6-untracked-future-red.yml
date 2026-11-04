@@ -1,0 +1,54 @@
+name: Phase6 untracked future grant Draft Red
+on:
+  push:
+    branches:
+      - test/phase6-untracked-future-grant-20261105-queue-c
+  workflow_dispatch:
+jobs:
+  untracked-future-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Verify targeted JUnit expected Red and exact failure
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.GrantLedgerUntrackedFutureRecordTest' --console=plain > untracked-future-red.log 2>&1
+          status=$?
+          set -e
+          cat untracked-future-red.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Unexpected Green; candidate Red not established.' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path("build/test-results/test").glob("TEST-*.xml"))
+          matching = [ET.parse(p).getroot() for p in reports if "GrantLedgerUntrackedFutureRecordTest" in p.name]
+          if len(matching) != 1:
+              raise SystemExit("Targeted JUnit report missing or ambiguous")
+          root = matching[0]
+          cases = root.findall(".//testcase")
+          if len(cases) != 1 or cases[0].attrib.get("name") != "untrackedFutureGrantMustInvalidateLivePendingSnapshot":
+              raise SystemExit("Unexpected executed test set")
+          failure = cases[0].find("failure")
+          if failure is None or "Expected java.lang.IllegalStateException to be thrown" not in (failure.attrib.get("message","") + (failure.text or "")):
+              raise SystemExit("Failure is not the expected missing fail-closed exception")
+          print("Verified 1 exact JUnit expected-Red assertion (not Green)")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase6-untracked-future-red-evidence
+          path: |
+            untracked-future-red.log
+            build/test-results/test/*.xml
+          if-no-files-found: warn
