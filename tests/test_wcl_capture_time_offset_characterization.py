@@ -3,7 +3,6 @@
 The read-only audit is not proof that a capture came from Paper.
 No production behavior is modified by this test module.
 """
-import copy
 import sys
 import unittest
 from pathlib import Path
