@@ -48,6 +48,22 @@ class WorldStorageExcludedWorldPlayerdataAliasTest {
     }
 
     @Test
+    void excludedWorldPlayerdataAliasIsRejectedWhenExcludedWorldIsVisitedFirst() throws Exception {
+        Path included = Files.createDirectory(temp.resolve("included"));
+        Path excluded = Files.createDirectory(temp.resolve("excluded"));
+        Path region = Files.createDirectory(included.resolve("region"));
+        Path players = Files.createDirectory(excluded.resolve("playerdata"));
+        Path source = Files.write(region.resolve("r.0.0.mca"), new byte[] {1});
+        linkOrSkip(players.resolve(PLAYER + ".dat"), source);
+        Map<String, Path> roots = new LinkedHashMap<>();
+        roots.put("excluded", excluded);
+        roots.put("included", included);
+
+        assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(roots, onlyIncludedWorld(), 20));
+    }
+
+    @Test
     void excludedWorldPlayerdataCannotAliasSameUuidInIncludedWorld() throws Exception {
         Path included = Files.createDirectory(temp.resolve("included"));
         Path excluded = Files.createDirectory(temp.resolve("excluded"));
