@@ -1,0 +1,29 @@
+name: Phase5 WCL JSON depth candidate Red
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-json-depth-red-20261105-queue-d
+  workflow_dispatch:
+jobs:
+  expected-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Candidate must fail for uncaught recursion
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_audit_wcl_json_depth_candidate.py' -v > candidate.log 2>&1
+          rc=$?
+          cat candidate.log
+          if [ "$rc" -eq 0 ]; then
+            echo "Unexpected Green: candidate may have been fixed or behavior changed"
+            exit 1
+          fi
+          grep -q 'RecursionError' candidate.log || { echo "Unexpected Red reason"; exit 1; }
+          echo "Expected Red: uncaught RecursionError verified"
+      - name: Existing audit regressions
+        run: python -m unittest discover -s tests -p 'test_audit_wcl_service_capture.py' -v
