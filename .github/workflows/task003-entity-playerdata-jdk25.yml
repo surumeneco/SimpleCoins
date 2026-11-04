@@ -25,3 +25,24 @@ jobs:
           gradle-version: '9.2.1'
       - name: Run exact excluded entity-playerdata alias JUnit tests
         run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldEntityAliasTest
+      - name: Reject skipped or missing alias regressions
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+
+          reports = list(pathlib.Path("build/test-results/test").glob(
+              "TEST-*WorldStorageExcludedWorldEntityAliasTest.xml"))
+          if len(reports) != 1:
+              raise SystemExit(f"Expected one JUnit XML report, found {len(reports)}")
+          root = ET.parse(reports[0]).getroot()
+          tests = int(root.attrib.get("tests", "-1"))
+          skipped = int(root.attrib.get("skipped", "-1"))
+          failures = int(root.attrib.get("failures", "-1"))
+          errors = int(root.attrib.get("errors", "-1"))
+          if (tests, skipped, failures, errors) != (3, 0, 0, 0):
+              raise SystemExit(
+                  f"Expected 3 executed, 0 skipped/failures/errors: "
+                  f"{tests=} {skipped=} {failures=} {errors=}")
+          print("All 3 alias regressions executed without skip/failure/error")
+          PY
