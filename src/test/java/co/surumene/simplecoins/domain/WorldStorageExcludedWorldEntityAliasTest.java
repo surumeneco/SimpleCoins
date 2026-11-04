@@ -76,4 +76,19 @@ class WorldStorageExcludedWorldEntityAliasTest {
         assertEquals(0, manifest.worldFiles().size());
         assertEquals(Map.of(UUID.fromString(PLAYER), source), manifest.playerDataFiles());
     }
+
+    @Test
+    void includedOverworldRegionAndNetherEntityPhysicalAliasFailsClosed() throws Exception {
+        Path included = Files.createDirectory(temp.resolve("included"));
+        Path overworldRegion = Files.createDirectory(included.resolve("region"));
+        Path netherEntities = Files.createDirectories(included.resolve("DIM-1/entities"));
+        Path source = Files.write(overworldRegion.resolve("r.0.0.mca"), new byte[] {1});
+        linkOrSkip(netherEntities.resolve("r.1.0.mca"), source);
+
+        assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(
+                        Map.of("included", included),
+                        new WorldScope(true, Set.of(), Set.of()), 20));
+    }
+
 }
