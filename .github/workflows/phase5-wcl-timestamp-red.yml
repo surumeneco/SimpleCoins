@@ -1,0 +1,37 @@
+name: Phase5 WCL timestamp Draft Red evidence
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-capture-metadata-type-red-20261104-queue-b
+  workflow_dispatch:
+jobs:
+  timestamp-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Execute proposed Red against exact branch source
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_audit_wcl_capture_timestamp_types_draft.py' -v > timestamp-red.log 2>&1
+          status=$?
+          set -e
+          cat timestamp-red.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Unexpected Green: inspect test and source before advancing.' >&2
+            exit 1
+          fi
+          grep -q 'AttributeError' timestamp-red.log || {
+            echo 'Red did not fail for the expected AttributeError boundary.' >&2
+            exit 1
+          }
+          echo 'Expected Draft Red observed (nonzero unittest exit and AttributeError).'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-wcl-timestamp-red-log
+          path: timestamp-red.log
+          if-no-files-found: warn
