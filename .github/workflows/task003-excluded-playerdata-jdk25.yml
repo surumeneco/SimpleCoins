@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/task003-excluded-playerdata-jdk25.yml'
       - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageExcludedWorldPlayerdataAliasTest.java'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,7 +25,7 @@ jobs:
         with:
           gradle-version: '9.2.1'
       - name: Run excluded-world playerdata physical alias JUnit tests
-        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldPlayerdataAliasTest
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldPlayerdataAliasTest
       - name: Assert all three alias regression cases actually ran (no skips)
         run: |
           python3 - <<'PY'
