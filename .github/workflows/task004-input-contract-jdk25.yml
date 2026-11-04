@@ -1,0 +1,28 @@
+name: BlockLocker input contract Draft regression
+
+on:
+  push:
+    branches:
+      - test/task004-input-contract-jdk25-20261104-queue-d
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/domain/BlockLockerSignAttachmentInputContractTest.java'
+      - '.github/workflows/task004-input-contract-jdk25.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  input-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run input-contract JUnit at exact HEAD
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.BlockLockerSignAttachmentInputContractTest
