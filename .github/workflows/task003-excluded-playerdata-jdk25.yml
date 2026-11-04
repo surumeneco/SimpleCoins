@@ -1,0 +1,45 @@
+name: Phase5 excluded-world playerdata alias JDK25 regression
+
+on:
+  push:
+    branches:
+      - test/task003-excluded-playerdata-jdk25-20261104-queue-b
+    paths:
+      - '.github/workflows/task003-excluded-playerdata-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageExcludedWorldPlayerdataAliasTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  excluded-world-playerdata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run excluded-world playerdata physical alias JUnit tests
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldPlayerdataAliasTest
+      - name: Assert all five alias regression cases actually ran (no skips)
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+
+          reports = sorted(pathlib.Path('build/test-results/test').glob('TEST-*WorldStorageExcludedWorldPlayerdataAliasTest.xml'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected exactly one JUnit XML report, found {len(reports)}')
+          root = ET.parse(reports[0]).getroot()
+          cases = root.findall('.//testcase')
+          skipped = sum(1 for case in cases if case.find('skipped') is not None)
+          failed = sum(1 for case in cases if case.find('failure') is not None or case.find('error') is not None)
+          if len(cases) != 5 or skipped or failed:
+              raise SystemExit(f'Expected 5 executed passing cases: cases={len(cases)} skipped={skipped} failed={failed}')
+          print('Verified 5 executed, non-skipped JUnit cases')
+          PY
