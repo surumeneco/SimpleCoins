@@ -1,0 +1,46 @@
+name: Task005 durable checksum corruption JDK25
+on:
+  push:
+    branches:
+      - test/task005-durable-checksum-faults-20261105-queue-c
+    paths:
+      - '.github/workflows/task005-durable-checksum-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/DurableFileChecksumFaultTest.java'
+      - 'docs/cat/phase6-durable-payload-boundaries.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checksum-faults:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute fresh scoped JUnit suite
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.DurableFileChecksumFaultTest
+      - name: Assert four executed cases, zero skipped, errors or failures
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          name = 'co.surumene.simplecoins.domain.DurableFileChecksumFaultTest'
+          reports = list(Path('build/test-results/test').glob('TEST-' + name + '.xml'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected exactly one JUnit suite, found {len(reports)}')
+          suite = ET.parse(reports[0]).getroot()
+          actual = {k: int(suite.attrib.get(k, '0'))
+                    for k in ('tests', 'failures', 'errors', 'skipped')}
+          expected = {'tests': 4, 'failures': 0, 'errors': 0, 'skipped': 0}
+          if actual != expected:
+              raise SystemExit(f'Checksum fault suite incomplete: {actual}, expected {expected}')
+          print('Verified 4/4 JUnit checksum corruption cases Green, CAT Gates not asserted')
+          PY
