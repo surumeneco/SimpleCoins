@@ -1,0 +1,20 @@
+name: Phase6 durable ancestor Green JDK25
+on:
+  push:
+    branches:
+      - feature/phase6-durable-ancestor-green-20261105-chatboost
+
+jobs:
+  pure-java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Verify durable journal regression and domain tests
+        run: gradle --no-daemon clean test jar
