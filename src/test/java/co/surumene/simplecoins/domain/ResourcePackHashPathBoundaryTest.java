@@ -10,6 +10,19 @@ import org.junit.jupiter.api.io.TempDir;
 class ResourcePackHashPathBoundaryTest {
     @TempDir Path directory;
 
+    @Test void republishedArchiveBytesChangeHashWithoutCaching() throws Exception {
+        Path archive = directory.resolve("republished.zip");
+        byte[] first = {1, 2, 3};
+        byte[] changed = {3, 2, 1};
+        Files.write(archive, first);
+        byte[] initialHash = ResourcePackHash.sha1(archive);
+        Files.write(archive, changed);
+        assertArrayEquals(MessageDigest.getInstance("SHA-1").digest(changed),
+                ResourcePackHash.sha1(archive));
+        Files.write(archive, first);
+        assertArrayEquals(initialHash, ResourcePackHash.sha1(archive));
+    }
+
     @Test void emptyArchiveHasTwentyByteDigest() throws Exception {
         Path archive = Files.createFile(directory.resolve("empty.zip"));
         assertArrayEquals(MessageDigest.getInstance("SHA-1").digest(new byte[0]),
