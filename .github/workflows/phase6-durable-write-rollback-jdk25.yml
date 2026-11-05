@@ -1,0 +1,39 @@
+name: Phase 6 durable write rollback characterization
+on:
+  push:
+    branches:
+      - test/phase6-durable-write-rollback-20261105-queue-a
+  workflow_dispatch:
+jobs:
+  isolated-junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Verify exactly three complete rollback cases
+        shell: bash
+        run: |
+          gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.DurableFileWriteFailureRollbackTest'
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          target = "co.surumene.simplecoins.domain.DurableFileWriteFailureRollbackTest"
+          suites = []
+          for report in Path("build/test-results/test").glob("TEST-*.xml"):
+              root = ET.parse(report).getroot()
+              if root.attrib.get("name") == target or report.stem == "TEST-" + target:
+                  suites.append(root)
+          if len(suites) != 1:
+              raise SystemExit(f"Expected exactly one suite, got {len(suites)}")
+          cases = suites[0].findall(".//testcase")
+          if len(cases) != 3 or any(tc.find(tag) is not None
+              for tc in cases for tag in ("failure", "error", "skipped")):
+              raise SystemExit(f"Expected 3 full Green cases, got {len(cases)}: {suites[0].attrib}")
+          print("Verified DurableFile failed-write rollback JUnit 3/3 Green; CAT normative and crash reboot NOT-RUN")
+          PY
