@@ -34,7 +34,7 @@ public final class ManagedResources {
             Path file = target(path);
             if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
                 if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || !previous.containsKey(path)
-                        || !previous.get(path).equals(digest(Files.readAllBytes(file))))
+                        || !previous.get(path).equals(digest(file)))
                     throw new IOException("Unowned or modified Geyser resource: " + file);
             } else if (previous.containsKey(path)) {
                 throw new IOException("Managed Geyser resource is missing: " + file);
@@ -71,6 +71,21 @@ public final class ManagedResources {
             if (Files.isSymbolicLink(part))
                 throw new IOException("Managed resource path contains a symbolic link: " + part);
         }
+    }
+
+    /** Digest existing managed files with constant heap use, regardless of pack size. */
+    private static String digest(Path file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = Files.newInputStream(file,
+                    StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1)
+                    digest.update(buffer, 0, read);
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException impossible) { throw new AssertionError(impossible); }
     }
 
     private static String digest(byte[] content) {
