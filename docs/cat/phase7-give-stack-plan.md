@@ -4,7 +4,9 @@ kind: domain-spec
 id: simplecoins.phase7.give-stack-plan
 status: draft
 process: simplecoins.admin-give
-source_refs: []
+source_refs:
+  - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
+  - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
 refs: []
 semantic_contract: markdown-v2
 language: ja
