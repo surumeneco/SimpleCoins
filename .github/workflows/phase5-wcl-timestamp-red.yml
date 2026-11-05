@@ -1,0 +1,45 @@
+name: Phase5 WCL timestamp Draft Red evidence
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-capture-metadata-type-red-20261104-queue-b
+  workflow_dispatch:
+jobs:
+  timestamp-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Execute proposed Red against exact branch source
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_audit_wcl_capture_timestamp_types.py' -v > timestamp-red.log 2>&1
+          status=$?
+          set -e
+          cat timestamp-red.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Unexpected Green: inspect test and source before advancing.' >&2
+            exit 1
+          fi
+          # Both tests use subTest for two fields x five invalid JSON types.
+          # A single AttributeError is insufficient evidence that all vectors ran.
+          errors=$(grep -c '^ERROR: test_non_string_timestamp_fields_return_structured_invalid ' timestamp-red.log || true)
+          failures=$(grep -c '^FAIL: test_cli_non_string_timestamp_is_json_invalid_not_traceback ' timestamp-red.log || true)
+          if [ "$errors" -ne 10 ] || [ "$failures" -ne 10 ]; then
+            echo "Unexpected Red shape: expected 10 AttributeError cases and 10 CLI failures; got errors=$errors failures=$failures" >&2
+            exit 1
+          fi
+          if [ "$(grep -c '^AttributeError:' timestamp-red.log || true)" -ne 10 ]; then
+            echo 'Expected ten AttributeError tracebacks from the direct audit boundary.' >&2
+            exit 1
+          fi
+          echo 'Expected Draft Red observed for all 20 subtest vectors.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-wcl-timestamp-red-log
+          path: timestamp-red.log
+          if-no-files-found: warn
