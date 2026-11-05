@@ -107,5 +107,28 @@ class AuditTests(unittest.TestCase):
                 self.assertIn("status", json.loads(result.stdout))
 
 
+    def assert_rejected_json_text(self, payload):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "capture.json"
+            path.write_text(payload, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "audit_wcl_service_capture.py"), str(path)],
+                capture_output=True, text=True, check=False)
+            self.assertEqual(3, result.returncode, "malformed input must not pass structural audit")
+            self.assertEqual("invalid", json.loads(result.stdout)["status"])
+
+    def test_nonfinite_json_extension_must_not_pass_capture_validation(self):
+        payload = json.dumps(valid())[:-1] + ',"untrusted_extension": NaN}'
+        self.assert_rejected_json_text(payload)
+
+    def test_duplicate_json_schema_key_must_not_pass_capture_validation(self):
+        payload = json.dumps(valid())[:-1] + ',"schema_version": 1}'
+        self.assert_rejected_json_text(payload)
+
+    def test_duplicate_json_capture_object_must_not_pass_capture_validation(self):
+        payload = json.dumps(valid())[:-1] + ',"capture":' + json.dumps(valid()["capture"]) + '}'
+        self.assert_rejected_json_text(payload)
+
+
 if __name__ == "__main__":
     unittest.main()
