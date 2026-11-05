@@ -23,13 +23,19 @@ on `develop` commit `c317b2488d342c8827335043aed5ae736e85e3ea`.
 preserve existing command-global upper-bound behavior and do not authorize
 online/offline give implementation, resource-pack delivery, or Paper deployment.
 
-## Observations and validation vectors
+## 対象
 
-| ID | Observed property | Direct validation |
-| --- | --- | --- |
-| GIVE-BUDGET-MATRIX-01 | `requireBudget(stacks, recipients)` accepts exactly when both positive and their mathematical product is at most 1024 | 17 positive stack counts × 16 positive recipient counts, compared to `BigInteger` multiplication (272 combinations) |
-| GIVE-BUDGET-MATRIX-02 | `coinStacks(count)` is ceiling(count / 64) without overflow, including `Long.MAX_VALUE` | 12 representative boundaries checked by unbounded arithmetic |
-| GIVE-BUDGET-MATRIX-03 | Zero and negative stack counts/recipients and coin counts are invalid | six explicit rejected cases |
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.admin-give.issuance-budget | `IssuanceBudget.java` の既存コードにおける整数境界・発行量のDraft観測 |
+
+## 規則
+
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| GIVE-BUDGET-MATRIX-01 | 正のstacks・recipientsと発行数上限1024 | `requireBudget(stacks, recipients)` accepts exactly when both positive and their mathematical product is at most 1024 | 17 positive stack counts × 16 positive recipient counts, compared to `BigInteger` multiplication (272 combinations) |
+| GIVE-BUDGET-MATRIX-02 | coinStacks(count)とLong境界 | `coinStacks(count)` is ceiling(count / 64) without overflow, including `Long.MAX_VALUE` | 12 representative boundaries checked by unbounded arithmetic |
+| GIVE-BUDGET-MATRIX-03 | 0以下のstacks・recipients・coin count | Zero and negative stack counts/recipients and coin counts are invalid | six explicit rejected cases |
 
 The present implementation compares `stacksPerTarget > MAX_STACKS_PER_COMMAND / targets`
 rather than multiplying two bounded platform types, preventing an overflowing
