@@ -19,7 +19,7 @@ language: ja
 | simplecoins.world-scope | 既存包含・除外判定 |
 
 ## 規則
-| ID | 条件 | 要求候補 | 検証 |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | WS-01 | inのみ | true | WorldScopeTest.allExplicitMembershipCombinationsFollowObservedTruthTable |
 | WS-02 | outのみ | false | 同上 |
