@@ -1,0 +1,39 @@
+name: Phase 7 resource pack hash regular archive tests
+on:
+  push:
+    branches:
+      - test/phase7-pack-hash-lexical-boundaries-20261105-queue-a
+  workflow_dispatch:
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Verify three executed SHA1 tests
+        shell: bash
+        run: |
+          gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.ResourcePackHashPathBoundaryTest'
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          target = "co.surumene.simplecoins.domain.ResourcePackHashPathBoundaryTest"
+          suites = []
+          for report in Path("build/test-results/test").glob("TEST-*.xml"):
+              suite = ET.parse(report).getroot()
+              if suite.attrib.get("name") == target or report.stem == "TEST-" + target:
+                  suites.append(suite)
+          if len(suites) != 1:
+              raise SystemExit("Expected one new JUnit class report")
+          cases = suites[0].findall(".//testcase")
+          if len(cases) != 3 or any(c.find(x) is not None for c in cases
+                                     for x in ("failure", "error", "skipped")):
+              raise SystemExit(f"Expected 3 completed successful cases: {suites[0].attrib}")
+          print("Verified resource-pack hash 3/3 JUnit Green; client runtime and normative CAT NOT-RUN")
+          PY
