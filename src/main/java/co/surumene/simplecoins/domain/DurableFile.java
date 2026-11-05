@@ -18,8 +18,10 @@ import java.util.Arrays;
 public final class DurableFile {
     private DurableFile() {}
     public static void write(Path target, byte[] payload) throws IOException {
+        requireNoSymbolicAncestors(target);
         Path parent = target.toAbsolutePath().getParent();
         Files.createDirectories(parent);
+        requireNoSymbolicAncestors(target);
         Path temporary = Files.createTempFile(parent, ".pending-", ".tmp");
         try {
             try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
@@ -28,6 +30,7 @@ public final class DurableFile {
                 while (bytes.hasRemaining()) channel.write(bytes);
                 channel.force(true);
             }
+            requireNoSymbolicAncestors(target);
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             try (FileChannel directory = FileChannel.open(parent, StandardOpenOption.READ)) {
                 directory.force(true);
@@ -38,16 +41,19 @@ public final class DurableFile {
     }
     public static byte[] read(Path target, int maximumBytes) throws IOException {
         if (maximumBytes < 0) throw new IllegalArgumentException("Negative journal budget");
+        requireNoSymbolicAncestors(target);
         if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Journal record is missing, non-regular or symbolic: " + target);
         long size = Files.size(target);
         if (size < 32 || size > maximumBytes + 32L || size > Integer.MAX_VALUE)
             throw new IOException("Invalid journal size: " + target);
         byte[] all;
+        requireNoSymbolicAncestors(target);
         try (InputStream input = Files.newInputStream(target,
                 StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             all = readBounded(input, (int) size);
         }
+        requireNoSymbolicAncestors(target);
         if (all.length != size)
             throw new IOException("Journal changed while reading: " + target);
         byte[] payload = Arrays.copyOfRange(all, 32, all.length);
@@ -67,6 +73,18 @@ public final class DurableFile {
             output.write(buffer, 0, count);
         }
         return output.toByteArray();
+    }
+
+    /** Reject redirection through links anywhere in a durable journal record path. */
+    private static void requireNoSymbolicAncestors(Path target) throws IOException {
+        if (target == null) throw new IOException("Missing durable record path");
+        Path absolute = target.toAbsolutePath();
+        for (Path component : absolute)
+            if ("..".equals(component.toString()))
+                throw new IOException("Durable record path traverses parent directories");
+        for (Path part = absolute.normalize(); part != null; part = part.getParent())
+            if (Files.isSymbolicLink(part))
+                throw new IOException("Durable record path contains a symbolic link: " + part);
     }
 
     private static byte[] hash(byte[] payload) {
