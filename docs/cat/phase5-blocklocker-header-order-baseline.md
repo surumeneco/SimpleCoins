@@ -19,9 +19,9 @@ language: ja
 | --- | --- |
 | simplecoins.blocklocker.header-order | Existing `BlockLockerHeaderMatcher.match` text-only implementation; Git blob `804f9987c616222ae81b10ce57ab31236f259337` |
 
-## 観測された振る舞い
+## 規則
 
-| ID | 入力条件 | 現行コードの出力 | 回帰テスト |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | BL-HO-01 | PRIVATE / MORE_USERS の有効aliasを逆順に列挙 | 同じ正確なヘッダーに同じType、非一致はempty | matchingDoesNotDependOnRuntimeAliasIterationOrder |
 | BL-HO-02 | 異なるTypeのaliasが旧式カラーコード・大文字小文字・外側余白除去後に衝突 | alias順序や正の表示一致より先にIOException | crossTypeCollisionAlwaysRejectsBeforePositiveMatch |
