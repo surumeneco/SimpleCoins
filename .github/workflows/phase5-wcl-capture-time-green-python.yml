@@ -1,0 +1,15 @@
+name: Phase5 WCL capture time Green Python
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-capture-time-green-20261105-chatboost
+jobs:
+  audit-time:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify WCL capture audit regression
+        run: python -m unittest discover -s tests -p 'test_audit_wcl*.py' -v

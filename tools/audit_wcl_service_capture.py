@@ -31,8 +31,13 @@ def audit(capture):
         if not isinstance(meta.get(field), str) or not meta[field].strip():
             invalid.add("MISSING_CAPTURE_METADATA")
     try:
-        started = datetime.fromisoformat(meta["server_start"].replace("Z", "+00:00"))
-        captured = datetime.fromisoformat(meta["captured_at"].replace("Z", "+00:00"))
+        started_raw = meta.get("server_start")
+        captured_raw = meta.get("captured_at")
+        if (not isinstance(started_raw, str) or not started_raw.strip() or
+                not isinstance(captured_raw, str) or not captured_raw.strip()):
+            raise ValueError("Invalid capture timestamp")
+        started = datetime.fromisoformat(started_raw.replace("Z", "+00:00"))
+        captured = datetime.fromisoformat(captured_raw.replace("Z", "+00:00"))
         if started.tzinfo is None or captured.tzinfo is None or captured < started:
             invalid.add("INVALID_CAPTURE_TIME")
     except (KeyError, TypeError, ValueError):
