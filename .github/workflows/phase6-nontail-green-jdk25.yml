@@ -1,0 +1,55 @@
+name: Phase6 non-tail Green prototype JDK25
+on:
+  push:
+    branches:
+      - feature/phase6-nontail-green-prototype-20261105-queue-b
+    paths:
+      - '.github/workflows/phase6-nontail-green-jdk25.yml'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantLedger.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantLedgerNonTailIntegrityTest.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantLedgerOlderAcknowledgementDurabilityTest.java'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  failure-injection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run six existing non-tail fault-injection JUnit cases
+        run: >-
+          gradle --no-daemon test
+          --tests co.surumene.simplecoins.domain.GrantLedgerNonTailIntegrityTest
+          --tests co.surumene.simplecoins.domain.GrantLedgerOlderAcknowledgementDurabilityTest
+      - name: Verify exact JUnit XML counts and no skipped scenarios
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          expected = [
+            'GrantLedgerNonTailIntegrityTest',
+            'GrantLedgerOlderAcknowledgementDurabilityTest',
+          ]
+          result = {'tests': 0, 'failures': 0, 'errors': 0, 'skipped': 0}
+          for name in expected:
+              files = list(Path('build/test-results/test').glob('TEST-*.' + name + '.xml'))
+              if len(files) != 1:
+                  raise SystemExit(f'{name}: XML count was {len(files)}, expected 1')
+              root = ET.parse(files[0]).getroot()
+              values = {k: int(root.attrib.get(k, '0')) for k in result}
+              if values['tests'] != 3:
+                  raise SystemExit(f'{name}: expected 3 JUnit cases, got {values}')
+              print(name, values)
+              for k, v in values.items():
+                  result[k] += v
+          if result != {'tests': 6, 'failures': 0, 'errors': 0, 'skipped': 0}:
+              raise SystemExit(f'FAIL: {result}')
+          print('PASS: six exact non-tail JUnit failure-injection cases')
+          PY
