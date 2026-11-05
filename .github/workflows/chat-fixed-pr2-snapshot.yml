@@ -1,0 +1,32 @@
+name: Chat fixed-source read-only snapshot
+on:
+  push:
+    branches:
+      - infra/chat-fixed-pr2-snapshot-20261106
+permissions:
+  contents: read
+jobs:
+  archive-fixed-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact, public SimpleCoins commit
+        uses: actions/checkout@v4
+        with:
+          ref: 01a06f9f0fb78c8f941f2aa2e1c3df5e8951d153
+          persist-credentials: false
+      - name: Create deterministic read-only Git tree archive
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "01a06f9f0fb78c8f941f2aa2e1c3df5e8951d153"
+          test "$(git rev-parse HEAD^{tree})" = "7481b3968125813a46de6cb3253c5db9e9d4289a"
+          git archive --format=tar --output=source.tar HEAD
+          printf '%s\n' 'repository=surumeneco/SimpleCoins' 'commit=01a06f9f0fb78c8f941f2aa2e1c3df5e8951d153' 'tree=7481b3968125813a46de6cb3253c5db9e9d4289a' > source-manifest.txt
+          sha256sum source.tar > source.tar.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-pr2-fixed-source
+          path: |
+            source.tar
+            source.tar.sha256
+            source-manifest.txt
+          retention-days: 2
