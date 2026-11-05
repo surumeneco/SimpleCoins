@@ -98,6 +98,21 @@ def audit(capture):
             "codes": sorted(invalid | incomplete)}
 
 
+def strict_object_pairs(pairs):
+    """Reject ambiguous JSON object members at every nesting level."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON property")
+        result[key] = value
+    return result
+
+
+def reject_json_constant(_value):
+    """Reject JavaScript NaN/Infinity extensions to RFC 8259 JSON."""
+    raise ValueError("Non-finite JSON token")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture", type=Path, help="JSON exported from an independently verified Paper probe")
@@ -106,7 +121,9 @@ def main(argv=None):
         # Bounded input. An exported capture is not an authority or a source of player identities.
         if args.capture.stat().st_size > 1024 * 1024:
             raise ValueError("capture too large")
-        data = json.loads(args.capture.read_text(encoding="utf-8"))
+        data = json.loads(args.capture.read_text(encoding="utf-8"),
+                          object_pairs_hook=strict_object_pairs,
+                          parse_constant=reject_json_constant)
         result = audit(data)
     except (OSError, ValueError, UnicodeError):
         result = {"status": "invalid", "codes": ["UNREADABLE_CAPTURE"]}
