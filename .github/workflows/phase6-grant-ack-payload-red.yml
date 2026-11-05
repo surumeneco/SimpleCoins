@@ -50,7 +50,7 @@ jobs:
               if case.find("error") is not None or case.find("skipped") is not None:
                   raise SystemExit(f"Unexpected error/skip: {case.attrib.get('name')}")
               failure = case.find("failure")
-              if case.attrib.get("name") == "matchingGrantAndDurableReceiptStillAcknowledgeOnce":
+              if case.attrib.get("name", "").removesuffix("()") == "matchingGrantAndDurableReceiptStillAcknowledgeOnce":
                   if failure is not None:
                       raise SystemExit("Canonical control must pass")
                   controls += 1
