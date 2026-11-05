@@ -19,9 +19,9 @@ language: ja
 | --- | --- |
 | simplecoins.blocklocker.everyone-visible | Existing text-only `BlockLockerEveryoneText.matches` implementation, Git blob `8e8900c3c26126de082fbbffa3e30e9712123cc2` |
 
-## 観測された振る舞い
+## 規則
 
-| ID | 既存コードの入力条件 | 観測された出力 | 検証 |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | BL-EV-01 | 表示側に旧式カラーコード・余白・大文字小文字差、実行時aliasは無色 | 対応する角括弧付きタグをtrueとする | coloredVisibleTagMatchesUncoloredRuntimeLocalization |
 | BL-EV-02 | 全体が角括弧付きaliasに一致しない表示 | 部分一致・余分な角括弧・前後の別文字列をfalseとする | onlyTheEntireBracketedVisibleTagCanMatch |
