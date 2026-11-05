@@ -1,0 +1,67 @@
+name: Phase 6 grant acknowledgement payload Draft Red
+on:
+  push:
+    branches:
+      - test/phase6-grant-ack-payload-integrity-20261105-queue-b
+  workflow_dispatch:
+jobs:
+  expected-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run the exact candidate JUnit class and validate expected Red
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.GrantLedgerAcknowledgementPayloadIntegrityTest'
+          gradle_exit=$?
+          set -e
+          if [ "$gradle_exit" -eq 0 ]; then
+            echo 'Unexpected Green: this is an unconfirmed CAT candidate, not approved implementation'
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          reports = list(Path("build/test-results/test").glob("TEST-*.xml"))
+          target = "co.surumene.simplecoins.domain.GrantLedgerAcknowledgementPayloadIntegrityTest"
+          candidates = []
+          for path in reports:
+              root = ET.parse(path).getroot()
+              if root.attrib.get("name") == target or path.stem == "TEST-" + target:
+                  candidates.append(root)
+          if len(candidates) != 1:
+              raise SystemExit(f"Expected exactly one JUnit suite {target}; found {len(candidates)}; XML reports={reports}")
+          root = candidates[0]
+          cases = root.findall(".//testcase")
+          if len(cases) != 4:
+              raise SystemExit(f"Expected four candidate tests, got {len(cases)}")
+          failures = []
+          controls = 0
+          for case in cases:
+              if case.find("error") is not None or case.find("skipped") is not None:
+                  raise SystemExit(f"Unexpected error/skip: {case.attrib.get('name')}")
+              failure = case.find("failure")
+              if case.attrib.get("name", "").removesuffix("()") == "matchingGrantAndDurableReceiptStillAcknowledgeOnce":
+                  if failure is not None:
+                      raise SystemExit("Canonical control must pass")
+                  controls += 1
+              else:
+                  if failure is None:
+                      raise SystemExit(f"Unexpected Green: {case.attrib.get('name')}")
+                  message = (failure.attrib.get("message") or "") + " " + (failure.text or "")
+                  if "IllegalStateException" not in message or "nothing was thrown" not in message:
+                      raise SystemExit(f"Unexpected Red reason: {case.attrib.get('name')}: {message[:180]}")
+                  failures.append(case.attrib.get("name"))
+          if controls != 1 or len(failures) != 3:
+              raise SystemExit(f"Wrong expected-Red matrix: controls={controls}, failures={failures}")
+          print("EXPECTED DRAFT RED: 3 missing fail-closed rejections, 1 canonical Green control. CAT Gate remains NOT-RUN.")
+          PY
