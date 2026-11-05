@@ -1,7 +1,7 @@
 ---
 cat_version: '0.3'
 kind: domain-spec
-id: simplecoins.phase7.pack-hash-lexical-boundaries
+id: simplecoins.phase7.pack-hash-regular-archives
 status: draft
 process: simplecoins.resource-pack.hash
 source_refs:
@@ -11,14 +11,13 @@ semantic_contract: markdown-v2
 language: ja
 ---
 
-# Resource-pack hash path boundary (existing-code Draft)
+# Resource-pack hash for regular archives (existing-code Draft)
 
-TASK-20261101-006. Characterization of existing `ResourcePackHash.java`
-blob `50219d9f4b858ce8b58d67b9ae9944aba5ba94b4` on develop.
+TASK-20261101-006. Observation of `ResourcePackHash.java` blob
+`50219d9f4b858ce8b58d67b9ae9944aba5ba94b4` on develop.
 
-- A lexical `..` path component is rejected, even when it would normalize to an existing regular archive.
-- A filename containing consecutive dots but not a standalone `..` path component is permitted and hashed accurately.
-- An empty archive is a regular file and yields the standard 20-byte SHA-1 digest.
-- Valid nested real directories are allowed; no implicit requirement for the output to live at the workspace root.
+1. An empty regular archive produces the standard 20-byte SHA-1 digest.
+2. An archive under existing nested real directories yields its exact content digest.
+3. Rebuilding an archive at the same path with different bytes changes its hash; restoring the prior bytes restores the prior hash.
 
-These are non-normative, code-to-spec Draft observations with no production changes. A test result cannot establish JE/BE client behavior, Nexo publication, Paper/Geyser, or CAT semantic and implementation Gates.
+Scoped code-to-spec characterization only. The tests do not establish JE/BE client distribution, Geyser/Nexo integration, security against all filesystem races, or CAT normative Gates. No production source is modified.
