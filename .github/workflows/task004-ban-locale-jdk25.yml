@@ -1,0 +1,43 @@
+name: Task004 BAN locale JDK25 verification
+on:
+  push:
+    branches:
+      - test/queue-b-ban-evidence-locale-20261105
+    paths:
+      - '.github/workflows/task004-ban-locale-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/BanEvidenceLocaleNormalizationTest.java'
+      - 'docs/cat/drafts/ban-evidence-locale-normalization-20261105.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ban-locale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute scoped BAN locale JUnit cases
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.BanEvidenceLocaleNormalizationTest
+      - name: Require exactly two executed JUnit cases
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          matches = list(Path('build/test-results/test').glob('*BanEvidenceLocaleNormalizationTest.xml'))
+          if len(matches) != 1:
+              raise SystemExit(f'Expected one XML suite, got {len(matches)}')
+          root = ET.parse(matches[0]).getroot()
+          counts = {k: int(root.attrib.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')}
+          expected = {'tests': 2, 'failures': 0, 'errors': 0, 'skipped': 0}
+          if counts != expected:
+              raise SystemExit(f'JUnit result mismatch: {counts} != {expected}')
+          print('Verified exact two BAN locale JUnit cases:', counts)
+          PY
