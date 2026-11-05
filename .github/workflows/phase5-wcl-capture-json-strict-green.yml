@@ -1,0 +1,15 @@
+name: Phase5 WCL strict JSON Green Python
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-capture-json-strict-green-20261105-chatboost
+jobs:
+  strict-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify strict WCL capture JSON parser regression
+        run: python -m unittest discover -s tests -p 'test_audit_wcl_service_capture.py' -v
