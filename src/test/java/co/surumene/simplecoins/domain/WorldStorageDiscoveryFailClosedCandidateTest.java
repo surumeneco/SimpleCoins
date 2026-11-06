@@ -58,4 +58,24 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
         assertEquals(0, manifest.worldFiles().size());
         assertEquals(0, manifest.playerDataFiles().size());
     }
+    @Test void symbolicWorldRootIsRejectedBeforeTraversal() throws Exception {
+        Path real = Files.createDirectory(directory.resolve("real-world"));
+        Path alias = Files.createSymbolicLink(directory.resolve("world-alias"), real);
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", alias), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("root missing or symbolic"));
+    }
+
+    @Test void crossCategoryHardlinkCannotBeCountedAsTwoSavedSources() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path region = Files.createDirectory(world.resolve("region"));
+        Path players = Files.createDirectory(world.resolve("playerdata"));
+        Path source = region.resolve("r.0.0.mca");
+        Files.write(source, new byte[] {1});
+        Files.createLink(players.resolve("00000000-0000-0000-0000-000000000001.dat"), source);
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"));
+    }
+
 }
