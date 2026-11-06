@@ -94,6 +94,18 @@ class SavedWiringTest(unittest.TestCase):
         report = self.inspect(scan_refs=refs)
         self.assertIn('scanner:ResolvedEntitySettlementImport', report['missing'])
 
+    def test_arbitrary_utf8_string_is_not_a_class_reference(self):
+        # A string literal naming a class is not proof of a JVM class reference.
+        self.assertFalse(app.has_class_reference(
+            frozenset(['prefix ' + DOMAIN + 'SettlementScanRunner' + ' suffix']),
+            DOMAIN + 'SettlementScanRunner'))
+
+    def test_descriptor_embedded_in_arbitrary_text_is_not_a_reference(self):
+        # A log message can quote a descriptor without linking the class.
+        self.assertFalse(app.has_class_reference(
+            frozenset(['log:L' + DOMAIN + 'SettlementScanRunner;:done']),
+            DOMAIN + 'SettlementScanRunner'))
+
     def test_unregistered_entrypoint_is_not_a_candidate(self):
         report = self.inspect(main_refs=['registerEvents'])
         self.assertIn('main:SettlementScanRunner', report['missing'])
