@@ -122,4 +122,22 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
         assertTrue(failure.getMessage().contains("Non-regular authoritative storage source"));
     }
 
+
+    @Test void noncanonicalUppercasePlayerUuidCannotAliasCanonicalPlayer() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path players = Files.createDirectory(world.resolve("playerdata"));
+        Files.write(players.resolve("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA.dat"), new byte[] {1});
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Noncanonical playerdata UUID filename"));
+    }
+
+    @Test void noncanonicalRegionCoordinateCannotAliasCanonicalRegion() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path region = Files.createDirectory(world.resolve("region"));
+        Files.write(region.resolve("r.00.0.mca"), new byte[] {1});
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Noncanonical Anvil region filename"));
+    }
 }
