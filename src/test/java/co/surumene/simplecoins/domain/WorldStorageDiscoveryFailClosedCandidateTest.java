@@ -102,4 +102,24 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
         assertTrue(failure.getMessage().contains("Aliased physical authoritative source"));
     }
 
+    @Test void overlappingWorldRootsCannotBeCountedAsIndependentInventories() throws Exception {
+        Path outer = Files.createDirectory(directory.resolve("outer-world"));
+        Path nested = Files.createDirectory(outer.resolve("nested-world"));
+        Path region = Files.createDirectory(nested.resolve("region"));
+        Files.write(region.resolve("r.0.0.mca"), new byte[] {1});
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(
+                        Map.of("outer", outer, "nested", nested), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Overlapping world storage roots"));
+    }
+
+    @Test void directoryAtAuthoritativeRegionFilePathIsNotSilentlyOmitted() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path region = Files.createDirectory(world.resolve("region"));
+        Files.createDirectory(region.resolve("r.0.0.mca"));
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Non-regular authoritative storage source"));
+    }
+
 }
