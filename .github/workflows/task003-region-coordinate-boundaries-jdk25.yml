@@ -1,0 +1,30 @@
+name: Phase5 region coordinate boundary JDK25
+on:
+  push:
+    branches:
+      - test/task003-region-coordinate-boundaries-20261107-queue-c
+  workflow_dispatch:
+jobs:
+  region-boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run scoped real JUnit tests
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageRegionCoordinateBoundaryTest'
+      - name: Verify four executed JUnit cases
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          paths = glob.glob('build/test-results/test/TEST-*WorldStorageRegionCoordinateBoundaryTest.xml')
+          assert len(paths) == 1, paths
+          root = ET.parse(paths[0]).getroot()
+          assert (int(root.attrib['tests']), int(root.attrib['failures']), int(root.attrib['errors']), int(root.attrib['skipped'])) == (4, 0, 0, 0), root.attrib
+          PY
