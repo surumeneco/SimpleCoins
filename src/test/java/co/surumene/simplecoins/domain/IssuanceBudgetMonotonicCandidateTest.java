@@ -54,4 +54,35 @@ class IssuanceBudgetMonotonicCandidateTest {
                     () -> IssuanceBudget.requireBudget(Long.MAX_VALUE, recipients));
         }
     }
+
+    @Test void increasingRecipientCountNeverTurnsRejectedGiveIntoAcceptedGive() {
+        long[] stackCounts = {1, 2, 512, 1024, 1025, Long.MAX_VALUE};
+        for (long stacksPerRecipient : stackCounts) {
+            boolean rejected = false;
+            for (int recipients : new int[] {1, 2, 3, 512, 1024, 1025, Integer.MAX_VALUE}) {
+                boolean accepted;
+                try {
+                    IssuanceBudget.requireBudget(stacksPerRecipient, recipients);
+                    accepted = true;
+                } catch (IllegalArgumentException expected) {
+                    accepted = false;
+                }
+                assertFalse(rejected && accepted,
+                        "budget acceptance must be monotonic: stacks="
+                                + stacksPerRecipient + ", recipients=" + recipients);
+                rejected |= !accepted;
+            }
+        }
+    }
+
+    @Test void coinStackConversionIsMonotonicAcrossEverySixtyFourBoundary() {
+        for (long boundary : new long[] {64, 128, 1024, 4096, Long.MAX_VALUE - 63}) {
+            long before = IssuanceBudget.coinStacks(boundary - 1);
+            long at = IssuanceBudget.coinStacks(boundary);
+            long after = IssuanceBudget.coinStacks(boundary + 1);
+            assertTrue(before <= at && at <= after, "boundary=" + boundary);
+            assertTrue(at - before <= 1 && after - at <= 1,
+                    "one additional coin cannot consume more than one stack");
+        }
+    }
 }
