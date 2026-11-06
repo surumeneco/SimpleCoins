@@ -16,6 +16,7 @@ java {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.134-stable")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.134-stable") // Real Paper event API in JUnit
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
