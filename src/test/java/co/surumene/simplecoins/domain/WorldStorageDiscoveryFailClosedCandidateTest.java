@@ -78,4 +78,28 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
         assertTrue(failure.getMessage().contains("Aliased physical authoritative source"));
     }
 
+    @Test void excludedWorldPlayerdataSymlinkStillFailsClosed() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("excluded-world"));
+        Path players = Files.createDirectory(world.resolve("playerdata"));
+        Path external = Files.write(directory.resolve("outside.dat"), new byte[] {1});
+        Files.createSymbolicLink(players.resolve("00000000-0000-0000-0000-000000000001.dat"), external);
+        WorldScope excluded = new WorldScope(false, Set.of(), Set.of("excluded"));
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("excluded", world), excluded, 100));
+        assertTrue(failure.getMessage().contains("Symbolic storage file"));
+    }
+
+    @Test void crossWorldHardlinkCannotBeCountedTwice() throws Exception {
+        Path first = Files.createDirectory(directory.resolve("first"));
+        Path second = Files.createDirectory(directory.resolve("second"));
+        Path firstRegion = Files.createDirectory(first.resolve("region"));
+        Path secondRegion = Files.createDirectory(second.resolve("region"));
+        Path source = Files.write(firstRegion.resolve("r.0.0.mca"), new byte[] {1});
+        Files.createLink(secondRegion.resolve("r.1.0.mca"), source);
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(
+                        Map.of("first", first, "second", second), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Aliased physical authoritative source"));
+    }
+
 }
