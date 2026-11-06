@@ -1,0 +1,32 @@
+name: TASK003 excluded-world playerdata validation (JDK25)
+on:
+  push:
+    branches:
+      - test/task003-excluded-world-playerdata-invalid-20261107-queue-c
+  workflow_dispatch:
+jobs:
+  candidate-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute targeted JUnit candidate cases
+        run: gradle test --tests co.surumene.simplecoins.domain.WorldStorageExcludedWorldPlayerdataValidationTest --no-daemon
+      - name: Verify all three JUnit cases executed
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          files = glob.glob('build/test-results/test/TEST-*WorldStorageExcludedWorldPlayerdataValidationTest.xml')
+          assert len(files) == 1, f'Expected one JUnit XML result, found {files}'
+          root = ET.parse(files[0]).getroot()
+          counts = {k: int(root.attrib.get(k, '0')) for k in ('tests','failures','errors','skipped')}
+          assert counts == {'tests': 3, 'failures': 0, 'errors': 0, 'skipped': 0}, counts
+          print('Verified three executed JUnit cases:', counts)
+          PY
