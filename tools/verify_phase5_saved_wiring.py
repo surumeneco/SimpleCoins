@@ -82,7 +82,9 @@ TRAVERSAL_REFERENCES = (
 def has_class_reference(constants: frozenset[str], internal_name: str) -> bool:
     """Match an exact JVM internal name or an object descriptor, not a prefix."""
     descriptor = 'L' + internal_name + ';'
-    return any(value == internal_name or descriptor in value for value in constants)
+    return any(value == internal_name or
+               (value.startswith(('(', 'L', '[')) and descriptor in value)
+               for value in constants)
 
 
 def inspect_jar(path: Path) -> dict:
