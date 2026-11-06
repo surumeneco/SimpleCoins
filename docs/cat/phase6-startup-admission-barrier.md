@@ -31,6 +31,7 @@ language: ja
 | ADMIT-03 | Scan incomplete or players online | Admission remains denied and failure is terminal | incompleteOrOnlineRejection |
 | ADMIT-04 | Current verified scan with zero players | Admission can be opened by controlled publication | verifiedRelease |
 | ADMIT-05 | Shutdown or later serious consistency fault | Admission becomes denied again | stopOrFatalRevokes |
+| ADMIT-06 | A failure from the current scan generation arrives after publication | Any late failure must revoke readiness; stale unrelated generation must not reopen it | currentGenerationLateFailureRevokes |
 
 ## Scope and limitations
 
