@@ -25,7 +25,7 @@ jobs:
           gradle-version: '9.2.1'
       - name: Run discovery fail-closed JUnit cases
         run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageDiscoveryFailClosedCandidateTest
-      - name: Assert four executed cases
+      - name: Assert six executed cases
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -35,6 +35,6 @@ jobs:
               raise SystemExit(f'Expected one test report, found {len(files)}')
           root = ET.parse(files[0]).getroot()
           actual = {k: int(root.attrib.get(k, '0')) for k in ('tests','failures','errors','skipped')}
-          assert actual == {'tests': 4, 'failures': 0, 'errors': 0, 'skipped': 0}, actual
+          assert actual == {'tests': 6, 'failures': 0, 'errors': 0, 'skipped': 0}, actual
           print(actual)
           PY
