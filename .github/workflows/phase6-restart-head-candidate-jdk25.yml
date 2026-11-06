@@ -1,0 +1,36 @@
+name: Phase6 restart-head Candidate JUnit (JDK25)
+on:
+  push:
+    branches:
+      - test/task005-restart-head-recovery-queue-a-20261107
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restart-head-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run restart-head candidate tests
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.GrantLedgerRestartHeadRecoveryCandidateTest
+      - name: Verify JUnit XML is complete
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          paths = list(Path('build/test-results/test').glob('TEST-*.GrantLedgerRestartHeadRecoveryCandidateTest.xml'))
+          if len(paths) != 1:
+              raise SystemExit(f'Expected one JUnit XML, found {len(paths)}')
+          root = ET.parse(paths[0]).getroot()
+          values = {k: int(root.attrib.get(k, 0)) for k in ('tests','failures','errors','skipped')}
+          print(values)
+          if values != {'tests': 2, 'failures': 0, 'errors': 0, 'skipped': 0}:
+              raise SystemExit('Candidate test count or outcome mismatch')
+          PY
