@@ -29,8 +29,8 @@ class BanEvidenceDecisionSnapshotTest {
         observations.add(new BanEvidence.Source("ban", BanEvidence.Status.BANNED));
         assertEquals(BanEvidence.Status.CLEAR, decision.status(),
                 "An issued decision must not silently re-evaluate mutable caller inputs");
-        assertEquals(BanEvidence.Status.UNKNOWN, BanEvidence.evaluate(required, observations).status(),
-                "A fresh decision must treat newly missing required sources as unknown");
+        assertEquals(BanEvidence.Status.BANNED, BanEvidence.evaluate(required, observations).status(),
+                "A fresh decision must observe the new BAN evidence despite missing sources");
     }
 
     @Test
