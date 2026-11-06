@@ -43,7 +43,11 @@ public final class AdmissionBarrier {
     }
 
     public synchronized void fail(long generation) {
-        requireCurrent(generation);
+        // A failure racing with successful publication must still revoke admission.
+        // Only the active generation can terminate the published snapshot.
+        if (generation != currentGeneration ||
+                (state != State.SCANNING && state != State.READY))
+            throw new IllegalStateException("Stale or unexpected settlement generation");
         state = State.FAILED;
     }
 
