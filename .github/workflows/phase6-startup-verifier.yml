@@ -1,0 +1,18 @@
+name: Phase6 startup wiring static verifier
+on:
+  push:
+    branches: [feature/phase6-startup-verifier-20261106-chatboost]
+  pull_request:
+    branches: [develop]
+permissions:
+  contents: read
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test conservative compiled-JAR startup inventory
+        run: python -m unittest discover -s tests -p 'test_verify_phase6_startup_wiring.py' -v
