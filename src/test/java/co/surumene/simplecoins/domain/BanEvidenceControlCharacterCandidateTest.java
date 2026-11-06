@@ -23,8 +23,8 @@ class BanEvidenceControlCharacterCandidateTest {
     @Test
     void embeddedTabInRequiredSourceIdIsRejected() {
         assertThrows(IOException.class, () -> BanEvidence.evaluate(
-                Set.of("server\\tban"),
-                List.of(new BanEvidence.Source("server\\tban", BanEvidence.Status.CLEAR))));
+                Set.of("server\tban"),
+                List.of(new BanEvidence.Source("server\tban", BanEvidence.Status.CLEAR))));
     }
 
     @Test
