@@ -78,6 +78,13 @@ TRAVERSAL_REFERENCES = (
 )
 
 
+
+def has_class_reference(constants: frozenset[str], internal_name: str) -> bool:
+    """Match an exact JVM internal name or an object descriptor, not a prefix."""
+    descriptor = 'L' + internal_name + ';'
+    return any(value == internal_name or descriptor in value for value in constants)
+
+
 def inspect_jar(path: Path) -> dict:
     with ZipFile(path) as jar:
         entries = jar.namelist()
@@ -107,14 +114,13 @@ def inspect_jar(path: Path) -> dict:
             scan_constants = scan_constants | utf8_pool(jar.read(inner_path))
 
         checks: dict[str, bool] = {
-            'main:SettlementScanRunner': any(
-                DOMAIN + 'SettlementScanRunner' in value for value in main_constants),
+            'main:SettlementScanRunner': has_class_reference(main_constants, DOMAIN + 'SettlementScanRunner'),
         }
         checks.update({f'class:{name}': name in pools for name in REQUIRED_CLASSES})
-        checks.update({f'scanner:{name}': any(DOMAIN + name in value for value in scan_constants)
+        checks.update({f'scanner:{name}': has_class_reference(scan_constants, DOMAIN + name)
                        for name in SCAN_REFERENCES})
         traversal_pool = pools.get('WorldSnapshotTraversal', frozenset())
-        checks.update({f'traversal:{name}': any(DOMAIN + name in value for value in traversal_pool)
+        checks.update({f'traversal:{name}': has_class_reference(traversal_pool, DOMAIN + name)
                        for name in TRAVERSAL_REFERENCES})
         discovery_pool = pools.get('WorldStorageDiscovery', frozenset())
         checks['discovery:requiredSourceIds'] = 'requiredSourceIds' in discovery_pool
