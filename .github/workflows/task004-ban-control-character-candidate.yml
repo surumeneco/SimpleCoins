@@ -1,0 +1,20 @@
+name: TASK004 BAN control-character candidate JUnit
+
+on:
+  push:
+    branches:
+      - test/task004-ban-source-control-char-queue-b-20261107
+  workflow_dispatch:
+
+jobs:
+  ban-source-control-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Execute candidate JUnit
+        run: ./gradlew test --tests 'co.surumene.simplecoins.domain.BanEvidenceControlCharacterCandidateTest' --no-daemon
