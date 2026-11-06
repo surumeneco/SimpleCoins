@@ -25,7 +25,7 @@ jobs:
           files = glob.glob('build/test-results/test/TEST-*IssuanceBudgetMonotonicCandidateTest.xml')
           assert len(files) == 1, files
           root = ET.parse(files[0]).getroot()
-          assert int(root.attrib['tests']) == 3, root.attrib
+          assert int(root.attrib['tests']) == 5, root.attrib
           for key in ('failures', 'errors', 'skipped'):
               assert int(root.attrib.get(key, '0')) == 0, root.attrib
           PY
