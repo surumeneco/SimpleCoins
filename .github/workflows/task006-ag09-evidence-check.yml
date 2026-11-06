@@ -1,0 +1,16 @@
+name: Phase 7 AG-09 evidence checker
+on:
+  push:
+    branches:
+      - test/task006-ag09-evidence-validator-20261106-queue-d
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run isolated evidence tests
+        run: python -m unittest discover -s tests -p test_verify_ag09_evidence.py -v
