@@ -82,6 +82,18 @@ class SavedWiringTest(unittest.TestCase):
                                                  DOMAIN + 'SavedEntityUuidIntegrity'])
         self.assertIn('traversal:PlayerDataReader', report['missing'])
 
+    def test_similarly_named_main_class_does_not_count_as_wired(self):
+        report = self.inspect(main_refs=[DOMAIN + 'SettlementScanRunnerFake'])
+        self.assertIn('main:SettlementScanRunner', report['missing'])
+
+    def test_similarly_named_scanner_import_does_not_count_as_wired(self):
+        refs = [DOMAIN + n for n in (
+            'WorldSnapshotTraversal', 'SettlementAccumulator',
+            'PlayerDataSettlementImport', 'BlockEntitySettlementImport',
+            'FreeEntitySettlementImport', 'ResolvedEntitySettlementImportFake')]
+        report = self.inspect(scan_refs=refs)
+        self.assertIn('scanner:ResolvedEntitySettlementImport', report['missing'])
+
     def test_unregistered_entrypoint_is_not_a_candidate(self):
         report = self.inspect(main_refs=['registerEvents'])
         self.assertIn('main:SettlementScanRunner', report['missing'])
