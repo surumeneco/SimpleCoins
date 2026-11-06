@@ -86,4 +86,52 @@ class AdmissionBarrierTest {
             assertFalse(barrier.mayAdmit());
         }
     }
+
+    @Test void currentGenerationLateFailureRevokesPublishedAdmission() {
+        AdmissionBarrier barrier = new AdmissionBarrier();
+        long generation = barrier.begin();
+        barrier.complete(generation, true, true);
+        assertTrue(barrier.mayAdmit());
+        assertThrows(IllegalStateException.class, () -> barrier.fail(generation + 1));
+        barrier.fail(generation);
+        assertFalse(barrier.mayAdmit());
+        assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        assertThrows(IllegalStateException.class, () -> barrier.complete(generation, true, true));
+    }
+
+    @Test void concurrentPublicationAndSameGenerationFailureAlwaysEndClosed() throws Exception {
+        for (int n = 0; n < 100; n++) {
+            AdmissionBarrier barrier = new AdmissionBarrier();
+            long generation = barrier.begin();
+            CountDownLatch go = new CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<Throwable> unexpected =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            Thread publishing = new Thread(() -> {
+                try {
+                    go.await();
+                    barrier.complete(generation, true, true);
+                } catch (IllegalStateException expected) {
+                    // The failure may have won the race and revoked scanning.
+                } catch (Throwable failure) {
+                    unexpected.compareAndSet(null, failure);
+                }
+            });
+            Thread failing = new Thread(() -> {
+                try {
+                    go.await();
+                    barrier.fail(generation);
+                } catch (Throwable failure) {
+                    unexpected.compareAndSet(null, failure);
+                }
+            });
+            publishing.start();
+            failing.start();
+            go.countDown();
+            publishing.join();
+            failing.join();
+            assertNull(unexpected.get());
+            assertFalse(barrier.mayAdmit());
+            assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        }
+    }
 }
