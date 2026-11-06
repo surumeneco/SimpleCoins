@@ -1,0 +1,39 @@
+name: Phase6 valid-record tamper characterization JDK25
+on:
+  push:
+    branches:
+      - feature/phase6-valid-record-tamper-test-20261106-queue-c
+    paths:
+      - '.github/workflows/phase6-valid-record-tamper-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantLedgerValidRecordTamperTest.java'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  characterization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute valid-record tamper JUnit
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.GrantLedgerValidRecordTamperTest
+      - name: Verify exact result
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          paths = list(Path('build/test-results/test').glob('TEST-*.GrantLedgerValidRecordTamperTest.xml'))
+          if len(paths) != 1:
+              raise SystemExit(f'Expected one JUnit XML, found {len(paths)}')
+          root = ET.parse(paths[0]).getroot()
+          counts = {k: int(root.attrib.get(k, '0')) for k in ('tests','failures','errors','skipped')}
+          if counts != {'tests':1,'failures':0,'errors':0,'skipped':0}:
+              raise SystemExit(f'Unexpected result: {counts}')
+          print('PASS', counts)
+          PY
