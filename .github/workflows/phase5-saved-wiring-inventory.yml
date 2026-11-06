@@ -1,0 +1,24 @@
+name: Phase5 saved-source wiring inventory
+on:
+  push:
+    branches:
+      - test/phase5-saved-wiring-inventory-20261107-chatboost
+  pull_request:
+    paths:
+      - tools/verify_phase5_saved_wiring.py
+      - tests/test_verify_phase5_saved_wiring.py
+      - .github/workflows/phase5-saved-wiring-inventory.yml
+permissions:
+  contents: read
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify fixture regressions
+        run: |
+          python -m unittest discover -s tests -p 'test_verify_phase5_saved_wiring.py' -v
+          python -m py_compile tools/verify_phase5_saved_wiring.py
