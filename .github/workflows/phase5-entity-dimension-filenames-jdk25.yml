@@ -1,0 +1,30 @@
+name: Phase5 entity dimension filename JDK25
+on:
+  push:
+    branches:
+      - test/task003-region-entity-path-validation-20261107-queue-c
+  workflow_dispatch:
+jobs:
+  entity-dimension-filenames:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run targeted JUnit tests
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageEntityDimensionFilenameTest'
+      - name: Verify three JUnit tests executed
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          paths = glob.glob('build/test-results/test/TEST-*WorldStorageEntityDimensionFilenameTest.xml')
+          assert len(paths) == 1, paths
+          root = ET.parse(paths[0]).getroot()
+          assert tuple(int(root.attrib[k]) for k in ('tests', 'failures', 'errors', 'skipped')) == (3, 0, 0, 0), root.attrib
+          PY
