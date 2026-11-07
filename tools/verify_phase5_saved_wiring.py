@@ -100,11 +100,15 @@ def inspect_jar(path: Path) -> dict:
             if class_path in names:
                 pools[name] = utf8_pool(jar.read(class_path))
 
-        # Javac may place visitor calls in the anonymous inner class.
-        inner_path = DOMAIN + 'SettlementScanRunner$1.class'
+        # Javac may place visitor calls in any numbered anonymous inner class.
+        # Looking only at $1 silently misses a scanner implemented in $2 or later.
         scan_constants = pools.get('SettlementScanRunner', frozenset())
-        if inner_path in names:
-            scan_constants = scan_constants | utf8_pool(jar.read(inner_path))
+        inner_prefix = DOMAIN + 'SettlementScanRunner$'
+        for inner_path in sorted(names):
+            if (inner_path.startswith(inner_prefix)
+                    and inner_path.endswith('.class')
+                    and inner_path[len(inner_prefix):-len('.class')].isdigit()):
+                scan_constants = scan_constants | utf8_pool(jar.read(inner_path))
 
         checks: dict[str, bool] = {
             'main:SettlementScanRunner': any(

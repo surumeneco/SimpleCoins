@@ -82,6 +82,42 @@ class SavedWiringTest(unittest.TestCase):
                                                  DOMAIN + 'SavedEntityUuidIntegrity'])
         self.assertIn('traversal:PlayerDataReader', report['missing'])
 
+    def test_scanner_reference_in_second_anonymous_class_is_detected(self):
+        refs = [DOMAIN + n for n in (
+            'WorldSnapshotTraversal', 'SettlementAccumulator', 'PlayerDataSettlementImport',
+            'BlockEntitySettlementImport', 'FreeEntitySettlementImport',
+            'ResolvedEntitySettlementImport')]
+        with tempfile.TemporaryDirectory() as directory:
+            jarfile = Path(directory) / 'plugin.jar'
+            with ZipFile(jarfile, 'w') as jar:
+                jar.writestr('plugin.yml',
+                             'name: SimpleCoins\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\n')
+                jar.writestr(MAIN + '.class',
+                             synthetic_class([DOMAIN + 'SettlementScanRunner']))
+                for name in REQUIRED:
+                    constants = (['requiredSourceIds', 'discover']
+                                 if name == 'WorldStorageDiscovery' else
+                                 [DOMAIN + n for n in ('AnvilRegionReader',
+                                  'PlayerDataReader', 'SavedEntityUuidIntegrity')]
+                                 if name == 'WorldSnapshotTraversal' else [])
+                    jar.writestr(DOMAIN + name + '.class', synthetic_class(constants))
+                jar.writestr(DOMAIN + 'SettlementScanRunner$2.class',
+                             synthetic_class(refs))
+            report = app.inspect_jar(jarfile)
+        self.assertEqual('candidate-only', report['status'])
+        self.assertFalse(any(key.startswith('scanner:') for key in report['missing']))
+
+    def test_corrupt_second_anonymous_class_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jarfile = Path(directory) / 'plugin.jar'
+            with ZipFile(jarfile, 'w') as jar:
+                jar.writestr('plugin.yml',
+                             'name: SimpleCoins\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\n')
+                jar.writestr(MAIN + '.class', synthetic_class())
+                jar.writestr(DOMAIN + 'SettlementScanRunner$2.class', b'BAD')
+            with self.assertRaises(app.InvalidClassFile):
+                app.inspect_jar(jarfile)
+
     def test_unregistered_entrypoint_is_not_a_candidate(self):
         report = self.inspect(main_refs=['registerEvents'])
         self.assertIn('main:SettlementScanRunner', report['missing'])
