@@ -1,0 +1,24 @@
+name: Phase7 AG-09 evidence checker
+on:
+  push:
+    branches:
+      - fix/phase7-ag09-malformed-evidence-20261107-chatboost
+  pull_request:
+    paths:
+      - tools/verify_ag09_evidence.py
+      - tests/test_verify_ag09_evidence.py
+      - .github/workflows/phase7-ag09-evidence-regression.yml
+permissions:
+  contents: read
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Run AG-09 fault evidence checks
+        run: |
+          python -m unittest discover -s tests -p test_verify_ag09_evidence.py -v
+          python -m py_compile tools/verify_ag09_evidence.py
