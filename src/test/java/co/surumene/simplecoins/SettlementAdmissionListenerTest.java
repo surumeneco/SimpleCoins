@@ -3,6 +3,10 @@ package co.surumene.simplecoins;
 import static org.junit.jupiter.api.Assertions.*;
 
 import co.surumene.simplecoins.domain.AdmissionBarrier;
+import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
+import co.surumene.simplecoins.domain.SettlementAccumulator;
+import co.surumene.simplecoins.domain.WorldScope;
+import java.util.Set;
 import io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.event.EventHandler;
@@ -30,10 +34,21 @@ class SettlementAdmissionListenerTest {
         assertFalse(during.isAllowed());
     }
 
+    private static SettlementSnapshotPublisher publishEmptyVerifiedSnapshot(AdmissionBarrier barrier) {
+        SettlementSnapshotPublisher published = new SettlementSnapshotPublisher(barrier);
+        var pending = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), Set.of("verified-file"));
+        pending.completeSource("verified-file");
+        published.publish(pending);
+        return published;
+    }
+
     @Test void verifiedPublicationAllowsConnectionWithoutOverridingPriorBan() {
         AdmissionBarrier barrier = new AdmissionBarrier();
-        SettlementAdmissionListener listener = new SettlementAdmissionListener(barrier);
-        barrier.complete(barrier.begin(), true, true);
+        long generation = barrier.begin();
+        SettlementSnapshotPublisher published = publishEmptyVerifiedSnapshot(barrier);
+        SettlementAdmissionListener listener = new SettlementAdmissionListener(barrier, published);
+        barrier.complete(generation, true, true);
 
         var permitted = connection(null);
         listener.validate(permitted);
@@ -48,8 +63,10 @@ class SettlementAdmissionListenerTest {
 
     @Test void fatalFailureRevokesPublicationAndDeniesFurtherConnections() {
         AdmissionBarrier barrier = new AdmissionBarrier();
-        SettlementAdmissionListener listener = new SettlementAdmissionListener(barrier);
-        barrier.complete(barrier.begin(), true, true);
+        long generation = barrier.begin();
+        SettlementSnapshotPublisher published = publishEmptyVerifiedSnapshot(barrier);
+        SettlementAdmissionListener listener = new SettlementAdmissionListener(barrier, published);
+        barrier.complete(generation, true, true);
         barrier.fatalFailure();
         var denied = connection(null);
         listener.validate(denied);
@@ -66,5 +83,8 @@ class SettlementAdmissionListenerTest {
         assertNotNull(handler);
         assertEquals(EventPriority.HIGHEST, handler.priority());
         assertThrows(NullPointerException.class, () -> new SettlementAdmissionListener(null));
+        assertThrows(IllegalArgumentException.class, () -> new SettlementAdmissionListener(
+                new AdmissionBarrier(), new SettlementSnapshotPublisher(new AdmissionBarrier())));
+
     }
 }
