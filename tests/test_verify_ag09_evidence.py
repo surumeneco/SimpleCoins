@@ -41,5 +41,20 @@ class AG09EvidenceTests(unittest.TestCase):
         self.assertEqual(evaluate(self.row)[0], "inconclusive")
 
 
+    def test_missing_numeric_csv_cell_does_not_raise_typeerror(self):
+        # csv.DictReader uses None when the row ends before this field.
+        self.row["promised"] = None
+        self.assertEqual("inconclusive", evaluate(self.row)[0])
+
+    def test_missing_verification_flag_does_not_raise_attributeerror(self):
+        self.row["ledger_verified"] = None
+        self.assertEqual("inconclusive", evaluate(self.row)[0])
+
+    def test_null_stop_point_never_reports_consistent(self):
+        self.row["stop_point"] = None
+        self.assertEqual("inconclusive", evaluate(self.row)[0])
+
+
+
 if __name__ == "__main__":
     unittest.main()
