@@ -190,4 +190,30 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
                 () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
         assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
     }
+
+    @Test void duplicatePlayerUuidAcrossDifferentWorldsFailsClosed() throws Exception {
+        Path first = Files.createDirectory(directory.resolve("first-world"));
+        Path second = Files.createDirectory(directory.resolve("second-world"));
+        Path firstPlayers = Files.createDirectory(first.resolve("playerdata"));
+        Path secondPlayers = Files.createDirectory(second.resolve("playerdata"));
+        String filename = "00000000-0000-0000-0000-000000000003.dat";
+        Files.write(firstPlayers.resolve(filename), new byte[] {1});
+        Files.write(secondPlayers.resolve(filename), new byte[] {2});
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(
+                        Map.of("first", first, "second", second), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
+    }
+
+    @Test void nestedBackupRegionIsNotAnAuthoritativeWorldSource() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path actualRegion = Files.createDirectory(world.resolve("region"));
+        Path actual = Files.write(actualRegion.resolve("r.0.0.mca"), new byte[] {1});
+        Path backup = Files.createDirectories(world.resolve("archive").resolve("region"));
+        Files.write(backup.resolve("r.1.0.mca"), new byte[] {2});
+        var manifest = WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100);
+        assertEquals(1, manifest.worldFiles().size());
+        assertEquals(actual, manifest.worldFiles().get(0).path());
+        assertEquals(1, manifest.requiredSourceIds().size());
+    }
 }
