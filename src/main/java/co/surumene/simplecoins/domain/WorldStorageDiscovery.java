@@ -94,6 +94,13 @@ public final class WorldStorageDiscovery {
             if (worldName == null || worldName.isBlank() || rawRoot == null)
                 throw new IllegalArgumentException("Missing world name or folder");
             Path root = rawRoot.toAbsolutePath().normalize();
+            // NOFOLLOW_LINKS on the final world root is insufficient: Java's
+            // path lookup still traverses any symbolic ancestor component.
+            // Reject every ancestor before discovering authoritative files.
+            for (Path component = root; component != null; component = component.getParent()) {
+                if (Files.isSymbolicLink(component))
+                    throw new IOException("Symbolic ancestor in world storage root: " + component);
+            }
             for (Path existingRoot : worldRoots) {
                 if (root.startsWith(existingRoot) || existingRoot.startsWith(root))
                     throw new IOException("Overlapping world storage roots: " + existingRoot + " and " + root);
