@@ -122,7 +122,30 @@ public final class GrantLedger {
         grants.put(complete.sequence(), complete);
     }
     private void checkHealthy() {
-        if (failed) throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
+        if (failed)
+            throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
+        try {
+            // Do not trust a valid tail if an older persisted reservation has
+            // vanished or changed. This is a correctness-first full scan,
+            // intentionally O(n) durable reads per operation until a safe
+            // compact/indexed journal protocol is designed and verified.
+            byte[] head = DurableFile.read(directory.resolve("head"), 8);
+            long last = grants.isEmpty() ? 0 : grants.lastKey();
+            if (head.length != 8 || java.nio.ByteBuffer.wrap(head).getLong() != last)
+                throw new IOException("Durable issuance head differs from in-memory journal");
+            for (Grant expected : grants.values()) {
+                Grant persisted = decode(DurableFile.read(
+                        directory.resolve(expected.sequence() + ".grant"), 8192));
+                if (!expected.equals(persisted))
+                    throw new IOException("Durable issuance record disagrees at sequence "
+                            + expected.sequence());
+            }
+        } catch (IOException | RuntimeException corruption) {
+            failed = true;
+            throw new IllegalStateException(
+                    "Issuance journal failed integrity verification; deny further operations",
+                    corruption);
+        }
     }
     private void persist(Grant grant) throws IOException {
         try { DurableFile.write(directory.resolve(grant.sequence() + ".grant"), encode(grant)); }
