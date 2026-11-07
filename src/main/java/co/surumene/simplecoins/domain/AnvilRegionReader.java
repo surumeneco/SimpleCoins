@@ -59,6 +59,13 @@ public final class AnvilRegionReader {
         if (!regionFile.getFileName().toString().equals("r." + rx + "." + rz + ".mca"))
             throw new IOException("Noncanonical Anvil region filename: " + regionFile);
 
+        // Checking only the last component with NOFOLLOW_LINKS would still
+        // follow symbolic ancestors and could read outside the selected snapshot.
+        for (Path component = regionFile.toAbsolutePath().normalize();
+                component != null; component = component.getParent()) {
+            if (Files.isSymbolicLink(component))
+                throw new IOException("Symbolic ancestor in region source path: " + component);
+        }
         if (!Files.isRegularFile(regionFile, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Region file missing or symbolic: " + regionFile);
         try (FileChannel channel = FileChannel.open(regionFile, StandardOpenOption.READ)) {
