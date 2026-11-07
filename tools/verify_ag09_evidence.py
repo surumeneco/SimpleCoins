@@ -23,12 +23,13 @@ NUMERIC = ("promised", "delivered_before", "delivered_after",
 
 
 def evaluate(row):
-    missing = [key for key in REQUIRED if not str(row.get(key, "")).strip()]
+    missing = [key for key in REQUIRED
+               if row.get(key) is None or not str(row[key]).strip()]
     if missing:
         return "inconclusive", "missing: " + ", ".join(missing)
     try:
         values = {key: int(row[key]) for key in NUMERIC}
-    except ValueError:
+    except (TypeError, ValueError):
         return "inconclusive", "noninteger evidence"
     if any(value < 0 for value in values.values()):
         return "fail", "negative amount or receipt"
