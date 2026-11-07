@@ -18,6 +18,20 @@ import java.util.Arrays;
 public final class DurableFile {
     private DurableFile() {}
     public static void write(Path target, byte[] payload) throws IOException {
+        writeInternal(target, payload, false);
+    }
+
+    /**
+     * Install a new durable record without overwriting even an unexpected
+     * existing path. An atomic same-filesystem hard link provides exclusive
+     * creation on POSIX filesystems; unsupported providers must fail closed.
+     */
+    public static void writeNew(Path target, byte[] payload) throws IOException {
+        writeInternal(target, payload, true);
+    }
+
+    private static void writeInternal(Path target, byte[] payload,
+                                      boolean requireAbsent) throws IOException {
         Path parent = target.toAbsolutePath().getParent();
         Files.createDirectories(parent);
         Path temporary = Files.createTempFile(parent, ".pending-", ".tmp");
@@ -28,7 +42,15 @@ public final class DurableFile {
                 while (bytes.hasRemaining()) channel.write(bytes);
                 channel.force(true);
             }
-            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            if (requireAbsent) {
+                // Files.move(ATOMIC_MOVE) does not promise no-replace behavior.
+                // createLink is atomic, refuses an occupied target and avoids
+                // replacing a reservation left by a crashed/competing writer.
+                Files.createLink(target, temporary);
+            } else {
+                Files.move(temporary, target,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            }
             try (FileChannel directory = FileChannel.open(parent, StandardOpenOption.READ)) {
                 directory.force(true);
             }
