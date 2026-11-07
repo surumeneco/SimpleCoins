@@ -1,0 +1,39 @@
+name: Phase5 symlink budget JDK25
+on:
+  push:
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageDiscoverySymlinkBudgetTest.java'
+      - '.github/workflows/phase5-symlink-budget-jdk25.yml'
+  workflow_dispatch:
+jobs:
+  symlink-budget:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run targeted JUnit regression
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageDiscoverySymlinkBudgetTest'
+      - name: Require three executed non-skipped JUnit cases
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path('build/test-results/test').glob('TEST-*WorldStorageDiscoverySymlinkBudgetTest.xml'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected one JUnit XML report, got {len(reports)}')
+          root = ET.parse(reports[0]).getroot()
+          cases = root.findall('.//testcase')
+          skipped = sum(c.find('skipped') is not None for c in cases)
+          failures = sum(c.find('failure') is not None or c.find('error') is not None for c in cases)
+          if len(cases) != 3 or skipped or failures:
+              raise SystemExit(f'Expected 3 passing non-skipped tests; actual={len(cases)}, skipped={skipped}, failures={failures}')
+          print('Verified 3 executed non-skipped JUnit cases')
+          PY
