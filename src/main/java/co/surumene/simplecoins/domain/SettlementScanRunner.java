@@ -1,0 +1,104 @@
+package co.surumene.simplecoins.domain;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Read-only, disk-only settlement staging. This does NOT establish a consistent
+ * live-world snapshot or authorize publication. Loaded entities, plugin-specific
+ * ownership, BAN state and all other sources must be reconciled separately.
+ */
+public final class SettlementScanRunner {
+    private SettlementScanRunner() {}
+
+    @FunctionalInterface
+    public interface BlockOwnerLookup {
+        BlockEntitySettlementImport.Ownership resolve(String world, String blockPosition)
+                throws IOException;
+    }
+
+    @FunctionalInterface
+    public interface EntityOwnerLookup {
+        Map<String, ResolvedEntitySettlementImport.Ownership> resolve(
+                String world, Map<String, Object> savedChunk) throws IOException;
+    }
+
+    /** Pending accounting state only; no commit or publication is performed. */
+    public record Staged(SettlementAccumulator pending,
+                         WorldSnapshotTraversal.Report report,
+                         Set<String> requiredSourceIds) {
+        public Staged {
+            Objects.requireNonNull(pending);
+            Objects.requireNonNull(report);
+            requiredSourceIds = Set.copyOf(requiredSourceIds);
+        }
+    }
+
+    private static String sourceId(Path path) {
+        return path.toAbsolutePath().normalize().toString();
+    }
+
+    public static Staged stage(WorldStorageDiscovery.Manifest manifest,
+                               WorldScope scope,
+                               Set<UUID> currentlyBanned,
+                               BlockOwnerLookup blockOwners,
+                               EntityOwnerLookup entityOwners,
+                               int maximumCompressedBytes,
+                               int maximumInflatedBytes) throws IOException {
+        Objects.requireNonNull(manifest);
+        Objects.requireNonNull(scope);
+        Objects.requireNonNull(currentlyBanned);
+        Objects.requireNonNull(blockOwners);
+        Objects.requireNonNull(entityOwners);
+        Set<UUID> banned = Set.copyOf(currentlyBanned);
+        Set<String> required = manifest.requiredSourceIds();
+        var pending = new SettlementAccumulator(scope, required);
+
+        WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
+                manifest, maximumCompressedBytes, maximumInflatedBytes,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override
+                    public void chunk(WorldStorageDiscovery.SourceFile source,
+                                      AnvilRegionReader.Chunk chunk) throws IOException {
+                        // The discovery layer normally excludes disabled worlds.
+                        // If a manually constructed manifest includes one, read
+                        // it but do not attribute assets from that world.
+                        if (!scope.includes(source.world())) return;
+                        String id = sourceId(source.path());
+                        if (source.kind() == WorldStorageDiscovery.Kind.REGION) {
+                            BlockEntitySettlementImport.stageChunk(
+                                    pending, id, source.world(), chunk.nbt(),
+                                    position -> blockOwners.resolve(source.world(), position));
+                        } else {
+                            FreeEntitySettlementImport.stageChunk(
+                                    pending, id, source.world(), chunk.nbt());
+                            Map<String, ResolvedEntitySettlementImport.Ownership> owners =
+                                    entityOwners.resolve(source.world(), chunk.nbt());
+                            if (owners == null)
+                                throw new IOException("Saved Entity ownership resolver returned null");
+                            ResolvedEntitySettlementImport.stageChunk(
+                                    pending, id, source.world(), chunk.nbt(), owners);
+                        }
+                    }
+
+                    @Override
+                    public void player(UUID player, Map<String, Object> data) throws IOException {
+                        Path path = manifest.playerDataFiles().get(player);
+                        if (path == null)
+                            throw new IOException("Playerdata missing from manifest: " + player);
+                        PlayerDataSettlementImport.stage(pending, sourceId(path), player,
+                                banned.contains(player), data);
+                    }
+                });
+
+        // A world source may contain multiple chunks. Completion is valid only
+        // after traversal of every file and playerdata has returned successfully.
+        for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles())
+            pending.completeSource(sourceId(source.path()));
+        return new Staged(pending, report, required);
+    }
+}
