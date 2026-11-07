@@ -100,7 +100,7 @@ class WorldSnapshotSourceDriftTest {
                 manifest, 4096, 4096, new WorldSnapshotTraversal.Visitor() {
                     @Override public void chunk(WorldStorageDiscovery.SourceFile source,
                                                 AnvilRegionReader.Chunk chunk) throws IOException {
-                        player(uuid);
+                        WorldSnapshotSourceDriftTest.this.player(uuid);
                     }
                     @Override public void player(UUID who, Map<String, Object> data) {}
                 }), "A playerdata source absent at preflight must not appear and be accepted mid-scan");
