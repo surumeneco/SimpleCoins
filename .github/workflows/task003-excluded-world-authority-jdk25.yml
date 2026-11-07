@@ -1,0 +1,49 @@
+name: TASK003 excluded-world authority JDK25 verification
+on:
+  push:
+    branches:
+      - test/task003-excluded-world-jdk25-evidence-20261107-chat
+    paths:
+      - .github/workflows/task003-excluded-world-authority-jdk25.yml
+      - src/test/java/co/surumene/simplecoins/domain/WorldStorageDiscoveryExcludedWorldAuthorityTest.java
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run existing JUnit (no production changes)
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.WorldStorageDiscoveryExcludedWorldAuthorityTest'
+      - name: Verify exactly two executed, non-skipped JUnit cases
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          files = list(Path('build/test-results/test').glob('TEST-*WorldStorageDiscoveryExcludedWorldAuthorityTest.xml'))
+          if len(files) != 1:
+              raise SystemExit(f'Expected one JUnit XML, found {len(files)}')
+          root = ET.parse(files[0]).getroot()
+          values = {k: int(root.attrib.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')}
+          if values != {'tests': 2, 'failures': 0, 'errors': 0, 'skipped': 0}:
+              raise SystemExit(f'Unexpected JUnit result: {values}')
+          print('Verified JUnit 2/2, zero skipped/failures/errors')
+          PY
+      - name: Preserve test execution XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task003-excluded-world-authority-junit
+          path: build/test-results/test/TEST-*WorldStorageDiscoveryExcludedWorldAuthorityTest.xml
+          if-no-files-found: warn
