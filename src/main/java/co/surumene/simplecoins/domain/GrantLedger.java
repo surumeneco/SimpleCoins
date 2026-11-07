@@ -81,7 +81,7 @@ public final class GrantLedger {
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
-        persist(grant);
+        persistNew(grant);
         try { writeHead(next); }
         catch (IOException failure) { failed = true; throw failure; }
         grants.put(next, grant);
@@ -150,6 +150,15 @@ public final class GrantLedger {
     private void persist(Grant grant) throws IOException {
         try { DurableFile.write(directory.resolve(grant.sequence() + ".grant"), encode(grant)); }
         catch (IOException ex) { failed = true; throw ex; }
+    }
+
+    private void persistNew(Grant grant) throws IOException {
+        try {
+            DurableFile.writeNew(directory.resolve(grant.sequence() + ".grant"), encode(grant));
+        } catch (IOException ex) {
+            failed = true;
+            throw ex;
+        }
     }
     private static byte[] encode(Grant grant) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
