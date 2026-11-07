@@ -69,7 +69,7 @@ def class_references(payload: bytes) -> frozenset[str]:
     descriptors and similarly prefixed names are not counted as references.
     This is still a static hint, not proof of invocation.
     """
-    if len(payload) < 10 or payload[:4] != b'\\xca\\xfe\\xba\\xbe':
+    if len(payload) < 10 or payload[:4] != b'\xca\xfe\xba\xbe':
         raise InvalidClassFile('Invalid class-file header')
     count = struct.unpack_from('>H', payload, 8)[0]
     if count < 1:
