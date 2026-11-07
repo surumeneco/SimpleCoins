@@ -23,9 +23,15 @@ REQUIRED = (
 )
 
 
-def synthetic_class(constants=()):
+def synthetic_class(constants=(), *, literals=()):
+    """Emit real CONSTANT_Class entries, plus optionally unreferenced UTF8 strings."""
     parts = []
     for value in constants:
+        index = len(parts) + 1
+        encoded = value.encode('ascii')
+        parts.append(b'\x01' + struct.pack('>H', len(encoded)) + encoded)
+        parts.append(b'\x07' + struct.pack('>H', index))
+    for value in literals:
         encoded = value.encode('ascii')
         parts.append(b'\x01' + struct.pack('>H', len(encoded)) + encoded)
     return b'\xca\xfe\xba\xbe' + b'\0\0\0\x41' + struct.pack('>H', len(parts) + 1) + b''.join(parts)
@@ -33,7 +39,7 @@ def synthetic_class(constants=()):
 
 class SavedWiringTest(unittest.TestCase):
     def inspect(self, *, absent=(), main_refs=None, scan_refs=None, traversal_refs=None,
-                corrupted=None, duplicate=False):
+                corrupted=None, duplicate=False, main_literals=(), scan_literals=()):
         refs_main = [DOMAIN + 'SettlementScanRunner'] if main_refs is None else main_refs
         refs_scan = [DOMAIN + n for n in (
             'WorldSnapshotTraversal', 'SettlementAccumulator', 'PlayerDataSettlementImport',
@@ -46,14 +52,15 @@ class SavedWiringTest(unittest.TestCase):
             jarfile = Path(directory) / 'plugin.jar'
             with ZipFile(jarfile, 'w') as jar:
                 jar.writestr('plugin.yml', 'name: SimpleCoins\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\n')
-                jar.writestr(MAIN + '.class', synthetic_class(refs_main))
+                jar.writestr(MAIN + '.class', synthetic_class(refs_main, literals=main_literals))
                 for name in REQUIRED:
                     if name in absent:
                         continue
                     constants = refs_scan if name == 'SettlementScanRunner' else (
                         refs_traversal if name == 'WorldSnapshotTraversal' else
                         ['requiredSourceIds', 'discover'] if name == 'WorldStorageDiscovery' else [])
-                    payload = b'BAD' if name == corrupted else synthetic_class(constants)
+                    payload = b'BAD' if name == corrupted else synthetic_class(
+                        constants, literals=scan_literals if name == 'SettlementScanRunner' else ())
                     jar.writestr(DOMAIN + name + '.class', payload)
                 if duplicate:
                     jar.writestr(DOMAIN + 'AnvilRegionReader.class', synthetic_class())
@@ -117,6 +124,30 @@ class SavedWiringTest(unittest.TestCase):
                 jar.writestr(DOMAIN + 'SettlementScanRunner$2.class', b'BAD')
             with self.assertRaises(app.InvalidClassFile):
                 app.inspect_jar(jarfile)
+
+    def test_similarly_named_main_class_is_not_a_reference(self):
+        report = self.inspect(main_refs=[DOMAIN + 'SettlementScanRunnerFake'])
+        self.assertIn('main:SettlementScanRunner', report['missing'])
+
+    def test_similarly_named_scanner_import_is_not_a_reference(self):
+        refs = [DOMAIN + n for n in ('WorldSnapshotTraversal', 'SettlementAccumulator',
+                'PlayerDataSettlementImport', 'BlockEntitySettlementImport',
+                'FreeEntitySettlementImport', 'ResolvedEntitySettlementImportFake')]
+        report = self.inspect(scan_refs=refs)
+        self.assertIn('scanner:ResolvedEntitySettlementImport', report['missing'])
+
+    def test_unreferenced_class_name_in_utf8_log_is_not_wiring(self):
+        report = self.inspect(main_refs=[],
+                              main_literals=['debug:' + DOMAIN + 'SettlementScanRunner'])
+        self.assertIn('main:SettlementScanRunner', report['missing'])
+
+    def test_unreferenced_descriptor_in_log_is_not_scanner_import(self):
+        refs = [DOMAIN + n for n in ('WorldSnapshotTraversal', 'SettlementAccumulator',
+                'PlayerDataSettlementImport', 'BlockEntitySettlementImport',
+                'FreeEntitySettlementImport')]
+        report = self.inspect(scan_refs=refs,
+            scan_literals=['log:L' + DOMAIN + 'ResolvedEntitySettlementImport;:done'])
+        self.assertIn('scanner:ResolvedEntitySettlementImport', report['missing'])
 
     def test_unregistered_entrypoint_is_not_a_candidate(self):
         report = self.inspect(main_refs=['registerEvents'])
