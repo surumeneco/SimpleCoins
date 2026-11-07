@@ -39,6 +39,13 @@ public final class PlayerDataReader {
             throw new IOException("Invalid playerdata UUID: " + file, invalid);
         }
 
+        // NOFOLLOW_LINKS on the final file cannot exclude a symlink in any
+        // parent directory of a caller-supplied authoritative playerdata root.
+        for (Path component = file.toAbsolutePath().normalize();
+                component != null; component = component.getParent()) {
+            if (Files.isSymbolicLink(component))
+                throw new IOException("Symbolic ancestor in playerdata source path: " + component);
+        }
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Missing or symbolic playerdata: " + file);
         long size = Files.size(file);
