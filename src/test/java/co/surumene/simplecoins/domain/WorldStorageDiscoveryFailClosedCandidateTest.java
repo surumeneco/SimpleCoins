@@ -168,4 +168,26 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
                         .collect(java.util.stream.Collectors.toSet()));
         assertEquals(2, manifest.requiredSourceIds().size());
     }
+
+    @Test void legacyPlayersDataIsDiscoveredAsAnAuthoritativePlayerSource() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path players = Files.createDirectories(world.resolve("players").resolve("data"));
+        Path saved = Files.write(players.resolve("00000000-0000-0000-0000-000000000002.dat"),
+                new byte[] {1});
+        var manifest = WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100);
+        assertEquals(Map.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002"), saved),
+                manifest.playerDataFiles());
+    }
+
+    @Test void legacyAndModernPlayerdataForSameUuidMustFailClosed() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path modern = Files.createDirectory(world.resolve("playerdata"));
+        Path legacy = Files.createDirectories(world.resolve("players").resolve("data"));
+        String filename = "00000000-0000-0000-0000-000000000002.dat";
+        Files.write(modern.resolve(filename), new byte[] {1});
+        Files.write(legacy.resolve(filename), new byte[] {2});
+        IOException failure = assertThrows(IOException.class,
+                () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
+        assertTrue(failure.getMessage().contains("Ambiguous playerdata authority"));
+    }
 }
