@@ -1,0 +1,40 @@
+name: Phase5 discovery fail-closed JDK25 candidate
+on:
+  push:
+    branches:
+      - test/task003-discovery-failclosed-20261107-queue-d
+    paths:
+      - '.github/workflows/task003-discovery-failclosed-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageDiscoveryFailClosedCandidateTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-characterization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run discovery fail-closed JUnit cases
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageDiscoveryFailClosedCandidateTest
+      - name: Assert eighteen executed cases
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          files = list(Path('build/test-results/test').glob('*WorldStorageDiscoveryFailClosedCandidateTest.xml'))
+          if len(files) != 1:
+              raise SystemExit(f'Expected one test report, found {len(files)}')
+          root = ET.parse(files[0]).getroot()
+          actual = {k: int(root.attrib.get(k, '0')) for k in ('tests','failures','errors','skipped')}
+          assert actual == {'tests': 18, 'failures': 0, 'errors': 0, 'skipped': 0}, actual
+          print(actual)
+          PY
