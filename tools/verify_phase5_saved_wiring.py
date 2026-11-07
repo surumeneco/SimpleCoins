@@ -60,6 +60,64 @@ def utf8_pool(payload: bytes) -> frozenset[str]:
     return frozenset(entries)
 
 
+
+def class_references(payload: bytes) -> frozenset[str]:
+    """Resolve only tagged JVM CONSTANT_Class entries, never arbitrary UTF8 hints.
+
+    A string literal or debug log can contain a class path but does not establish
+    a bytecode class reference. Reference names are exact JVM internal names;
+    descriptors and similarly prefixed names are not counted as references.
+    This is still a static hint, not proof of invocation.
+    """
+    if len(payload) < 10 or payload[:4] != b'\xca\xfe\xba\xbe':
+        raise InvalidClassFile('Invalid class-file header')
+    count = struct.unpack_from('>H', payload, 8)[0]
+    if count < 1:
+        raise InvalidClassFile('Invalid zero constant-pool count')
+    offset = 10
+    index = 1
+    strings: dict[int, str | None] = {}
+    classes: list[int] = []
+
+    def take(size: int) -> bytes:
+        nonlocal offset
+        if offset + size > len(payload):
+            raise InvalidClassFile('Truncated class-file constant pool')
+        chunk = payload[offset:offset + size]
+        offset += size
+        return chunk
+
+    while index < count:
+        tag = take(1)[0]
+        if tag == 1:
+            length = struct.unpack('>H', take(2))[0]
+            raw = take(length)
+            strings[index] = raw.decode('ascii') if raw.isascii() else None
+        elif tag == 7:
+            classes.append(struct.unpack('>H', take(2))[0])
+        elif tag in (3, 4, 9, 10, 11, 12, 17, 18):
+            take(4)
+        elif tag in (5, 6):
+            take(8)
+            index += 1
+        elif tag in (8, 16, 19, 20):
+            take(2)
+        elif tag == 15:
+            take(3)
+        else:
+            raise InvalidClassFile(f'Unsupported constant-pool tag: {tag}')
+        index += 1
+
+    result: set[str] = set()
+    for class_index in classes:
+        if class_index not in strings:
+            raise InvalidClassFile('CONSTANT_Class has invalid Utf8 name index')
+        name = strings[class_index]
+        if name is not None:
+            result.add(name)
+    return frozenset(result)
+
+
 DOMAIN = 'co/surumene/simplecoins/domain/'
 REQUIRED_CLASSES = (
     'WorldStorageDiscovery', 'WorldSnapshotTraversal', 'AnvilRegionReader',
@@ -93,32 +151,34 @@ def inspect_jar(path: Path) -> dict:
         main_class = main.group(1).replace('.', '/') + '.class'
         if main_class not in names:
             raise ValueError('Declared main plugin class absent')
-        main_constants = utf8_pool(jar.read(main_class))
+        main_class_refs = class_references(jar.read(main_class))
         pools: dict[str, frozenset[str]] = {}
+        references: dict[str, frozenset[str]] = {}
         for name in REQUIRED_CLASSES:
             class_path = DOMAIN + name + '.class'
             if class_path in names:
-                pools[name] = utf8_pool(jar.read(class_path))
+                class_bytes = jar.read(class_path)
+                pools[name] = utf8_pool(class_bytes)
+                references[name] = class_references(class_bytes)
 
         # Javac may place visitor calls in any numbered anonymous inner class.
         # Looking only at $1 silently misses a scanner implemented in $2 or later.
-        scan_constants = pools.get('SettlementScanRunner', frozenset())
+        scan_classes = references.get('SettlementScanRunner', frozenset())
         inner_prefix = DOMAIN + 'SettlementScanRunner$'
         for inner_path in sorted(names):
             if (inner_path.startswith(inner_prefix)
                     and inner_path.endswith('.class')
                     and inner_path[len(inner_prefix):-len('.class')].isdigit()):
-                scan_constants = scan_constants | utf8_pool(jar.read(inner_path))
+                scan_classes = scan_classes | class_references(jar.read(inner_path))
 
         checks: dict[str, bool] = {
-            'main:SettlementScanRunner': any(
-                DOMAIN + 'SettlementScanRunner' in value for value in main_constants),
+            'main:SettlementScanRunner': DOMAIN + 'SettlementScanRunner' in main_class_refs,
         }
         checks.update({f'class:{name}': name in pools for name in REQUIRED_CLASSES})
-        checks.update({f'scanner:{name}': any(DOMAIN + name in value for value in scan_constants)
+        checks.update({f'scanner:{name}': DOMAIN + name in scan_classes
                        for name in SCAN_REFERENCES})
-        traversal_pool = pools.get('WorldSnapshotTraversal', frozenset())
-        checks.update({f'traversal:{name}': any(DOMAIN + name in value for value in traversal_pool)
+        traversal_classes = references.get('WorldSnapshotTraversal', frozenset())
+        checks.update({f'traversal:{name}': DOMAIN + name in traversal_classes
                        for name in TRAVERSAL_REFERENCES})
         discovery_pool = pools.get('WorldStorageDiscovery', frozenset())
         checks['discovery:requiredSourceIds'] = 'requiredSourceIds' in discovery_pool
