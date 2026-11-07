@@ -140,4 +140,32 @@ class WorldStorageDiscoveryFailClosedCandidateTest {
                 () -> WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100));
         assertTrue(failure.getMessage().contains("Noncanonical Anvil region filename"));
     }
+
+    @Test void excludedWorldStillContributesPlayerdataButNotRegionAssets() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("excluded-world"));
+        Path region = Files.createDirectory(world.resolve("region"));
+        Path players = Files.createDirectory(world.resolve("playerdata"));
+        Files.write(region.resolve("r.0.0.mca"), new byte[] {1});
+        Path player = Files.write(players.resolve("00000000-0000-0000-0000-000000000001.dat"), new byte[] {2});
+        WorldScope excluded = new WorldScope(false, Set.of(), Set.of("excluded"));
+        var manifest = WorldStorageDiscovery.discover(Map.of("excluded", world), excluded, 100);
+        assertEquals(0, manifest.worldFiles().size());
+        assertEquals(Map.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"), player),
+                manifest.playerDataFiles());
+    }
+
+    @Test void dimensionEntityAndRegionSourcesRemainDistinctAndDiscoverable() throws Exception {
+        Path world = Files.createDirectory(directory.resolve("world"));
+        Path dimension = Files.createDirectories(world.resolve("dimensions").resolve("example").resolve("moon"));
+        Path region = Files.createDirectory(dimension.resolve("region"));
+        Path entities = Files.createDirectory(dimension.resolve("entities"));
+        Files.write(region.resolve("r.-1.2.mca"), new byte[] {1});
+        Files.write(entities.resolve("r.-1.2.mca"), new byte[] {2});
+        var manifest = WorldStorageDiscovery.discover(Map.of("world", world), allWorlds(), 100);
+        assertEquals(2, manifest.worldFiles().size());
+        assertEquals(Set.of(WorldStorageDiscovery.Kind.REGION, WorldStorageDiscovery.Kind.ENTITY),
+                manifest.worldFiles().stream().map(WorldStorageDiscovery.SourceFile::kind)
+                        .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(2, manifest.requiredSourceIds().size());
+    }
 }
