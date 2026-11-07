@@ -1,0 +1,25 @@
+name: Phase5 WCL capture parser regression
+on:
+  push:
+    branches:
+      - fix/phase5-wcl-capture-strict-readonly-20261107-chatboost
+  pull_request:
+    paths:
+      - tools/audit_wcl_service_capture.py
+      - tests/test_audit_wcl_service_capture.py
+      - tests/test_audit_wcl_time_type_boundary.py
+      - .github/workflows/phase5-wcl-capture-parser.yml
+permissions:
+  contents: read
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify strict and malformed WCL capture input
+        run: |
+          python -m unittest discover -s tests -p 'test_audit_wcl*.py' -v
+          python -m py_compile tools/audit_wcl_service_capture.py
