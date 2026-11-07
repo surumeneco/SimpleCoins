@@ -1,0 +1,40 @@
+name: Phase5 region coordinate boundaries JDK25 candidate
+on:
+  push:
+    branches:
+      - test/task003-region-coordinate-overflow-queue-b-20261107
+    paths:
+      - '.github/workflows/task003-region-coordinate-boundary-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldStorageRegionCoordinateBoundaryCandidateTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coordinate-boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run coordinate boundary JUnit
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.WorldStorageRegionCoordinateBoundaryCandidateTest
+      - name: Verify two executed non-skipped JUnit cases
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path('build/test-results/test').glob('*WorldStorageRegionCoordinateBoundaryCandidateTest.xml'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected exactly one report, got {len(reports)}')
+          root = ET.parse(reports[0]).getroot()
+          counts = {k: int(root.attrib.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')}
+          assert counts == {'tests': 2, 'failures': 0, 'errors': 0, 'skipped': 0}, counts
+          print(counts)
+          PY
