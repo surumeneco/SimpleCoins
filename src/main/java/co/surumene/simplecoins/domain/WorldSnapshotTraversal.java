@@ -33,6 +33,21 @@ public final class WorldSnapshotTraversal {
     /** A report exists only if every discovered input was read successfully. */
     public record Report(int regionFiles, int chunks, int playerFiles) {}
 
+    /**
+     * Best-effort file-change evidence, not a coherent-world snapshot proof.
+     * Metadata comparison detects size/timestamp/file-identity changes only.
+     */
+    private record SourceStamp(Object physicalKey, long size,
+                               java.nio.file.attribute.FileTime modified) {}
+
+    private static SourceStamp stamp(Path path) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attrs.isRegularFile())
+            throw new IOException("Snapshot source disappeared or ceased being regular: " + path);
+        return new SourceStamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime());
+    }
+
     public static Report traverse(WorldStorageDiscovery.Manifest manifest,
                                   int maximumCompressedBytes,
                                   int maximumInflatedBytes,
@@ -44,6 +59,9 @@ public final class WorldSnapshotTraversal {
 
         // Reject an ambiguous manifest before invoking any callbacks.
         Set<Path> paths = new HashSet<>();
+        // Store the exact preflight source set, including absent mandatory
+        // playerdata. A late-appearing file is not part of the input snapshot.
+        Map<Path, SourceStamp> before = new HashMap<>();
         Map<Object, Path> physicalKeys = new HashMap<>();
         List<Path> unknownKeys = new ArrayList<>();
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles()) {
@@ -57,6 +75,7 @@ public final class WorldSnapshotTraversal {
             if (!paths.add(path))
                 throw new IOException("Duplicate world data source: " + path);
             requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
+            before.put(path, stamp(path));
         }
         for (var entry : manifest.playerDataFiles().entrySet()) {
             Path raw = entry.getValue();
@@ -67,8 +86,12 @@ public final class WorldSnapshotTraversal {
                 throw new IOException("Duplicate or overlapping playerdata source: " + path);
             // Keep the existing later read failure for missing playerdata, but
             // reject physical aliases of present files before any callbacks.
-            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS))
+            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
                 requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
+                before.put(path, stamp(path));
+            } else {
+                before.put(path, null);
+            }
         }
 
         int files = 0, chunks = 0, players = 0;
@@ -97,6 +120,18 @@ public final class WorldSnapshotTraversal {
                     maximumCompressedBytes, maximumInflatedBytes);
             visitor.player(entry.getKey(), data);
             players = Math.addExact(players, 1);
+        }
+        // Check EVERY authoritative input again, including already visited
+        // regions. The caller must discard all staged values on any mismatch.
+        // This is a drift detector, not a substitute for freezing Paper worlds.
+        for (var entry : before.entrySet()) {
+            if (entry.getValue() == null)
+                throw new IOException("Required playerdata appeared during snapshot traversal: "
+                        + entry.getKey());
+            SourceStamp observed = stamp(entry.getKey());
+            if (!entry.getValue().equals(observed))
+                throw new IOException("Authoritative saved source changed during traversal: "
+                        + entry.getKey());
         }
         return new Report(files, chunks, players);
     }
