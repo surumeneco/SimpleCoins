@@ -91,7 +91,7 @@ class SavedWiringTest(unittest.TestCase):
             jarfile = Path(directory) / 'plugin.jar'
             with ZipFile(jarfile, 'w') as jar:
                 jar.writestr('plugin.yml',
-                             'name: SimpleCoins\\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\\n')
+                             'name: SimpleCoins\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\n')
                 jar.writestr(MAIN + '.class',
                              synthetic_class([DOMAIN + 'SettlementScanRunner']))
                 for name in REQUIRED:
@@ -112,7 +112,7 @@ class SavedWiringTest(unittest.TestCase):
             jarfile = Path(directory) / 'plugin.jar'
             with ZipFile(jarfile, 'w') as jar:
                 jar.writestr('plugin.yml',
-                             'name: SimpleCoins\\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\\n')
+                             'name: SimpleCoins\nmain: co.surumene.simplecoins.SimpleCoinsPlugin\n')
                 jar.writestr(MAIN + '.class', synthetic_class())
                 jar.writestr(DOMAIN + 'SettlementScanRunner$2.class', b'BAD')
             with self.assertRaises(app.InvalidClassFile):
