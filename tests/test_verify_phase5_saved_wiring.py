@@ -162,5 +162,29 @@ class SavedWiringTest(unittest.TestCase):
             self.inspect(duplicate=True)
 
 
+    def test_forward_constant_class_name_index_is_resolved(self):
+        """A tagged JVM class may refer to a later constant-pool UTF8 entry."""
+        name = DOMAIN + 'SettlementScanRunner'
+        encoded = name.encode('ascii')
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 3) + b'\x07\x00\x02'
+                   + b'\x01' + struct.pack('>H', len(encoded)) + encoded)
+        self.assertEqual(frozenset({name}), app.class_references(payload))
+
+    def test_invalid_class_name_pool_index_fails_closed(self):
+        """A dangling CONSTANT_Class must never count as scanner wiring."""
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 2) + b'\x07\x00\x02')
+        with self.assertRaises(app.InvalidClassFile):
+            app.class_references(payload)
+
+    def test_truncated_class_name_index_fails_closed(self):
+        """A partial CONSTANT_Class index is not a valid reference."""
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 2) + b'\x07\x00')
+        with self.assertRaises(app.InvalidClassFile):
+            app.class_references(payload)
+
+
 if __name__ == '__main__':
     unittest.main()
