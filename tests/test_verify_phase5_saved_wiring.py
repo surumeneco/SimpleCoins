@@ -157,6 +157,25 @@ class SavedWiringTest(unittest.TestCase):
         with self.assertRaises(app.InvalidClassFile):
             self.inspect(corrupted='WorldSnapshotTraversal')
 
+    def test_terminal_wide_constant_slot_fails_closed(self):
+        # JVMS §4.4.5: CONSTANT_Long/Double reserves the next CP index.
+        # A last-index wide constant cannot be a structurally valid pool.
+        for tag in (5, 6):
+            payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                       + struct.pack('>H', 2) + bytes([tag]) + bytes(8))
+            for parser in (app.utf8_pool, app.class_references):
+                with self.subTest(tag=tag, parser=parser.__name__):
+                    with self.assertRaises(app.InvalidClassFile):
+                        parser(payload)
+
+    def test_wide_constant_with_reserved_slot_remains_parseable(self):
+        for tag in (5, 6):
+            payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                       + struct.pack('>H', 3) + bytes([tag]) + bytes(8))
+            with self.subTest(tag=tag):
+                self.assertEqual(frozenset(), app.utf8_pool(payload))
+                self.assertEqual(frozenset(), app.class_references(payload))
+
     def test_duplicate_class_name_fails_closed(self):
         with self.assertRaises(ValueError):
             self.inspect(duplicate=True)
