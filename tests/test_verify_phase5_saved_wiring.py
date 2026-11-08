@@ -162,9 +162,9 @@ class SavedWiringTest(unittest.TestCase):
             jarfile = Path(directory) / 'plugin.jar'
             with ZipFile(jarfile, 'w') as jar:
                 jar.writestr('plugin.yml',
-                             'name: SimpleCoins\\n'
-                             'main: co.surumene.simplecoins.SimpleCoinsPlugin\\n'
-                             'main: attacker.other.EntryPoint\\n')
+                             'name: SimpleCoins\n'
+                             'main: co.surumene.simplecoins.SimpleCoinsPlugin\n'
+                             'main: attacker.other.EntryPoint\n')
                 jar.writestr(MAIN + '.class',
                              synthetic_class([DOMAIN + 'SettlementScanRunner']))
             with self.assertRaisesRegex(ValueError, 'main'):
