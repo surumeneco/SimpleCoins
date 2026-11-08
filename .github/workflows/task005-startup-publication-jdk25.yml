@@ -39,7 +39,7 @@ jobs:
               'failedBackgroundStageNeverSchedulesPublication',
           }
           cases=root.findall('.//testcase')
-          assert {case.attrib['name'] for case in cases} == expected, [c.attrib for c in cases]
+          assert {case.attrib['name'].removesuffix('()') for case in cases} == expected, [c.attrib for c in cases]
           assert len(cases)==4 and all(not c.findall('failure') and not c.findall('error') and not c.findall('skipped') for c in cases)
           assert int(root.attrib.get('tests','0'))==4 and int(root.attrib.get('failures','1'))==0 and int(root.attrib.get('errors','1'))==0 and int(root.attrib.get('skipped','1'))==0
           print('Verified TASK005 exact JUnit 4/4 passed; zero failures/errors/skipped')
