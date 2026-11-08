@@ -157,6 +157,19 @@ class SavedWiringTest(unittest.TestCase):
         with self.assertRaises(app.InvalidClassFile):
             self.inspect(corrupted='WorldSnapshotTraversal')
 
+    def test_conflicting_duplicate_main_descriptor_keys_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jarfile = Path(directory) / 'plugin.jar'
+            with ZipFile(jarfile, 'w') as jar:
+                jar.writestr('plugin.yml',
+                             'name: SimpleCoins\\n'
+                             'main: co.surumene.simplecoins.SimpleCoinsPlugin\\n'
+                             'main: attacker.other.EntryPoint\\n')
+                jar.writestr(MAIN + '.class',
+                             synthetic_class([DOMAIN + 'SettlementScanRunner']))
+            with self.assertRaisesRegex(ValueError, 'main'):
+                app.inspect_jar(jarfile)
+
     def test_duplicate_class_name_fails_closed(self):
         with self.assertRaises(ValueError):
             self.inspect(duplicate=True)
