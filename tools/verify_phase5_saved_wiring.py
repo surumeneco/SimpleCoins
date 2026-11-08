@@ -145,78 +145,11 @@ def inspect_jar(path: Path) -> dict:
         if 'plugin.yml' not in names:
             raise ValueError('Missing plugin.yml')
         descriptor = jar.read('plugin.yml').decode('utf-8')
-        # An ambiguous plugin entrypoint cannot be evidence of startup wiring.
-        # A permissive first-match search would silently accept a later override.
+        # Duplicate YAML keys can override the class actually loaded by Paper.
         main_keys = re.findall(r'(?m)^main\s*:', descriptor)
         if len(main_keys) != 1:
             raise ValueError('Missing or ambiguous main plugin class')
-        main = re.search(r'(?m)^main\s*:\s*([a-zA-Z0-9_.]+)\s*
-        if main_class not in names:
-            raise ValueError('Declared main plugin class absent')
-        main_class_refs = class_references(jar.read(main_class))
-        pools: dict[str, frozenset[str]] = {}
-        references: dict[str, frozenset[str]] = {}
-        for name in REQUIRED_CLASSES:
-            class_path = DOMAIN + name + '.class'
-            if class_path in names:
-                class_bytes = jar.read(class_path)
-                pools[name] = utf8_pool(class_bytes)
-                references[name] = class_references(class_bytes)
-
-        # Javac may place visitor calls in any numbered anonymous inner class.
-        # Looking only at $1 silently misses a scanner implemented in $2 or later.
-        scan_classes = references.get('SettlementScanRunner', frozenset())
-        inner_prefix = DOMAIN + 'SettlementScanRunner$'
-        for inner_path in sorted(names):
-            if (inner_path.startswith(inner_prefix)
-                    and inner_path.endswith('.class')
-                    and inner_path[len(inner_prefix):-len('.class')].isdigit()):
-                scan_classes = scan_classes | class_references(jar.read(inner_path))
-
-        checks: dict[str, bool] = {
-            'main:SettlementScanRunner': DOMAIN + 'SettlementScanRunner' in main_class_refs,
-        }
-        checks.update({f'class:{name}': name in pools for name in REQUIRED_CLASSES})
-        checks.update({f'scanner:{name}': DOMAIN + name in scan_classes
-                       for name in SCAN_REFERENCES})
-        traversal_classes = references.get('WorldSnapshotTraversal', frozenset())
-        checks.update({f'traversal:{name}': DOMAIN + name in traversal_classes
-                       for name in TRAVERSAL_REFERENCES})
-        discovery_pool = pools.get('WorldStorageDiscovery', frozenset())
-        checks['discovery:requiredSourceIds'] = 'requiredSourceIds' in discovery_pool
-        checks['discovery:discover'] = 'discover' in discovery_pool
-        missing = sorted(name for name, found in checks.items() if not found)
-        return {
-            'kind': 'phase5-saved-wiring-static-inventory',
-            'main_class': main.group(1),
-            'status': 'missing' if missing else 'candidate-only',
-            'missing': missing,
-            'checks': checks,
-            'limitation': (
-                'Constant-pool hints do not prove invocation, correct source roots, '
-                'NBT decoder completeness, saved/live deduplication, ownership, '
-                'consistent snapshot, CAT Gates, or Paper/JE/BE acceptance.'
-            ),
-        }
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--jar', required=True, type=Path)
-    args = parser.parse_args(argv)
-    try:
-        report = inspect_jar(args.jar)
-    except (OSError, BadZipFile, ValueError, UnicodeError, struct.error) as exc:
-        print(json.dumps({'kind': 'phase5-saved-wiring-static-inventory',
-                          'status': 'invalid', 'error': str(exc)}, ensure_ascii=False))
-        return 3
-    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-    return 2 if report['status'] == 'missing' else 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())
-, descriptor)
+        main = re.search(r'(?m)^main\s*:\s*([a-zA-Z0-9_.]+)\s*$', descriptor)
         if main is None:
             raise ValueError('Missing or invalid main plugin class')
         main_class = main.group(1).replace('.', '/') + '.class'
