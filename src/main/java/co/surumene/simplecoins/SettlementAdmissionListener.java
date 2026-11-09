@@ -43,7 +43,12 @@ public final class SettlementAdmissionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void validate(PlayerConnectionValidateLoginEvent event) {
         Objects.requireNonNull(event, "event");
-        if (event.isAllowed() && (!barrier.mayAdmit() || publication == null || !publication.mayAdmit()))
+        if (!event.isAllowed()) {
+            // Another listener has already rejected admission; preserve its reason.
+            return;
+        }
+        if (!barrier.mayAdmit() || publication == null || !publication.mayAdmit()) {
             event.kickMessage(NOT_READY);
+        }
     }
 }
