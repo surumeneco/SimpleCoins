@@ -78,6 +78,7 @@ public final class BlockLockerSavedSignText {
                 throw new IOException("Non-string saved sign " + side + " message");
             lines.add(line);
         }
-        return List.copyOf(lines);
+        // Evidence makes the single immutable copy before exposing these lines.
+        return lines;
     }
 }
