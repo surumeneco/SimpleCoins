@@ -1,0 +1,6 @@
+name: SimpleCoinsGuard
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.guard.SimpleCoinsAdmissionGuard
+api-version: '26.2'
+load: STARTUP
+description: Independent admission barrier for SimpleCoins startup and disable safety
