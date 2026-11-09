@@ -48,14 +48,17 @@ public final class SettlementStartupCoordinator<T> {
             throw new IllegalStateException("Startup settlement already scheduled");
         final long generation = gate.begin();
         try {
-            background.execute(() -> {
-                try {
-                    T candidate = Objects.requireNonNull(stage.run(), "Missing verified snapshot");
-                    mainThread.execute(() -> publish(generation, candidate));
-                } catch (Throwable error) {
-                    abort(error);
-                }
-            });
+            background.execute(() -> runBackground(generation));
+        } catch (Throwable error) {
+            abort(error);
+        }
+    }
+
+    /** Keep scan failures isolated from executor submission failures. */
+    private void runBackground(long generation) {
+        try {
+            T candidate = Objects.requireNonNull(stage.run(), "Missing verified snapshot");
+            mainThread.execute(() -> publish(generation, candidate));
         } catch (Throwable error) {
             abort(error);
         }
