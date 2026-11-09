@@ -8,14 +8,16 @@ import java.util.Map;
 public final class CoinMoney {
     private CoinMoney() {}
 
+    /** Private fixed denomination order; avoid a cloned enum array per decomposition. */
+    private static final CoinDenomination[] DENOMINATIONS = CoinDenomination.values();
+
     /** Greedy decomposition is minimum-coin for the agreed 1/5/10 decimal series. */
     public static Map<CoinDenomination, Long> minimumCoins(long amount) {
         if (amount <= 0) throw new IllegalArgumentException("Amount must be positive");
         EnumMap<CoinDenomination, Long> result = new EnumMap<>(CoinDenomination.class);
         long remaining = amount;
-        CoinDenomination[] denominations = CoinDenomination.values();
-        for (int i = denominations.length - 1; i >= 0; i--) {
-            CoinDenomination d = denominations[i];
+        for (int i = DENOMINATIONS.length - 1; i >= 0; i--) {
+            CoinDenomination d = DENOMINATIONS[i];
             long count = remaining / d.value();
             if (count != 0) result.put(d, count);
             remaining %= d.value();
