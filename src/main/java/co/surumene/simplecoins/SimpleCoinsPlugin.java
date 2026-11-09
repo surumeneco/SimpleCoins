@@ -1,9 +1,11 @@
 package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.AdmissionBarrier;
+import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.ServicePriority;
 
 import java.util.logging.Level;
 
@@ -29,6 +31,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         try {
             getServer().getPluginManager().registerEvents(
                     new SettlementAdmissionListener(admission, publication), this);
+            // Read-only service is served through the independent guard's
+            // classloader; it never opens while journal/scan are not connected.
+            getServer().getServicesManager().register(
+                    AdmissionPermit.class, publication::mayAdmit, this, ServicePriority.Normal);
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
@@ -41,6 +47,9 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Remove the cross-plugin permission service before tearing down state.
+        // The independent guard then denies, even after this plugin is disabled.
+        getServer().getServicesManager().unregisterAll(this);
         // Revocation is required even for an already published generation.
         if (publication != null) {
             publication.revoke();
