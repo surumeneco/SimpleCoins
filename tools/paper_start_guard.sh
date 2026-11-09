@@ -22,7 +22,8 @@ jar="$server_dir/plugins/SimpleCoins.jar"
 guard="$server_dir/plugins/SimpleCoinsGuard.jar"
 properties="$server_dir/server.properties"
 whitelist="$server_dir/whitelist.json"
-for input in "$jar" "$guard" "$properties" "$whitelist"; do
+ops="$server_dir/ops.json"
+for input in "$jar" "$guard" "$properties" "$whitelist" "$ops"; do
   if [[ ! -f $input || -L $input ]]; then
     echo "START_GUARD_DENIED: missing or symlinked required input: $input" >&2
     exit 66
@@ -36,13 +37,13 @@ if [[ $actual_digest != "$expected_digest" || $actual_guard_digest != "$expected
 fi
 # Validate an actual loadable plugin descriptor (not a random matching ZIP),
 # strict property uniqueness, and an empty allowlist before starting Paper.
-if ! python3 - "$jar" "$guard" "$properties" "$whitelist" <<'PY'
+if ! python3 - "$jar" "$guard" "$properties" "$whitelist" "$ops" <<'PY'
 import json
 import pathlib
 import sys
 import zipfile
 
-jar, guard, properties, whitelist = (pathlib.Path(s) for s in sys.argv[1:])
+jar, guard, properties, whitelist, ops = (pathlib.Path(s) for s in sys.argv[1:])
 try:
     for path, name, main, classname in (
         (jar, 'SimpleCoins', 'co.surumene.simplecoins.SimpleCoinsPlugin',
@@ -80,6 +81,10 @@ try:
             raise ValueError(f'{name}=true must occur exactly once')
     if json.loads(whitelist.read_text(encoding='utf-8')) != []:
         raise ValueError('whitelist.json must be an empty JSON array')
+    # Vanilla/Paper operators bypass a Java Edition whitelist even when
+    # whitelist.json is empty. No OP can be present before settlement.
+    if json.loads(ops.read_text(encoding='utf-8')) != []:
+        raise ValueError('ops.json must be an empty JSON array (OP whitelist bypass)')
 except (ValueError, OSError, UnicodeError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
     print(f'START_GUARD_DENIED: {exc}', file=sys.stderr)
     sys.exit(1)
@@ -93,6 +98,6 @@ if ! flock -n "$guard_lock"; then
   echo 'START_GUARD_DENIED: another guarded Paper launch is active' >&2
   exit 68
 fi
-printf '%s\n' 'START_GUARD_PASSED: pinned SimpleCoins and SimpleCoinsGuard JARs + closed whitelist verified' >&2
+printf '%s\n' 'START_GUARD_PASSED: pinned SimpleCoins and Guard JARs + empty whitelist and OP list verified' >&2
 cd -- "$server_dir"
 exec "$@"
