@@ -23,6 +23,25 @@ This is the proposed **SimpleCoins consumer contract** for the WCL `WonderfulSto
 | simplecoins.owner.wcl-registration | Complete, authoritative WWC/WWW service registration inventory before owner and storage accounting |
 | simplecoins.owner.wcl-result | Distinguish verified empty provider storage from missing, failed, stale or wrong-identity evidence |
 
+## Existing decision provenance and unresolved integration design
+
+The following is a **Draft provenance mapping**, not CAT normative promotion. Source locations are 1-based physical Markdown lines; SHA-256 identifies the actual raw Drive versions read for this mapping, not an approved CAT Artifact revision.
+
+| Source | SHA-256 (raw UTF-8 bytes) | Existing design decisions used here |
+| --- | --- | --- |
+| [02A / Drive `1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g`](https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view) | `0c69fa2a94d3064484f805ee33840348b091d936a20034f9f03f61f1aaf8bccc` | L25–31: WWC/WWW commander → tame owner → FREE only when candidates are established; L37–40: current BAN/playerdata determines DEAD versus PERSONAL |
+| [02B / Drive `1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8`](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view) | `a435aa5f0a6eb1850d71e1482e26a5d38582a27d1fa1da3a82c48d5626234aef` | L54–58: full saved/loaded scan, failure remains incomplete and is never published as zero; L27: settlement replaces the prior cached estimate only after authoritative scan |
+
+| WCL Draft rule | Existing decision authority | Additional proposal requiring separate CAT review/confirmation |
+| --- | --- | --- |
+| WCL-CONSUMER-01 / -03 / -04 | 02A L31 and 02B L54–58 require complete, authoritative WWC/WWW accounting | Enumerating **all** Bukkit `RegisteredServiceProvider` entries, checking duplicate provider IDs, registration owner and enabled state are implementation-specific safeguards inferred from the inspected WCL develop API; these mechanics are not explicitly user-confirmed in 02A/02B |
+| WCL-CONSUMER-02 | 02B L57 and 02A L31 prohibit interpreting uninspected assets as FREE or zero | The exact required set and deployed plugin version/JAR identity must be established from the runtime, not assumed from `develop` source or this Draft |
+| WCL-CONSUMER-05 | 02B L54–58 require a consistent source for the counted entity/world snapshot | Comparing the snapshot entity/world/provider identifiers with an independently observed request is a proposed technical guard, not an approved protocol specification |
+| WCL-CONSUMER-06 | 02B L57–58 separate failed or absent loaded data from verified saved/offline data | `NotFound` versus `Failure` are observed API variants; their provenance is `docs/verification/phase5-wcl-provider-contract.md`, not a blanket user decision that either variant means empty |
+| WCL-CONSUMER-07 | 02A L31 allows absence of ownership candidates **after successful verification**; 02B L57 requires completed read | Empty `Success` covers only the identified entity/provider storage. It cannot establish complete world inventory, verified missing commander/owner, or an overall zero settlement |
+
+**Current source boundary:** `develop@b31b8cc0a5c1e88d2c0960349b964fd934d1bc39`, `SavedEntityOwner.java` Git blob `ec5d5a91e51cb7bb925bbb2152486100c0e07cbc`: vanilla saved tame-owner hints, not a WCL service enumeration or an authoritative WWC/WWW owner. This mapping does not supply formal Process/PI/TCE Confirmed history; that provenance and the implementation-specific rules above remain to be reviewed before any new production semantics or spec-implementation Gate.
+
 ## Rules
 
 | ID | Condition | Requirement | Verification |
