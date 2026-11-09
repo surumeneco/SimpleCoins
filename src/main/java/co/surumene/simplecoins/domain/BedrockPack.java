@@ -105,7 +105,11 @@ public final class BedrockPack {
             else if (c == '\n') out.append("\\n");
             else if (c == '\r') out.append("\\r");
             else if (c == '\t') out.append("\\t");
-            else if (c < 32 || Character.isSurrogate(c)) out.append(String.format("\\u%04x", (int)c));
+            else if (c < 32 || Character.isSurrogate(c)) {
+                out.append("\\u");
+                for (int shift = 12; shift >= 0; shift -= 4)
+                    out.append("0123456789abcdef".charAt((c >>> shift) & 0xf));
+            }
             else out.append(c);
         }
         return out.append('"').toString();
