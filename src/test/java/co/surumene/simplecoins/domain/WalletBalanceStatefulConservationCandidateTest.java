@@ -54,4 +54,31 @@ class WalletBalanceStatefulConservationCandidateTest {
         assertTrue(successful > 1_000, "exercise enough valid transitions");
         assertTrue(rejected > 100, "exercise cap and insufficient-funds rejections");
     }
+    /**
+     * Observed WalletBalance arithmetic contract: overflow is rejected before
+     * a replacement immutable balance is constructed, including a cap of MAX_VALUE.
+     */
+    @Test void overflowAndInvalidAmountsNeverMutateOriginalBalance() {
+        WalletBalance nearlyFull = new WalletBalance(Long.MAX_VALUE - 1);
+        assertThrows(ArithmeticException.class,
+                () -> nearlyFull.deposit(2, Long.MAX_VALUE));
+        assertEquals(Long.MAX_VALUE - 1, nearlyFull.amount());
+
+        WalletBalance full = nearlyFull.deposit(1, Long.MAX_VALUE);
+        assertEquals(Long.MAX_VALUE, full.amount());
+        assertEquals(Long.MAX_VALUE - 1, nearlyFull.amount());
+        assertThrows(ArithmeticException.class,
+                () -> full.deposit(1, Long.MAX_VALUE));
+        assertEquals(Long.MAX_VALUE, full.amount());
+
+        WalletBalance empty = new WalletBalance(0);
+        assertThrows(IllegalArgumentException.class, () -> empty.deposit(0, 100));
+        assertThrows(IllegalArgumentException.class, () -> empty.deposit(-1, 100));
+        assertThrows(IllegalArgumentException.class, () -> empty.deposit(1, -1));
+        assertThrows(IllegalArgumentException.class, () -> empty.withdraw(0));
+        assertThrows(IllegalArgumentException.class, () -> empty.withdraw(-1));
+        assertThrows(IllegalStateException.class, () -> empty.withdraw(1));
+        assertEquals(0, empty.amount());
+    }
+
 }
