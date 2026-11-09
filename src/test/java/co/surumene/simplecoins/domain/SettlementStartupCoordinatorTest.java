@@ -168,4 +168,30 @@ class SettlementStartupCoordinatorTest {
         assertEquals(1, signalCalls.get());
         assertTrue(main.tasks.isEmpty());
     }
+
+    @Test void rejectedBackgroundExecutorWithThrowingFailureSignalNeverSchedulesWork() {
+        AdmissionBarrier barrier = new AdmissionBarrier();
+        RejectedExecutionException rejection = new RejectedExecutionException("worker pool stopped");
+        IllegalStateException signalFailure = new IllegalStateException("shutdown signal failed");
+        AtomicInteger signalCalls = new AtomicInteger();
+        Executor rejected = task -> { throw rejection; };
+        var coordinator = new SettlementStartupCoordinator<String>(
+                barrier, rejected, task -> fail("main thread must not be scheduled"),
+                () -> fail("source stage must never run"),
+                value -> fail("publisher must not run"), () -> true,
+                error -> {
+                    signalCalls.incrementAndGet();
+                    throw signalFailure;
+                });
+
+        coordinator.start();
+
+        assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        assertFalse(barrier.mayAdmit());
+        assertSame(rejection, coordinator.failure().orElseThrow());
+        assertArrayEquals(new Throwable[]{signalFailure}, rejection.getSuppressed());
+        assertEquals(1, signalCalls.get());
+        assertThrows(IllegalStateException.class, coordinator::start);
+        assertEquals(1, signalCalls.get());
+    }
 }
