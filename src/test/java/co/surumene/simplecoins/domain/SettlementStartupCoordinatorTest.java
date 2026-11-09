@@ -143,4 +143,29 @@ class SettlementStartupCoordinatorTest {
         assertEquals(AdmissionBarrier.State.STOPPED, barrier.state());
         assertFalse(barrier.mayAdmit());
     }
+
+    @Test void failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed() {
+        AdmissionBarrier barrier = new AdmissionBarrier();
+        Queue disk = new Queue(), main = new Queue();
+        IOException scannerFailure = new IOException("unreadable settlement snapshot");
+        IllegalStateException dispatchFailure = new IllegalStateException("shutdown dispatch rejected");
+        AtomicInteger signalCalls = new AtomicInteger();
+        var coordinator = new SettlementStartupCoordinator<>(barrier, disk, main,
+                () -> { throw scannerFailure; },
+                value -> fail("failed scan cannot publish"), () -> true,
+                error -> {
+                    signalCalls.incrementAndGet();
+                    throw dispatchFailure;
+                });
+
+        coordinator.start();
+        disk.next();
+
+        assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        assertFalse(barrier.mayAdmit());
+        assertSame(scannerFailure, coordinator.failure().orElseThrow());
+        assertArrayEquals(new Throwable[]{dispatchFailure}, scannerFailure.getSuppressed());
+        assertEquals(1, signalCalls.get());
+        assertTrue(main.tasks.isEmpty());
+    }
 }
