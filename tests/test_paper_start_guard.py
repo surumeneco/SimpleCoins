@@ -25,6 +25,8 @@ class PaperStartGuardTests(unittest.TestCase):
         self.props.write_text('white-list=true\nenforce-whitelist=true\n', encoding='utf-8')
         self.allow = self.home / 'whitelist.json'
         self.allow.write_text('[]\n', encoding='utf-8')
+        self.ops = self.home / 'ops.json'
+        self.ops.write_text('[]\n', encoding='utf-8')
         self.marker = self.home / 'launched.txt'
 
     def make_jar(self, *, main='co.surumene.simplecoins.SimpleCoinsPlugin'):
@@ -115,6 +117,26 @@ class PaperStartGuardTests(unittest.TestCase):
 
     def test_existing_whitelisted_user_refuses(self):
         self.allow.write_text(json.dumps([{'uuid': '00000000-0000-0000-0000-000000000001', 'name':'Player'}]))
+        self.assert_denied(self.run_guard())
+
+    def test_operator_bypass_is_blocked_before_launch(self):
+        # Java Edition operators bypass the ordinary empty whitelist.
+        self.ops.write_text(json.dumps([{'uuid': '00000000-0000-0000-0000-000000000002', 'name':'Admin', 'level':4}]))
+        self.assert_denied(self.run_guard())
+
+    def test_missing_ops_file_refuses(self):
+        self.ops.unlink()
+        self.assert_denied(self.run_guard())
+
+    def test_corrupt_ops_file_refuses(self):
+        self.ops.write_text('{ bad')
+        self.assert_denied(self.run_guard())
+
+    def test_symlinked_ops_file_refuses(self):
+        original = self.home / 'ops-reference.json'
+        original.write_bytes(self.ops.read_bytes())
+        self.ops.unlink()
+        self.ops.symlink_to(original)
         self.assert_denied(self.run_guard())
 
     def test_corrupt_whitelist_refuses(self):
