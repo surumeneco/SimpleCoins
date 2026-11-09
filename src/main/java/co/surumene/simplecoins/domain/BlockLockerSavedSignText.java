@@ -64,9 +64,12 @@ public final class BlockLockerSavedSignText {
     }
 
     private static List<String> modernLines(Object raw, String side) throws IOException {
-        if (!(raw instanceof Map<?, ?> text) ||
-                text.keySet().stream().anyMatch(key -> !(key instanceof String)))
+        if (!(raw instanceof Map<?, ?> text))
             throw new IOException("Malformed saved sign " + side + " compound");
+        for (Object key : text.keySet()) {
+            if (!(key instanceof String))
+                throw new IOException("Malformed saved sign " + side + " compound");
+        }
         if (!(text.get("messages") instanceof List<?> messages) || messages.size() != 4)
             throw new IOException("Missing or invalid saved sign " + side + " messages");
         List<String> lines = new ArrayList<>(4);
