@@ -66,6 +66,10 @@ public final class SimpleCoinsAdmissionGuard extends JavaPlugin implements Liste
     @EventHandler(priority = EventPriority.MONITOR)
     public void onSimpleCoinsDisabled(PluginDisableEvent event) {
         if ("SimpleCoins".equals(event.getPlugin().getName())) {
+            // PluginDisableEvent may fire before the ServiceManager removes the
+            // main plugin's provider. Revoke immediately; Netty logins may be
+            // checked off-thread while the disable sequence is still running.
+            stopping = true;
             getLogger().severe("SimpleCoins disabled while guard is active; stopping server");
             Bukkit.shutdown();
         }
