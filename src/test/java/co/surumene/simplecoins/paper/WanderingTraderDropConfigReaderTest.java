@@ -107,5 +107,14 @@ class WanderingTraderDropConfigReaderTest {
         root = valid();
         root.set("trader-drops.max-count", 65.5);
         assertRejected(root);
+        root = valid();
+        root.set("trader-drops.max-count", new java.math.BigInteger("18446744073709551616"));
+        assertRejected(root);
+        root = valid();
+        root.set("trader-drops.max-count", new java.math.BigDecimal("2147483648"));
+        assertRejected(root);
+        root = valid();
+        root.set("trader-drops.max-stacks-per-event", new java.math.BigInteger("18446744073709551617"));
+        assertRejected(root);
     }
 }

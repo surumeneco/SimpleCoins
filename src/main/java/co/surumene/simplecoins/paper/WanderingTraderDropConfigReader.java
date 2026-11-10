@@ -102,13 +102,16 @@ public final class WanderingTraderDropConfigReader {
             if (required) throw new IllegalArgumentException("Missing trader-drops." + key);
             return fallback;
         }
-        if (!(value instanceof Number number)
-                || number.doubleValue() != Math.rint(number.doubleValue())
-                || number.longValue() < Integer.MIN_VALUE
-                || number.longValue() > Integer.MAX_VALUE
-                || !Double.isFinite(number.doubleValue()))
+        if (!(value instanceof Number number))
             throw new IllegalArgumentException("Expected integer trader-drops." + key);
-        return number.intValue();
+        try {
+            // Never narrow a large BigInteger/BigDecimal/Double using longValue:
+            // numeric overflow could wrap into a different allowed count/weight.
+            return new java.math.BigDecimal(number.toString()).intValueExact();
+        } catch (ArithmeticException | NumberFormatException invalid) {
+            throw new IllegalArgumentException("Expected exact integer trader-drops." + key,
+                    invalid);
+        }
     }
 
     private static Map<CoinDenomination, Integer> parseWeights(
