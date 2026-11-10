@@ -17,12 +17,17 @@ public final class WanderingTraderDropPolicy {
     public record Drop(CoinDenomination denomination, int count) {
         public Drop {
             Objects.requireNonNull(denomination, "denomination");
-            if (count < 1 || count > 64)
-                throw new IllegalArgumentException("Drop count must fit one ItemStack (1..64)");
+            if (count < 1)
+                throw new IllegalArgumentException("Drop count must be positive");
         }
 
         public long value() {
             return (long) denomination.value() * count;
+        }
+
+        /** Number of 64-coin ItemStacks a later issuance adapter must prepare. */
+        public long requiredStacks() {
+            return 1L + (count - 1L) / 64L;
         }
     }
 
@@ -37,8 +42,8 @@ public final class WanderingTraderDropPolicy {
                                      int maximumCount, Map<CoinDenomination, Integer> configuredWeights) {
         if (!Double.isFinite(probability) || probability < 0 || probability > 1)
             throw new IllegalArgumentException("Drop probability must be in [0, 1]");
-        if (minimumCount < 1 || maximumCount > 64 || minimumCount > maximumCount)
-            throw new IllegalArgumentException("Drop count range must be within 1..64");
+        if (minimumCount < 1 || maximumCount < minimumCount)
+            throw new IllegalArgumentException("Drop count range must be positive and ordered");
         Objects.requireNonNull(configuredWeights, "configuredWeights");
         EnumMap<CoinDenomination, Integer> accepted = new EnumMap<>(CoinDenomination.class);
         long sum = 0;
@@ -72,8 +77,9 @@ public final class WanderingTraderDropPolicy {
         for (CoinDenomination denomination : CoinDenomination.values()) {
             int weight = weights.getOrDefault(denomination, 0);
             if (ticket < weight) {
+                // Long upper bound remains valid when max == Integer.MAX_VALUE.
                 int count = minimumCount == maximumCount
-                        ? minimumCount : random.nextInt(minimumCount, maximumCount + 1);
+                        ? minimumCount : (int) random.nextLong(minimumCount, (long) maximumCount + 1L);
                 return Optional.of(new Drop(denomination, count));
             }
             ticket -= weight;

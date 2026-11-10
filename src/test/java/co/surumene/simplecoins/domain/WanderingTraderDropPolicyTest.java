@@ -38,8 +38,8 @@ class WanderingTraderDropPolicyTest {
             else if (output.denomination() == CoinDenomination.FIVE) fives++;
             else fail("Zero-weight denomination selected");
         }
-        assertEquals(2523, ones);
-        assertEquals(7477, fives);
+        assertTrue(ones > 2000 && ones < 3000, "Fixed-seed weighted selection imbalance: " + ones);
+        assertEquals(10_000, ones + fives);
         assertTrue(sawMin && sawMax);
     }
 
@@ -60,6 +60,22 @@ class WanderingTraderDropPolicyTest {
     }
 
     @Test
+    void amountsAboveAStackAndIntegerMaxAreNotTruncated() {
+        var twoStacks = new WanderingTraderDropPolicy(true, 1, 65, 65,
+                Map.of(CoinDenomination.HUNDRED, 1));
+        var result = twoStacks.draw(new Random(7)).orElseThrow();
+        assertEquals(65, result.count());
+        assertEquals(2L, result.requiredStacks());
+        assertEquals(6500L, result.value());
+        var largest = new WanderingTraderDropPolicy(true, 1,
+                Integer.MAX_VALUE, Integer.MAX_VALUE, Map.of(CoinDenomination.TEN_THOUSAND, 1))
+                .draw(new Random(7)).orElseThrow();
+        assertEquals(Integer.MAX_VALUE, largest.count());
+        assertEquals(33_554_432L, largest.requiredStacks());
+        assertEquals(21_474_836_470_000L, largest.value());
+    }
+
+    @Test
     void malformedConfigAndDropFailClosed() {
         var valid = Map.of(CoinDenomination.ONE, 1);
         for (double probability : new double[]{-0.1, 1.1, Double.NaN,
@@ -69,14 +85,14 @@ class WanderingTraderDropPolicyTest {
         }
         assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy(true, 1, 0, 1, valid));
         assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy(true, 1, 2, 1, valid));
-        assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy(true, 1, 1, 65, valid));
+        assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy(true, 1, 1, 0, valid));
         assertThrows(IllegalArgumentException.class,
                 () -> new WanderingTraderDropPolicy(true, 1, 1, 1, Map.of(CoinDenomination.ONE, -1)));
         assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy(true, 1, 1, 1, Map.of()));
         assertThrows(NullPointerException.class, () -> new WanderingTraderDropPolicy(true, 1, 1, 1, null));
         assertThrows(NullPointerException.class, () -> new WanderingTraderDropPolicy.Drop(null, 1));
         assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy.Drop(CoinDenomination.ONE, 0));
-        assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy.Drop(CoinDenomination.ONE, 65));
+        assertThrows(IllegalArgumentException.class, () -> new WanderingTraderDropPolicy.Drop(CoinDenomination.ONE, -1));
         assertThrows(NullPointerException.class, () -> new WanderingTraderDropPolicy(true, 1, 1, 1, valid).draw(null));
     }
 }
