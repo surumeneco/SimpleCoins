@@ -21,6 +21,11 @@ class WanderingTraderDropConfigReaderTest {
         return config;
     }
 
+    private static void assertRejected(YamlConfiguration input) {
+        assertThrows(IllegalArgumentException.class,
+                () -> WanderingTraderDropConfigReader.read(input));
+    }
+
     @Test void absentSectionOrExplicitDisableNeverDraws() {
         assertTrue(WanderingTraderDropConfigReader.read(new YamlConfiguration())
                 .policy().draw(new Random(1)).isEmpty());
@@ -45,39 +50,39 @@ class WanderingTraderDropConfigReaderTest {
     @Test void malformedConfigRejectedRatherThanCoerced() {
         YamlConfiguration root = valid();
         root.set("trader-drops.probability", "1.0");
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.enabled", "true");
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.unknown-key", 42);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.weights.123", 10);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.weights.01", 1);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
     }
 
     @Test void enabledConfigRequiresAllFieldsAndPreparedCapacity() {
         YamlConfiguration root = valid();
         root.set("trader-drops.max-stacks-per-event", 1);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.probability", null);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.max-count", 65537);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.weights.1", -1);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.weights", "1: 1");
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
         root = valid();
         root.set("trader-drops.max-count", 65.5);
-        assertThrows(IllegalArgumentException.class, () -> WanderingTraderDropConfigReader.read(root));
+        assertRejected(root);
     }
 }
