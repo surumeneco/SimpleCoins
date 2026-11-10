@@ -65,6 +65,29 @@ class WanderingTraderDropConfigReaderTest {
         assertRejected(root);
     }
 
+    @Test void acceptsLegacySettingsButNeverConflictingAliases() {
+        YamlConfiguration legacy = new YamlConfiguration();
+        legacy.set("trader-drops.enabled", true);
+        legacy.set("trader-drops.chance", 1.0);
+        legacy.set("trader-drops.minimum-count", 1);
+        legacy.set("trader-drops.maximum-count", 1);
+        legacy.set("trader-drops.weights.100", 4);
+        var loaded = WanderingTraderDropConfigReader.read(legacy);
+        var decision = loaded.policy().draw(new Random(5)).orElseThrow();
+        assertEquals(CoinDenomination.HUNDRED, decision.denomination());
+        assertEquals(1, decision.count());
+        assertEquals(1, loaded.maxStacksPerEvent());
+
+        legacy.set("trader-drops.probability", 0.5);
+        assertRejected(legacy);
+        legacy.set("trader-drops.probability", null);
+        legacy.set("trader-drops.min-count", 1);
+        assertRejected(legacy);
+        legacy.set("trader-drops.min-count", null);
+        legacy.set("trader-drops.max-count", 1);
+        assertRejected(legacy);
+    }
+
     @Test void enabledConfigRequiresAllFieldsAndPreparedCapacity() {
         YamlConfiguration root = valid();
         root.set("trader-drops.max-stacks-per-event", 1);
