@@ -29,9 +29,10 @@ import java.util.Objects;
  * First Paper registration candidate for 20 equivalent shapeless exchanges.
  *
  * This listener prevents marked coins being consumed by unrelated crafting
- * recipes in the supported prepare/craft/crafter paths. RecipeChoice.ExactChoice
- * is still sensitive to metadata changes and therefore requires a follow-up
- * compatibility check before final 1.0.0 acceptance. A real monetary journal
+ * recipes in the supported prepare/craft/crafter paths. Paper 26.2's
+ * predicate choice checks the stable PDC denomination/model, not the mutable
+ * display name. Actual Shift/crafter and third-party compatibility still
+ * require standalone Paper acceptance tests. A real monetary journal
  * service must additionally observe accepted exchanges.
  */
 public final class CoinExchangeRecipes implements Listener {
@@ -56,8 +57,13 @@ public final class CoinExchangeRecipes implements Listener {
                 NamespacedKey key = new NamespacedKey(plugin, "exchange_" + formula.id());
                 ShapelessRecipe recipe = new ShapelessRecipe(
                         key, codec.create(formula.output(), formula.outputCount()));
+                // ExactChoice also compares display metadata: changing config names
+                // would strand genuine pre-rename coins. Match their stable identity.
+                RecipeChoice ingredient = RecipeChoice.predicateChoice(
+                        stack -> matchesDenomination(stack, formula.input()),
+                        codec.create(formula.input(), 1));
                 for (int i = 0; i < formula.inputCount(); i++) {
-                    recipe.addIngredient(new RecipeChoice.ExactChoice(codec.create(formula.input(), 1)));
+                    recipe.addIngredient(ingredient);
                 }
                 if (!Bukkit.addRecipe(recipe))
                     throw new IllegalStateException("Duplicate or rejected coin recipe: " + key);
@@ -115,6 +121,15 @@ public final class CoinExchangeRecipes implements Listener {
         Recipe recipe = event.getRecipe();
         if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
             event.setCancelled(true);
+        }
+    }
+
+    /** Malformed PDC/model is never eligible for a currency exchange. */
+    private boolean matchesDenomination(ItemStack stack, CoinDenomination denomination) {
+        try {
+            return codec.identify(stack).orElse(null) == denomination;
+        } catch (RuntimeException invalidCurrency) {
+            return false;
         }
     }
 
