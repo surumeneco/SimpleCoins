@@ -135,8 +135,12 @@ public final class CoinExchangeRecipes implements Listener {
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onOtherResultTake(InventoryClickEvent event) {
+        // Avoid looking at unrelated inventories or their input slots.
+        if (event.getRawSlot() != 2) return;
         var top = event.getView().getTopInventory();
-        if (PaperCurrencyConsumption.blocksResult(top.getType().name(), event.getRawSlot(),
+        InventoryType type = top.getType();
+        if (type != InventoryType.MERCHANT && type != InventoryType.CARTOGRAPHY) return;
+        if (PaperCurrencyConsumption.blocksResult(type.name(), event.getRawSlot(),
                 codec.hasCoinMarker(top.getItem(0)), codec.hasCoinMarker(top.getItem(1)))) {
             event.setCancelled(true);
         }
