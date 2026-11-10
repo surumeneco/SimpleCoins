@@ -26,12 +26,24 @@ public final class SimpleCoinsAdmissionGuard extends JavaPlugin implements Liste
             "Server accounting is not verified. Please reconnect later.");
 
     private volatile boolean stopping;
+    private final AdmissionHealthWatchdog watchdog = new AdmissionHealthWatchdog();
 
     @Override
     public void onEnable() {
         stopping = false;
-        getServer().getPluginManager().registerEvents(this, this);
-        getLogger().info("Admission guard active (default-deny until verified SimpleCoins service)");
+        try {
+            getServer().getPluginManager().registerEvents(this, this);
+            // A login-only check cannot detect journal loss when nobody joins.
+            // Poll on the Paper main thread, but do NOT stop on startup's
+            // expected unready state until readiness has once been observed.
+            getServer().getScheduler().runTaskTimer(this, this::pollHealth, 1L, 20L);
+            getLogger().info("Admission guard active (default-deny until verified SimpleCoins service)");
+        } catch (RuntimeException | Error failure) {
+            stopping = true;
+            getLogger().log(Level.SEVERE, "Cannot establish independent guard health poll", failure);
+            Bukkit.shutdown();
+            throw failure;
+        }
     }
 
     /**
@@ -58,9 +70,25 @@ public final class SimpleCoinsAdmissionGuard extends JavaPlugin implements Liste
         }
     }
 
+    /**
+     * A positive login check also arms the one-way watchdog, even if the
+     * service becomes unhealthy before the next scheduled heartbeat.
+     */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onConnection(PlayerConnectionValidateLoginEvent event) {
-        if (event.isAllowed() && !canAdmit()) event.kickMessage(UNAVAILABLE);
+        if (!event.isAllowed()) return;
+        boolean healthy = canAdmit();
+        if (watchdog.mustStop(healthy) || !healthy) event.kickMessage(UNAVAILABLE);
+    }
+
+    /** Main-thread monitor for loss after a previously verified open state. */
+    private void pollHealth() {
+        if (stopping) return;
+        if (watchdog.mustStop(canAdmit())) {
+            stopping = true;
+            getLogger().severe("Previously verified accounting admission lost health; stopping Paper");
+            Bukkit.shutdown();
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
