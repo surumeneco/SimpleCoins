@@ -2,6 +2,7 @@ package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.CoinExchangeFormula;
+import co.surumene.simplecoins.domain.PaperCurrencyConsumption;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
@@ -11,6 +12,9 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.CrafterCraftEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
@@ -120,6 +124,30 @@ public final class CoinExchangeRecipes implements Listener {
         ItemStack[] matrix = crafter.getInventory().getContents();
         Recipe recipe = event.getRecipe();
         if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Guard non-crafting consumption sites that normally accept PAPER.
+     * The raw result slot is 2 for merchant and cartography inventories;
+     * clicking and shift-clicking the result both pass through this event.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onOtherResultTake(InventoryClickEvent event) {
+        var top = event.getView().getTopInventory();
+        if (PaperCurrencyConsumption.blocksResult(top.getType().name(), event.getRawSlot(),
+                codec.hasCoinMarker(top.getItem(0)), codec.hasCoinMarker(top.getItem(1)))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Last cancellation point for Paper villager/wandering-trader purchases. */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onMerchantPurchase(PlayerTradeEvent event) {
+        var top = event.getPlayer().getOpenInventory().getTopInventory();
+        if (top.getType() == InventoryType.MERCHANT &&
+                (codec.hasCoinMarker(top.getItem(0)) || codec.hasCoinMarker(top.getItem(1)))) {
             event.setCancelled(true);
         }
     }
