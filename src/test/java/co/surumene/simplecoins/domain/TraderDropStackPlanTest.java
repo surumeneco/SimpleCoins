@@ -56,3 +56,4 @@ class TraderDropStackPlanTest {
                     sum * CoinDenomination.TEN_THOUSAND.value());
         }
     }
+}
