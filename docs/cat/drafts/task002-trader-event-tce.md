@@ -17,7 +17,7 @@ language: ja
 
 # TCE: 行商人発行の一回性 (Draft)
 
-網羅要求: open
+網羅要求: partial
 
 ## 振る舞い
 | ID | 起点 | 条件 | 結果 | 効果 |
