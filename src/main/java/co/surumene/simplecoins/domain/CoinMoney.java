@@ -21,6 +21,7 @@ public final class CoinMoney {
             long count = remaining / d.value();
             if (count != 0) result.put(d, count);
             remaining %= d.value();
+            if (remaining == 0) break;
         }
         return Collections.unmodifiableMap(result);
     }
