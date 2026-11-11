@@ -38,6 +38,9 @@ public final class TraderDeathIssuanceListener implements Listener {
         this.journal = Objects.requireNonNull(journal);
         this.random = Objects.requireNonNull(random);
         this.fatal = Objects.requireNonNull(fatal);
+        if (this.journal.hasUnreconciledFromStartup())
+            throw new IllegalStateException("Unreconciled trader issuance receipts: "
+                    + "startup reconciliation is required before issuing new coins");
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

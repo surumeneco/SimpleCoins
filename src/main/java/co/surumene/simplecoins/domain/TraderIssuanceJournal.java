@@ -48,6 +48,9 @@ public final class TraderIssuanceJournal implements AutoCloseable {
     private final FileLock singleWriterLock;
     private final Map<UUID, Receipt> records = new HashMap<>();
     private boolean unhealthy;
+    // Snapshot from disk at startup only. Current-session receipts must not
+    // quarantine other legitimate deaths in the same running server.
+    private final boolean unresolvedAtStartup;
 
     public TraderIssuanceJournal(Path directory) throws IOException {
         this.directory = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
@@ -78,6 +81,18 @@ public final class TraderIssuanceJournal implements AutoCloseable {
             close();
             throw error;
         }
+        this.unresolvedAtStartup = records.values().stream().anyMatch(Receipt::needsReconciliation);
+    }
+
+    /**
+     * Fail-closed startup admission: an EVENT_RECORDED receipt is not proof
+     * that Paper persisted the dropped entities or that ledger accounting ran.
+     * Reconciliation must be verified by the coordinating plugin before any
+     * replacement listener starts issuing on a subsequent process lifetime.
+     */
+    public synchronized boolean hasUnreconciledFromStartup() {
+        healthy();
+        return unresolvedAtStartup;
     }
 
     public synchronized boolean has(UUID traderId) {

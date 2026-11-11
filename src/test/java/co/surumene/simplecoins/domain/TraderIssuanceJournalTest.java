@@ -62,6 +62,36 @@ class TraderIssuanceJournalTest {
         }
     }
 
+    @Test void completedEventOnDiskBlocksNextStartupButNotSameSession() throws Exception {
+        try (var journal = new TraderIssuanceJournal(temp)) {
+            assertFalse(journal.hasUnreconciledFromStartup());
+            assertTrue(journal.begin(TRADER, Optional.of(drop())));
+            assertFalse(journal.hasUnreconciledFromStartup(),
+                    "A live receipt must not retroactively alter the startup snapshot");
+            journal.markEventRecorded(TRADER);
+            assertEquals(1, journal.unresolved().size());
+        }
+        try (var journal = new TraderIssuanceJournal(temp)) {
+            assertTrue(journal.hasUnreconciledFromStartup(),
+                    "An event receipt cannot certify saved entity/ledger state");
+            assertTrue(journal.receipt(TRADER).orElseThrow().needsReconciliation());
+        }
+    }
+
+    @Test void preparedReceiptBlocksRestartButNoDropDoesNot() throws Exception {
+        try (var journal = new TraderIssuanceJournal(temp)) {
+            assertTrue(journal.begin(TRADER, Optional.empty()));
+            assertFalse(journal.hasUnreconciledFromStartup());
+        }
+        try (var journal = new TraderIssuanceJournal(temp)) {
+            assertFalse(journal.hasUnreconciledFromStartup());
+            assertTrue(journal.begin(UUID.randomUUID(), Optional.of(drop())));
+        }
+        try (var journal = new TraderIssuanceJournal(temp)) {
+            assertTrue(journal.hasUnreconciledFromStartup());
+        }
+    }
+
     @Test void rejectsConcurrentWriterAndCorruptRecord() throws Exception {
         try (var journal = new TraderIssuanceJournal(temp)) {
             assertThrows(IOException.class, () -> new TraderIssuanceJournal(temp));
