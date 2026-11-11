@@ -210,7 +210,9 @@ public final class CoinExchangeRecipes implements Listener {
         int found = 0;
         for (ItemStack item : matrix) {
             if (item == null || item.getType().isAir()) continue;
-            if (!codec.hasCoinMarker(item)) return false;
+            // One unit is consumed from each occupied slot; zero-count tagged
+            // ItemStacks must never satisfy the monetary input contract.
+            if (item.getAmount() < 1 || !codec.hasCoinMarker(item)) return false;
             try {
                 CoinDenomination value = codec.identify(item).orElse(null);
                 if (value != formula.input()) return false;
