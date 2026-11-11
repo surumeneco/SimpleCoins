@@ -73,7 +73,11 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             walletCrafting = new WalletCrafting(this, walletCodec);
             walletCrafting.register();
             getServer().getPluginManager().registerEvents(
-                    new WalletMenu(walletCodec, codec, capacity), this);
+                    new WalletMenu(walletCodec, codec, capacity, failure -> {
+                        publication.revoke();
+                        getLogger().log(Level.SEVERE,
+                                "Irrecoverable wallet/coin inventory mutation; revoking admission", failure);
+                    }), this);
             getServer().getPluginManager().registerEvents(
                     new SettlementAdmissionListener(admission, publication), this);
             // Read-only service is served through the independent guard's
