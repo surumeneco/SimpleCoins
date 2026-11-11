@@ -7,8 +7,7 @@ process: simplecoins.wallet
 source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
   - https://drive.google.com/file/d/1j4e2nvoY8OANQL2yDUjrwe3ubsR-73ea/view
-refs:
-  - simplecoins.wallet.balance
+refs: []
 base_revision: 85c25554e30f742291395c02a4d8481a0f7d3c2f
 semantic_contract: markdown-v2
 language: ja
