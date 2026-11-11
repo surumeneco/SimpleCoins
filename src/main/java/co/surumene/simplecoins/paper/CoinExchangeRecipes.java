@@ -101,7 +101,9 @@ public final class CoinExchangeRecipes implements Listener {
     public void onPrepare(PrepareItemCraftEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getInventory().getResult()))) {
             event.getInventory().setResult(null);
         }
     }
@@ -110,7 +112,9 @@ public final class CoinExchangeRecipes implements Listener {
     public void onCraft(CraftItemEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getCurrentItem()))) {
             event.setCancelled(true);
         }
     }
@@ -123,7 +127,9 @@ public final class CoinExchangeRecipes implements Listener {
         }
         ItemStack[] matrix = crafter.getInventory().getContents();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getResult()))) {
             event.setCancelled(true);
         }
     }
@@ -177,11 +183,30 @@ public final class CoinExchangeRecipes implements Listener {
         return recipe instanceof Keyed keyed && formulas.containsKey(keyed.getKey());
     }
 
+    /**
+     * Validate final output as well as the key; recipe-key collisions cannot
+     * authorize minting a different value or an unmarked PAPER output.
+     */
+    private boolean isExpectedRegisteredResult(Recipe recipe, ItemStack result) {
+        if (!(recipe instanceof Keyed keyed)) return false;
+        CoinExchangeFormula formula = formulas.get(keyed.getKey());
+        return formula != null && isExpectedResult(result, formula);
+    }
+
+    private boolean isExpectedResult(ItemStack stack, CoinExchangeFormula formula) {
+        if (stack == null || stack.getAmount() != formula.outputCount()) return false;
+        try {
+            return codec.identify(stack).orElse(null) == formula.output();
+        } catch (RuntimeException invalidCoin) {
+            return false;
+        }
+    }
+
     /** Validate every *occupied slot*, not its stack count; Bukkit consumes one/slot. */
     public boolean isApproved(Recipe recipe, ItemStack[] matrix) {
         if (!(recipe instanceof Keyed keyed)) return false;
         CoinExchangeFormula formula = formulas.get(keyed.getKey());
-        if (formula == null) return false;
+        if (formula == null || !isExpectedResult(recipe.getResult(), formula)) return false;
         int found = 0;
         for (ItemStack item : matrix) {
             if (item == null || item.getType().isAir()) continue;
