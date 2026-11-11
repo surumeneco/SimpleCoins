@@ -38,4 +38,23 @@ class BedrockPackOutputAliasCandidateTest {
         assertArrayEquals(published, Files.readAllBytes(shared),
                 "An invalid pair of destinations must preserve published bytes");
     }
+    @Test
+    void hardLinkedPublishedDestinationsMustNotOverwriteEitherOutput() throws Exception {
+        var images = new EnumMap<CoinDenomination, byte[]>(CoinDenomination.class);
+        var names = new EnumMap<CoinDenomination, String>(CoinDenomination.class);
+        for (var denomination : CoinDenomination.values()) {
+            images.put(denomination, new byte[]{1, 2, 3});
+            names.put(denomination, denomination.value() + " Coin");
+        }
+        Path pack = directory.resolve("previous.mcpack");
+        Path mapping = directory.resolve("previous.json");
+        byte[] published = "unchanged original output".getBytes(StandardCharsets.UTF_8);
+        Files.write(pack, published);
+        Files.createLink(mapping, pack);
+
+        assertThrows(IOException.class, () -> BedrockPack.write(pack, mapping, images, names));
+        assertArrayEquals(published, Files.readAllBytes(pack));
+        assertArrayEquals(published, Files.readAllBytes(mapping));
+        assertTrue(Files.isSameFile(pack, mapping));
+    }
 }
