@@ -2,6 +2,7 @@ package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.WalletBalance;
+import co.surumene.simplecoins.domain.WalletTransferTransaction;
 import java.util.Objects;
 import java.util.UUID;
 import org.bukkit.Bukkit;
@@ -112,20 +113,38 @@ public final class WalletMenu implements Listener {
     }
 
     private boolean deposit(Player player, Holder holder, ItemStack wallet,
-                            long value, Runnable consume) {
+                            long value, Runnable consume, Runnable restoreCoins) {
+        ItemStack oldWallet = wallet.clone();
         try {
             long next = new WalletBalance(identity(wallet).balance())
                     .deposit(value, capacity).amount();
             ItemStack nextWallet = wallets.withBalance(wallet, next);
-            // Single-main-thread inventory writes; on an exception no deposit
-            // may continue. Durable persistence remains a separate G0 Gate.
-            consume.run();
-            player.getInventory().setItem(holder.hotbarSlot, nextWallet);
-            render(player, holder);
-            return true;
+            WalletTransferTransaction.execute(
+                    () -> player.getInventory().setItem(holder.hotbarSlot, nextWallet),
+                    consume,
+                    () -> player.getInventory().setItem(holder.hotbarSlot, oldWallet),
+                    restoreCoins);
+        } catch (WalletTransferTransaction.Unrecoverable cannotRestore) {
+            // The player/world may already contain newly minted or destroyed
+            // money. Shutdown is necessary but NOT proof of durable recovery.
+            Bukkit.shutdown();
+            return false;
         } catch (RuntimeException rejected) {
             return false;
         }
+        // GUI pseudo-items are not monetary state. Failure to repaint must
+        // never cause the completed monetary transaction to be retried.
+        try { render(player, holder); } catch (RuntimeException displayFailure) {
+            player.closeInventory();
+        }
+        return true;
+    }
+
+    private static ItemStack[] copyStorage(ItemStack[] contents) {
+        ItemStack[] snapshot = contents.clone();
+        for (int i = 0; i < snapshot.length; i++)
+            if (snapshot[i] != null) snapshot[i] = snapshot[i].clone();
+        return snapshot;
     }
 
     private static boolean fits(PlayerInventory inventory, ItemStack payment) {
@@ -181,8 +200,11 @@ public final class WalletMenu implements Listener {
                     || offered.getAmount() < 1 || offered.getAmount() > 64) return;
             long value = Math.multiplyExact((long) denomination.value(), offered.getAmount());
             int playerSlot = event.getSlot();
+            var clicked = event.getClickedInventory();
+            ItemStack before = offered.clone();
             deposit(player, holder, wallet, value,
-                    () -> event.getClickedInventory().setItem(playerSlot, null));
+                    () -> clicked.setItem(playerSlot, null),
+                    () -> clicked.setItem(playerSlot, before));
             return;
         }
 
@@ -197,6 +219,7 @@ public final class WalletMenu implements Listener {
                     || cursor.getAmount() > 64) return;
             int count = event.isRightClick() ? 1 : cursor.getAmount();
             long value = (long) count * denomination.value();
+            ItemStack before = cursor.clone();
             deposit(player, holder, wallet, value, () -> {
                 if (cursor.getAmount() == count) event.getView().setCursor(null);
                 else {
@@ -204,7 +227,7 @@ public final class WalletMenu implements Listener {
                     remainder.setAmount(cursor.getAmount() - count);
                     event.getView().setCursor(remainder);
                 }
-            });
+            }, () -> event.getView().setCursor(before));
             return;
         }
 
@@ -218,17 +241,38 @@ public final class WalletMenu implements Listener {
             ItemStack nextWallet = wallets.withBalance(wallet,
                     new WalletBalance(balance).withdraw((long) count * denomination.value()).amount());
 
+            Runnable writeCoins;
+            Runnable restoreCoins;
             if (event.isShiftClick()) {
                 if (!fits(player.getInventory(), payout)) return;
-                var leftovers = player.getInventory().addItem(payout);
-                if (!leftovers.isEmpty())
-                    throw new IllegalStateException("Inventory changed during wallet payout");
-            } else event.getView().setCursor(payout);
-            player.getInventory().setItem(holder.hotbarSlot, nextWallet);
-            render(player, holder);
+                ItemStack[] originalStorage = copyStorage(player.getInventory().getStorageContents());
+                writeCoins = () -> {
+                    var leftovers = player.getInventory().addItem(payout);
+                    if (!leftovers.isEmpty())
+                        throw new IllegalStateException("Inventory changed during wallet payout");
+                };
+                restoreCoins = () -> player.getInventory().setStorageContents(originalStorage);
+            } else {
+                ItemStack oldCursor = event.getView().getCursor();
+                ItemStack cursorSnapshot = oldCursor == null ? null : oldCursor.clone();
+                writeCoins = () -> event.getView().setCursor(payout);
+                restoreCoins = () -> event.getView().setCursor(cursorSnapshot);
+            }
+            ItemStack oldWallet = wallet.clone();
+            WalletTransferTransaction.execute(
+                    () -> player.getInventory().setItem(holder.hotbarSlot, nextWallet),
+                    writeCoins,
+                    () -> player.getInventory().setItem(holder.hotbarSlot, oldWallet),
+                    restoreCoins);
+        } catch (WalletTransferTransaction.Unrecoverable cannotRestore) {
+            Bukkit.shutdown();
+            return;
         } catch (RuntimeException invalid) {
-            // An operation failed before completion. This handler is not
-            // authorized to claim a successful monetary settlement.
+            // In-memory snapshots were restored when this was a partial write.
+            return;
+        }
+        try { render(player, holder); } catch (RuntimeException displayFailure) {
+            player.closeInventory();
         }
     }
 
