@@ -2,6 +2,7 @@ package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.CoinExchangeFormula;
+import co.surumene.simplecoins.domain.PaperCurrencyConsumption;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
@@ -11,6 +12,9 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.CrafterCraftEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
@@ -97,7 +101,9 @@ public final class CoinExchangeRecipes implements Listener {
     public void onPrepare(PrepareItemCraftEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getInventory().getResult()))) {
             event.getInventory().setResult(null);
         }
     }
@@ -106,7 +112,9 @@ public final class CoinExchangeRecipes implements Listener {
     public void onCraft(CraftItemEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getCurrentItem()))) {
             event.setCancelled(true);
         }
     }
@@ -119,7 +127,37 @@ public final class CoinExchangeRecipes implements Listener {
         }
         ItemStack[] matrix = crafter.getInventory().getContents();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !isExpectedRegisteredResult(recipe, event.getResult()))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Guard non-crafting consumption sites that normally accept PAPER.
+     * The raw result slot is 2 for merchant and cartography inventories;
+     * clicking and shift-clicking the result both pass through this event.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onOtherResultTake(InventoryClickEvent event) {
+        // Avoid looking at unrelated inventories or their input slots.
+        if (event.getRawSlot() != 2) return;
+        var top = event.getView().getTopInventory();
+        InventoryType type = top.getType();
+        if (type != InventoryType.MERCHANT && type != InventoryType.CARTOGRAPHY) return;
+        if (PaperCurrencyConsumption.blocksResult(type.name(), event.getRawSlot(),
+                codec.hasCoinMarker(top.getItem(0)), codec.hasCoinMarker(top.getItem(1)))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Last cancellation point for Paper villager/wandering-trader purchases. */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onMerchantPurchase(PlayerTradeEvent event) {
+        var top = event.getPlayer().getOpenInventory().getTopInventory();
+        if (top.getType() == InventoryType.MERCHANT &&
+                (codec.hasCoinMarker(top.getItem(0)) || codec.hasCoinMarker(top.getItem(1)))) {
             event.setCancelled(true);
         }
     }
@@ -145,15 +183,36 @@ public final class CoinExchangeRecipes implements Listener {
         return recipe instanceof Keyed keyed && formulas.containsKey(keyed.getKey());
     }
 
+    /**
+     * Validate final output as well as the key; recipe-key collisions cannot
+     * authorize minting a different value or an unmarked PAPER output.
+     */
+    private boolean isExpectedRegisteredResult(Recipe recipe, ItemStack result) {
+        if (!(recipe instanceof Keyed keyed)) return false;
+        CoinExchangeFormula formula = formulas.get(keyed.getKey());
+        return formula != null && isExpectedResult(result, formula);
+    }
+
+    private boolean isExpectedResult(ItemStack stack, CoinExchangeFormula formula) {
+        if (stack == null || stack.getAmount() != formula.outputCount()) return false;
+        try {
+            return codec.identify(stack).orElse(null) == formula.output();
+        } catch (RuntimeException invalidCoin) {
+            return false;
+        }
+    }
+
     /** Validate every *occupied slot*, not its stack count; Bukkit consumes one/slot. */
     public boolean isApproved(Recipe recipe, ItemStack[] matrix) {
         if (!(recipe instanceof Keyed keyed)) return false;
         CoinExchangeFormula formula = formulas.get(keyed.getKey());
-        if (formula == null) return false;
+        if (formula == null || !isExpectedResult(recipe.getResult(), formula)) return false;
         int found = 0;
         for (ItemStack item : matrix) {
             if (item == null || item.getType().isAir()) continue;
-            if (!codec.hasCoinMarker(item)) return false;
+            // One unit is consumed from each occupied slot; zero-count tagged
+            // ItemStacks must never satisfy the monetary input contract.
+            if (item.getAmount() < 1 || !codec.hasCoinMarker(item)) return false;
             try {
                 CoinDenomination value = codec.identify(item).orElse(null);
                 if (value != formula.input()) return false;
