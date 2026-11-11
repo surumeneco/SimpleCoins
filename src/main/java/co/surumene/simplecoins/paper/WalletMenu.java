@@ -5,6 +5,7 @@ import co.surumene.simplecoins.domain.WalletBalance;
 import co.surumene.simplecoins.domain.WalletTransferTransaction;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -34,12 +35,27 @@ public final class WalletMenu implements Listener {
     private final WalletItemCodec wallets;
     private final CoinItemCodec coins;
     private final long capacity;
+    private final Consumer<Throwable> onUnrecoverable;
+    private boolean halted;
 
-    public WalletMenu(WalletItemCodec wallets, CoinItemCodec coins, long capacity) {
+    public WalletMenu(WalletItemCodec wallets, CoinItemCodec coins, long capacity,
+                      Consumer<Throwable> onUnrecoverable) {
         this.wallets = Objects.requireNonNull(wallets, "wallets");
         this.coins = Objects.requireNonNull(coins, "coins");
         if (capacity < 0) throw new IllegalArgumentException("Negative wallet capacity");
         this.capacity = capacity;
+        this.onUnrecoverable = Objects.requireNonNull(onUnrecoverable, "onUnrecoverable");
+    }
+
+    private void unrecoverable(Throwable failure) {
+        halted = true; // No further in-process wallet operations, even before shutdown.
+        try {
+            // Main plugin must synchronously revoke its published admission
+            // permission, not wait for the independent guard's next poll.
+            onUnrecoverable.accept(failure);
+        } finally {
+            Bukkit.shutdown();
+        }
     }
 
     private static final class Holder implements InventoryHolder {
@@ -79,6 +95,10 @@ public final class WalletMenu implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onUse(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        if (halted) {
+            if (wallets.hasWalletMarker(event.getItem())) event.setCancelled(true);
+            return;
+        }
         if (event.getHand() != EquipmentSlot.HAND) {
             // A marked wallet in the other hand may not bypass our GUI.
             if (wallets.hasWalletMarker(player.getInventory().getItemInOffHand()))
@@ -127,7 +147,7 @@ public final class WalletMenu implements Listener {
         } catch (WalletTransferTransaction.Unrecoverable cannotRestore) {
             // The player/world may already contain newly minted or destroyed
             // money. Shutdown is necessary but NOT proof of durable recovery.
-            Bukkit.shutdown();
+            unrecoverable(cannotRestore);
             return false;
         } catch (RuntimeException rejected) {
             return false;
@@ -169,6 +189,7 @@ public final class WalletMenu implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         event.setCancelled(true);
+        if (halted) return;
         if (!(event.getWhoClicked() instanceof Player player)
                 || !player.getUniqueId().equals(holder.player)) return;
         ItemStack wallet = currentWallet(player, holder);
@@ -265,7 +286,7 @@ public final class WalletMenu implements Listener {
                     () -> player.getInventory().setItem(holder.hotbarSlot, oldWallet),
                     restoreCoins);
         } catch (WalletTransferTransaction.Unrecoverable cannotRestore) {
-            Bukkit.shutdown();
+            unrecoverable(cannotRestore);
             return;
         } catch (RuntimeException invalid) {
             // In-memory snapshots were restored when this was a partial write.
