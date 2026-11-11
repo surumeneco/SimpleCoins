@@ -16,11 +16,11 @@ wallet:
   max-balance: 640000
 trader-drops:
   enabled: true
-  chance: 0.001
+  chance: 0.5
   minimum-count: 1
   maximum-count: 1
   # Lowest to highest denomination: each next weight is half its predecessor.
-  # Total weight 511. The weights apply only after the 0.1% death-event roll.
+  # Total weight 511. The weights apply only after the 50% death-event roll.
   weights:
     '1': 256
     '5': 128
