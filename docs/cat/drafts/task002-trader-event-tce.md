@@ -26,6 +26,8 @@ language: ja
 | issue | 行商人死亡 | 抽選成功・新規UUID・記録正常 | 1 | 生成貨幣を死亡ドロップへ一回追加 |
 | replay | 行商人死亡 | 既存UUIDの永続記録 | 1 | 再抽選・再追加しない |
 | write-fail | 行商人死亡 | 永続書込失敗 | 0 | ドロップの部分追加を拒否 |
-| restart-pending | 起動 | 未確定レコードあり | 0 | 正常発行の許可を与えない |
+| restart-pending | 起動 | PREPAREDまたはEVENT_RECORDEDの既存レコードあり | 0 | 新規発行listenerをhaltし、別UUIDにも発行しない |
+| restart-no-drop | 起動 | NO_DROPレコードのみ | 1 | 安全側の重複抑止を維持しつつ新規IDの発行は許可 |
+| current-session-unresolved | 行商人死亡 | 同セッションに既存発行済み（未照合） | 1 | 旧レコードの存在だけを理由に新規死体処理を停止しない |
 
 これはDraftの技術試験である。Paperクラッシュ時の現物/ファイル統合正しさを保証する受入Gateではない。
