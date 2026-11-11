@@ -297,6 +297,22 @@ public final class WalletMenu implements Listener {
         }
     }
 
+    /**
+     * Bundle is only a durable physical shell for the independent wallet PDC.
+     * Vanilla Bundle content insertion would create a second unmanaged asset
+     * compartment, so reject native right-click wallet interactions outside
+     * the dedicated nine-slot GUI as well.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onNativeBundleClick(InventoryClickEvent event) {
+        if (event.getView().getTopInventory().getHolder() instanceof Holder) return;
+        if (!event.isRightClick()) return;
+        if (wallets.hasWalletMarker(event.getCurrentItem())
+                || wallets.hasWalletMarker(event.getCursor())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder() instanceof Holder) {
