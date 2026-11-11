@@ -1,12 +1,18 @@
 package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.AdmissionBarrier;
+import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.paper.CoinExchangeRecipes;
+import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.ServicePriority;
 
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.logging.Level;
 
 /**
@@ -19,23 +25,41 @@ import java.util.logging.Level;
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
+    private CoinExchangeRecipes exchanges;
 
     @Override
     public void onEnable() {
         admission = new AdmissionBarrier();
         publication = new SettlementSnapshotPublisher(admission);
 
-        // Register as early as possible in the Paper plugin lifecycle.
-        // AdmissionBarrier starts BLOCKED; do not call begin() or complete()
-        // until a fully verified settlement pipeline is actually wired.
+        // The independent STARTUP guard must already be loaded and denying
+        // new connections. A plugin reload with players present is unsafe.
+        // Never begin a settlement scan or open admission in this bootstrap.
         try {
+            if (!getServer().getOnlinePlayers().isEmpty())
+                throw new IllegalStateException("Unsafe SimpleCoins bootstrap: players already online");
+            saveDefaultConfig();
+            WanderingTraderDropConfigReader.read(getConfig()); // strict validation, not issuance
+            EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
+            Map<CoinDenomination, String> fallback = CoinItemCodec.defaultNames();
+            for (CoinDenomination coin : CoinDenomination.values()) {
+                String key = "coins." + coin.value() + ".name";
+                Object value = getConfig().get(key);
+                if (value != null && (!(value instanceof String name) || name.isBlank()))
+                    throw new IllegalArgumentException("Invalid configured currency display name: " + key);
+                names.put(coin, value == null ? fallback.get(coin) : (String) value);
+            }
+            CoinItemCodec codec = new CoinItemCodec(names);
+            exchanges = new CoinExchangeRecipes(this, codec);
+            exchanges.register();
             getServer().getPluginManager().registerEvents(
                     new SettlementAdmissionListener(admission, publication), this);
             // Read-only service is served through the independent guard's
             // classloader; it never opens while journal/scan are not connected.
             getServer().getServicesManager().register(
                     AdmissionPermit.class, publication::mayAdmit, this, ServicePriority.Normal);
-            getLogger().warning("Settlement engine not connected; player admission remains disabled.");
+            getLogger().warning("Registered " + exchanges.registeredCount()
+                    + " value-neutral currency exchanges; settlement and trader issuance remain disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
             getLogger().log(Level.SEVERE, "Failed to register admission protection", failure);
@@ -50,6 +74,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         // Remove the cross-plugin permission service before tearing down state.
         // The independent guard then denies, even after this plugin is disabled.
         getServer().getServicesManager().unregisterAll(this);
+        if (exchanges != null) {
+            try { exchanges.unregister(); }
+            catch (RuntimeException | Error failure) {
+                getLogger().log(Level.SEVERE, "Failed to unregister currency recipes", failure);
+            }
+            exchanges = null;
+        }
         // Revocation is required even for an already published generation.
         if (publication != null) {
             publication.revoke();

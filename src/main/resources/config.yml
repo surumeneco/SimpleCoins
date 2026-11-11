@@ -1,0 +1,40 @@
+# Default settings for SimpleCoins 1.0.0 candidate; existing operator configs
+# are not automatically overwritten on upgrade.
+currency:
+  unit: C
+coins:
+  '1': {name: '1 Coin'}
+  '5': {name: '5 Coin'}
+  '10': {name: '10 Coin'}
+  '50': {name: '50 Coin'}
+  '100': {name: '100 Coin'}
+  '500': {name: '500 Coin'}
+  '1000': {name: '1000 Coin'}
+  '5000': {name: '5000 Coin'}
+  '10000': {name: '10000 Coin'}
+wallet:
+  max-balance: 640000
+trader-drops:
+  enabled: true
+  chance: 0.5
+  minimum-count: 1
+  maximum-count: 1
+  # Lowest to highest denomination: each next weight is half its predecessor.
+  # Total weight 511. The weights apply only after the 50% death-event roll.
+  weights:
+    '1': 256
+    '5': 128
+    '10': 64
+    '50': 32
+    '100': 16
+    '500': 8
+    '1000': 4
+    '5000': 2
+    '10000': 1
+resource-pack:
+  # Host the generated ZIP when Nexo is not used.
+  public-url: ""
+statistics:
+  default-enabled: true
+  enabled-worlds: []
+  disabled-worlds: []
