@@ -212,9 +212,19 @@ public final class WalletMenu implements Listener {
             if (event.getClickedInventory() == null
                     || event.getClickedInventory().getType() != org.bukkit.event.inventory.InventoryType.PLAYER
                     || event.getSlot() == holder.hotbarSlot) return;
+            // Ordinary left/right clicks in the player's lower inventory
+            // remain vanilla, unless either item is a wallet or the source
+            // hotbar slot is involved. All top GUI currency icons remain locked.
+            if (!event.isShiftClick()) {
+                if ((event.getClick() == ClickType.LEFT
+                        || event.getClick() == ClickType.RIGHT)
+                        && !wallets.hasWalletMarker(event.getCurrentItem())
+                        && !wallets.hasWalletMarker(event.getCursor()))
+                    event.setCancelled(false);
+                return;
+            }
             // Deposit an entire real coin stack on Shift-clicking the player's
             // inventory. Reject corrupt denomination tags and amount 0.
-            if (!event.isShiftClick()) return;
             ItemStack offered = event.getCurrentItem();
             CoinDenomination denomination = coin(coins, offered);
             if (denomination == null || offered == null
