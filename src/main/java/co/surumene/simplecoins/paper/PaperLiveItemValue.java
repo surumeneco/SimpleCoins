@@ -46,7 +46,8 @@ public final class PaperLiveItemValue {
      * A shared wallet-ID generation may be provided for an explicitly
      * selected inventory, without claiming a globally coherent world snapshot.
      */
-    private static BigInteger stack(ItemStack stack, int maxSerializedBytes,
+    /** Package-private shared identity context for one explicitly selected live source. */
+    static BigInteger stack(ItemStack stack, int maxSerializedBytes,
                                    int maxInflatedBytes, Set<UUID> seenWallets) throws IOException {
         limits(maxSerializedBytes, maxInflatedBytes);
         requireMainThread();
