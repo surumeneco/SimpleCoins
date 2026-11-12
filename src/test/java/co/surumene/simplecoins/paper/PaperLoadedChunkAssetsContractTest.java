@@ -37,6 +37,22 @@ class PaperLoadedChunkAssetsContractTest {
         assertFalse(PaperLoadedChunkAssets.isIndependentInventoryHolder(null));
     }
 
+    @Test void villagerInternalInventoryIsIndependentOfEquipmentAndPlayerSlots() {
+        assertTrue(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.Villager.class));
+        assertTrue(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.WanderingTrader.class));
+        assertFalse(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.Player.class));
+        assertFalse(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.Zombie.class));
+        assertFalse(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.minecart.StorageMinecart.class));
+        assertFalse(PaperLoadedChunkAssets.isVillagerInternalInventorySource(
+                org.bukkit.entity.Allay.class));
+        assertFalse(PaperLoadedChunkAssets.isVillagerInternalInventorySource(null));
+    }
+
     @Test void nullOrNonpositiveCurrencyCannotEnterAResultEntry() {
         assertThrows(IllegalArgumentException.class, () ->
                 new PaperLoadedChunkAssets.Entry("slot", "world", BigInteger.ZERO));
