@@ -98,7 +98,19 @@ public final class SettlementScanRunner {
         Objects.requireNonNull(blockOwners);
         Objects.requireNonNull(entityOwners);
         Set<UUID> banned = Set.copyOf(currentlyBanned);
-        Set<String> required = manifest.requiredSourceIds();
+        Set<String> savedSources = manifest.requiredSourceIds();
+        Set<String> required = savedSources;
+        if (partition != null) {
+            // A hybrid plan MUST NOT make the on-disk copy disappear and
+            // then allow a zero-valued commit without the live replacement.
+            // Every declared loaded Chunk and online Player is an additional
+            // mandatory accounting source, even if it currently holds 0C.
+            Set<String> allSources = new java.util.HashSet<>(savedSources);
+            Set<String> liveSources = partition.requiredLiveSourceIds();
+            if (!allSources.addAll(liveSources) && !liveSources.isEmpty())
+                throw new IOException("Overlapping saved/live accounting source IDs");
+            required = Set.copyOf(allSources);
+        }
         var pending = new SettlementAccumulator(scope, required);
         // One authoritative playerdata generation must not count a copied
         // wallet UUID as separate currency for two different players.
