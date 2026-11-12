@@ -147,7 +147,12 @@ public final class PaperLivePlayerAssets {
             slots = Math.addExact(slots, candidate.scannedSlots());
             result.add(candidate);
         }
-        if (Bukkit.getOnlinePlayers().size() != selected.size())
+        Set<UUID> actualOwners = new HashSet<>();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online == null || !actualOwners.add(online.getUniqueId()))
+                throw new IOException("Invalid Player set after scan");
+        }
+        if (!actualOwners.equals(seenOwners))
             throw new IOException("Online Player set changed while scanning");
         return new OnlineSet(result.size(), slots, result);
     }
