@@ -95,12 +95,22 @@ public final class PaperCapturedHybridSettlement {
         List<SavedLiveSourcePartition.Chunk> loaded = new ArrayList<>();
         List<UUID> online = new ArrayList<>();
         for (HybridLiveSourceStage.Source source : observed.sources()) {
-            if (source instanceof HybridLiveSourceStage.ChunkSource chunk)
+            if (source instanceof HybridLiveSourceStage.ChunkSource chunk) {
+                // A captured Chunk from an excluded world is caller error.
+                // Passing it through to the accumulator would silently
+                // discard its positive currency via WorldScope.includes()
+                // while still marking its live source as completed.
+                if (!scope.includes(chunk.chunk().world()))
+                    throw new IOException("Captured Paper Chunk is outside enabled "
+                            + "accounting WorldScope: " + chunk.chunk().world());
                 loaded.add(chunk.chunk());
-            else if (source instanceof HybridLiveSourceStage.PlayerSource player)
+            } else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
+                // World-independent Player inventory is always included,
+                // even when all per-World currency statistics are OFF.
                 online.add(player.player());
-            else
+            } else {
                 throw new IOException("Unsupported captured Paper LIVE source");
+            }
         }
 
         // The selection is not an administrator-supplied claim: it is derived
