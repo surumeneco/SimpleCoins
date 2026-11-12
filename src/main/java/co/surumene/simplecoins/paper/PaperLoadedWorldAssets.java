@@ -95,11 +95,28 @@ public final class PaperLoadedWorldAssets {
      * all selected worlds, rather than resetting it for every World.
      * These mutable sets MUST be discarded on any scan failure.
      */
+    /** Receive the exact authoritative loaded Chunk Slice during this one scan. */
+    @FunctionalInterface
+    interface SliceObserver {
+        void accept(PaperLoadedChunkAssets.Slice slice) throws IOException;
+    }
+
     static Report scan(World world, int maxChunks, int maxTiles,
                        int maxEntities, int maxSlots,
                        int maxSerializedBytes, int maxInflatedBytes,
                        Set<UUID> walletIds, Set<UUID> entityIds,
                        Set<String> physicalSlots) throws IOException {
+        return scan(world, maxChunks, maxTiles, maxEntities, maxSlots,
+                maxSerializedBytes, maxInflatedBytes, walletIds, entityIds,
+                physicalSlots, slice -> {});
+    }
+
+    static Report scan(World world, int maxChunks, int maxTiles,
+                       int maxEntities, int maxSlots,
+                       int maxSerializedBytes, int maxInflatedBytes,
+                       Set<UUID> walletIds, Set<UUID> entityIds,
+                       Set<String> physicalSlots, SliceObserver observed) throws IOException {
+        Objects.requireNonNull(observed, "loaded Chunk source observer");
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(walletIds, "shared wallet identities");
         Objects.requireNonNull(entityIds, "shared Entity identities");
@@ -141,6 +158,9 @@ public final class PaperLoadedWorldAssets {
             if (nextTiles > maxTiles - tiles || nextEntities > maxEntities - entities ||
                     slice.scannedSlots() > maxSlots - slots)
                 throw new IOException("Loaded-world scan aggregate budget exhausted");
+            // Capture monetary source details from the same bounded scan;
+            // never re-query chunks to infer their IDs after the fact.
+            observed.accept(slice);
             tiles += nextTiles;
             entities += nextEntities;
             slots += slice.scannedSlots();
