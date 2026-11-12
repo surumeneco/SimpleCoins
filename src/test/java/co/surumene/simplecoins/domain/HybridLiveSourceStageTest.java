@@ -117,6 +117,16 @@ class HybridLiveSourceStageTest {
         assertThrows(IllegalStateException.class, s.staged().pending()::commit);
     }
 
+    @Test void nullOwnershipEvidenceIsNeverSilentlyTreatedAsFree() {
+        Setup s = setup();
+        assertThrows(IOException.class, () -> HybridLiveSourceStage.stage(
+                s.staged(), s.plan(), List.of(
+                        chunk(100, "world/world/-1,64,32:0"),
+                        new HybridLiveSourceStage.PlayerSource(OWNER, List.of())),
+                (source, entry) -> null));
+        assertThrows(IllegalStateException.class, s.staged().pending()::commit);
+    }
+
     @Test void duplicatePhysicalSlotAcrossLiveSourcesAlwaysRejectsCommit() {
         Setup s = setup();
         // Different source IDs cannot claim one physical item twice.
