@@ -69,6 +69,11 @@ public final class NormalMutationJournal implements AutoCloseable {
         }
     }
 
+    /** Distinguish a new durable reservation from a repeated event ID. */
+    public record Preparation(Mutation mutation, boolean newlyCreated) {
+        public Preparation { Objects.requireNonNull(mutation); }
+    }
+
     private final Path directory;
     private final FileChannel lockChannel;
     private final FileLock writerLock;
@@ -160,7 +165,7 @@ public final class NormalMutationJournal implements AutoCloseable {
      * Idempotently reserve one proposed physical movement before Paper edits
      * the corresponding inventory/Entity. This does not mint or transfer money.
      */
-    public synchronized Mutation prepare(UUID operationId, Account from,
+    public synchronized Preparation prepare(UUID operationId, Account from,
                                          Account to, long amount) throws IOException {
         checkHealthy();
         Objects.requireNonNull(operationId, "operation id");
@@ -169,7 +174,7 @@ public final class NormalMutationJournal implements AutoCloseable {
             Mutation old = entries.get(previous);
             if (!old.from().equals(from) || !old.to().equals(to) || old.amount() != amount)
                 throw new IllegalStateException("Conflicting duplicate monetary operation ID");
-            return old;
+            return new Preparation(old, false);
         }
         long next = entries.isEmpty() ? 1 : Math.addExact(entries.lastKey(), 1);
         Mutation candidate = new Mutation(next, operationId, from, to, amount, Phase.PREPARED);
@@ -182,7 +187,7 @@ public final class NormalMutationJournal implements AutoCloseable {
         }
         entries.put(next, candidate);
         operationIds.put(operationId, next);
-        return candidate;
+        return new Preparation(candidate, true);
     }
 
     /**
