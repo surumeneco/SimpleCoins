@@ -89,6 +89,34 @@ public final class SavedLiveSourcePartition {
         return Authority.SAVED;
     }
 
+    /**
+     * Stable disjoint source identities for live holdings. UUIDs encode
+     * online Player sources; Base64url world-name bytes disambiguate names
+     * containing slashes or separators without importing disk paths.
+     */
+    public static String liveChunkSourceId(Chunk chunk) {
+        Objects.requireNonNull(chunk, "live chunk source");
+        String world = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(chunk.world().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return "live:chunk/" + world + "/" + chunk.x() + "/" + chunk.z();
+    }
+
+    public static String livePlayerSourceId(UUID player) {
+        return "live:player/" + Objects.requireNonNull(player, "live Player UUID");
+    }
+
+    /**
+     * These source IDs are REQUIRED for monetary settlement even when the
+     * corresponding holder has zero currency. Source selection and live
+     * inventory observation alone are not proof of staged value completion.
+     */
+    public Set<String> requiredLiveSourceIds() {
+        Set<String> ids = new HashSet<>();
+        for (Chunk chunk : selectedLiveChunks) ids.add(liveChunkSourceId(chunk));
+        for (UUID player : selectedLivePlayers) ids.add(livePlayerSourceId(player));
+        return Set.copyOf(ids);
+    }
+
     /** Read-only query: an online Player's saved playerdata must not count twice. */
     public boolean shadowsSavedPlayer(UUID player) {
         return selectedLivePlayers.contains(Objects.requireNonNull(player, "Player UUID"));
