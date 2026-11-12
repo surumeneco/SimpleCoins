@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.util.Objects;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import org.bukkit.Bukkit;
 import org.bukkit.inventory.Inventory;
@@ -36,6 +39,15 @@ public final class PaperLiveItemValue {
     /** A single stack, including a wallet's balance and nested item contents. */
     public static BigInteger stack(ItemStack stack, int maxSerializedBytes,
                                    int maxInflatedBytes) throws IOException {
+        return stack(stack, maxSerializedBytes, maxInflatedBytes, new HashSet<>());
+    }
+
+    /**
+     * A shared wallet-ID generation may be provided for an explicitly
+     * selected inventory, without claiming a globally coherent world snapshot.
+     */
+    private static BigInteger stack(ItemStack stack, int maxSerializedBytes,
+                                   int maxInflatedBytes, Set<UUID> seenWallets) throws IOException {
         limits(maxSerializedBytes, maxInflatedBytes);
         requireMainThread();
         if (stack == null || stack.getType().isAir()) return BigInteger.ZERO;
@@ -51,7 +63,7 @@ public final class PaperLiveItemValue {
         InputStream decoded = (encoded[0] == (byte) 0x1f && encoded[1] == (byte) 0x8b)
                 ? new GZIPInputStream(raw) : raw;
         try (decoded) {
-            return StoredItemValue.value(NbtReader.read(decoded, maxInflatedBytes));
+            return StoredItemValue.value(NbtReader.read(decoded, maxInflatedBytes), seenWallets);
         }
     }
 
@@ -70,7 +82,9 @@ public final class PaperLiveItemValue {
         if (items.length > maxSlots || inventory.getSize() > maxSlots)
             throw new IOException("Live inventory exceeds item slot budget");
         BigInteger sum = BigInteger.ZERO;
-        for (ItemStack item : items) sum = sum.add(stack(item, maxSerializedBytes, maxInflatedBytes));
+        Set<UUID> seenWallets = new HashSet<>();
+        for (ItemStack item : items)
+            sum = sum.add(stack(item, maxSerializedBytes, maxInflatedBytes, seenWallets));
         return sum;
     }
 }
