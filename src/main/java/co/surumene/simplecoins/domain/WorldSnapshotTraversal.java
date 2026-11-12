@@ -1,6 +1,11 @@
 package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -34,18 +39,51 @@ public final class WorldSnapshotTraversal {
     public record Report(int regionFiles, int chunks, int playerFiles) {}
 
     /**
-     * Best-effort file-change evidence, not a coherent-world snapshot proof.
-     * Metadata comparison detects size/timestamp/file-identity changes only.
+     * Still NOT a coherent-world snapshot proof: a file may change outside
+     * the scan window, and Paper memory/external plugins require reconciliation.
+     * Compare content as well as metadata, to detect same-size/mtime rewrites.
      */
     private record SourceStamp(Object physicalKey, long size,
-                               java.nio.file.attribute.FileTime modified) {}
+                               java.nio.file.attribute.FileTime modified, String sha256) {}
 
     private static SourceStamp stamp(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class,
+        BasicFileAttributes before = Files.readAttributes(path, BasicFileAttributes.class,
                 LinkOption.NOFOLLOW_LINKS);
-        if (!attrs.isRegularFile())
+        if (!before.isRegularFile())
             throw new IOException("Snapshot source disappeared or ceased being regular: " + path);
-        return new SourceStamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime());
+        String fingerprint = contentFingerprint(path, before.size());
+        // Guard the fingerprint read itself. A file swapping identities or
+        // changing size/mtime during the digest is not a stable source.
+        BasicFileAttributes after = Files.readAttributes(path, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!after.isRegularFile() || !Objects.equals(before.fileKey(), after.fileKey())
+                || before.size() != after.size()
+                || !before.lastModifiedTime().equals(after.lastModifiedTime()))
+            throw new IOException("Snapshot source changed while fingerprinting: " + path);
+        return new SourceStamp(before.fileKey(), before.size(),
+                before.lastModifiedTime(), fingerprint);
+    }
+
+    /** Stream with a fixed 8 KiB buffer; no entire MCA/playerdata in memory. */
+    private static String contentFingerprint(Path path, long expectedBytes) throws IOException {
+        MessageDigest sha256;
+        try { sha256 = MessageDigest.getInstance("SHA-256"); }
+        catch (NoSuchAlgorithmException impossible) { throw new AssertionError(impossible); }
+        long readBytes = 0;
+        byte[] buffer = new byte[8192];
+        try (InputStream input = Files.newInputStream(path,
+                StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            int n;
+            while ((n = input.read(buffer)) != -1) {
+                if (n > expectedBytes - readBytes)
+                    throw new IOException("Snapshot source grew during fingerprinting: " + path);
+                sha256.update(buffer, 0, n);
+                readBytes += n;
+            }
+        }
+        if (readBytes != expectedBytes)
+            throw new IOException("Snapshot source shrank during fingerprinting: " + path);
+        return HexFormat.of().formatHex(sha256.digest());
     }
 
     public static Report traverse(WorldStorageDiscovery.Manifest manifest,
