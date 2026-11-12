@@ -214,8 +214,24 @@ class SettlementScanRunnerTest {
                 4096, 4096, new java.util.HashSet<>(), plan);
         assertEquals(1, staged.report().regionFiles());
         assertEquals(1, staged.report().playerFiles());
-        assertEquals(BigInteger.ZERO, staged.pending().commit().statistics().worldTotal(),
-                "The disk copy of a live monetary holder must not be added twice");
+        // The stage may not claim the world totals are zero merely because
+        // we correctly avoided the two disk copies. LIVE money is mandatory.
+        assertThrows(IllegalStateException.class, () -> staged.pending().commit());
+        String chunkSource = SavedLiveSourcePartition.liveChunkSourceId(loadedChunk);
+        String playerSource = SavedLiveSourcePartition.livePlayerSourceId(player);
+        assertTrue(staged.requiredSourceIds().containsAll(Set.of(chunkSource, playerSource)));
+        staged.pending().accept(new SettlementAccumulator.Asset(chunkSource,
+                "world/world/entity/loaded/slot0", "world", null, false,
+                false, true, BigInteger.valueOf(700L), "live/world/chunk/slot0"));
+        staged.pending().completeSource(chunkSource);
+        staged.pending().accept(new SettlementAccumulator.Asset(playerSource,
+                "player/" + player + "/inventory/0", null, player, false,
+                false, true, BigInteger.valueOf(500L),
+                "live/player/" + player + "/inventory/0"));
+        staged.pending().completeSource(playerSource);
+        var committed = staged.pending().commit();
+        assertEquals(BigInteger.valueOf(1200L), committed.statistics().worldTotal());
+        assertEquals(BigInteger.valueOf(500L), committed.personalBalances().get(player));
     }
 
     @Test void declaredButUnreadLiveChunkCannotFinishDiskStage() throws Exception {
@@ -244,6 +260,9 @@ class SettlementScanRunnerTest {
                 new WorldScope(true, Set.of(), Set.of()), Set.of(),
                 (world, position) -> null,
                 (world, chunk) -> Map.of(), 4096, 4096, new java.util.HashSet<>(), plan);
+        assertThrows(IllegalStateException.class, () -> staged.pending().commit());
+        // The caller has independently confirmed this live Player held 0C.
+        staged.pending().completeSource(SavedLiveSourcePartition.livePlayerSourceId(online));
         var totals = staged.pending().commit().personalBalances();
         assertEquals(BigInteger.valueOf(200L), totals.get(offline));
         assertNull(totals.get(online), "Online holder cannot be silently counted from saved playerdata");
