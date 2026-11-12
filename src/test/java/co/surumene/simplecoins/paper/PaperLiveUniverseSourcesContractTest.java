@@ -79,6 +79,52 @@ class PaperLiveUniverseSourcesContractTest {
                 new PaperLiveUniverseAssets.Observed(report(), List.of(chunk(), duplicate)));
     }
 
+    @Test void sameValueAtDifferentPhysicalSlotIsNotEquivalentToObservedPaperSlot() {
+        // A forged location retains 100C and the same world prefix, so a
+        // totals-only comparison would let its ownership be misattributed.
+        var forged = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk("a", 0, 0),
+                List.of(new HybridLiveSourceStage.Value(
+                        "world/a/99,64,99:0", "a", BigInteger.valueOf(100))));
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLiveUniverseAssets.Observed(report(), List.of(forged, player())));
+    }
+
+    @Test void equalSumCannotHideSwappedCurrencyAcrossTwoPhysicalSlots() {
+        var original = new PaperLoadedWorldAssets.Report("a", 1, 1, 0, 0, 0, 27,
+                List.of(new PaperLoadedChunkAssets.Entry(BLOCK, "a", BigInteger.valueOf(100)),
+                        new PaperLoadedChunkAssets.Entry(
+                                "world/a/2,64,2:0", "a", BigInteger.valueOf(200))));
+        var emptyPlayers = new PaperLivePlayerAssets.OnlineSet(0, 0, List.of());
+        var observed = new PaperLiveUniverseAssets.Report(
+                List.of(original), emptyPlayers, 1, 1, 0, 27);
+        var swapped = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk("a", 0, 0),
+                List.of(new HybridLiveSourceStage.Value(
+                                BLOCK, "a", BigInteger.valueOf(200)),
+                        new HybridLiveSourceStage.Value(
+                                "world/a/2,64,2:0", "a", BigInteger.valueOf(100))));
+        assertEquals(BigInteger.valueOf(300), observed.total());
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLiveUniverseAssets.Observed(observed, List.of(swapped)));
+    }
+
+    @Test void duplicateSlotInUnderlyingPaperAggregateCannotBeCoveredByForgedSecondSlot() {
+        var corruptReport = new PaperLoadedWorldAssets.Report("a", 1, 1, 0, 0, 0, 27,
+                List.of(new PaperLoadedChunkAssets.Entry(BLOCK, "a", BigInteger.valueOf(100)),
+                        new PaperLoadedChunkAssets.Entry(BLOCK, "a", BigInteger.valueOf(100))));
+        var noPlayers = new PaperLivePlayerAssets.OnlineSet(0, 0, List.of());
+        var aggregate = new PaperLiveUniverseAssets.Report(
+                List.of(corruptReport), noPlayers, 1, 1, 0, 27);
+        var detailed = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk("a", 0, 0),
+                List.of(new HybridLiveSourceStage.Value(BLOCK, "a", BigInteger.valueOf(100)),
+                        new HybridLiveSourceStage.Value(
+                                "world/a/2,64,2:0", "a", BigInteger.valueOf(100))));
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLiveUniverseAssets.Observed(aggregate, List.of(detailed)));
+    }
+
     @Test void emptyChunkIsStillARequiredSourceWhenNoCurrencyPresent() {
         var world = new PaperLoadedWorldAssets.Report("a", 1, 0, 0, 0, 0, 0,
                 List.of());

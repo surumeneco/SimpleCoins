@@ -92,8 +92,24 @@ public final class PaperLiveUniverseAssets {
             for (var world : report.worlds())
                 expectedChunks.put(world.world(), world.scannedChunks());
             Map<String, Integer> countedChunks = new HashMap<>();
+            // Materialize exact physical slot → monetary amount authority
+            // from the original one-pass Paper scan. Equal sums alone cannot
+            // prove the same physical holders were retained in source detail.
+            Map<String, BigInteger> expectedValues = new HashMap<>();
+            for (var world : report.worlds()) {
+                for (var entry : world.entries()) {
+                    if (expectedValues.putIfAbsent(entry.physicalKey(), entry.amount()) != null)
+                        throw new IllegalArgumentException("Repeated physical slot in World aggregate");
+                }
+            }
             Set<UUID> expectedPlayers = new HashSet<>();
-            for (var player : report.online().players()) expectedPlayers.add(player.owner());
+            for (var player : report.online().players()) {
+                expectedPlayers.add(player.owner());
+                for (var entry : player.entries()) {
+                    if (expectedValues.putIfAbsent(entry.physicalKey(), entry.amount()) != null)
+                        throw new IllegalArgumentException("Repeated physical slot in online Player aggregate");
+                }
+            }
             Set<UUID> countedPlayers = new HashSet<>();
             Set<String> sourceIds = new HashSet<>();
             Set<String> physicalKeys = new HashSet<>();
@@ -126,9 +142,18 @@ public final class PaperLiveUniverseAssets {
                                 "player/" + player.player() + "/"))
                             throw new IllegalArgumentException("Online Player monetary source mismatch");
                     }
+                    BigInteger originallyRead = expectedValues.remove(entry.physicalKey());
+                    if (originallyRead == null || !originallyRead.equals(entry.amount()))
+                        throw new IllegalArgumentException(
+                                "Paper LIVE monetary source does not match the real scanned slot: "
+                                + entry.physicalKey());
                     total = total.add(entry.amount());
                 }
             }
+            if (!expectedValues.isEmpty())
+                throw new IllegalArgumentException(
+                        "Paper LIVE monetary detail omitted physical slots: "
+                        + expectedValues.keySet());
             for (var world : expectedChunks.entrySet()) {
                 if (!world.getValue().equals(countedChunks.getOrDefault(world.getKey(), 0)))
                     throw new IllegalArgumentException("Paper LIVE Chunk count disagrees with source details");
