@@ -33,6 +33,8 @@ language: ja
 | paper-source-04 | 従来の集計とソース別明細が不一致 | value総額・Chunk件数・Player件数・source ID重複を拒否する | synthetic Report回帰 |
 | paper-source-05 | 任意のワールド横断で同一財布UUIDを複製する | 従来通り共有Setで重複を拒否する | 既存Paper統合 |
 | paper-source-06 | 走査が成功 | 読取したことだけを示し、Worldの静止・Owner/BAN・保存NBT全件・仕訳整合は保証しない | admission は常に閉 |
+| paper-source-07 | Chunk/Player別Source総額は一致するが、どちらかの額が移された | 各Reportの実物physicalKeyと金額を**sourceごとに照合**し、総額一致のみでは成功扱いしない | Chunk 100→75/Player 50→75の入替テスト |
+| paper-source-08 | ソースのphysicalKeyだけを別のキーに差替 | 金額が同じでも現物Slot不一致として拒否する | source/Reportの厳密なキー比較 |
 
 ## Boundary
 
