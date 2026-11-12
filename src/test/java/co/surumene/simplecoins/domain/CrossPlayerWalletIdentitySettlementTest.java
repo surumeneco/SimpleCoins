@@ -44,6 +44,35 @@ class CrossPlayerWalletIdentitySettlementTest {
         return file;
     }
 
+    @Test void walletAlreadySeenInLiveSourceMustAbortSavedSettlement() throws Exception {
+        UUID owner = UUID.fromString("00000000-0000-0000-0000-000000001101");
+        UUID copied = UUID.fromString("00000000-0000-0000-0000-000000009901");
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(owner, playerdata(owner, copied, 340L)));
+        Set<UUID> sharedGeneration = new java.util.HashSet<>(Set.of(copied));
+        assertThrows(IOException.class, () -> SettlementScanRunner.stage(
+                manifest, new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                1048576, 1048576, sharedGeneration));
+        assertTrue(sharedGeneration.contains(copied));
+    }
+
+    @Test void differentWalletAlreadySeenInLiveSourceRemainsDistinct() throws Exception {
+        UUID owner = UUID.fromString("00000000-0000-0000-0000-000000001102");
+        UUID live = UUID.fromString("00000000-0000-0000-0000-000000009902");
+        UUID saved = UUID.fromString("00000000-0000-0000-0000-000000009903");
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(owner, playerdata(owner, saved, 200L)));
+        Set<UUID> sharedGeneration = new java.util.HashSet<>(Set.of(live));
+        var staged = SettlementScanRunner.stage(
+                manifest, new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                1048576, 1048576, sharedGeneration);
+        assertEquals(Set.of(live, saved), sharedGeneration);
+        assertEquals(BigInteger.valueOf(200L),
+                staged.pending().commit().personalBalances().get(owner));
+    }
+
     @Test void clonedWalletAcrossTwoDistinctPlayerdataMustAbortEntireSettlement() throws Exception {
         UUID a = UUID.fromString("00000000-0000-0000-0000-000000001001");
         UUID b = UUID.fromString("00000000-0000-0000-0000-000000001002");
