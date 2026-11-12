@@ -89,6 +89,11 @@ public final class SavedLiveSourcePartition {
         return Authority.SAVED;
     }
 
+    /** Read-only query: an online Player's saved playerdata must not count twice. */
+    public boolean shadowsSavedPlayer(UUID player) {
+        return selectedLivePlayers.contains(Objects.requireNonNull(player, "Player UUID"));
+    }
+
     /** A saved playerdata can never be counted twice with online Player data. */
     public Authority savedPlayer(UUID player) throws IOException {
         ensureOpen();
