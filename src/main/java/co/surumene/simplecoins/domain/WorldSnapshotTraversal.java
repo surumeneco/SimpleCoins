@@ -90,6 +90,23 @@ public final class WorldSnapshotTraversal {
                                   int maximumCompressedBytes,
                                   int maximumInflatedBytes,
                                   Visitor visitor) throws IOException {
+        return traverse(manifest, maximumCompressedBytes, maximumInflatedBytes,
+                visitor, null);
+    }
+
+    /**
+     * Route saved NBT callbacks through an explicit saved/live partition,
+     * without skipping any saved-file parsing or drift/integrity inspection.
+     * Before calling this, the caller must stage and acknowledge all selected
+     * LIVE sources (including their actual values) in the same validated
+     * settlement generation. A successful report is still not authority
+     * to publish or admit players: Paper coherence is not proven here.
+     */
+    public static Report traverse(WorldStorageDiscovery.Manifest manifest,
+                                  int maximumCompressedBytes,
+                                  int maximumInflatedBytes,
+                                  Visitor visitor,
+                                  SavedLiveSourcePartition partition) throws IOException {
         Objects.requireNonNull(manifest, "manifest");
         Objects.requireNonNull(visitor, "visitor");
         if (maximumCompressedBytes < 1 || maximumInflatedBytes < 1)
@@ -155,7 +172,10 @@ public final class WorldSnapshotTraversal {
                                     throw new IOException("Duplicate saved Entity UUID across chunks: " + uuid);
                             }
                         }
-                        visitor.chunk(source, chunk);
+                        if (partition == null ||
+                                partition.savedChunk(source.world(), chunk.x(), chunk.z(),
+                                        source.kind()) == SavedLiveSourcePartition.Authority.SAVED)
+                            visitor.chunk(source, chunk);
                         fileChunks[0] = Math.addExact(fileChunks[0], 1);
                     });
             files = Math.addExact(files, 1);
@@ -165,7 +185,9 @@ public final class WorldSnapshotTraversal {
                 .sorted(Comparator.comparing(e -> e.getKey().toString())).toList()) {
             var data = PlayerDataReader.read(entry.getValue(),
                     maximumCompressedBytes, maximumInflatedBytes);
-            visitor.player(entry.getKey(), data);
+            if (partition == null ||
+                    partition.savedPlayer(entry.getKey()) == SavedLiveSourcePartition.Authority.SAVED)
+                visitor.player(entry.getKey(), data);
             players = Math.addExact(players, 1);
         }
         // Check EVERY authoritative input again, including already visited
@@ -180,6 +202,7 @@ public final class WorldSnapshotTraversal {
                 throw new IOException("Authoritative saved source changed during traversal: "
                         + entry.getKey());
         }
+        if (partition != null) partition.finish();
         return new Report(files, chunks, players);
     }
 

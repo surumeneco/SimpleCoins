@@ -123,6 +123,78 @@ class WorldSnapshotTraversalTest {
         assertEquals(2, WorldSnapshotTraversal.traverse(manifest, 4096, 4096, visitor).chunks());
     }
 
+    @Test void partitionedTraversalDoesNotStageShadowedSavedChunksOrOnlinePlayerdata()
+            throws Exception {
+        Path terrain = region("region", 10);
+        Path entities = region("entities", 20);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000003333");
+        Path playerdata = player(player, 30);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", terrain, WorldStorageDiscovery.Kind.REGION),
+                new WorldStorageDiscovery.SourceFile("world", entities, WorldStorageDiscovery.Kind.ENTITY)),
+                Map.of(player, playerdata));
+        var loaded = new SavedLiveSourcePartition.Chunk("world", 0, 0);
+        var partition = new SavedLiveSourcePartition(List.of(loaded), List.of(player));
+        partition.liveChunk(loaded);
+        partition.livePlayer(player);
+        AtomicInteger visited = new AtomicInteger();
+        WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID uuid, Map<String,Object> root) {
+                        visited.incrementAndGet();
+                    }
+                }, partition);
+        assertEquals(0, visited.get(), "Live chunks and online playerdata must not count twice");
+        assertEquals(2, report.regionFiles(), "Saved sources are STILL read for drift checks");
+        assertEquals(2, report.chunks());
+        assertEquals(1, report.playerFiles());
+    }
+
+    @Test void partitionedTraversalRefusesUnvisitedDeclaredLiveSources() throws Exception {
+        Path terrain = region("region", 10);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", terrain, WorldStorageDiscovery.Kind.REGION)),
+                Map.of());
+        var loaded = new SavedLiveSourcePartition.Chunk("world", 0, 0);
+        var partition = new SavedLiveSourcePartition(List.of(loaded), List.of());
+        AtomicInteger visited = new AtomicInteger();
+        assertThrows(IOException.class, () -> WorldSnapshotTraversal.traverse(
+                manifest, 4096, 4096, new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID player, Map<String,Object> root) {}
+                }, partition));
+        assertEquals(0, visited.get(), "Never stage a shadowed saved source");
+    }
+
+    @Test void partitionedTraversalStillStagesUnloadedChunksAndOfflinePlayerdata() throws Exception {
+        Path terrain = region("region", 10);
+        UUID owner = UUID.fromString("00000000-0000-0000-0000-000000003334");
+        Path saved = player(owner, 30);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", terrain, WorldStorageDiscovery.Kind.REGION)),
+                Map.of(owner, saved));
+        var partition = new SavedLiveSourcePartition(List.of(), List.of());
+        AtomicInteger visited = new AtomicInteger();
+        WorldSnapshotTraversal.traverse(manifest, 4096, 4096,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk chunk) {
+                        visited.incrementAndGet();
+                    }
+                    @Override public void player(UUID uuid, Map<String,Object> root) {
+                        visited.incrementAndGet();
+                    }
+                }, partition);
+        assertEquals(2, visited.get(), "Unloaded/unconnected sources remain authoritative saved inputs");
+    }
+
     @Test void readsEachDiscoveredRegionAndPlayerWithoutSilentlySkippingSources() throws Exception {
         Path terrain = region("region", 10);
         Path entities = region("entities", 20);
