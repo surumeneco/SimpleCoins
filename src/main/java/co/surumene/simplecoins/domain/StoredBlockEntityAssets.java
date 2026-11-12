@@ -6,7 +6,9 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Read-only inventory extraction from modern terrain chunk block_entities.
@@ -18,6 +20,13 @@ public final class StoredBlockEntityAssets {
     private StoredBlockEntityAssets() {}
 
     public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
+        return extract(chunk, new HashSet<>());
+    }
+
+    /** Shared UUID identity set for all saved assets in one staged generation. */
+    public static Map<String, BigInteger> extract(Map<String, Object> chunk,
+                                                   Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "wallet identities");
         if (chunk == null || !(chunk.get("block_entities") instanceof List<?> blockEntities))
             throw new IOException("Missing modern chunk block_entities list");
 
@@ -54,7 +63,7 @@ public final class StoredBlockEntityAssets {
                     throw new IOException("Malformed decorated pot item at " + pos);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> item = (Map<String, Object>) stack;
-                BigInteger amount = StoredItemValue.value(item);
+                BigInteger amount = StoredItemValue.value(item, seenWallets);
                 if (amount.signum() > 0) found.put(pos + ":0", amount);
                 continue;
             }
@@ -107,7 +116,7 @@ public final class StoredBlockEntityAssets {
 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> item = (Map<String, Object>) stack;
-                BigInteger amount = StoredItemValue.value(item);
+                BigInteger amount = StoredItemValue.value(item, seenWallets);
                 if (amount.signum() > 0) found.put(pos + ":" + slot, amount);
             }
         }

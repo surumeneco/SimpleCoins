@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,15 @@ public final class ResolvedEntitySettlementImport {
     public static void stageChunk(SettlementAccumulator settlement, String source, String world,
                                   Map<String, Object> chunk,
                                   Map<String, Ownership> ownershipByUuid) throws IOException {
+        stageChunk(settlement, source, world, chunk, ownershipByUuid, new java.util.HashSet<>());
+    }
+
+    /** For one whole saved-data generation, share wallet UUIDs across sources. */
+    public static void stageChunk(SettlementAccumulator settlement, String source, String world,
+                                  Map<String, Object> chunk,
+                                  Map<String, Ownership> ownershipByUuid,
+                                  Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "saved wallet identities");
         Objects.requireNonNull(settlement);
         try {
             if (world == null || world.isBlank())
@@ -35,8 +45,8 @@ public final class ResolvedEntitySettlementImport {
             // holders. Validate all saved Entity identities across both before
             // staging either view, or a copied UUID can count two inventories.
             SavedEntityUuidIntegrity.validate(chunk);
-            Map<String, BigInteger> equipment = StoredEntityEquipmentAssets.extract(chunk);
-            Map<String, BigInteger> inventory = StoredEntityInventoryAssets.extract(chunk);
+            Map<String, BigInteger> equipment = StoredEntityEquipmentAssets.extract(chunk, seenWallets);
+            Map<String, BigInteger> inventory = StoredEntityInventoryAssets.extract(chunk, seenWallets);
             List<SettlementAccumulator.Asset> pending = new ArrayList<>();
             collect(pending, source, world, "equipment", equipment, ownershipByUuid);
             collect(pending, source, world, "inventory", inventory, ownershipByUuid);

@@ -59,7 +59,7 @@ public final class SettlementScanRunner {
         var pending = new SettlementAccumulator(scope, required);
         // One authoritative playerdata generation must not count a copied
         // wallet UUID as separate currency for two different players.
-        Set<UUID> seenPlayerWallets = new java.util.HashSet<>();
+        Set<UUID> seenSavedWallets = new java.util.HashSet<>();
 
         WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
                 manifest, maximumCompressedBytes, maximumInflatedBytes,
@@ -75,16 +75,18 @@ public final class SettlementScanRunner {
                         if (source.kind() == WorldStorageDiscovery.Kind.REGION) {
                             BlockEntitySettlementImport.stageChunk(
                                     pending, id, source.world(), chunk.nbt(),
-                                    position -> blockOwners.resolve(source.world(), position));
+                                    position -> blockOwners.resolve(source.world(), position),
+                                    seenSavedWallets);
                         } else {
                             FreeEntitySettlementImport.stageChunk(
-                                    pending, id, source.world(), chunk.nbt());
+                                    pending, id, source.world(), chunk.nbt(), seenSavedWallets);
                             Map<String, ResolvedEntitySettlementImport.Ownership> owners =
                                     entityOwners.resolve(source.world(), chunk.nbt());
                             if (owners == null)
                                 throw new IOException("Saved Entity ownership resolver returned null");
                             ResolvedEntitySettlementImport.stageChunk(
-                                    pending, id, source.world(), chunk.nbt(), owners);
+                                    pending, id, source.world(), chunk.nbt(), owners,
+                                    seenSavedWallets);
                         }
                     }
 
@@ -94,7 +96,7 @@ public final class SettlementScanRunner {
                         if (path == null)
                             throw new IOException("Playerdata missing from manifest: " + player);
                         PlayerDataSettlementImport.stage(pending, sourceId(path), player,
-                                banned.contains(player), data, seenPlayerWallets);
+                                banned.contains(player), data, seenSavedWallets);
                     }
                 });
 
