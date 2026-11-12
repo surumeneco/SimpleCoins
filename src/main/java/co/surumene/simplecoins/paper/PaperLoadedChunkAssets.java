@@ -16,6 +16,8 @@ import org.bukkit.block.Chest;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -41,8 +43,17 @@ public final class PaperLoadedChunkAssets {
 
     public record Slice(String world, int chunkX, int chunkZ,
                         int scannedBlockInventories, int scannedItemEntities,
-                        int unhandledTileEntities, int unhandledOtherEntities,
-                        int scannedSlots, List<Entry> entries) {
+                        int scannedDisplayEntities, int unhandledTileEntities,
+                        int unhandledOtherEntities, int scannedSlots,
+                        List<Entry> entries) {
+        /** Preserve the pre-display constructor for existing callers. */
+        public Slice(String world, int chunkX, int chunkZ,
+                     int scannedBlockInventories, int scannedItemEntities,
+                     int unhandledTileEntities, int unhandledOtherEntities,
+                     int scannedSlots, List<Entry> entries) {
+            this(world, chunkX, chunkZ, scannedBlockInventories, scannedItemEntities,
+                    0, unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
+        }
         public Slice {
             world = Objects.requireNonNull(world);
             entries = List.copyOf(entries);
@@ -93,7 +104,7 @@ public final class PaperLoadedChunkAssets {
         if (tiles.length > maxTiles || entities.length > maxEntities)
             throw new IOException("Loaded chunk source count exceeds budget");
 
-        int blockInventories = 0, items = 0, otherTiles = 0, otherEntities = 0;
+        int blockInventories = 0, items = 0, displayed = 0, otherTiles = 0, otherEntities = 0;
         int slots = 0;
         List<Entry> found = new ArrayList<>();
 
@@ -136,19 +147,31 @@ public final class PaperLoadedChunkAssets {
             if (entity == null) throw new IOException("Null chunk entity");
             if (!entityIds.add(entity.getUniqueId()))
                 throw new IOException("Duplicate live entity UUID: " + entity.getUniqueId());
-            if (!(entity instanceof Item dropped)) {
+            ItemStack represented;
+            String physical;
+            if (entity instanceof Item dropped) {
+                represented = dropped.getItemStack();
+                physical = "world/" + worldId + "/entity/" + entity.getUniqueId();
+                items++;
+            } else if (entity instanceof ItemFrame frame) {
+                represented = frame.getItem();
+                physical = "world/" + worldId + "/entity/" + entity.getUniqueId() + "/display";
+                displayed++;
+            } else if (entity instanceof ItemDisplay display) {
+                represented = display.getItemStack();
+                physical = "world/" + worldId + "/entity/" + entity.getUniqueId() + "/display";
+                displayed++;
+            } else {
                 otherEntities++;
                 continue;
             }
             if (++slots > maxSlots)
-                throw new IOException("Loaded chunk Item Entity slot budget exhausted");
-            String physical = "world/" + worldId + "/entity/" + entity.getUniqueId();
+                throw new IOException("Loaded chunk displayed/dropped Item slot budget exhausted");
             BigInteger amount = PaperLiveItemValue.stack(
-                    dropped.getItemStack(), maxSerializedBytes, maxInflatedBytes, walletIds);
-            items++;
+                    represented, maxSerializedBytes, maxInflatedBytes, walletIds);
             if (amount.signum() > 0) {
                 if (!keys.add(physical))
-                    throw new IOException("Duplicate physical live Item UUID: " + physical);
+                    throw new IOException("Duplicate physical live Entity item: " + physical);
                 found.add(new Entry(physical, worldId, amount));
             }
         }
@@ -156,6 +179,6 @@ public final class PaperLoadedChunkAssets {
         if (!chunk.isLoaded())
             throw new IOException("Loaded chunk became unavailable during scan");
         return new Slice(worldId, cx, cz, blockInventories, items,
-                otherTiles, otherEntities, slots, found);
+                displayed, otherTiles, otherEntities, slots, found);
     }
 }
