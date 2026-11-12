@@ -108,8 +108,10 @@ public final class HybridLiveSourceStage {
                 } else if (source instanceof PlayerSource && value.world() != null) {
                     throw new IOException("World-bound online Player inventory: " + source.id());
                 }
-                SettlementAccumulator.Asset asset = Objects.requireNonNull(
-                        classifier.classify(source, value), "Missing authoritative asset classification");
+                SettlementAccumulator.Asset asset = classifier.classify(source, value);
+                if (asset == null)
+                    throw new IOException("Missing authoritative LIVE asset classification: "
+                            + source.id());
                 if (!source.id().equals(asset.source()) ||
                         !value.physicalKey().equals(asset.physicalKey()) ||
                         !Objects.equals(value.world(), asset.world()) ||
