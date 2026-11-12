@@ -21,6 +21,7 @@ import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -47,15 +48,16 @@ public final class PaperLoadedChunkAssets {
     public record Slice(String world, int chunkX, int chunkZ,
                         int scannedBlockInventories, int scannedItemEntities,
                         int scannedDisplayEntities, int scannedEquipmentEntities,
-                        int unhandledTileEntities, int unhandledOtherEntities,
-                        int scannedSlots, List<Entry> entries) {
+                        int scannedInventoryEntities, int unhandledTileEntities,
+                        int unhandledOtherEntities, int scannedSlots,
+                        List<Entry> entries) {
         /** Preserve both pre-display and pre-equipment public constructors. */
         public Slice(String world, int chunkX, int chunkZ,
                      int scannedBlockInventories, int scannedItemEntities,
                      int unhandledTileEntities, int unhandledOtherEntities,
                      int scannedSlots, List<Entry> entries) {
             this(world, chunkX, chunkZ, scannedBlockInventories, scannedItemEntities,
-                    0, 0, unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
+                    0, 0, 0, unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
         }
         public Slice(String world, int chunkX, int chunkZ,
                      int scannedBlockInventories, int scannedItemEntities,
@@ -63,8 +65,17 @@ public final class PaperLoadedChunkAssets {
                      int unhandledOtherEntities, int scannedSlots,
                      List<Entry> entries) {
             this(world, chunkX, chunkZ, scannedBlockInventories, scannedItemEntities,
-                    scannedDisplayEntities, 0, unhandledTileEntities,
+                    scannedDisplayEntities, 0, 0, unhandledTileEntities,
                     unhandledOtherEntities, scannedSlots, entries);
+        }
+        public Slice(String world, int chunkX, int chunkZ,
+                     int scannedBlockInventories, int scannedItemEntities,
+                     int scannedDisplayEntities, int scannedEquipmentEntities,
+                     int unhandledTileEntities, int unhandledOtherEntities,
+                     int scannedSlots, List<Entry> entries) {
+            this(world, chunkX, chunkZ, scannedBlockInventories, scannedItemEntities,
+                    scannedDisplayEntities, scannedEquipmentEntities, 0,
+                    unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
         }
         public Slice {
             world = Objects.requireNonNull(world);
@@ -116,7 +127,7 @@ public final class PaperLoadedChunkAssets {
         if (tiles.length > maxTiles || entities.length > maxEntities)
             throw new IOException("Loaded chunk source count exceeds budget");
 
-        int blockInventories = 0, items = 0, displayed = 0, equipped = 0;
+        int blockInventories = 0, items = 0, displayed = 0, equipped = 0, holderInventories = 0;
         int otherTiles = 0, otherEntities = 0;
         int slots = 0;
         List<Entry> found = new ArrayList<>();
@@ -202,6 +213,29 @@ public final class PaperLoadedChunkAssets {
                     }
                 }
                 continue;
+            } else if (entity instanceof InventoryHolder holder) {
+                // LivingEntity gear is handled in the preceding branch. Player
+                // inventory is a separate source and cannot be counted here.
+                Inventory held = holder.getInventory();
+                if (held == null) throw new IOException("Missing live Entity inventory");
+                ItemStack[] itemsHeld = Objects.requireNonNull(held.getContents(),
+                        "Entity inventory contents missing");
+                if (itemsHeld.length != held.getSize() || itemsHeld.length > maxSlots - slots)
+                    throw new IOException("Entity inventory size/slot budget mismatch");
+                slots += itemsHeld.length;
+                holderInventories++;
+                for (int i = 0; i < itemsHeld.length; i++) {
+                    BigInteger inventoryValue = PaperLiveItemValue.stack(itemsHeld[i],
+                            maxSerializedBytes, maxInflatedBytes, walletIds);
+                    if (inventoryValue.signum() > 0) {
+                        String slotKey = "world/" + worldId + "/entity/" +
+                                entity.getUniqueId() + "/inventory/" + i;
+                        if (!keys.add(slotKey))
+                            throw new IOException("Duplicate live Entity inventory slot: " + slotKey);
+                        found.add(new Entry(slotKey, worldId, inventoryValue));
+                    }
+                }
+                continue;
             } else {
                 otherEntities++;
                 continue;
@@ -220,6 +254,6 @@ public final class PaperLoadedChunkAssets {
         if (!chunk.isLoaded())
             throw new IOException("Loaded chunk became unavailable during scan");
         return new Slice(worldId, cx, cz, blockInventories, items,
-                displayed, equipped, otherTiles, otherEntities, slots, found);
+                displayed, equipped, holderInventories, otherTiles, otherEntities, slots, found);
     }
 }
