@@ -62,9 +62,11 @@ public final class WalletItemCodec {
         // the original items during recoloring or balance updates.
         if (!(meta instanceof BundleMeta bundleMeta) || !bundleMeta.getItems().isEmpty())
             throw new IllegalStateException("Currency wallet must have an empty Bundle container");
-        // A custom stack cap above one permits stacking/splitting multiple
-        // identical PDC UUIDs and duplicating their numeric balances.
-        if (!meta.hasMaxStackSize() || meta.getMaxStackSize() != 1)
+        // The effective stack cap, not the optional ItemMeta component, is
+        // authoritative: Paper may omit a redundant explicit cap of one for
+        // native bundles. Any effective cap above one permits cloning UUIDs
+        // and balances by stack splitting.
+        if (item.getMaxStackSize() != 1)
             throw new IllegalStateException("Currency wallet must have max stack size one");
         String rawId = meta.getPersistentDataContainer().get(WALLET_ID, PersistentDataType.STRING);
         Long rawBalance = meta.getPersistentDataContainer().get(WALLET_BALANCE, PersistentDataType.LONG);
