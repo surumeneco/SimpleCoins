@@ -195,6 +195,60 @@ class SettlementScanRunnerTest {
         assertEquals(BigInteger.valueOf(200), banned.pending().commit().statistics().dead());
     }
 
+    @Test void acknowledgedLiveChunkAndPlayerShadowDiskMonetaryValue() throws Exception {
+        UUID player = UUID.randomUUID(), livingEntity = UUID.randomUUID();
+        Path savedRegion = equippedEntityRegion(livingEntity);
+        Path savedPlayer = playerData(player, 3); // 300C on disk, 0C from disk when online
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", savedRegion,
+                        WorldStorageDiscovery.Kind.ENTITY)), Map.of(player, savedPlayer));
+        var loadedChunk = new SavedLiveSourcePartition.Chunk("world", 0, 0);
+        var plan = new SavedLiveSourcePartition(List.of(loadedChunk), List.of(player));
+        // The selected live inputs are assumed to have been successfully read.
+        plan.liveChunk(loadedChunk);
+        plan.livePlayer(player);
+        var staged = SettlementScanRunner.stage(manifest,
+                new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> { throw new IOException("Cannot resolve shadowed block"); },
+                (world, chunk) -> { throw new IOException("Cannot resolve shadowed entity"); },
+                4096, 4096, new java.util.HashSet<>(), plan);
+        assertEquals(1, staged.report().regionFiles());
+        assertEquals(1, staged.report().playerFiles());
+        assertEquals(BigInteger.ZERO, staged.pending().commit().statistics().worldTotal(),
+                "The disk copy of a live monetary holder must not be added twice");
+    }
+
+    @Test void declaredButUnreadLiveChunkCannotFinishDiskStage() throws Exception {
+        UUID entityId = UUID.randomUUID();
+        Path savedRegion = equippedEntityRegion(entityId);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", savedRegion,
+                        WorldStorageDiscovery.Kind.ENTITY)), Map.of());
+        var plan = new SavedLiveSourcePartition(List.of(
+                new SavedLiveSourcePartition.Chunk("world", 0, 0)), List.of());
+        assertThrows(IOException.class, () -> SettlementScanRunner.stage(manifest,
+                new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null,
+                (world, chunk) -> Map.of(), 4096, 4096, new java.util.HashSet<>(), plan));
+    }
+
+    @Test void offlinePlayerdataStillStagesWhenUnrelatedOnlinePlayerShadowsSelf() throws Exception {
+        UUID online = UUID.randomUUID(), offline = UUID.randomUUID();
+        Path onlineData = playerData(online, 3);
+        Path offlineData = playerData(offline, 2);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(online, onlineData, offline, offlineData));
+        var plan = new SavedLiveSourcePartition(List.of(), List.of(online));
+        plan.livePlayer(online);
+        var staged = SettlementScanRunner.stage(manifest,
+                new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null,
+                (world, chunk) -> Map.of(), 4096, 4096, new java.util.HashSet<>(), plan);
+        var totals = staged.pending().commit().personalBalances();
+        assertEquals(BigInteger.valueOf(200L), totals.get(offline));
+        assertNull(totals.get(online), "Online holder cannot be silently counted from saved playerdata");
+    }
+
     @Test void unresolvedBlockOwnershipAbortsTheEntireStagingRun() throws Exception {
         Path file = region(true);
         var manifest = new WorldStorageDiscovery.Manifest(List.of(
