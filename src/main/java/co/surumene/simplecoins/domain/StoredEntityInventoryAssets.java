@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +19,13 @@ public final class StoredEntityInventoryAssets {
     private StoredEntityInventoryAssets() {}
 
     public static Map<String, BigInteger> extract(Map<String, Object> chunk) throws IOException {
+        return extract(chunk, new HashSet<>());
+    }
+
+    /** Shared UUID identity set for all saved assets in one staged generation. */
+    public static Map<String, BigInteger> extract(Map<String, Object> chunk,
+                                                   Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "wallet identities");
         if (chunk == null || !(chunk.get("Entities") instanceof List<?> entities))
             throw new IOException("Missing saved entity chunk Entities list");
 
@@ -92,7 +100,7 @@ public final class StoredEntityInventoryAssets {
                     throw new IOException("Duplicate Entity inventory slot: " + key + ":" + index);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> item = (Map<String, Object>) stack;
-                BigInteger value = StoredItemValue.value(item);
+                BigInteger value = StoredItemValue.value(item, seenWallets);
                 if (value.signum() > 0) found.put(key + ":inventory:" + index, value);
             }
         }
