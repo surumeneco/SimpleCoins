@@ -5,6 +5,10 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
+import co.surumene.simplecoins.domain.HybridLiveSourceStage;
+import co.surumene.simplecoins.domain.SavedLiveSourcePartition;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -76,6 +80,67 @@ public final class PaperLiveUniverseAssets {
     }
 
     /**
+     * Immutable per-source monetary inputs verified against the SAME read's
+     * World/Player aggregate. This is only a checked source capture and cannot
+     * prove freeze, external ownership or authoritative economic settlement.
+     */
+    public record Observed(Report report, List<HybridLiveSourceStage.Source> sources) {
+        public Observed {
+            Objects.requireNonNull(report, "Paper universe aggregate");
+            sources = List.copyOf(sources);
+            Map<String, Integer> expectedChunks = new HashMap<>();
+            for (var world : report.worlds())
+                expectedChunks.put(world.world(), world.scannedChunks());
+            Map<String, Integer> countedChunks = new HashMap<>();
+            Set<UUID> expectedPlayers = new HashSet<>();
+            for (var player : report.online().players()) expectedPlayers.add(player.owner());
+            Set<UUID> countedPlayers = new HashSet<>();
+            Set<String> sourceIds = new HashSet<>();
+            Set<String> physicalKeys = new HashSet<>();
+            BigInteger total = BigInteger.ZERO;
+
+            for (var source : sources) {
+                if (!sourceIds.add(source.id()))
+                    throw new IllegalArgumentException("Repeated Paper LIVE monetary source");
+                if (source instanceof HybridLiveSourceStage.ChunkSource chunk) {
+                    if (!expectedChunks.containsKey(chunk.chunk().world()))
+                        throw new IllegalArgumentException("Foreign Paper loaded Chunk");
+                    countedChunks.merge(chunk.chunk().world(), 1, Math::addExact);
+                } else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
+                    if (!expectedPlayers.contains(player.player()) ||
+                            !countedPlayers.add(player.player()))
+                        throw new IllegalArgumentException("Foreign or repeated online Player");
+                } else {
+                    throw new IllegalArgumentException("Unknown Paper LIVE source");
+                }
+                for (var entry : source.values()) {
+                    if (!physicalKeys.add(entry.physicalKey()))
+                        throw new IllegalArgumentException("Repeated physical monetary slot");
+                    if (source instanceof HybridLiveSourceStage.ChunkSource chunk) {
+                        if (!chunk.chunk().world().equals(entry.world()) ||
+                                !entry.physicalKey().startsWith(
+                                        "world/" + chunk.chunk().world() + "/"))
+                            throw new IllegalArgumentException("Chunk monetary source mismatch");
+                    } else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
+                        if (entry.world() != null || !entry.physicalKey().startsWith(
+                                "player/" + player.player() + "/"))
+                            throw new IllegalArgumentException("Online Player monetary source mismatch");
+                    }
+                    total = total.add(entry.amount());
+                }
+            }
+            for (var world : expectedChunks.entrySet()) {
+                if (!world.getValue().equals(countedChunks.getOrDefault(world.getKey(), 0)))
+                    throw new IllegalArgumentException("Paper LIVE Chunk count disagrees with source details");
+            }
+            if (!countedPlayers.equals(expectedPlayers) || !total.equals(report.total()))
+                throw new IllegalArgumentException("Paper LIVE monetary detail disagrees with aggregate");
+        }
+
+        public boolean isCompleteSettlementSource() { return false; }
+    }
+
+    /**
      * Does not load chunks or worlds. Caller supplies exactly the included
      * World set, chosen under WorldScope and a stable main-thread generation.
      */
@@ -92,6 +157,16 @@ public final class PaperLiveUniverseAssets {
      */
     public static Report scan(Collection<World> selectedWorlds, Budget budget,
                               Set<UUID> sharedWalletIds) throws IOException {
+        return scanWithSources(selectedWorlds, budget, sharedWalletIds).report();
+    }
+
+    /**
+     * Capture each selected Paper Chunk and online Player at the point of
+     * scanning. Does not revisit later to reconstruct Entity positions.
+     */
+    public static Observed scanWithSources(Collection<World> selectedWorlds,
+                                           Budget budget,
+                                           Set<UUID> sharedWalletIds) throws IOException {
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(selectedWorlds, "selected Paper Worlds");
         Objects.requireNonNull(budget, "bounded live scan");
@@ -115,6 +190,7 @@ public final class PaperLiveUniverseAssets {
         Set<UUID> entitiesSeen = new HashSet<>();
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedWorldAssets.Report> captured = new ArrayList<>();
+        List<HybridLiveSourceStage.Source> sources = new ArrayList<>();
         int chunks = 0, tiles = 0, entities = 0, slots = 0;
 
         for (World world : selection) {
@@ -124,7 +200,16 @@ public final class PaperLiveUniverseAssets {
                     Math.max(1, budget.maxEntities() - entities),
                     Math.max(1, budget.maxSlots() - slots),
                     budget.maxSerializedBytes(), budget.maxInflatedBytes(),
-                    wallets, entitiesSeen, physicalSlots);
+                    wallets, entitiesSeen, physicalSlots,
+                    slice -> {
+                        var chunk = new SavedLiveSourcePartition.Chunk(
+                                slice.world(), slice.chunkX(), slice.chunkZ());
+                        var values = slice.entries().stream()
+                                .map(entry -> new HybridLiveSourceStage.Value(
+                                        entry.physicalKey(), entry.world(), entry.amount()))
+                                .toList();
+                        sources.add(new HybridLiveSourceStage.ChunkSource(chunk, values));
+                    });
             int readTiles = Math.addExact(report.scannedBlockInventories(),
                     report.unhandledTileEntities());
             int readEntities = Math.addExact(
@@ -151,6 +236,14 @@ public final class PaperLiveUniverseAssets {
         if (online.scannedSlots() > budget.maxSlots() - slots)
             throw new IOException("Aggregate world-plus-Player slot budget exhausted");
         slots = Math.addExact(slots, online.scannedSlots());
-        return new Report(captured, online, chunks, tiles, entities, slots);
+        for (var player : online.players()) {
+            var values = player.entries().stream()
+                    .map(entry -> new HybridLiveSourceStage.Value(
+                            entry.physicalKey(), null, entry.amount()))
+                    .toList();
+            sources.add(new HybridLiveSourceStage.PlayerSource(player.owner(), values));
+        }
+        return new Observed(new Report(captured, online,
+                chunks, tiles, entities, slots), sources);
     }
 }
