@@ -10,10 +10,12 @@ import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
+import co.surumene.simplecoins.domain.NormalMutationJournal;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.ServicePriority;
 
+import java.io.IOException;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -28,6 +30,7 @@ import java.util.logging.Level;
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
+    private NormalMutationJournal normalJournal;
     private CoinExchangeRecipes exchanges;
     private WalletCrafting walletCrafting;
 
@@ -43,6 +46,21 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             if (!getServer().getOnlinePlayers().isEmpty())
                 throw new IllegalStateException("Unsafe SimpleCoins bootstrap: players already online");
             saveDefaultConfig();
+            // Initialize the independently durable journal before registering
+            // currency-related Paper listeners. Failure is terminal.
+            // A healthy journal alone is NOT permission to admit players:
+            // authoritative settlement and event-to-ledger binding are absent.
+            try {
+                normalJournal = new NormalMutationJournal(
+                        getDataFolder().toPath().resolve("normal-mutations"));
+                normalJournal.verifyAll();
+                if (normalJournal.hasUnreconciledFromStartup())
+                    getLogger().warning("Unreconciled monetary mutations: authoritative "
+                            + "physical settlement required before any admission.");
+            } catch (IOException journalFailure) {
+                throw new IllegalStateException(
+                        "Cannot initialize durable normal monetary journal", journalFailure);
+            }
             WanderingTraderDropConfigReader.read(getConfig()); // strict validation, not issuance
             EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
             Map<CoinDenomination, String> fallback = CoinItemCodec.defaultNames();
@@ -114,6 +132,14 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 getLogger().log(Level.SEVERE, "Failed to unregister currency recipes", failure);
             }
             exchanges = null;
+        }
+        if (normalJournal != null) {
+            try { normalJournal.close(); }
+            catch (IOException journalFailure) {
+                getLogger().log(Level.SEVERE,
+                        "Failed to close durable normal monetary journal", journalFailure);
+            }
+            normalJournal = null;
         }
         // Revocation is required even for an already published generation.
         if (publication != null) {
