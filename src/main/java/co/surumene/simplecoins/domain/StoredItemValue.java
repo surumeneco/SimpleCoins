@@ -28,10 +28,24 @@ public final class StoredItemValue {
     private StoredItemValue() {}
 
     public static BigInteger value(Map<String, Object> item) throws IOException {
-        return value(item, 0);
+        return value(item, new HashSet<>());
     }
 
-    private static BigInteger value(Map<String, Object> item, int depth) throws IOException {
+    /**
+     * The caller supplies a mutable identity set for one authoritative source
+     * or full validated generation. Duplicate wallet UUIDs mean ambiguous
+     * physical value, never a valid extra balance.
+     *
+     * Discard this set on a failed scan rather than attempting partial reuse.
+     */
+    public static BigInteger value(Map<String, Object> item,
+                                   Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "wallet identity context");
+        return value(item, 0, seenWallets);
+    }
+
+    private static BigInteger value(Map<String, Object> item, int depth,
+                                    Set<UUID> seenWallets) throws IOException {
         Objects.requireNonNull(item);
         if (depth > MAX_DEPTH)
             throw new IOException("Stored container nesting exceeds " + MAX_DEPTH);
@@ -142,6 +156,8 @@ public final class StoredItemValue {
                             (!(children instanceof List<?> list) || !list.isEmpty()))
                         throw new IOException("Wallet contains unexpected nested items: " + childKey);
                 }
+                if (!seenWallets.add(UUID.fromString(walletId)))
+                    throw new IOException("Duplicate physical wallet UUID: " + walletId);
                 return BigInteger.valueOf(balance);
             }
             if (pdc.containsKey("simplecoins:wallet_balance"))
@@ -154,7 +170,7 @@ public final class StoredItemValue {
             if (!(rawBundle instanceof List<?> contents))
                 throw new IOException("Invalid bundle contents");
             for (Object child : contents)
-                nested = nested.add(value(itemMap(child), depth + 1));
+                nested = nested.add(value(itemMap(child), depth + 1, seenWallets));
         }
         Object rawContainer = components.get("minecraft:container");
         if (components.containsKey("minecraft:container")) {
@@ -178,7 +194,7 @@ public final class StoredItemValue {
                     throw new IOException("Invalid shulker box slot: " + number.longValue());
                 if (!occupiedSlots.add(number.intValue()))
                     throw new IOException("Duplicate nested container slot: " + number.intValue());
-                nested = nested.add(value(itemMap(slot.get("item")), depth + 1));
+                nested = nested.add(value(itemMap(slot.get("item")), depth + 1, seenWallets));
             }
         }
         return nested.multiply(BigInteger.valueOf(quantity));
