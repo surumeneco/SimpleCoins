@@ -49,6 +49,27 @@ public final class SettlementScanRunner {
                                EntityOwnerLookup entityOwners,
                                int maximumCompressedBytes,
                                int maximumInflatedBytes) throws IOException {
+        return stage(manifest, scope, currentlyBanned, blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, new java.util.HashSet<>());
+    }
+
+    /**
+     * Optional externally-owned identity context for a validated, single
+     * saved/live settlement generation. The same mutable Set may be passed to
+     * PaperLiveUniverseAssets.scan(..., walletIds); a duplicate physical wallet
+     * UUID must reject either read order. On any failure ALL staged values and
+     * the shared Set must be discarded. This method is still DISK-ONLY and
+     * cannot publish an authoritative world settlement.
+     */
+    public static Staged stage(WorldStorageDiscovery.Manifest manifest,
+                               WorldScope scope,
+                               Set<UUID> currentlyBanned,
+                               BlockOwnerLookup blockOwners,
+                               EntityOwnerLookup entityOwners,
+                               int maximumCompressedBytes,
+                               int maximumInflatedBytes,
+                               Set<UUID> sharedWalletIds) throws IOException {
+        Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(manifest);
         Objects.requireNonNull(scope);
         Objects.requireNonNull(currentlyBanned);
@@ -59,7 +80,7 @@ public final class SettlementScanRunner {
         var pending = new SettlementAccumulator(scope, required);
         // One authoritative playerdata generation must not count a copied
         // wallet UUID as separate currency for two different players.
-        Set<UUID> seenSavedWallets = new java.util.HashSet<>();
+        Set<UUID> seenSavedWallets = sharedWalletIds;
 
         WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
                 manifest, maximumCompressedBytes, maximumInflatedBytes,

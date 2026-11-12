@@ -81,6 +81,18 @@ public final class PaperLiveUniverseAssets {
      */
     public static Report scan(Collection<World> selectedWorlds, Budget budget)
             throws IOException {
+        return scan(selectedWorlds, budget, new HashSet<>());
+    }
+
+    /**
+     * A single wallet UUID context can be shared with authoritative saved NBT
+     * staging. The caller owns the Set and must discard it and ALL partial
+     * stage results on any failure. This does not establish source temporal
+     * coherence or prove all saved/live holders were read.
+     */
+    public static Report scan(Collection<World> selectedWorlds, Budget budget,
+                              Set<UUID> sharedWalletIds) throws IOException {
+        Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(selectedWorlds, "selected Paper Worlds");
         Objects.requireNonNull(budget, "bounded live scan");
         if (!Bukkit.isPrimaryThread())
@@ -99,7 +111,7 @@ public final class PaperLiveUniverseAssets {
                 throw new IOException("Duplicate/invalid selected live World");
         }
 
-        Set<UUID> wallets = new HashSet<>();
+        Set<UUID> wallets = sharedWalletIds;
         Set<UUID> entitiesSeen = new HashSet<>();
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedWorldAssets.Report> captured = new ArrayList<>();
