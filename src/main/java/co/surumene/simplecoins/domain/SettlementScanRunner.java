@@ -69,6 +69,28 @@ public final class SettlementScanRunner {
                                int maximumCompressedBytes,
                                int maximumInflatedBytes,
                                Set<UUID> sharedWalletIds) throws IOException {
+        return stage(manifest, scope, currentlyBanned, blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, null);
+    }
+
+    /**
+     * Hybrid routing of the saved file visits. Every saved source is still read
+     * and checked for content/source drift; monetary callbacks for holders
+     * shadowed by declared loaded Chunk and online Player sources are skipped.
+     * The external caller must capture/verify the selected live monetary
+     * sources in the same candidate generation before acknowledging them in
+     * {@link SavedLiveSourcePartition}; this method DOES NOT stage or prove
+     * those live values. Its return cannot authorize admission/publication.
+     */
+    public static Staged stage(WorldStorageDiscovery.Manifest manifest,
+                               WorldScope scope,
+                               Set<UUID> currentlyBanned,
+                               BlockOwnerLookup blockOwners,
+                               EntityOwnerLookup entityOwners,
+                               int maximumCompressedBytes,
+                               int maximumInflatedBytes,
+                               Set<UUID> sharedWalletIds,
+                               SavedLiveSourcePartition partition) throws IOException {
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(manifest);
         Objects.requireNonNull(scope);
@@ -76,7 +98,19 @@ public final class SettlementScanRunner {
         Objects.requireNonNull(blockOwners);
         Objects.requireNonNull(entityOwners);
         Set<UUID> banned = Set.copyOf(currentlyBanned);
-        Set<String> required = manifest.requiredSourceIds();
+        Set<String> savedSources = manifest.requiredSourceIds();
+        Set<String> required = savedSources;
+        if (partition != null) {
+            // A hybrid plan MUST NOT make the on-disk copy disappear and
+            // then allow a zero-valued commit without the live replacement.
+            // Every declared loaded Chunk and online Player is an additional
+            // mandatory accounting source, even if it currently holds 0C.
+            Set<String> allSources = new java.util.HashSet<>(savedSources);
+            Set<String> liveSources = partition.requiredLiveSourceIds();
+            if (!allSources.addAll(liveSources) && !liveSources.isEmpty())
+                throw new IOException("Overlapping saved/live accounting source IDs");
+            required = Set.copyOf(allSources);
+        }
         var pending = new SettlementAccumulator(scope, required);
         // One authoritative playerdata generation must not count a copied
         // wallet UUID as separate currency for two different players.
@@ -119,12 +153,24 @@ public final class SettlementScanRunner {
                         PlayerDataSettlementImport.stage(pending, sourceId(path), player,
                                 banned.contains(player), data, seenSavedWallets);
                     }
-                });
+                }, partition);
 
         // A world source may contain multiple chunks. Completion is valid only
         // after traversal of every file and playerdata has returned successfully.
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles())
             pending.completeSource(sourceId(source.path()));
+        // PlayerDataSettlementImport normally closes the playerdata source.
+        // Online players' disk copies were deliberately not staged, so they
+        // must instead be closed only after WorldSnapshotTraversal has read
+        // and SHA-verified EVERY saved input and verified live-plan coverage.
+        // Without this, a valid hybrid run would have an incomplete required
+        // source even though no disk balance should be included for it.
+        if (partition != null) {
+            for (var entry : manifest.playerDataFiles().entrySet()) {
+                if (partition.shadowsSavedPlayer(entry.getKey()))
+                    pending.completeSource(sourceId(entry.getValue()));
+            }
+        }
         return new Staged(pending, report, required);
     }
 }
