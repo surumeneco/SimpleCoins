@@ -103,6 +103,10 @@ public final class PaperLiveUniverseAssets {
             }
             Map<String, Integer> countedChunks = new HashMap<>();
             Map<String, Map<String, BigInteger>> actualWorldAssets = new HashMap<>();
+            // A selected Paper World may have zero loaded Chunks. Its absence
+            // from observed sources is valid only when the Report expects 0.
+            for (var world : report.worlds())
+                actualWorldAssets.put(world.world(), new HashMap<>());
             Map<UUID, Map<String, BigInteger>> expectedPlayerAssets = new HashMap<>();
             Set<UUID> expectedPlayers = new HashSet<>();
             for (var player : report.online().players()) {
