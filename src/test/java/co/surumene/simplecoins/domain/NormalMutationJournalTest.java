@@ -32,8 +32,10 @@ class NormalMutationJournalTest {
 
     @Test void transferIsPreparedDurablyBeforeAnyPaperMutation() throws Exception {
         try (var journal = new NormalMutationJournal(root)) {
-            var movement = journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
+            var prepared = journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
                     NormalMutationJournal.Account.player(BOB), 100);
+            assertTrue(prepared.newlyCreated());
+            var movement = prepared.mutation();
             assertEquals(1, movement.sequence());
             assertEquals(NormalMutationJournal.Phase.PREPARED, movement.phase());
             assertEquals(0, movement.physicalSupplyDelta());
@@ -50,9 +52,9 @@ class NormalMutationJournalTest {
     @Test void issuanceAndDestructionHaveOppositeSupplyDeltas() throws Exception {
         try (var journal = new NormalMutationJournal(root)) {
             var minted = journal.prepare(TX_A, NormalMutationJournal.Account.external(),
-                    NormalMutationJournal.Account.player(ALICE), 10000);
+                    NormalMutationJournal.Account.player(ALICE), 10000).mutation();
             var destroyed = journal.prepare(TX_B, NormalMutationJournal.Account.free(),
-                    NormalMutationJournal.Account.external(), 35);
+                    NormalMutationJournal.Account.external(), 35).mutation();
             assertEquals(10000, minted.physicalSupplyDelta());
             assertEquals(-35, destroyed.physicalSupplyDelta());
             assertEquals(2, destroyed.sequence());
@@ -64,8 +66,11 @@ class NormalMutationJournalTest {
         try (var journal = new NormalMutationJournal(root)) {
             var old = journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
                     NormalMutationJournal.Account.free(), 123);
-            assertEquals(old, journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
-                    NormalMutationJournal.Account.free(), 123));
+            assertTrue(old.newlyCreated());
+            var repeated = journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
+                    NormalMutationJournal.Account.free(), 123);
+            assertFalse(repeated.newlyCreated(), "Must not permit a repeated Paper mutation");
+            assertEquals(old.mutation(), repeated.mutation());
             assertThrows(IllegalStateException.class,
                     () -> journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
                             NormalMutationJournal.Account.free(), 124));
