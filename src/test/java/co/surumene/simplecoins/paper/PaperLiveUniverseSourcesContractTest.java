@@ -104,6 +104,17 @@ class PaperLiveUniverseSourcesContractTest {
                 new PaperLiveUniverseAssets.Observed(report(), List.of(wrongSlot, player())));
     }
 
+    @Test void selectedWorldWithZeroLoadedChunksHasNoInventedMonetarySource() {
+        var emptyWorld = new PaperLoadedWorldAssets.Report("a", 0, 0, 0, 0, 0, 0,
+                List.of());
+        var online = new PaperLivePlayerAssets.OnlineSet(0, 0, List.of());
+        var empty = new PaperLiveUniverseAssets.Report(List.of(emptyWorld), online,
+                0, 0, 0, 0);
+        var observed = new PaperLiveUniverseAssets.Observed(empty, List.of());
+        assertEquals(BigInteger.ZERO, observed.report().total());
+        assertEquals(0, observed.sources().size());
+    }
+
     @Test void emptyChunkIsStillARequiredSourceWhenNoCurrencyPresent() {
         var world = new PaperLoadedWorldAssets.Report("a", 1, 0, 0, 0, 0, 0,
                 List.of());
