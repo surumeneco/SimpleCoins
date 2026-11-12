@@ -57,6 +57,9 @@ public final class SettlementScanRunner {
         Set<UUID> banned = Set.copyOf(currentlyBanned);
         Set<String> required = manifest.requiredSourceIds();
         var pending = new SettlementAccumulator(scope, required);
+        // One authoritative playerdata generation must not count a copied
+        // wallet UUID as separate currency for two different players.
+        Set<UUID> seenPlayerWallets = new java.util.HashSet<>();
 
         WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
                 manifest, maximumCompressedBytes, maximumInflatedBytes,
@@ -91,7 +94,7 @@ public final class SettlementScanRunner {
                         if (path == null)
                             throw new IOException("Playerdata missing from manifest: " + player);
                         PlayerDataSettlementImport.stage(pending, sourceId(path), player,
-                                banned.contains(player), data);
+                                banned.contains(player), data, seenPlayerWallets);
                     }
                 });
 
