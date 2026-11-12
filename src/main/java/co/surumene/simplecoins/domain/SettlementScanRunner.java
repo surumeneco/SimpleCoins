@@ -69,6 +69,28 @@ public final class SettlementScanRunner {
                                int maximumCompressedBytes,
                                int maximumInflatedBytes,
                                Set<UUID> sharedWalletIds) throws IOException {
+        return stage(manifest, scope, currentlyBanned, blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, null);
+    }
+
+    /**
+     * Hybrid routing of the saved file visits. Every saved source is still read
+     * and checked for content/source drift; monetary callbacks for holders
+     * shadowed by declared loaded Chunk and online Player sources are skipped.
+     * The external caller must capture/verify the selected live monetary
+     * sources in the same candidate generation before acknowledging them in
+     * {@link SavedLiveSourcePartition}; this method DOES NOT stage or prove
+     * those live values. Its return cannot authorize admission/publication.
+     */
+    public static Staged stage(WorldStorageDiscovery.Manifest manifest,
+                               WorldScope scope,
+                               Set<UUID> currentlyBanned,
+                               BlockOwnerLookup blockOwners,
+                               EntityOwnerLookup entityOwners,
+                               int maximumCompressedBytes,
+                               int maximumInflatedBytes,
+                               Set<UUID> sharedWalletIds,
+                               SavedLiveSourcePartition partition) throws IOException {
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(manifest);
         Objects.requireNonNull(scope);
@@ -119,7 +141,7 @@ public final class SettlementScanRunner {
                         PlayerDataSettlementImport.stage(pending, sourceId(path), player,
                                 banned.contains(player), data, seenSavedWallets);
                     }
-                });
+                }, partition);
 
         // A world source may contain multiple chunks. Completion is valid only
         // after traversal of every file and playerdata has returned successfully.
