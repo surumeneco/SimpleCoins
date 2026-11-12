@@ -37,6 +37,8 @@ language: ja
 | partition-04 | 選択したLIVE ChunkまたはPlayerを読み取り損ねる | 集合閉包を失敗し、走査完了の報告を返さない | 未訪問LIVEのテスト |
 | partition-05 | 同一保存ソース・ライブソースの重複報告、選択集合外のライブ読取 | 全体を失敗として再利用不能にする | 重複・未知ソースのテスト |
 | partition-06 | 集合が閉包した | あくまで入力の選択・読取範囲が揃ったという証明にとどめ、決算結果の公開権限は与えない | isCompleteSettlementSource=false |
+| partition-07 | `WorldSnapshotTraversal` に正本選択を指定して保存ファイルを全件走査する | REGION/ENTITY・playerdataのshadow対象は金額Visitorへ渡さず、保存ファイルと外部チャンクの整合検査は省略しない | 同じAnvil座標・Playerdataを持つ統合fixture |
+| partition-08 | 必要なLIVE Chunk/Playerが一件でも読取未完了 | 訪問済み保存ソースだけで走査成功報告を返さない | `traverse`のライブ集合閉包回帰 |
 
 ## Boundary
 
