@@ -185,7 +185,9 @@ public final class WalletMenu implements Listener {
         catch (RuntimeException invalid) { return null; }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    // Respect earlier cancellation by world protection/economy plugins. A
+    // normal lower-inventory click must never re-enable their denied action.
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         event.setCancelled(true);

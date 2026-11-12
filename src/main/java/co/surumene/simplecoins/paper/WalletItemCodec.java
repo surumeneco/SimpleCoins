@@ -7,6 +7,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BundleMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -56,6 +57,11 @@ public final class WalletItemCodec {
         if (!isBundle(item.getType()) || item.getAmount() != 1)
             throw new IllegalStateException("Currency wallet has invalid material or count");
         ItemMeta meta = Objects.requireNonNull(item.getItemMeta());
+        // Native Bundle contents bypass the numeric wallet accounting model.
+        // Reject hidden physical assets rather than normalizing or dropping
+        // the original items during recoloring or balance updates.
+        if (!(meta instanceof BundleMeta bundleMeta) || !bundleMeta.getItems().isEmpty())
+            throw new IllegalStateException("Currency wallet must have an empty Bundle container");
         String rawId = meta.getPersistentDataContainer().get(WALLET_ID, PersistentDataType.STRING);
         Long rawBalance = meta.getPersistentDataContainer().get(WALLET_BALANCE, PersistentDataType.LONG);
         if (rawId == null || rawBalance == null || rawBalance < 0)
