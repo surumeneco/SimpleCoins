@@ -79,6 +79,31 @@ class PaperLiveUniverseSourcesContractTest {
                 new PaperLiveUniverseAssets.Observed(report(), List.of(chunk(), duplicate)));
     }
 
+    @Test void perHolderValueSwapCannotBeHiddenByUnchangedUniverseTotal() {
+        var changedChunk = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk("a", 0, 0),
+                List.of(new HybridLiveSourceStage.Value(
+                        BLOCK, "a", BigInteger.valueOf(75))));
+        var changedPlayer = new HybridLiveSourceStage.PlayerSource(PLAYER,
+                List.of(new HybridLiveSourceStage.Value(
+                        PLAYER_SLOT, null, BigInteger.valueOf(75))));
+        // Original real report is Chunk 100C and Player 50C, total 150C.
+        // A synthetic replacement also totals 150C, but physical holdings
+        // differ; the snapshot must reject the tampered source details.
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLiveUniverseAssets.Observed(report(),
+                        List.of(changedChunk, changedPlayer)));
+    }
+
+    @Test void changedPhysicalKeyCannotBeHiddenBySameAmount() {
+        var wrongSlot = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk("a", 0, 0),
+                List.of(new HybridLiveSourceStage.Value(
+                        "world/a/1,64,2:0", "a", BigInteger.valueOf(100))));
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLiveUniverseAssets.Observed(report(), List.of(wrongSlot, player())));
+    }
+
     @Test void emptyChunkIsStillARequiredSourceWhenNoCurrencyPresent() {
         var world = new PaperLoadedWorldAssets.Report("a", 1, 0, 0, 0, 0, 0,
                 List.of());
