@@ -125,6 +125,15 @@ public final class PaperLivePlayerAssets {
     public static OnlineSet scanOnline(int maxPlayers, int maxSlots,
                                        int maxSerializedBytes, int maxInflatedBytes)
             throws IOException {
+        return scanOnline(maxPlayers, maxSlots, maxSerializedBytes,
+                maxInflatedBytes, new HashSet<>());
+    }
+
+    /** Global wallet identity context from the selected Paper world scan. */
+    static OnlineSet scanOnline(int maxPlayers, int maxSlots,
+                                int maxSerializedBytes, int maxInflatedBytes,
+                                Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "shared wallet IDs");
         if (maxPlayers < 1 || maxSlots < 1 ||
                 maxSerializedBytes < 1 || maxInflatedBytes < 1)
             throw new IllegalArgumentException("Positive online Player budgets required");
@@ -134,7 +143,6 @@ public final class PaperLivePlayerAssets {
         if (selected.size() > maxPlayers)
             throw new IOException("Online Player count exceeds budget");
         Set<UUID> seenOwners = new HashSet<>();
-        Set<UUID> seenWallets = new HashSet<>();
         List<Snapshot> result = new ArrayList<>();
         int slots = 0;
         for (Player player : selected) {
