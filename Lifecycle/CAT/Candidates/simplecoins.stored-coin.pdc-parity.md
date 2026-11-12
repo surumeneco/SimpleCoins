@@ -34,3 +34,22 @@ language: ja
 - Regression: `StoredItemValueCoinCodecParityTest` の現行PDC/正しいmodel/モデル欠損/材質不正/重複キー/入れ子を検証する。
 - JUnit Green、Paper 26.2 JE/BE、CAT Process Closure / Model Conformance / Implementation Conformance、正式なキー互換性決定はそれぞれ独立の証拠を要する。
 - 本ファイルは既存コードと設計正本の矛盾を記録する候補であって、決定・Confirmed・デプロイ許可ではない。
+
+## 対象
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.coin.paper | Paper実体のPDC額面・ItemModel・PAPER素材 |
+| simplecoins.settlement.stored | NBTの保存済み現物を集計する金額抽出関数 |
+| simplecoins.settlement.nested | バンドル・シュルカー内の保存現物にも適用される再帰計上 |
+
+## 規則
+
+以下は既存実装・設計出典から抽出した**未承認の候補**であり、Confirmedの意味論を宣言しない。
+
+| ID | 条件 | 要求 | 検証 |
+| --- | --- | --- | --- |
+| coin.pdc.active | Paper Codecが出力したPAPER現物を保存して読み取る | 現行coin_denominationと正規item_modelから額面×数量を計上し、0扱いしない候補 | 正規PDCの100額面3枚、5額面2枚の入れ子走査 |
+| coin.pdc.invalid | 現行PDCがあるが素材・型・額面・item_modelが不正 | 正常額面や普通紙として扱わず、走査全体を失敗させる候補 | 不正モデル/欠損/材質/額面/型のIOException |
+| coin.pdc.conflict | 現行キーと従来キー、または財布タグが同一物理スタックに併存 | 選択的な0扱い・恣意的な片方の計上を拒否する候補 | PDCキー競合のIOException |
+| coin.pdc.legacy | 従来denominationのみを保存した現物を読み取る | 既存互換挙動を変えず、移行・拒否の正式方針は未決定と明記する候補 | 既存StoredItemValueTest回帰と互換性判断の別管理 |
