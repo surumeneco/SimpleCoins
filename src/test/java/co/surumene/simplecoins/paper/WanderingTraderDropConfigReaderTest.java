@@ -36,7 +36,7 @@ class WanderingTraderDropConfigReaderTest {
             }
         }
         assertTrue(defaults.getBoolean("trader-drops.enabled"));
-        assertEquals(0.5, defaults.getDouble("trader-drops.chance"));
+        assertEquals(0.1, defaults.getDouble("trader-drops.chance"));
         assertEquals(1, defaults.getInt("trader-drops.minimum-count"));
         assertEquals(1, defaults.getInt("trader-drops.maximum-count"));
         var weights = defaults.getConfigurationSection("trader-drops.weights");
@@ -62,8 +62,8 @@ class WanderingTraderDropConfigReaderTest {
         for (int i = 0; i < 10_000; i++) {
             if (loaded.policy().draw(deathRng).isPresent()) drops++;
         }
-        assertTrue(drops > 4_500 && drops < 5_500,
-                "The default chance must be 50%, observed " + drops + " / 10000");
+        assertTrue(drops > 800 && drops < 1_200,
+                "The default chance must be 10%, observed " + drops + " / 10000");
         defaults.set("trader-drops.chance", 1.0);
         var forced = WanderingTraderDropConfigReader.read(defaults);
         var observed = java.util.EnumSet.noneOf(CoinDenomination.class);
@@ -74,6 +74,24 @@ class WanderingTraderDropConfigReaderTest {
             observed.add(result.denomination());
         }
         assertEquals(java.util.EnumSet.allOf(CoinDenomination.class), observed);
+    }
+
+    @Test void explicitlyConfiguredLegacyFiftyPercentIsNotSilentlyOverridden() {
+        YamlConfiguration operator = valid();
+        operator.set("trader-drops.probability", null);
+        operator.set("trader-drops.chance", 0.5);
+        operator.set("trader-drops.min-count", null);
+        operator.set("trader-drops.max-count", null);
+        operator.set("trader-drops.minimum-count", 65);
+        operator.set("trader-drops.maximum-count", 65);
+        var loaded = WanderingTraderDropConfigReader.read(operator);
+        int delivered = 0;
+        var rng = new Random(20261112L);
+        for (int i = 0; i < 10_000; i++) {
+            if (loaded.policy().draw(rng).isPresent()) delivered++;
+        }
+        assertTrue(delivered > 4_500 && delivered < 5_500,
+                "An operator's explicitly configured 50% chance must be preserved: " + delivered);
     }
 
     @Test void absentSectionOrExplicitDisableNeverDraws() {
