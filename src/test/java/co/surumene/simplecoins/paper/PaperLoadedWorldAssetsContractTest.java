@@ -17,6 +17,7 @@ class PaperLoadedWorldAssetsContractTest {
         assertEquals(BigInteger.valueOf(600), report.total());
         assertEquals(2, report.scannedChunks());
         assertEquals(0, report.scannedDisplayEntities());
+        assertEquals(0, report.scannedEquipmentEntities());
         assertEquals(54, report.scannedSlots());
         assertEquals(2, report.entries().size());
         assertFalse(report.isCompleteSettlementSource());
@@ -33,6 +34,18 @@ class PaperLoadedWorldAssetsContractTest {
         assertFalse(reported.isCompleteSettlementSource());
         assertThrows(IllegalArgumentException.class, () ->
                 new PaperLoadedWorldAssets.Report("w", 1, 0, 0, -1, 0, 0, 0, List.of()));
+    }
+
+    @Test void livingEntityEquipmentIsAccountedSeparateFromDisplays() {
+        var report = new PaperLoadedWorldAssets.Report("w", 1, 0, 0, 0, 1, 0, 0, 6,
+                List.of(new PaperLoadedChunkAssets.Entry("world/w/entity/u/equipment/mainhand",
+                        "w", BigInteger.valueOf(1200L))));
+        assertEquals(1, report.scannedEquipmentEntities());
+        assertEquals(6, report.scannedSlots());
+        assertEquals(BigInteger.valueOf(1200L), report.total());
+        assertFalse(report.isCompleteSettlementSource());
+        assertThrows(IllegalArgumentException.class, () ->
+                new PaperLoadedWorldAssets.Report("w", 1, 0, 0, 0, -1, 0, 0, 0, List.of()));
     }
 
     @Test void refusesInvalidOrCrossWorldResult() {

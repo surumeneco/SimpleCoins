@@ -22,21 +22,30 @@ public final class PaperLoadedWorldAssets {
 
     public record Report(String world, int scannedChunks, int scannedBlockInventories,
                          int scannedItemEntities, int scannedDisplayEntities,
-                         int unhandledTileEntities, int unhandledOtherEntities,
-                         int scannedSlots, List<PaperLoadedChunkAssets.Entry> entries) {
-        /** Preserve the pre-display constructor used by earlier reports. */
+                         int scannedEquipmentEntities, int unhandledTileEntities,
+                         int unhandledOtherEntities, int scannedSlots,
+                         List<PaperLoadedChunkAssets.Entry> entries) {
+        /** Preserve both previous report constructors. */
         public Report(String world, int scannedChunks, int scannedBlockInventories,
                       int scannedItemEntities, int unhandledTileEntities,
                       int unhandledOtherEntities, int scannedSlots,
                       List<PaperLoadedChunkAssets.Entry> entries) {
             this(world, scannedChunks, scannedBlockInventories,
-                    scannedItemEntities, 0, unhandledTileEntities,
+                    scannedItemEntities, 0, 0, unhandledTileEntities,
                     unhandledOtherEntities, scannedSlots, entries);
+        }
+        public Report(String world, int scannedChunks, int scannedBlockInventories,
+                      int scannedItemEntities, int scannedDisplayEntities,
+                      int unhandledTileEntities, int unhandledOtherEntities,
+                      int scannedSlots, List<PaperLoadedChunkAssets.Entry> entries) {
+            this(world, scannedChunks, scannedBlockInventories,
+                    scannedItemEntities, scannedDisplayEntities, 0,
+                    unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
         }
         public Report {
             if (world == null || world.isBlank() || scannedChunks < 0 ||
                     scannedBlockInventories < 0 || scannedItemEntities < 0 ||
-                    scannedDisplayEntities < 0 ||
+                    scannedDisplayEntities < 0 || scannedEquipmentEntities < 0 ||
                     unhandledTileEntities < 0 || unhandledOtherEntities < 0 ||
                     scannedSlots < 0)
                 throw new IllegalArgumentException("Invalid loaded world report");
@@ -83,7 +92,8 @@ public final class PaperLoadedWorldAssets {
         Set<UUID> entityIds = new HashSet<>();
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedChunkAssets.Entry> entries = new ArrayList<>();
-        int tiles = 0, entities = 0, blocks = 0, itemEntities = 0, displayEntities = 0;
+        int tiles = 0, entities = 0, blocks = 0, itemEntities = 0;
+        int displayEntities = 0, equippedEntities = 0;
         int otherTiles = 0, otherEntities = 0, slots = 0;
 
         for (Chunk chunk : loaded) {
@@ -99,8 +109,9 @@ public final class PaperLoadedWorldAssets {
                     maxSerializedBytes, maxInflatedBytes,
                     walletIds, entityIds, physicalSlots);
             int nextTiles = Math.addExact(slice.scannedBlockInventories(), slice.unhandledTileEntities());
-            int nextEntities = Math.addExact(Math.addExact(slice.scannedItemEntities(),
-                    slice.scannedDisplayEntities()), slice.unhandledOtherEntities());
+            int nextEntities = Math.addExact(Math.addExact(
+                    Math.addExact(slice.scannedItemEntities(), slice.scannedDisplayEntities()),
+                    slice.scannedEquipmentEntities()), slice.unhandledOtherEntities());
             if (nextTiles > maxTiles - tiles || nextEntities > maxEntities - entities ||
                     slice.scannedSlots() > maxSlots - slots)
                 throw new IOException("Loaded-world scan aggregate budget exhausted");
@@ -110,11 +121,12 @@ public final class PaperLoadedWorldAssets {
             blocks += slice.scannedBlockInventories();
             itemEntities += slice.scannedItemEntities();
             displayEntities += slice.scannedDisplayEntities();
+            equippedEntities += slice.scannedEquipmentEntities();
             otherTiles += slice.unhandledTileEntities();
             otherEntities += slice.unhandledOtherEntities();
             entries.addAll(slice.entries());
         }
         return new Report(world.getName(), loaded.length, blocks, itemEntities,
-                displayEntities, otherTiles, otherEntities, slots, entries);
+                displayEntities, equippedEntities, otherTiles, otherEntities, slots, entries);
     }
 }
