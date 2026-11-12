@@ -5,6 +5,9 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
+import co.surumene.simplecoins.paper.WalletCrafting;
+import co.surumene.simplecoins.paper.WalletItemCodec;
+import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import org.bukkit.Bukkit;
@@ -26,6 +29,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
     private CoinExchangeRecipes exchanges;
+    private WalletCrafting walletCrafting;
 
     @Override
     public void onEnable() {
@@ -49,9 +53,31 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     throw new IllegalArgumentException("Invalid configured currency display name: " + key);
                 names.put(coin, value == null ? fallback.get(coin) : (String) value);
             }
+            Object rawUnit = getConfig().get("currency.unit", "C");
+            if (!(rawUnit instanceof String unit) || unit.isBlank())
+                throw new IllegalArgumentException("Invalid currency.unit");
+            Object rawCapacity = getConfig().get("wallet.max-balance", 640000);
+            if (!(rawCapacity instanceof Number capacityValue))
+                throw new IllegalArgumentException("Invalid wallet.max-balance");
+            long capacity;
+            try { capacity = new java.math.BigDecimal(capacityValue.toString()).longValueExact(); }
+            catch (ArithmeticException | NumberFormatException invalid) {
+                throw new IllegalArgumentException("Wallet capacity must be an exact long", invalid);
+            }
+            if (capacity < 0)
+                throw new IllegalArgumentException("Wallet capacity cannot be negative");
             CoinItemCodec codec = new CoinItemCodec(names);
+            WalletItemCodec walletCodec = new WalletItemCodec(java.util.UUID::randomUUID, unit);
             exchanges = new CoinExchangeRecipes(this, codec);
             exchanges.register();
+            walletCrafting = new WalletCrafting(this, walletCodec);
+            walletCrafting.register();
+            getServer().getPluginManager().registerEvents(
+                    new WalletMenu(walletCodec, codec, capacity, failure -> {
+                        publication.revoke();
+                        getLogger().log(Level.SEVERE,
+                                "Irrecoverable wallet/coin inventory mutation; revoking admission", failure);
+                    }), this);
             getServer().getPluginManager().registerEvents(
                     new SettlementAdmissionListener(admission, publication), this);
             // Read-only service is served through the independent guard's
@@ -59,7 +85,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getServer().getServicesManager().register(
                     AdmissionPermit.class, publication::mayAdmit, this, ServicePriority.Normal);
             getLogger().warning("Registered " + exchanges.registeredCount()
-                    + " value-neutral currency exchanges; settlement and trader issuance remain disabled.");
+                    + " value-neutral currency exchanges and " + walletCrafting.registeredCount()
+                    + " wallet recipes; settlement and trader issuance remain disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
             getLogger().log(Level.SEVERE, "Failed to register admission protection", failure);
@@ -74,6 +101,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         // Remove the cross-plugin permission service before tearing down state.
         // The independent guard then denies, even after this plugin is disabled.
         getServer().getServicesManager().unregisterAll(this);
+        if (walletCrafting != null) {
+            try { walletCrafting.unregister(); }
+            catch (RuntimeException | Error failure) {
+                getLogger().log(Level.SEVERE, "Failed to unregister wallet recipes", failure);
+            }
+            walletCrafting = null;
+        }
         if (exchanges != null) {
             try { exchanges.unregister(); }
             catch (RuntimeException | Error failure) {
