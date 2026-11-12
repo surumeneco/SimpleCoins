@@ -14,13 +14,20 @@ language: ja
 
 # Anvil外部圧縮チャンクの保存世代ドリフト検出 Candidate
 
+## 対象
+
+| Ref | Aspect |
+| --- | --- |
+| anvil-sidecar | Anvilの外部圧縮チャンク `c.<x>.<z>.mcc` |
+| saved-source-generation | 全件走査で整合を照合する保存ファイル集合 |
+
 ## 観測
 
 Anvil Regionの外部チャンクは同じディレクトリの `c.<x>.<z>.mcc` に圧縮NBTを保持する。現行 `AnvilRegionReader` はこの外部ファイルを読んで訪問するが、`WorldSnapshotTraversal.SourceStamp` が照合するのは `.mca` とplayerdataだけである。`.mca` を変えずに外部NBTを書き換えると、全件決算の入力が変わっても正本の変更を検出しない。
 
 ## 規則
 
-| ID | 条件 | 必要な挙動 | 根拠 |
+| ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
 | sidecar-01 | Anvilヘッダが外部 `.mcc` を参照する | 訪問前に対象ファイルの物理同一性・長さ・mtime・SHA-256を採取し、全訪問後に再確認する | 02B・保存ソースの全件正本照合 |
 | sidecar-02 | 訪問中に `.mcc` の内容だけが書換えられた | 同一サイズ・同一mtimeでもIOExceptionで全走査を無効とする | 既存 `.mca` ドリフト防止との整合 |
