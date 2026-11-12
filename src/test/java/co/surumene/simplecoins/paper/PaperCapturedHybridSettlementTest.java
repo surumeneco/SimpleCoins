@@ -98,6 +98,42 @@ class PaperCapturedHybridSettlementTest {
 
     private static WorldScope scope() { return new WorldScope(true, Set.of(), Set.of()); }
 
+    @Test void rejectsCapturedWorldExcludedByAccountingScopeInsteadOfDroppingCurrency() {
+        var captured = PaperCapturedHybridSettlement.fromObserved(
+                captured(false), new HashSet<>());
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(), Map.of());
+        assertThrows(IOException.class, () -> captured.stageCandidate(
+                manifest, new WorldScope(false, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+        assertThrows(IllegalStateException.class, () -> captured.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
+    @Test void playerCurrencyRemainsInScopeEvenWhenNoWorldIsIncluded() throws Exception {
+        String key = "player/" + ONLINE + "/inventory/0";
+        var held = new PaperLivePlayerAssets.Entry(
+                key, ONLINE, BigInteger.valueOf(150));
+        var online = new PaperLivePlayerAssets.OnlineSet(1, 63,
+                List.of(new PaperLivePlayerAssets.Snapshot(ONLINE, 63, List.of(held))));
+        var source = new HybridLiveSourceStage.PlayerSource(ONLINE,
+                List.of(new HybridLiveSourceStage.Value(key, null, BigInteger.valueOf(150))));
+        var captured = PaperCapturedHybridSettlement.fromObserved(
+                new PaperLiveUniverseAssets.Observed(
+                        new PaperLiveUniverseAssets.Report(
+                                List.of(), online, 0, 0, 0, 63), List.of(source)),
+                new HashSet<>());
+        var staged = captured.stageCandidate(
+                new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                new WorldScope(false, Set.of(), Set.of()), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER);
+        assertEquals(BigInteger.valueOf(150),
+                staged.pending().commit().personalBalances().get(ONLINE));
+    }
+
     @Test void stagesRealPaperSourceWithSavedOfflinePlayerExactlyOnce() throws Exception {
         var data = playerdata(OFFLINE, 3);
         var manifest = new WorldStorageDiscovery.Manifest(
