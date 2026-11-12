@@ -89,11 +89,33 @@ public final class PaperLiveUniverseAssets {
             Objects.requireNonNull(report, "Paper universe aggregate");
             sources = List.copyOf(sources);
             Map<String, Integer> expectedChunks = new HashMap<>();
-            for (var world : report.worlds())
+            Map<String, Map<String, BigInteger>> expectedWorldAssets = new HashMap<>();
+            Set<String> expectedPhysicalKeys = new HashSet<>();
+            for (var world : report.worlds()) {
                 expectedChunks.put(world.world(), world.scannedChunks());
+                Map<String, BigInteger> slots = new HashMap<>();
+                for (var physical : world.entries()) {
+                    if (!expectedPhysicalKeys.add(physical.physicalKey()) ||
+                            slots.putIfAbsent(physical.physicalKey(), physical.amount()) != null)
+                        throw new IllegalArgumentException("Duplicate physical slot in scanned World");
+                }
+                expectedWorldAssets.put(world.world(), slots);
+            }
             Map<String, Integer> countedChunks = new HashMap<>();
+            Map<String, Map<String, BigInteger>> actualWorldAssets = new HashMap<>();
+            Map<UUID, Map<String, BigInteger>> expectedPlayerAssets = new HashMap<>();
             Set<UUID> expectedPlayers = new HashSet<>();
-            for (var player : report.online().players()) expectedPlayers.add(player.owner());
+            for (var player : report.online().players()) {
+                expectedPlayers.add(player.owner());
+                Map<String, BigInteger> slots = new HashMap<>();
+                for (var physical : player.entries()) {
+                    if (!expectedPhysicalKeys.add(physical.physicalKey()) ||
+                            slots.putIfAbsent(physical.physicalKey(), physical.amount()) != null)
+                        throw new IllegalArgumentException("Duplicate physical slot in scanned Player");
+                }
+                expectedPlayerAssets.put(player.owner(), slots);
+            }
+            Map<UUID, Map<String, BigInteger>> actualPlayerAssets = new HashMap<>();
             Set<UUID> countedPlayers = new HashSet<>();
             Set<String> sourceIds = new HashSet<>();
             Set<String> physicalKeys = new HashSet<>();
@@ -106,10 +128,13 @@ public final class PaperLiveUniverseAssets {
                     if (!expectedChunks.containsKey(chunk.chunk().world()))
                         throw new IllegalArgumentException("Foreign Paper loaded Chunk");
                     countedChunks.merge(chunk.chunk().world(), 1, Math::addExact);
+                    actualWorldAssets.computeIfAbsent(chunk.chunk().world(),
+                            ignored -> new HashMap<>());
                 } else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
                     if (!expectedPlayers.contains(player.player()) ||
                             !countedPlayers.add(player.player()))
                         throw new IllegalArgumentException("Foreign or repeated online Player");
+                    actualPlayerAssets.put(player.player(), new HashMap<>());
                 } else {
                     throw new IllegalArgumentException("Unknown Paper LIVE source");
                 }
@@ -126,6 +151,12 @@ public final class PaperLiveUniverseAssets {
                                 "player/" + player.player() + "/"))
                             throw new IllegalArgumentException("Online Player monetary source mismatch");
                     }
+                    if (source instanceof HybridLiveSourceStage.ChunkSource chunk)
+                        actualWorldAssets.get(chunk.chunk().world())
+                                .put(entry.physicalKey(), entry.amount());
+                    else if (source instanceof HybridLiveSourceStage.PlayerSource player)
+                        actualPlayerAssets.get(player.player())
+                                .put(entry.physicalKey(), entry.amount());
                     total = total.add(entry.amount());
                 }
             }
@@ -133,8 +164,15 @@ public final class PaperLiveUniverseAssets {
                 if (!world.getValue().equals(countedChunks.getOrDefault(world.getKey(), 0)))
                     throw new IllegalArgumentException("Paper LIVE Chunk count disagrees with source details");
             }
-            if (!countedPlayers.equals(expectedPlayers) || !total.equals(report.total()))
-                throw new IllegalArgumentException("Paper LIVE monetary detail disagrees with aggregate");
+            // A matching grand total is NOT enough. Exchanging 25C between
+            // two holders or replacing a slot key would preserve the sum yet
+            // misattribute economic ownership. Compare the exact physical
+            // key and value for every observed world and every online player.
+            if (!countedPlayers.equals(expectedPlayers) || !total.equals(report.total()) ||
+                    !expectedWorldAssets.equals(actualWorldAssets) ||
+                    !expectedPlayerAssets.equals(actualPlayerAssets))
+                throw new IllegalArgumentException(
+                        "Paper LIVE monetary source/key/value disagrees with read-once aggregate");
         }
 
         public boolean isCompleteSettlementSource() { return false; }
