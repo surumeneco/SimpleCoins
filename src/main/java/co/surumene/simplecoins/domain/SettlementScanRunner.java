@@ -147,6 +147,18 @@ public final class SettlementScanRunner {
         // after traversal of every file and playerdata has returned successfully.
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles())
             pending.completeSource(sourceId(source.path()));
+        // PlayerDataSettlementImport normally closes the playerdata source.
+        // Online players' disk copies were deliberately not staged, so they
+        // must instead be closed only after WorldSnapshotTraversal has read
+        // and SHA-verified EVERY saved input and verified live-plan coverage.
+        // Without this, a valid hybrid run would have an incomplete required
+        // source even though no disk balance should be included for it.
+        if (partition != null) {
+            for (var entry : manifest.playerDataFiles().entrySet()) {
+                if (partition.shadowsSavedPlayer(entry.getKey()))
+                    pending.completeSource(sourceId(entry.getValue()));
+            }
+        }
         return new Staged(pending, report, required);
     }
 }
