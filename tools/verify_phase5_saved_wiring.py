@@ -145,7 +145,11 @@ def inspect_jar(path: Path) -> dict:
         if 'plugin.yml' not in names:
             raise ValueError('Missing plugin.yml')
         descriptor = jar.read('plugin.yml').decode('utf-8')
-        main = re.search(r'(?m)^main:\s*([a-zA-Z0-9_.]+)\s*$', descriptor)
+        # Duplicate YAML keys can override the class actually loaded by Paper.
+        main_keys = re.findall(r'(?m)^main\s*:', descriptor)
+        if len(main_keys) != 1:
+            raise ValueError('Missing or ambiguous main plugin class')
+        main = re.search(r'(?m)^main\s*:\s*([a-zA-Z0-9_.]+)\s*$', descriptor)
         if main is None:
             raise ValueError('Missing or invalid main plugin class')
         main_class = main.group(1).replace('.', '/') + '.class'
