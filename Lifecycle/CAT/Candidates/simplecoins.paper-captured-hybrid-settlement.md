@@ -35,6 +35,7 @@ language: ja
 | paper-bridge-05 | 帰属判断に未解決・なりすまし・偽の物理IDがある | 部分値を確定せずIOException | 所有者解決失敗テスト |
 | paper-bridge-06 | Paper capture中にWorld・Playerが欠ける | 空資産とみなさず読取全体を失敗させる | 既存`Observed`およびPaper検証 |
 | paper-bridge-07 | 一回限りの候補が成功する | 同時点性や全ワールド/保護/BAN/仕訳の完成は主張しない | admissionは常に閉 |
+| paper-bridge-08 | saved走査後にLIVE所有者分類中、新たなregionまたはplayerdataソースが出現する | 決算候補を返す前に元Manifestの保存ソース発見集合を再検証し、増減や再発見失敗を検知した場合はIOExceptionで拒否 | post-LIVE callbackによる保存ソース増加と不変control |
 
 ## Boundary
 
