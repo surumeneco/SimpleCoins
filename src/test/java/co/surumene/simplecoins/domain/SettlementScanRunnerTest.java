@@ -195,6 +195,23 @@ class SettlementScanRunnerTest {
         assertEquals(BigInteger.valueOf(200), banned.pending().commit().statistics().dead());
     }
 
+    @Test void disabledWorldSkipsSavedBlockOwnershipButStillStagesWorldIndependentPlayerdata() throws Exception {
+        UUID player = UUID.randomUUID();
+        Path region = region(true), data = playerData(player, 2);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(
+                new WorldStorageDiscovery.SourceFile("world", region, WorldStorageDiscovery.Kind.REGION)),
+                Map.of(player, data));
+        var scope = new WorldScope(true, Set.of(), Set.of("world"));
+        var staged = SettlementScanRunner.stage(manifest, scope, Set.of(),
+                (world, position) -> { throw new IOException("Disabled world must not resolve ownership"); },
+                (world, chunk) -> { throw new IOException("Disabled world must not resolve entities"); },
+                4096, 4096);
+
+        assertEquals(manifest.requiredSourceIds(), staged.requiredSourceIds());
+        assertEquals(BigInteger.valueOf(200),
+                staged.pending().commit().personalBalances().get(player));
+    }
+
     @Test void unresolvedBlockOwnershipAbortsTheEntireStagingRun() throws Exception {
         Path file = region(true);
         var manifest = new WorldStorageDiscovery.Manifest(List.of(
