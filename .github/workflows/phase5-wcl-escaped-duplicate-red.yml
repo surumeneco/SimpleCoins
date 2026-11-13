@@ -1,0 +1,37 @@
+name: Phase5 WCL escaped duplicate candidate Red
+on:
+  push:
+    branches:
+      - test/task004-wcl-escaped-duplicate-members-20261104-queue-d
+  workflow_dispatch:
+jobs:
+  candidate-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Assert candidate Red is reproducible
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_audit_wcl_escaped_duplicate_members_draft.py' -v > candidate-red.log 2>&1
+          code=$?
+          set -e
+          cat candidate-red.log
+          if [ "$code" -eq 0 ]; then
+            echo 'Candidate unexpectedly Green; inspect assertions' >&2
+            exit 1
+          fi
+          if ! grep -q 'Ran 4 tests' candidate-red.log; then
+            echo 'Wrong test selection or infrastructure failure' >&2
+            exit 1
+          fi
+          if ! grep -q 'FAILED (failures=4)' candidate-red.log; then
+            echo 'Unexpected Red failure shape' >&2
+            exit 1
+          fi
+          echo 'Expected Red reproduced; no production fix or CAT Gate implied'
+      - name: Baseline audit regression
+        run: python -m unittest discover -s tests -p 'test_audit_wcl_service_capture.py' -v
