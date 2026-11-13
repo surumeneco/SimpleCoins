@@ -33,7 +33,9 @@ public final class DurableFile {
     private static void writeInternal(Path target, byte[] payload,
                                       boolean requireAbsent) throws IOException {
         Path parent = target.toAbsolutePath().getParent();
+        requireNoSymbolicAncestors(target);
         Files.createDirectories(parent);
+        requireNoSymbolicAncestors(target);
         // Never silently replace an anomalous journal link (including dangling links).
         if (!requireAbsent && Files.isSymbolicLink(target))
             throw new IOException("Symbolic journal target cannot be replaced: " + target);
@@ -45,6 +47,7 @@ public final class DurableFile {
                 while (bytes.hasRemaining()) channel.write(bytes);
                 channel.force(true);
             }
+            requireNoSymbolicAncestors(target);
             if (requireAbsent) {
                 // Files.move(ATOMIC_MOVE) does not promise no-replace behavior.
                 // createLink is atomic, refuses an occupied target and avoids
@@ -67,6 +70,7 @@ public final class DurableFile {
     }
     public static byte[] read(Path target, int maximumBytes) throws IOException {
         if (maximumBytes < 0) throw new IllegalArgumentException("Negative journal budget");
+        requireNoSymbolicAncestors(target);
         if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Journal record is missing, non-regular or symbolic: " + target);
         long size = Files.size(target);
@@ -82,8 +86,23 @@ public final class DurableFile {
         byte[] payload = Arrays.copyOfRange(all, 32, all.length);
         if (!MessageDigest.isEqual(Arrays.copyOf(all, 32), hash(payload)))
             throw new IOException("Journal checksum mismatch: " + target);
+        requireNoSymbolicAncestors(target);
         return payload;
     }
+
+    /**
+     * Check path components from the record's parent up to the filesystem
+     * root. This rejects existing ancestor links, but it does not freeze
+     * filesystem namespace changes by another process (TOCTOU remains).
+     */
+    private static void requireNoSymbolicAncestors(Path target) throws IOException {
+        for (Path parent = target.toAbsolutePath().getParent();
+                parent != null; parent = parent.getParent()) {
+            if (Files.isSymbolicLink(parent))
+                throw new IOException("Symbolic journal path ancestor: " + parent);
+        }
+    }
+
     static byte[] readBounded(InputStream input, int maximumBytes) throws IOException {
         if (input == null || maximumBytes < 0)
             throw new IllegalArgumentException("Invalid bounded journal input");
