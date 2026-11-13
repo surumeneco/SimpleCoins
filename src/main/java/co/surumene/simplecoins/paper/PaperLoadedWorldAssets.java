@@ -88,6 +88,25 @@ public final class PaperLoadedWorldAssets {
     }
 
     /**
+     * Observe already-loaded Chunk coordinates without generating or loading.
+     * Missing, foreign, unloaded or repeated Chunk sources fail closed.
+     * The caller enforces the Paper primary-thread requirement.
+     */
+    static Set<Long> requireLoadedChunkCoordinates(World world) throws IOException {
+        Objects.requireNonNull(world, "world");
+        Chunk[] loaded = world.getLoadedChunks();
+        if (loaded == null)
+            throw new IOException("Loaded world Chunk set is unavailable");
+        Set<Long> coordinates = new HashSet<>();
+        for (Chunk chunk : loaded) {
+            if (chunk == null || chunk.getWorld() != world || !chunk.isLoaded() ||
+                    !coordinates.add(chunkCoordinate(chunk.getX(), chunk.getZ())))
+                throw new IOException("Invalid/duplicate loaded Chunk source");
+        }
+        return Set.copyOf(coordinates);
+    }
+
+    /**
      * No chunk loading or generation is performed. The entire selected set
      * is inspected on the primary thread, under explicit hard resource budgets.
      * For large worlds use smaller externally selected windows instead of
@@ -188,16 +207,7 @@ public final class PaperLoadedWorldAssets {
         // Verify coverage at the end, not just the first World.getLoadedChunks
         // snapshot. Even an equal-sized replacement means that currency in
         // one source was missed and a different source was counted stale.
-        Chunk[] afterScan = Objects.requireNonNull(world.getLoadedChunks(),
-                "Loaded world Chunk set missing at scan completion");
-        Set<Long> afterCoordinates = new HashSet<>();
-        for (Chunk candidate : afterScan) {
-            if (candidate == null || candidate.getWorld() != world ||
-                    !candidate.isLoaded() ||
-                    !afterCoordinates.add(chunkCoordinate(candidate.getX(), candidate.getZ())))
-                throw new IOException("Invalid/duplicate loaded Chunk after scan");
-        }
-        requireStableChunkCoordinates(chunkCoordinates, afterCoordinates);
+        requireStableChunkCoordinates(chunkCoordinates, requireLoadedChunkCoordinates(world));
         return new Report(world.getName(), loaded.length, blocks, itemEntities,
                 displayEntities, equippedEntities, inventoryEntities,
                 otherTiles, otherEntities, slots, entries);
