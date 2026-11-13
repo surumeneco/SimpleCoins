@@ -96,6 +96,45 @@ public final class PaperLiveUniverseAssets {
     }
 
     /**
+     * A block-inventory key carries immutable physical block coordinates.
+     * Even an exact key/amount match is not valid if the slot is assigned
+     * to a different observed Chunk. Entity keys contain UUIDs rather than
+     * coordinates and require separate location evidence.
+     */
+    private static void requireBlockSlotInChunk(SavedLiveSourcePartition.Chunk chunk,
+                                                String physicalKey) {
+        String prefix = "world/" + chunk.world() + "/";
+        if (!physicalKey.startsWith(prefix))
+            throw new IllegalArgumentException("Foreign World monetary source");
+        String location = physicalKey.substring(prefix.length());
+        if (location.startsWith("entity/")) return;
+        int delimiter = location.indexOf(':');
+        if (delimiter <= 0 || delimiter != location.lastIndexOf(':'))
+            throw new IllegalArgumentException("Malformed live block slot: " + physicalKey);
+        String[] coordinates = location.substring(0, delimiter).split(",", -1);
+        if (coordinates.length != 3)
+            throw new IllegalArgumentException("Malformed live block position: " + physicalKey);
+        try {
+            int x = Integer.parseInt(coordinates[0]);
+            int y = Integer.parseInt(coordinates[1]);
+            int z = Integer.parseInt(coordinates[2]);
+            String rawSlot = location.substring(delimiter + 1);
+            int slot = Integer.parseInt(rawSlot);
+            if (slot < 0 || !coordinates[0].equals(Integer.toString(x)) ||
+                    !coordinates[1].equals(Integer.toString(y)) ||
+                    !coordinates[2].equals(Integer.toString(z)) ||
+                    !rawSlot.equals(Integer.toString(slot)))
+                throw new IllegalArgumentException("Noncanonical live block slot: " + physicalKey);
+            if (Math.floorDiv(x, 16) != chunk.x() ||
+                    Math.floorDiv(z, 16) != chunk.z())
+                throw new IllegalArgumentException(
+                        "LIVE monetary slot assigned to a foreign Chunk: " + physicalKey);
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException("Malformed live block coordinates: " + physicalKey, invalid);
+        }
+    }
+
+    /**
      * Immutable per-source monetary inputs verified against the SAME read's
      * World/Player aggregate. This is only a checked source capture and cannot
      * prove freeze, external ownership or authoritative economic settlement.
@@ -153,6 +192,7 @@ public final class PaperLiveUniverseAssets {
                                 !entry.physicalKey().startsWith(
                                         "world/" + chunk.chunk().world() + "/"))
                             throw new IllegalArgumentException("Chunk monetary source mismatch");
+                        requireBlockSlotInChunk(chunk.chunk(), entry.physicalKey());
                     } else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
                         if (entry.world() != null || !entry.physicalKey().startsWith(
                                 "player/" + player.player() + "/"))
