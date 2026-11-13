@@ -71,6 +71,22 @@ public final class SettlementScanRunner {
             EntityOwnerLookup entityOwners,
             int maximumCompressedBytes,
             int maximumInflatedBytes) throws IOException {
+        return stageWithBanCoverage(manifest, scope, banSources, blockOwners,
+                entityOwners, maximumCompressedBytes, maximumInflatedBytes,
+                new java.util.HashSet<>(), null);
+    }
+
+    /** Same verified BAN generation across selected LIVE sources and saved NBT. */
+    public static Staged stageWithBanCoverage(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldScope scope,
+            BanSourceCoverage banSources,
+            BlockOwnerLookup blockOwners,
+            EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes,
+            int maximumInflatedBytes,
+            Set<UUID> sharedWalletIds,
+            SavedLiveSourcePartition partition) throws IOException {
         Objects.requireNonNull(manifest, "saved manifest");
         Objects.requireNonNull(banSources, "complete BAN source observations");
         Objects.requireNonNull(blockOwners, "external block owner resolver");
@@ -109,7 +125,7 @@ public final class SettlementScanRunner {
             return Map.copyOf(validated);
         };
         return stage(manifest, scope, banned, validatedBlocks, validatedEntities,
-                maximumCompressedBytes, maximumInflatedBytes);
+                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, partition);
     }
 
     public static Staged stage(WorldStorageDiscovery.Manifest manifest,
