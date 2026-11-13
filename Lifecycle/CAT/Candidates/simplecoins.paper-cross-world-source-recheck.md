@@ -14,13 +14,20 @@ language: ja
 
 # 複数World・Player横断後のロード済みChunk集合再照合 Candidate
 
-## 対象と既存の不足
+## 対象
+
+| Ref | Aspect |
+| --- | --- |
+| world-sources | 選択済み各Paper Worldのロード済みChunk座標集合 |
+| universe-capture | すべてのWorldとオンラインPlayerのLIVE走査結果 |
+
+## 観測
 
 一つのWorldの走査終了時点でそのWorldのロード済みChunk座標集合が変わっていないことは、PR #348で検査される。しかし次のWorldやオンラインPlayerのインベントリを走査している間に、先行Worldのロード済みChunk集合が変化すると、同一のPaper LIVE capture全体では不完全な世代になり得る。
 
-## 観測可能な要求
+## 規則
 
-| ID | 条件 | 振る舞い | 試験 |
+| ID | Condition | Requirement | Verification |
 | --- | --- | --- | --- |
 | universe-set-01 | すべての選択Worldが完全走査後にも同じChunk座標集合を持つ | LIVE capture候補を返してよい | 複数Worldの不変集合 |
 | universe-set-02 | 後続World/Playerの走査中に先行WorldのChunkが増減・同数で差し替わる | LIVE capture候補をIOExceptionで拒否 | 先行Worldの遅延変更 |
