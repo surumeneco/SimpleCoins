@@ -59,7 +59,24 @@ public final class PaperLoadedChunkAssets {
     public static Slice scan(Chunk chunk, int maxTiles, int maxEntities,
                              int maxSlots, int maxSerializedBytes,
                              int maxInflatedBytes) throws IOException {
+        return scan(chunk, maxTiles, maxEntities, maxSlots,
+                maxSerializedBytes, maxInflatedBytes,
+                new HashSet<>(), new HashSet<>(), new HashSet<>());
+    }
+
+    /**
+     * Used by a bounded loaded-world scan: wallet, entity, and physical-slot
+     * identities must be shared across every chunk in that scan. On failure
+     * the entire calling scan must be discarded, including these sets.
+     */
+    static Slice scan(Chunk chunk, int maxTiles, int maxEntities,
+                      int maxSlots, int maxSerializedBytes, int maxInflatedBytes,
+                      Set<UUID> walletIds, Set<UUID> entityIds,
+                      Set<String> keys) throws IOException {
         Objects.requireNonNull(chunk, "loaded chunk");
+        Objects.requireNonNull(walletIds, "shared wallet identities");
+        Objects.requireNonNull(entityIds, "shared entity identities");
+        Objects.requireNonNull(keys, "shared physical-slot identities");
         if (maxTiles < 1 || maxEntities < 1 || maxSlots < 1 ||
                 maxSerializedBytes < 1 || maxInflatedBytes < 1)
             throw new IllegalArgumentException("Live scan budgets must be positive");
@@ -79,9 +96,6 @@ public final class PaperLoadedChunkAssets {
         int blockInventories = 0, items = 0, otherTiles = 0, otherEntities = 0;
         int slots = 0;
         List<Entry> found = new ArrayList<>();
-        Set<String> keys = new HashSet<>();
-        Set<UUID> walletIds = new HashSet<>();
-        Set<UUID> entityIds = new HashSet<>();
 
         for (BlockState tile : tiles) {
             if (tile == null) throw new IOException("Null block state");
