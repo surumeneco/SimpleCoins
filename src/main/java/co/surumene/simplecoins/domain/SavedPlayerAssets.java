@@ -19,10 +19,20 @@ public final class SavedPlayerAssets {
     private SavedPlayerAssets() {}
 
     public static Map<String, BigInteger> extract(Map<String, Object> root) throws IOException {
+        return extract(root, new HashSet<>());
+    }
+
+    /**
+     * The higher-level settlement may share the wallet identity context
+     * across many saved playerdata sources. On any failure it discards the
+     * whole staged generation, including this mutable context.
+     */
+    public static Map<String, BigInteger> extract(Map<String, Object> root,
+                                                    Set<java.util.UUID> seenWallets) throws IOException {
         Objects.requireNonNull(root);
+        Objects.requireNonNull(seenWallets, "wallet identity context");
         Map<String, BigInteger> found = new LinkedHashMap<>();
         Set<String> visitedSlots = new HashSet<>();
-        Set<java.util.UUID> seenWallets = new HashSet<>();
         extractInventory(root, "Inventory", "inventory", found, visitedSlots, seenWallets);
         extractInventory(root, "EnderItems", "ender", found, visitedSlots, seenWallets);
         extractEquipment(root, found, visitedSlots, seenWallets);
