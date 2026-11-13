@@ -78,11 +78,34 @@ jobs:
           trap - EXIT
           grep -F 'Saving worlds' paper.log
           echo 'PAPER_GUARDED_BOOT_STOP_PASSED'
+      - name: Corrupt monetary journal checkpoint and require guarded fail-stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          test -f plugins/SimpleCoins/normal-mutations/head
+          printf 'intentionally corrupt journal checkpoint\\n' > plugins/SimpleCoins/normal-mutations/head
+          # No console-issued stop: corrupt accounting must terminate Paper
+          # on its own instead of leaving an unprotected server online.
+          set +e
+          timeout --signal=TERM --kill-after=5s 150s java -Xms256M -Xmx1024M -jar paper.jar nogui \\
+            </dev/null > paper-corrupt.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo 'Paper did not fail-stop after monetary journal corruption' >&2
+            tail -120 paper-corrupt.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-corrupt.log
+          grep -F 'Failed to initialize guarded accounting' paper-corrupt.log
+          grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper-corrupt.log
+          echo 'PAPER_CORRUPT_JOURNAL_FAILSTOP_PASSED'
       - name: Upload Paper diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-guarded-bootstrap-log
-          path: smoke/paper.log
+          path: smoke/*.log
           if-no-files-found: ignore
           retention-days: 7
