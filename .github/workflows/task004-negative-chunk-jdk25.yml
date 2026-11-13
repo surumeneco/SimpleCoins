@@ -1,0 +1,56 @@
+name: Task004 saved BlockLocker negative chunk JDK25
+
+on:
+  push:
+    branches:
+      - test/task004-negative-chunk-boundary-queue-d-20261109
+    paths:
+      - '.github/workflows/task004-negative-chunk-jdk25.yml'
+      - 'src/test/java/co/surumene/simplecoins/domain/BlockLockerNegativeChunkBoundaryTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-chunk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run saved-sign negative-chunk JUnit
+        run: gradle --no-daemon clean test --tests co.surumene.simplecoins.domain.BlockLockerNegativeChunkBoundaryTest
+      - name: Require exactly the two intended JUnit tests
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          files = list(Path('build/test-results/test').glob('*BlockLockerNegativeChunkBoundaryTest.xml'))
+          if len(files) != 1:
+              raise SystemExit(f'Expected exactly one JUnit XML suite, got {len(files)}')
+          root = ET.parse(files[0]).getroot()
+          counts = {k: int(root.attrib.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')}
+          expected_counts = {'tests': 2, 'failures': 0, 'errors': 0, 'skipped': 0}
+          if counts != expected_counts:
+              raise SystemExit(f'Unexpected JUnit result: {counts} != {expected_counts}')
+          names = {c.attrib.get('name', '').removesuffix('()') for c in root.findall('testcase')}
+          expected_names = {
+              'negativeChunkAcceptsMinusOneAndMinusSixteenButRejectsZero',
+              'negativeChunkRejectsMinusSeventeenAndWrongZChunk',
+          }
+          if names != expected_names:
+              raise SystemExit(f'Unexpected JUnit methods: {names} != {expected_names}')
+          print('Task004 JUnit evidence verified:', counts, sorted(names))
+          PY
+      - name: Preserve exact JUnit XML receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: task004-negative-chunk-junit
+          path: build/test-results/test/TEST-co.surumene.simplecoins.domain.BlockLockerNegativeChunkBoundaryTest.xml
+          if-no-files-found: error
