@@ -37,6 +37,13 @@ class PaperLiveUniverseAssetsContractTest {
                 new PaperLiveUniverseAssets.Report(List.of(world), online, 1, 0, 0, 1));
     }
 
+    @Test void callerOwnedPhysicalWalletContextCannotBeNull() {
+        var budget = new PaperLiveUniverseAssets.Budget(1, 1, 1, 1, 16,
+                1, 1048576, 1048576);
+        assertThrows(NullPointerException.class, () ->
+                PaperLiveUniverseAssets.scan(List.of(), budget, null));
+    }
+
     @Test void allScanResourceBudgetsMustBePositive() {
         assertThrows(IllegalArgumentException.class, () ->
                 new PaperLiveUniverseAssets.Budget(2, 10, 10, 10, 100,
