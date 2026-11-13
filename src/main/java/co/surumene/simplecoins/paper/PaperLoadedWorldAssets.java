@@ -75,6 +75,18 @@ public final class PaperLoadedWorldAssets {
         public boolean isCompleteSettlementSource() { return false; }
     }
 
+    /** Signed 32-bit Chunk coordinates form a unique 64-bit source key. */
+    static long chunkCoordinate(int x, int z) {
+        return ((long) x << 32) | (z & 0xffffffffL);
+    }
+
+    /** Disk/source publication must not trust a changed loaded-Chunk set. */
+    static void requireStableChunkCoordinates(Set<Long> initial, Set<Long> finalSet)
+            throws IOException {
+        if (!initial.equals(finalSet))
+            throw new IOException("Loaded Paper Chunk set changed during monetary scan");
+    }
+
     /**
      * No chunk loading or generation is performed. The entire selected set
      * is inspected on the primary thread, under explicit hard resource budgets.
@@ -141,7 +153,7 @@ public final class PaperLoadedWorldAssets {
         for (Chunk chunk : loaded) {
             if (chunk == null || chunk.getWorld() != world || !chunk.isLoaded())
                 throw new IOException("Invalid or unloaded world chunk");
-            long coordinate = ((long) chunk.getX() << 32) | (chunk.getZ() & 0xffffffffL);
+            long coordinate = chunkCoordinate(chunk.getX(), chunk.getZ());
             if (!chunkCoordinates.add(coordinate))
                 throw new IOException("Duplicate loaded chunk coordinates: " + coordinate);
             PaperLoadedChunkAssets.Slice slice = PaperLoadedChunkAssets.scan(chunk,
@@ -173,6 +185,19 @@ public final class PaperLoadedWorldAssets {
             otherEntities += slice.unhandledOtherEntities();
             entries.addAll(slice.entries());
         }
+        // Verify coverage at the end, not just the first World.getLoadedChunks
+        // snapshot. Even an equal-sized replacement means that currency in
+        // one source was missed and a different source was counted stale.
+        Chunk[] afterScan = Objects.requireNonNull(world.getLoadedChunks(),
+                "Loaded world Chunk set missing at scan completion");
+        Set<Long> afterCoordinates = new HashSet<>();
+        for (Chunk candidate : afterScan) {
+            if (candidate == null || candidate.getWorld() != world ||
+                    !candidate.isLoaded() ||
+                    !afterCoordinates.add(chunkCoordinate(candidate.getX(), candidate.getZ())))
+                throw new IOException("Invalid/duplicate loaded Chunk after scan");
+        }
+        requireStableChunkCoordinates(chunkCoordinates, afterCoordinates);
         return new Report(world.getName(), loaded.length, blocks, itemEntities,
                 displayEntities, equippedEntities, inventoryEntities,
                 otherTiles, otherEntities, slots, entries);
