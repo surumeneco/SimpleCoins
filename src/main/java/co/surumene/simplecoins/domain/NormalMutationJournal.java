@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -79,6 +80,8 @@ public final class NormalMutationJournal implements AutoCloseable {
     private final Path directory;
     private final FileChannel lockChannel;
     private final FileLock writerLock;
+    private final Path writerLockPath;
+    private final Object writerLockFileKey;
     private final TreeMap<Long, Mutation> entries = new TreeMap<>();
     private final Map<UUID, Long> operationIds = new HashMap<>();
     private final boolean unreconciledOnStartup;
@@ -95,7 +98,8 @@ public final class NormalMutationJournal implements AutoCloseable {
         Files.createDirectories(directory);
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Journal storage must be a real directory");
-        FileChannel channel = FileChannel.open(directory.resolve(".writer.lock"),
+        writerLockPath = directory.resolve(".writer.lock");
+        FileChannel channel = FileChannel.open(writerLockPath,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
         FileLock lock;
         try {
@@ -111,6 +115,7 @@ public final class NormalMutationJournal implements AutoCloseable {
         lockChannel = channel;
         writerLock = lock;
         try {
+            writerLockFileKey = requireWriterLockFileKey();
             readAllAtStartup();
             unreconciledOnStartup = !entries.isEmpty();
         } catch (IOException | RuntimeException failure) {
@@ -225,6 +230,8 @@ public final class NormalMutationJournal implements AutoCloseable {
         if (closed || failed || !writerLock.isValid())
             throw new IllegalStateException("Monetary journal not writable");
         try {
+            if (!writerLockFileKey.equals(requireWriterLockFileKey()))
+                throw new IOException("Monetary journal writer lock path changed");
             long actual = readHead();
             long expected = entries.isEmpty() ? 0 : entries.lastKey();
             if (actual != expected) throw new IOException("Journal head diverged from live state");
@@ -232,6 +239,20 @@ public final class NormalMutationJournal implements AutoCloseable {
             failed = true;
             throw new IllegalStateException("Monetary journal integrity failed; stop issuing", failure);
         }
+    }
+
+    /** Detect missing, replaced or symbolic writer lock files before mutation. */
+    private Object requireWriterLockFileKey() throws IOException {
+        for (Path parent = writerLockPath.getParent(); parent != null; parent = parent.getParent()) {
+            if (Files.isSymbolicLink(parent))
+                throw new IOException("Symbolic directory in journal lock path: " + parent);
+        }
+        BasicFileAttributes attributes = Files.readAttributes(
+                writerLockPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        Object key = attributes.fileKey();
+        if (!attributes.isRegularFile() || key == null)
+            throw new IOException("Monetary journal writer lock identity unavailable");
+        return key;
     }
 
     /**
