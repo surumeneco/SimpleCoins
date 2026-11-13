@@ -22,9 +22,10 @@ public final class SavedPlayerAssets {
         Objects.requireNonNull(root);
         Map<String, BigInteger> found = new LinkedHashMap<>();
         Set<String> visitedSlots = new HashSet<>();
-        extractInventory(root, "Inventory", "inventory", found, visitedSlots);
-        extractInventory(root, "EnderItems", "ender", found, visitedSlots);
-        extractEquipment(root, found, visitedSlots);
+        Set<java.util.UUID> seenWallets = new HashSet<>();
+        extractInventory(root, "Inventory", "inventory", found, visitedSlots, seenWallets);
+        extractInventory(root, "EnderItems", "ender", found, visitedSlots, seenWallets);
+        extractEquipment(root, found, visitedSlots, seenWallets);
         return Map.copyOf(found);
     }
 
@@ -35,7 +36,8 @@ public final class SavedPlayerAssets {
      */
     private static void extractEquipment(Map<String,Object> root,
                                          Map<String,BigInteger> found,
-                                         Set<String> visitedSlots) throws IOException {
+                                         Set<String> visitedSlots,
+                                         Set<java.util.UUID> seenWallets) throws IOException {
         if (!root.containsKey("equipment")) return;
         Object raw = root.get("equipment");
         if (!(raw instanceof Map<?,?> equipment))
@@ -80,14 +82,15 @@ public final class SavedPlayerAssets {
                 throw new IOException("Duplicate equipment slot: " + slot);
             @SuppressWarnings("unchecked")
             Map<String,Object> item = (Map<String,Object>) stack;
-            BigInteger value = StoredItemValue.value(item);
+            BigInteger value = StoredItemValue.value(item, seenWallets);
             if (value.signum() > 0) found.put(physical, value);
         }
     }
 
     private static void extractInventory(Map<String, Object> root, String key,
                                          String prefix, Map<String, BigInteger> found,
-                                         Set<String> visitedSlots) throws IOException {
+                                         Set<String> visitedSlots,
+                                         Set<java.util.UUID> seenWallets) throws IOException {
         if (!(root.get(key) instanceof List<?> stacks))
             throw new IOException("Missing or malformed playerdata inventory: " + key);
 
@@ -121,7 +124,7 @@ public final class SavedPlayerAssets {
 
             @SuppressWarnings("unchecked")
             Map<String, Object> typed = (Map<String, Object>) item;
-            BigInteger amount = StoredItemValue.value(typed);
+            BigInteger amount = StoredItemValue.value(typed, seenWallets);
             if (amount.signum() > 0) found.put(physical, amount);
         }
     }
