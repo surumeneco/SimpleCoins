@@ -257,6 +257,32 @@ class PaperCapturedHybridSettlementTest {
         assertEquals(BigInteger.valueOf(200), result.free());
     }
 
+    private PaperLiveUniverseAssets.Observed capturedWithZeroMoneyOnlinePlayer() {
+        var original = captured(true);
+        var zeroOnline = new PaperLivePlayerAssets.OnlineSet(1, 63,
+                List.of(new PaperLivePlayerAssets.Snapshot(ONLINE, 63, List.of())));
+        var old = original.report();
+        var revised = new PaperLiveUniverseAssets.Report(old.worlds(), zeroOnline,
+                old.scannedChunks(), old.scannedTiles(),
+                old.scannedEntities(), old.scannedSlots());
+        return new PaperLiveUniverseAssets.Observed(revised, List.of(
+                original.sources().getFirst(),
+                new HybridLiveSourceStage.PlayerSource(ONLINE, List.of())));
+    }
+
+    @Test void zeroMoneyOnlinePlayerStillNeedsExplicitBanEvidence() throws Exception {
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(), Map.of(
+                ONLINE, playerdata(ONLINE, 10), OFFLINE, playerdata(OFFLINE, 3)));
+        var incomplete = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                BAN_SOURCES, Map.of(OFFLINE, banRows(false)));
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                capturedWithZeroMoneyOnlinePlayer(), new HashSet<>());
+        assertThrows(IOException.class, () -> capture.stageCandidateWithBanCoverage(
+                manifest, scope(), incomplete,
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
     @Test void onlineSourceWithoutBanEvidenceInvalidatesWholeOneShotCapture()
             throws Exception {
         var onlineData = playerdata(ONLINE, 10);
