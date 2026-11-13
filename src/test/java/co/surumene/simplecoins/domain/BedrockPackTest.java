@@ -102,4 +102,37 @@ class BedrockPackTest {
             assertNotEquals(manifest, changed);
         }
     }
+
+    @Test void nameOnlyChangeInvalidatesBedrockManifestIdentity() throws Exception {
+        var images = sampleImages();
+        var names = new EnumMap<CoinDenomination, String>(CoinDenomination.class);
+        names.putAll(sampleNames());
+        Path pack = directory.resolve("identity/coins.mcpack");
+        Path mapping = directory.resolve("identity/coins.json");
+        BedrockPack.write(pack, mapping, images, names);
+        String beforeManifest;
+        try (ZipFile zip = new ZipFile(pack.toFile())) {
+            beforeManifest = new String(zip.getInputStream(zip.getEntry("manifest.json"))
+                    .readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        String beforeMapping = Files.readString(mapping);
+        CoinDenomination changed = CoinDenomination.values()[0];
+        names.put(changed, "Renamed display coin");
+        BedrockPack.write(pack, mapping, images, names);
+        try (ZipFile zip = new ZipFile(pack.toFile())) {
+            String afterManifest = new String(zip.getInputStream(zip.getEntry("manifest.json"))
+                    .readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            assertNotEquals(beforeManifest, afterManifest,
+                    "Bedrock cache UUID must change when display name changes");
+            for (var denomination : CoinDenomination.values()) {
+                var entry = zip.getEntry("textures/items/coin_" + denomination.value() + ".png");
+                assertNotNull(entry);
+                assertArrayEquals(images.get(denomination),
+                        zip.getInputStream(entry).readAllBytes());
+            }
+        }
+        String afterMapping = Files.readString(mapping);
+        assertNotEquals(beforeMapping, afterMapping);
+        assertTrue(afterMapping.contains("Renamed display coin"));
+    }
 }
