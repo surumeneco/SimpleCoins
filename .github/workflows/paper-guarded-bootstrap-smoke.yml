@@ -69,6 +69,9 @@ jobs:
           if [ "$ready" != 1 ]; then echo 'Paper startup timed out'; cat paper.log; exit 1; fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
+          test -f plugins/SimpleCoins/normal-mutations/head || { echo 'RED_JOURNAL_HEAD_NOT_CREATED'; exit 1; }
+          test -f plugins/SimpleCoins/normal-mutations/.writer.lock || { echo 'RED_JOURNAL_LOCK_NOT_CREATED'; exit 1; }
+          echo 'PAPER_NORMAL_JOURNAL_OPEN_VERIFIED'
           printf 'stop\n' >&3
           exec 3>&-
           wait "$server_pid"
