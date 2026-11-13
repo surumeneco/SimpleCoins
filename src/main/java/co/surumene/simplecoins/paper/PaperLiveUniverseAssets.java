@@ -39,6 +39,24 @@ public final class PaperLiveUniverseAssets {
         }
     }
 
+    /** World identity and exactly the Chunk coordinates captured in that World scan. */
+    static record WorldCapture(World world, Set<Long> chunkCoordinates) {
+        WorldCapture {
+            Objects.requireNonNull(world, "captured world");
+            chunkCoordinates = Set.copyOf(chunkCoordinates);
+        }
+    }
+
+    /** Final cross-World source check, after all World and Player inventory reads. */
+    static void requireWorldSourceSetsStillLoaded(List<WorldCapture> captures)
+            throws IOException {
+        for (WorldCapture capture : captures) {
+            PaperLoadedWorldAssets.requireStableChunkCoordinates(
+                    capture.chunkCoordinates(),
+                    PaperLoadedWorldAssets.requireLoadedChunkCoordinates(capture.world()));
+        }
+    }
+
     public record Report(List<PaperLoadedWorldAssets.Report> worlds,
                          PaperLivePlayerAssets.OnlineSet online,
                          int scannedChunks, int scannedTiles,
@@ -253,10 +271,12 @@ public final class PaperLiveUniverseAssets {
         Set<UUID> entitiesSeen = new HashSet<>();
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedWorldAssets.Report> captured = new ArrayList<>();
+        List<WorldCapture> worldCaptures = new ArrayList<>();
         List<HybridLiveSourceStage.Source> sources = new ArrayList<>();
         int chunks = 0, tiles = 0, entities = 0, slots = 0;
 
         for (World world : selection) {
+            Set<Long> observedChunkCoordinates = new HashSet<>();
             var report = PaperLoadedWorldAssets.scan(world,
                     Math.max(1, budget.maxChunks() - chunks),
                     Math.max(1, budget.maxTileEntities() - tiles),
@@ -265,6 +285,9 @@ public final class PaperLiveUniverseAssets {
                     budget.maxSerializedBytes(), budget.maxInflatedBytes(),
                     wallets, entitiesSeen, physicalSlots,
                     slice -> {
+                        if (!observedChunkCoordinates.add(PaperLoadedWorldAssets.chunkCoordinate(
+                                slice.chunkX(), slice.chunkZ())))
+                            throw new IOException("Duplicate captured Paper Chunk source");
                         var chunk = new SavedLiveSourcePartition.Chunk(
                                 slice.world(), slice.chunkX(), slice.chunkZ());
                         var values = slice.entries().stream()
@@ -288,7 +311,10 @@ public final class PaperLiveUniverseAssets {
             tiles = Math.addExact(tiles, readTiles);
             entities = Math.addExact(entities, readEntities);
             slots = Math.addExact(slots, report.scannedSlots());
+            if (observedChunkCoordinates.size() != report.scannedChunks())
+                throw new IOException("Missing captured Paper Chunk source");
             captured.add(report);
+            worldCaptures.add(new WorldCapture(world, observedChunkCoordinates));
         }
 
         // Player storage is world-independent, even when selected Worlds is
@@ -306,6 +332,7 @@ public final class PaperLiveUniverseAssets {
                     .toList();
             sources.add(new HybridLiveSourceStage.PlayerSource(player.owner(), values));
         }
+        requireWorldSourceSetsStillLoaded(worldCaptures);
         return new Observed(new Report(captured, online,
                 chunks, tiles, entities, slots), sources);
     }
