@@ -84,12 +84,11 @@ jobs:
           set -euo pipefail
           cd smoke
           test -f plugins/SimpleCoins/normal-mutations/head
-          printf 'intentionally corrupt journal checkpoint\\n' > plugins/SimpleCoins/normal-mutations/head
+          printf '%s\\n' 'intentionally corrupt journal checkpoint' > plugins/SimpleCoins/normal-mutations/head
           # No console-issued stop: corrupt accounting must terminate Paper
           # on its own instead of leaving an unprotected server online.
           set +e
-          timeout --signal=TERM --kill-after=5s 150s java -Xms256M -Xmx1024M -jar paper.jar nogui \\
-            </dev/null > paper-corrupt.log 2>&1
+          timeout --signal=TERM --kill-after=5s 150s java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-corrupt.log 2>&1
           status=$?
           set -e
           if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
