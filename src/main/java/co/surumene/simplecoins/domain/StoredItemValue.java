@@ -85,24 +85,40 @@ public final class StoredItemValue {
         }
 
         if (pdc != null) {
+            // The active Paper ItemStack codec writes coin_denomination,
+            // while older saved-data fixtures use denomination. Never treat
+            // real issued coins as ordinary paper worth zero during settlement.
+            boolean activeCoin = pdc.containsKey("simplecoins:coin_denomination");
+            boolean legacyCoin = pdc.containsKey("simplecoins:denomination");
+            if (activeCoin && legacyCoin)
+                throw new IOException("Conflicting stored coin denomination tags");
             // A physical item cannot simultaneously be a coin and a wallet.
-            // Otherwise one of the tagged balances is silently lost.
-            if (pdc.containsKey("simplecoins:denomination") &&
+            if ((activeCoin || legacyCoin) &&
                     (pdc.containsKey("simplecoins:wallet_id") ||
                      pdc.containsKey("simplecoins:wallet_balance")))
                 throw new IOException("Conflicting coin and wallet identity tags");
-            if (pdc.containsKey("simplecoins:denomination")) {
+            if (activeCoin || legacyCoin) {
+                Object rawDenomination = pdc.get(activeCoin
+                        ? "simplecoins:coin_denomination" : "simplecoins:denomination");
                 if (!id.equals("minecraft:paper") || quantity > 64 ||
-                        !(pdc.get("simplecoins:denomination") instanceof Integer denomination))
+                        !(rawDenomination instanceof Integer denomination))
                     throw new IOException("Malformed stored coin");
-                // Coin identity is incompatible with nested storage. Otherwise the
-                // early denomination return would silently omit hidden assets.
+                // A marked monetary item may not hide a second asset inside it.
                 for (String childKey : List.of("minecraft:bundle_contents", "minecraft:container")) {
                     if (components.containsKey(childKey))
                         throw new IOException("Coin contains unexpected nested storage: " + childKey);
                 }
                 try {
-                    return BigInteger.valueOf(CoinDenomination.fromValue(denomination).value())
+                    CoinDenomination face = CoinDenomination.fromValue(denomination);
+                    if (activeCoin) {
+                        // Match CoinItemCodec.modelKey, not mutable display text.
+                        // A forged or missing item_model cannot mint currency.
+                        Object rawModel = components.get("minecraft:item_model");
+                        if (!(rawModel instanceof String model) ||
+                                !model.equals("simplecoins:coin_" + face.value()))
+                            throw new IOException("Stored coin item_model mismatch");
+                    }
+                    return BigInteger.valueOf(face.value())
                             .multiply(BigInteger.valueOf(quantity));
                 } catch (IllegalArgumentException invalid) {
                     throw new IOException("Unknown stored coin denomination", invalid);
