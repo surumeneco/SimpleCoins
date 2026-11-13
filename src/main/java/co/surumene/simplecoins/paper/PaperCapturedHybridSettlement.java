@@ -127,6 +127,11 @@ public final class PaperCapturedHybridSettlement {
         // provided. A failure never returns the staged result to the caller.
         HybridLiveSourceStage.stage(staged, selection,
                 observed.sources(), liveOwnership);
+        // Ownership callbacks run after the saved traversal. Do not return a
+        // candidate if those callbacks introduced new authoritative disk
+        // sources that were absent from the original bounded discovery.
+        // This set check cannot prove atomic cross-memory/disk quiescence.
+        manifest.requireUnchangedDiscovery();
         return staged;
     }
 }
