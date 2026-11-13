@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.Set;
 
 /**
  * Stages saved item_display currency as free assets. This is only one Entity
@@ -15,11 +17,19 @@ public final class ItemDisplaySettlementImport {
 
     public static void stageChunk(SettlementAccumulator settlement, String source,
                                   String world, Map<String, Object> chunk) throws IOException {
+        stageChunk(settlement, source, world, chunk, new java.util.HashSet<>());
+    }
+
+    /** For one whole saved-data generation, share wallet UUIDs across sources. */
+    public static void stageChunk(SettlementAccumulator settlement, String source,
+                                  String world, Map<String, Object> chunk,
+                                  Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "saved wallet identities");
         Objects.requireNonNull(settlement);
         try {
             if (world == null || world.isBlank())
                 throw new IOException("A physical world identity is required");
-            Map<String, BigInteger> assets = StoredItemDisplayAssets.extract(chunk);
+            Map<String, BigInteger> assets = StoredItemDisplayAssets.extract(chunk, seenWallets);
             for (var entry : assets.entrySet()) {
                 String location = "world/" + world + "/item_display/" + entry.getKey() + "/slot/0";
                 // UUIDs are global physical identities across Entity types/worlds.
