@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.zip.GZIPInputStream;
@@ -167,6 +169,73 @@ public final class AnvilRegionReader {
                     callback.accept(new Chunk(x, z, nbt));
                 }
             }
+        }
+    }
+
+    /**
+     * Return every external .mcc payload referenced by this region's Anvil
+     * header before decoding chunks. A settlement must content-stamp these
+     * files as mandatory sub-sources and recheck them after all callbacks.
+     * The .mca header alone is NOT a complete saved-data identity.
+     */
+    public static Set<Path> externalSidecars(Path regionFile) throws IOException {
+        Objects.requireNonNull(regionFile, "region file");
+        String filename = regionFile.getFileName().toString();
+        String[] parts = filename.split("\\.", -1);
+        if (parts.length != 4 || !"r".equals(parts[0]) || !"mca".equals(parts[3]))
+            throw new IOException("Invalid external Anvil source name: " + filename);
+        final int regionX, regionZ;
+        try {
+            regionX = Integer.parseInt(parts[1]);
+            regionZ = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException invalid) {
+            throw new IOException("Invalid external Anvil source coordinates: " + filename, invalid);
+        }
+        if (!filename.equals("r." + regionX + "." + regionZ + ".mca"))
+            throw new IOException("Noncanonical external Anvil source: " + filename);
+
+        for (Path component = regionFile.toAbsolutePath().normalize();
+                component != null; component = component.getParent()) {
+            if (Files.isSymbolicLink(component))
+                throw new IOException("Symbolic external Anvil source ancestor: " + component);
+        }
+        if (!Files.isRegularFile(regionFile, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("External Anvil region source missing: " + regionFile);
+
+        try (FileChannel channel = FileChannel.open(regionFile, StandardOpenOption.READ)) {
+            long length = channel.size();
+            if (length < HEADER || length % SECTOR != 0)
+                throw new IOException("Incomplete external Anvil region: " + regionFile);
+            ByteBuffer table = read(channel, 0L, SECTOR);
+            Set<Path> referenced = new HashSet<>();
+            for (int slot = 0; slot < SLOTS; slot++) {
+                int address = table.getInt(slot * 4);
+                int offset = address >>> 8, sectors = address & 0xff;
+                if (offset == 0 && sectors == 0) continue;
+                if (offset < 2 || sectors < 1 ||
+                        ((long) offset + sectors) * SECTOR > length)
+                    throw new IOException("Invalid external Anvil chunk allocation at " + slot);
+                ByteBuffer prefix = read(channel, ((long) offset) * SECTOR, 5);
+                int compressedLength = prefix.getInt();
+                int flag = Byte.toUnsignedInt(prefix.get());
+                boolean external = (flag & 0x80) != 0;
+                if (!external) continue;
+                if (compressedLength != 1)
+                    throw new IOException("Invalid external Anvil stub length at " + slot);
+                int localX = slot % 32, localZ = slot / 32;
+                final int x, z;
+                try {
+                    x = Math.addExact(Math.multiplyExact(regionX, 32), localX);
+                    z = Math.addExact(Math.multiplyExact(regionZ, 32), localZ);
+                } catch (ArithmeticException overflow) {
+                    throw new IOException("External Anvil chunk coordinate overflow", overflow);
+                }
+                Path payload = regionFile.resolveSibling("c." + x + "." + z + ".mcc")
+                        .toAbsolutePath().normalize();
+                if (!referenced.add(payload))
+                    throw new IOException("Duplicate external Anvil sidecar: " + payload);
+            }
+            return Set.copyOf(referenced);
         }
     }
 

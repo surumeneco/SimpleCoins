@@ -114,6 +114,15 @@ public final class WorldSnapshotTraversal {
                 throw new IOException("Duplicate world data source: " + path);
             requireUniquePhysicalFile(path, physicalKeys, unknownKeys);
             before.put(path, stamp(path));
+            // External Anvil chunks keep their compressed monetary NBT in
+            // separate c.x.z.mcc files. Their bytes are authoritative inputs
+            // even when the .mca header itself has not changed.
+            for (Path sidecar : AnvilRegionReader.externalSidecars(path)) {
+                if (!paths.add(sidecar))
+                    throw new IOException("Duplicate external saved source: " + sidecar);
+                requireUniquePhysicalFile(sidecar, physicalKeys, unknownKeys);
+                before.put(sidecar, stamp(sidecar));
+            }
         }
         for (var entry : manifest.playerDataFiles().entrySet()) {
             Path raw = entry.getValue();
