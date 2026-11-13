@@ -17,11 +17,20 @@ public final class PlayerDataSettlementImport {
     public static void stage(SettlementAccumulator settlement, String source,
                              UUID player, boolean currentlyBanned,
                              Map<String, Object> playerdata) throws IOException {
+        stage(settlement, source, player, currentlyBanned, playerdata, new java.util.HashSet<>());
+    }
+
+    /** Share wallet identities across all mandatory playerdata sources in one stage. */
+    public static void stage(SettlementAccumulator settlement, String source,
+                             UUID player, boolean currentlyBanned,
+                             Map<String, Object> playerdata,
+                             java.util.Set<UUID> seenWallets) throws IOException {
         Objects.requireNonNull(settlement);
         Objects.requireNonNull(player);
+        Objects.requireNonNull(seenWallets, "wallet identity context");
         Map<String, BigInteger> slots;
         try {
-            slots = SavedPlayerAssets.extract(playerdata);
+            slots = SavedPlayerAssets.extract(playerdata, seenWallets);
         } catch (IOException failure) {
             settlement.failSource(source, "Playerdata could not be accounted: " + failure.getMessage());
             throw failure;
