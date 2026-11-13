@@ -20,6 +20,7 @@ import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.AbstractVillager;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.Inventory;
@@ -98,6 +99,15 @@ public final class PaperLoadedChunkAssets {
         return type != null
                 && InventoryHolder.class.isAssignableFrom(type)
                 && !LivingEntity.class.isAssignableFrom(type);
+    }
+
+    /**
+     * Villager internal Inventory is a separate physical storage source from
+     * equipment, unlike other LivingEntity InventoryHolder implementations.
+     */
+    static boolean isVillagerInternalInventorySource(Class<?> type) {
+        return type != null && AbstractVillager.class.isAssignableFrom(type)
+                && InventoryHolder.class.isAssignableFrom(type);
     }
 
     public static Slice scan(Chunk chunk, int maxTiles, int maxEntities,
@@ -200,6 +210,8 @@ public final class PaperLoadedChunkAssets {
                 // player source; do not include them in the chunk entity path.
                 EntityEquipment gear = living.getEquipment();
                 if (gear == null) {
+                    if (isVillagerInternalInventorySource(entity.getClass()))
+                        throw new IOException("Villager equipment source unavailable");
                     otherEntities++;
                     continue;
                 }
@@ -220,6 +232,32 @@ public final class PaperLoadedChunkAssets {
                         if (!keys.add(heldKey))
                             throw new IOException("Duplicate live equipment slot: " + heldKey);
                         found.add(new Entry(heldKey, worldId, equipmentValue));
+                    }
+                }
+                // Unlike a Player (handled by PaperLivePlayerAssets), a
+                // Villager's separate 8-slot internal inventory is a distinct
+                // monetary source, not an alias of the six gear slots.
+                if (isVillagerInternalInventorySource(entity.getClass())) {
+                    Inventory internal = ((AbstractVillager) living).getInventory();
+                    if (internal == null)
+                        throw new IOException("Villager internal inventory is unavailable");
+                    ItemStack[] contents = Objects.requireNonNull(internal.getContents(),
+                            "Villager inventory contents missing");
+                    if (contents.length != internal.getSize() ||
+                            contents.length > maxSlots - slots)
+                        throw new IOException("Villager inventory size/slot budget mismatch");
+                    slots += contents.length;
+                    holderInventories++;
+                    for (int slot = 0; slot < contents.length; slot++) {
+                        BigInteger amount = PaperLiveItemValue.stack(contents[slot],
+                                maxSerializedBytes, maxInflatedBytes, walletIds);
+                        if (amount.signum() > 0) {
+                            String physicalSlot = "world/" + worldId + "/entity/" +
+                                    entity.getUniqueId() + "/inventory/" + slot;
+                            if (!keys.add(physicalSlot))
+                                throw new IOException("Duplicate Villager inventory slot: " + physicalSlot);
+                            found.add(new Entry(physicalSlot, worldId, amount));
+                        }
                     }
                 }
                 continue;
