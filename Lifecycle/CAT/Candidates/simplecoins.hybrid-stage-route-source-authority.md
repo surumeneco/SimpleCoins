@@ -24,7 +24,7 @@ language: ja
 | saved-assets | Free・Personal・Deadへステージする保存中の物理貨幣 |
 | identity-context | 全保存・ライブ資産間で共有する財布UUID集合 |
 
-## 受入規則
+## 規則
 
 | ID | 条件 | 要求 | 検証 |
 | --- | --- | --- | --- |
