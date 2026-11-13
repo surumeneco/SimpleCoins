@@ -50,7 +50,7 @@ class SettlementDiscoveryScopeBindingTest {
                 manifest, scope, Set.of(),
                 (world, position) -> null, (world, chunk) -> Map.of(),
                 65536, 65536);
-        assertEquals(1, staged.report().worldFiles());
+        assertEquals(1, staged.report().regionFiles());
         assertEquals(java.math.BigInteger.ZERO, staged.pending().commit().statistics().worldTotal());
     }
 }
