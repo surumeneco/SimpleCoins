@@ -133,12 +133,24 @@ public final class GrantLedger {
             long last = grants.isEmpty() ? 0 : grants.lastKey();
             if (head.length != 8 || java.nio.ByteBuffer.wrap(head).getLong() != last)
                 throw new IOException("Durable issuance head differs from in-memory journal");
+            Set<String> knownRecords = new HashSet<>();
             for (Grant expected : grants.values()) {
                 Grant persisted = decode(DurableFile.read(
                         directory.resolve(expected.sequence() + ".grant"), 8192));
                 if (!expected.equals(persisted))
                     throw new IOException("Durable issuance record disagrees at sequence "
                             + expected.sequence());
+                knownRecords.add(expected.sequence() + ".grant");
+            }
+            // A valid head and matching known records do not prove that there
+            // are no additional durable reservations. Detect unexpected files
+            // before permitting another read, acknowledgement or issuance.
+            try (var listing = Files.list(directory)) {
+                for (Path entry : listing.toList()) {
+                    String name = entry.getFileName().toString();
+                    if (name.endsWith(".grant") && !knownRecords.contains(name))
+                        throw new IOException("Untracked issuance journal record: " + entry);
+                }
             }
         } catch (IOException | RuntimeException corruption) {
             failed = true;
