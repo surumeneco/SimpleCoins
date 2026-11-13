@@ -1,0 +1,15 @@
+name: SimpleCoins
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.SimpleCoinsPlugin
+api-version: '26.2'
+load: POSTWORLD
+# The admission listener must already be available when accounting starts.
+depend:
+  - SimpleCoinsGuard
+description: SimpleCoins Paper bootstrap - settlement integration is not yet available
+softdepend:
+  - Nexo
+  - BlockLocker
+  - WWC
+  - WWW
+  - WCL
