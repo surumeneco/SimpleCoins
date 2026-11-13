@@ -6,8 +6,7 @@ status: draft
 process: simplecoins.grant
 source_refs:
   - https://drive.google.com/file/d/1otIcgSDNba7wIDe1bwFHCZZno5w7TWQW/view
-refs:
-  - simplecoins.phase6.journal-root-integrity
+refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
@@ -19,6 +18,21 @@ Status: **Draft**, not Confirmed. Existing historical technical analysis; not a 
 ## 境界
 
 `DurableFile` is a lower-level checksummed record writer/reader used by monetary journal and snapshot components. Existing `phase6-journal-root-integrity.md` requires a symlink-free issuance journal root and ancestors at its caller boundary. This Draft asks whether the lower-level record primitive must also reject a symlinked ancestor independently, so that future callers cannot silently redirect durable monetary records.
+
+## Targets
+
+| Ref | Aspect |
+| --- | --- |
+| simplecoins.grant.storage | A journal record path must not traverse a symbolic ancestor |
+| simplecoins.grant.replay | A read must not accept a redirected valid checksummed record |
+
+## Rules
+
+| ID | Condition | Requirement | Verification |
+| --- | --- | --- | --- |
+| SC-DURABLE-PATH-01 | A write path contains a symlinked parent | Throw IOException without creating a record through the link | JUnit ancestor write |
+| SC-DURABLE-PATH-02 | A read path contains a symlinked parent | Throw IOException rather than accepting a redirected regular record | JUnit ancestor read |
+| SC-DURABLE-PATH-03 | A normal nested directory path is used | Preserve checksummed read/write roundtrip | JUnit nested ordinary path |
 
 ## 観測と期待
 
