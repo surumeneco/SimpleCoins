@@ -28,7 +28,7 @@ class GrantLedgerUntrackedNextRecordCandidateTest {
         Path next = root.resolve((first.sequence() + 1) + ".grant");
         Files.write(next, unexpected);
 
-        assertThrows(IOException.class, () -> ledger.reserve(player, 200, "console"));
+        assertThrows(IllegalStateException.class, () -> ledger.reserve(player, 200, "console"));
         assertArrayEquals(unexpected, Files.readAllBytes(next),
                 "An untracked durable record must not be overwritten");
         assertThrows(IllegalStateException.class, () -> ledger.pending(player),
