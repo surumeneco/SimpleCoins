@@ -13,6 +13,20 @@ class SavedLiveSourcePartitionTest {
     private static final UUID ONLINE = UUID.fromString("00000000-0000-0000-0000-000000005111");
     private static final UUID OFFLINE = UUID.fromString("00000000-0000-0000-0000-000000005222");
 
+    @Test void liveAccountingIdsAreStableUniqueAndRequiredEvenForZeroBalanceHolders() {
+        UUID online = UUID.fromString("00000000-0000-0000-0000-000000005111");
+        var first = new SavedLiveSourcePartition.Chunk("world", 0, 0);
+        var second = new SavedLiveSourcePartition.Chunk("world/0", 0, 0);
+        var plan = new SavedLiveSourcePartition(List.of(first, second), List.of(online));
+        assertEquals(Set.of(SavedLiveSourcePartition.liveChunkSourceId(first),
+                SavedLiveSourcePartition.liveChunkSourceId(second),
+                SavedLiveSourcePartition.livePlayerSourceId(online)),
+                plan.requiredLiveSourceIds());
+        assertEquals(3, plan.requiredLiveSourceIds().size());
+        assertNotEquals(SavedLiveSourcePartition.liveChunkSourceId(first),
+                SavedLiveSourcePartition.liveChunkSourceId(second));
+    }
+
     @Test void routesBothTerrainAndEntitySavedEntriesToSameLiveChunkWithoutDoubleSource() throws Exception {
         var a = new SavedLiveSourcePartition.Chunk("world", 0, 0);
         var planner = new SavedLiveSourcePartition(List.of(a), List.of());
