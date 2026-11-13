@@ -1,6 +1,8 @@
 package co.surumene.simplecoins.paper;
 
+import co.surumene.simplecoins.domain.BanSourceCoverage;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
+import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SavedLiveSourcePartition;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
 import co.surumene.simplecoins.domain.WorldScope;
@@ -82,12 +84,45 @@ public final class PaperCapturedHybridSettlement {
             int maximumCompressedBytes,
             int maximumInflatedBytes,
             HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        return stageCandidateInternal(manifest, scope, currentlyBanned, null,
+                blockOwners, entityOwners, maximumCompressedBytes,
+                maximumInflatedBytes, liveOwnership);
+    }
+
+    /** Use one complete, immutable provider-reported BAN generation for both
+     * saved and LIVE holders; this does not collect provider observations. */
+    public SettlementScanRunner.Staged stageCandidateWithBanCoverage(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldScope scope,
+            BanSourceCoverage banSources,
+            SettlementScanRunner.BlockOwnerLookup blockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes,
+            int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        Objects.requireNonNull(banSources, "BAN source coverage");
+        return stageCandidateInternal(manifest, scope, null, banSources,
+                blockOwners, entityOwners, maximumCompressedBytes,
+                maximumInflatedBytes, liveOwnership);
+    }
+
+    private SettlementScanRunner.Staged stageCandidateInternal(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldScope scope,
+            Set<UUID> currentlyBanned,
+            BanSourceCoverage banSources,
+            SettlementScanRunner.BlockOwnerLookup blockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes,
+            int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
         if (!consumed.compareAndSet(false, true))
             throw new IllegalStateException(
                     "Paper monetary capture was already consumed; acquire a new generation");
         Objects.requireNonNull(manifest, "saved manifest");
         Objects.requireNonNull(scope, "World inclusion");
-        Objects.requireNonNull(currentlyBanned, "verified current BAN set");
+        if (banSources == null)
+            Objects.requireNonNull(currentlyBanned, "verified current BAN set");
         Objects.requireNonNull(blockOwners, "saved Block ownership");
         Objects.requireNonNull(entityOwners, "saved Entity ownership");
         Objects.requireNonNull(liveOwnership, "authoritative LIVE owner classification");
@@ -97,8 +132,11 @@ public final class PaperCapturedHybridSettlement {
         for (HybridLiveSourceStage.Source source : observed.sources()) {
             if (source instanceof HybridLiveSourceStage.ChunkSource chunk)
                 loaded.add(chunk.chunk());
-            else if (source instanceof HybridLiveSourceStage.PlayerSource player)
+            else if (source instanceof HybridLiveSourceStage.PlayerSource player) {
+                // Mandatory even when a live Player holds 0C.
+                if (banSources != null) banSources.currentlyBanned(player.player());
                 online.add(player.player());
+            }
             else
                 throw new IOException("Unsupported captured Paper LIVE source");
         }
@@ -118,15 +156,32 @@ public final class PaperCapturedHybridSettlement {
 
         // This traverses and validates ALL saved files but excludes disk
         // currency shadowed by those previously observed live sources.
-        SettlementScanRunner.Staged staged = SettlementScanRunner.stage(
-                manifest, scope, currentlyBanned, blockOwners, entityOwners,
-                maximumCompressedBytes, maximumInflatedBytes, walletIds,
-                selection);
+        SettlementScanRunner.Staged staged = banSources == null
+                ? SettlementScanRunner.stage(
+                        manifest, scope, currentlyBanned, blockOwners, entityOwners,
+                        maximumCompressedBytes, maximumInflatedBytes, walletIds,
+                        selection)
+                : SettlementScanRunner.stageWithBanCoverage(
+                        manifest, scope, banSources, blockOwners, entityOwners,
+                        maximumCompressedBytes, maximumInflatedBytes, walletIds,
+                        selection);
 
         // Same physical source keys and balances; explicit ownership MUST be
         // provided. A failure never returns the staged result to the caller.
+        HybridLiveSourceStage.Classifier verifiedLive = (source, value) -> {
+            SettlementAccumulator.Asset raw = liveOwnership.classify(source, value);
+            if (raw == null || banSources == null) return raw;
+            UUID owner = raw.owner();
+            boolean personalOwner = owner != null && !raw.everyoneProtected();
+            return new SettlementAccumulator.Asset(
+                    raw.source(), raw.physicalKey(), raw.world(), owner,
+                    raw.everyoneProtected(),
+                    personalOwner && banSources.currentlyBanned(owner),
+                    personalOwner && manifest.playerDataFiles().containsKey(owner),
+                    raw.value(), raw.location());
+        };
         HybridLiveSourceStage.stage(staged, selection,
-                observed.sources(), liveOwnership);
+                observed.sources(), verifiedLive);
         // LIVE owner callbacks execute after the saved files were parsed.
         // Verify both the directory set and the SAME pre-parse file fingerprints
         // again: same-size / same-mtime byte rewrites must invalidate this

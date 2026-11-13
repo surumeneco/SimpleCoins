@@ -219,6 +219,90 @@ class PaperCapturedHybridSettlementTest {
                 4096, 4096, OWNER));
     }
 
+    private static final Set<String> BAN_SOURCES =
+            Set.of("paper-profile", "paper-ip", "external:moderation");
+
+    private static java.util.List<co.surumene.simplecoins.domain.BanEvidence.Source>
+            banRows(boolean ipBanned) {
+        return java.util.List.of(
+                new co.surumene.simplecoins.domain.BanEvidence.Source(
+                        "paper-profile", co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR),
+                new co.surumene.simplecoins.domain.BanEvidence.Source(
+                        "paper-ip", ipBanned
+                        ? co.surumene.simplecoins.domain.BanEvidence.Status.BANNED
+                        : co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR),
+                new co.surumene.simplecoins.domain.BanEvidence.Source(
+                        "external:moderation", co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR));
+    }
+
+    @Test void paperLiveIpBanAndSavedClearShareOneVerifiedSourceGeneration()
+            throws Exception {
+        var onlineData = playerdata(ONLINE, 10);
+        var offlineData = playerdata(OFFLINE, 3);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(ONLINE, onlineData, OFFLINE, offlineData));
+        var coverage = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                BAN_SOURCES, Map.of(ONLINE, banRows(true), OFFLINE, banRows(false)));
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                captured(true), new HashSet<>());
+        var staged = capture.stageCandidateWithBanCoverage(
+                manifest, scope(), coverage,
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER);
+        var result = staged.pending().commit();
+        assertEquals(BigInteger.valueOf(500), result.statistics().worldTotal());
+        assertEquals(BigInteger.valueOf(150), result.dead());
+        assertEquals(BigInteger.valueOf(300), result.personalBalances().get(OFFLINE));
+        assertFalse(result.personalBalances().containsKey(ONLINE));
+        assertEquals(BigInteger.valueOf(200), result.free());
+    }
+
+    private PaperLiveUniverseAssets.Observed capturedWithZeroMoneyOnlinePlayer() {
+        var original = captured(true);
+        var zeroOnline = new PaperLivePlayerAssets.OnlineSet(1, 63,
+                List.of(new PaperLivePlayerAssets.Snapshot(ONLINE, 63, List.of())));
+        var old = original.report();
+        var revised = new PaperLiveUniverseAssets.Report(old.worlds(), zeroOnline,
+                old.scannedChunks(), old.scannedTiles(),
+                old.scannedEntities(), old.scannedSlots());
+        return new PaperLiveUniverseAssets.Observed(revised, List.of(
+                original.sources().getFirst(),
+                new HybridLiveSourceStage.PlayerSource(ONLINE, List.of())));
+    }
+
+    @Test void zeroMoneyOnlinePlayerStillNeedsExplicitBanEvidence() throws Exception {
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(), Map.of(
+                ONLINE, playerdata(ONLINE, 10), OFFLINE, playerdata(OFFLINE, 3)));
+        var incomplete = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                BAN_SOURCES, Map.of(OFFLINE, banRows(false)));
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                capturedWithZeroMoneyOnlinePlayer(), new HashSet<>());
+        assertThrows(IOException.class, () -> capture.stageCandidateWithBanCoverage(
+                manifest, scope(), incomplete,
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
+    @Test void onlineSourceWithoutBanEvidenceInvalidatesWholeOneShotCapture()
+            throws Exception {
+        var onlineData = playerdata(ONLINE, 10);
+        var offlineData = playerdata(OFFLINE, 3);
+        var manifest = new WorldStorageDiscovery.Manifest(List.of(),
+                Map.of(ONLINE, onlineData, OFFLINE, offlineData));
+        var coverage = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                BAN_SOURCES, Map.of(OFFLINE, banRows(false)));
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                captured(true), new HashSet<>());
+        assertThrows(IOException.class, () -> capture.stageCandidateWithBanCoverage(
+                manifest, scope(), coverage,
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+        assertThrows(IllegalStateException.class, () -> capture.stageCandidateWithBanCoverage(
+                manifest, scope(), coverage,
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
     @Test void savedReadFailureDoesNotAllowRetryingStaleLiveCapture() throws Exception {
         var absent = directory.resolve("playerdata/missing.dat");
         var manifest = new WorldStorageDiscovery.Manifest(List.of(),
