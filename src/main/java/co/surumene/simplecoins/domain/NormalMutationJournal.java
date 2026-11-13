@@ -14,8 +14,10 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -232,14 +234,27 @@ public final class NormalMutationJournal implements AutoCloseable {
         }
     }
 
-    /** Expensive full-record validation. Required again during startup audit. */
+    /**
+     * Expensive full-record and source-set validation. Required during audits:
+     * a checksum-valid set of known records does not exclude untracked records
+     * produced by a failed or competing writer.
+     */
     public synchronized void verifyAll() {
         checkHealthy();
         try {
+            Set<String> expectedFiles = new HashSet<>();
             for (Mutation entry : entries.values()) {
                 Mutation stored = decode(DurableFile.read(recordPath(entry.sequence()), MAX_RECORD_BYTES));
                 if (!entry.equals(stored))
                     throw new IOException("Journal record changed: " + entry.sequence());
+                expectedFiles.add(entry.sequence() + ".mutation");
+            }
+            try (var files = Files.list(directory)) {
+                for (Path file : files.toList()) {
+                    String name = file.getFileName().toString();
+                    if (name.endsWith(".mutation") && !expectedFiles.contains(name))
+                        throw new IOException("Untracked monetary mutation record: " + file);
+                }
             }
         } catch (IOException | RuntimeException failure) {
             failed = true;
