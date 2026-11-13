@@ -94,6 +94,11 @@ public final class SettlementScanRunner {
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(manifest);
         Objects.requireNonNull(scope);
+        // A discovered Manifest's file set was selected using that exact
+        // world scope. Reinterpreting it under a different filter could
+        // silently omit authoritative regions that discovery excluded.
+        if (manifest.origin() != null && !manifest.origin().scope().equals(scope))
+            throw new IOException("Settlement WorldScope differs from saved discovery");
         Objects.requireNonNull(currentlyBanned);
         Objects.requireNonNull(blockOwners);
         Objects.requireNonNull(entityOwners);
