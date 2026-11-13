@@ -15,11 +15,18 @@ language: ja
 
 # オンラインPlayerのInventoryHolder二重読取を防ぐ技術Candidate
 
+## 対象
+| Ref | Aspect |
+| --- | --- |
+| live-player | PaperLivePlayerAssetsによるオンラインPlayer正本 |
+| chunk-holder | PaperLoadedChunkAssetsの非生体InventoryHolder経路 |
+| source-id | 財布UUIDとEntity UUIDの二重計上防止 |
+
 ## 観測
 現行developのPaperLoadedChunkAssetsは、PlayerをLivingEntityの装備走査から除外するが、次のInventoryHolder分岐でplayer.getInventory()を読み直し得る。PaperLivePlayerAssetsのPlayer専用正本と二重計上になり、LIVE同一世代の整合を失う。
 
 ## 規則
-| ID | 条件 | 期待する振る舞い | 検証 |
+| ID | 条件 | Requirement | 検証 |
 | --- | --- | --- | --- |
 | live-holder-01 | EntityがPlayerまたはその他のLivingEntity | Chunk InventoryHolder分岐では読まず、Player専用経路またはEntity装備経路のみ使う | 型判定JUnit |
 | live-holder-02 | Entityが非LivingEntityのInventoryHolder（StorageMinecart等） | 既存の限定的な物理Inventory走査を維持する | 型判定JUnit |
