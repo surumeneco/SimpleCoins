@@ -16,5 +16,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.2.1"
-      - name: Test isolated domain foundation
-        run: gradle --no-daemon clean test jar
+      - name: Test domain and guard modules
+        run: gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
+      - name: Test startup JAR preflight (unit and actual Gradle artifacts)
+        run: |
+          python3 -m unittest discover -s tests -p 'test_simplecoins_preflight.py'
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
