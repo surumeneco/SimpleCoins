@@ -1,0 +1,27 @@
+name: TASK004 BAN evidence permutation JUnit
+on:
+  push:
+    branches:
+      - test/task004-ban-evidence-permutation-queue-a-20261107
+  workflow_dispatch:
+jobs:
+  junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact JUnit class
+        run: gradle --no-daemon test --tests co.surumene.simplecoins.domain.BanEvidencePermutationCharacterizationTest
+      - name: Publish JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task004-ban-permutation-junit
+          path: build/test-results/test/*.xml
+          if-no-files-found: warn
