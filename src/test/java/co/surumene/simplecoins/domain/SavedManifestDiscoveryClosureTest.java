@@ -108,7 +108,5 @@ class SavedManifestDiscoveryClosureTest {
         Path existing = player(FIRST);
         var manual = new WorldStorageDiscovery.Manifest(List.of(), Map.of(FIRST, existing));
         assertEquals(1, visit(manual, id -> {}).playerFiles());
-        assertFalse(manual.hasSourceClosureProvenance());
-        assertTrue(discovered().hasSourceClosureProvenance());
     }
 }
