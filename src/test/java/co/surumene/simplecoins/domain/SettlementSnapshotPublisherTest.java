@@ -19,7 +19,7 @@ class SettlementSnapshotPublisherTest {
 
     @Test void completeSnapshotIsInvisibleUntilAdmissionOpens() {
         AdmissionBarrier barrier = new AdmissionBarrier();
-        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier);
+        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier, () -> true);
         assertTrue(publisher.current().isEmpty());
         long generation = barrier.begin();
         var source = pending();
@@ -78,7 +78,7 @@ class SettlementSnapshotPublisherTest {
 
     @Test void currentFailureAndStopHidePreviouslyPublishedResult() {
         AdmissionBarrier barrier = new AdmissionBarrier();
-        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier);
+        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier, () -> true);
         long generation = barrier.begin();
         var source = pending();
         source.completeSource("authoritative-file");
@@ -94,7 +94,7 @@ class SettlementSnapshotPublisherTest {
 
     @Test void deadAssetTotalAndLocationRemainConsistent() {
         AdmissionBarrier barrier = new AdmissionBarrier();
-        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier);
+        SettlementSnapshotPublisher publisher = new SettlementSnapshotPublisher(barrier, () -> true);
         long generation = barrier.begin();
         UUID owner = UUID.fromString("00000000-0000-0000-0000-000000000102");
         var source = pending();

@@ -35,7 +35,7 @@ class SettlementAdmissionListenerTest {
     }
 
     private static SettlementSnapshotPublisher publishEmptyVerifiedSnapshot(AdmissionBarrier barrier) {
-        SettlementSnapshotPublisher published = new SettlementSnapshotPublisher(barrier);
+        SettlementSnapshotPublisher published = new SettlementSnapshotPublisher(barrier, () -> true);
         var pending = new SettlementAccumulator(
                 new WorldScope(true, Set.of(), Set.of()), Set.of("verified-file"));
         pending.completeSource("verified-file");
