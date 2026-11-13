@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           cd smoke
           test -f plugins/SimpleCoins/normal-mutations/head
-          printf '%s\\n' 'intentionally corrupt journal checkpoint' > plugins/SimpleCoins/normal-mutations/head
+          echo 'intentionally corrupt journal checkpoint' > plugins/SimpleCoins/normal-mutations/head
           # No console-issued stop: corrupt accounting must terminate Paper
           # on its own instead of leaving an unprotected server online.
           set +e
