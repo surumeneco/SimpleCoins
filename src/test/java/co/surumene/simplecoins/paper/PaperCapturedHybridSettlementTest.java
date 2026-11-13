@@ -208,6 +208,9 @@ class PaperCapturedHybridSettlementTest {
                     Files.write(saved, changed);
                     Files.setLastModifiedTime(saved, priorMtime);
                     assertEquals(original.length, Files.size(saved));
+                    assertEquals(priorMtime, Files.getLastModifiedTime(saved),
+                            "The changed bytes must retain original filesystem metadata");
+                    assertFalse(java.util.Arrays.equals(original, Files.readAllBytes(saved)));
                     return OWNER.classify(source, value);
                 }));
         assertThrows(IllegalStateException.class, () -> capture.stageCandidate(
