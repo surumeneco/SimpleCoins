@@ -8,6 +8,19 @@
 - [02B_データ収集・決算処理](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view) は、未読取・失敗・時点不整合が残る決算を未完了とし、途中の統計公開を禁止する。
 - [BAN証拠境界](phase5-ban-source-boundary.md)、[BlockLocker alias境界](phase5-blocklocker-alias-boundary.md)、[WCL提供元契約](phase5-wcl-provider-contract.md)が個別APIの詳細を保持する。本書はそれらを複製せず、集約側の判定順序だけを扱う。
 
+## 規範出典の対応（TASK-20261101-004 / 2026-11-09）
+
+この対応表は **既存の製品仕様の出典確認**であり、CAT Process/PI/TCEの正式Confirmed、Gate成功、外部アダプター実装の証明ではない。対象コードの基準は `develop@b31b8cc0a5c1e88d2c0960349b964fd934d1bc39`。出典のGoogle DriveファイルIDを固定しておくが、更新時には本文を再照合する。
+
+| 受入ベクトル | 製品仕様の具体的出典 | 既存コード／未達の境界 |
+| --- | --- | --- |
+| OE-01/02/03 | [02A「所有者の定義（確定事項）」](https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view)：非保護と有効EveryoneはF、保護は実際の適用が条件。[02B「BlockLocker保存形式の調査結果」](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view)：PRIVATE第1プロフィール、いずれかの有効Everyone優先、UUIDを特定できない旧看板はF | `BlockLockerChestLinkage` は相互方向の物理形状のみ。実保護適用・旧看板の検証済みUUID不在を確立しない |
+| OE-04/14 | [02B「基本思想・正本」「起動時／停止時決算」](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view)：未読取・失敗は未完了、全件完了後に一括切替 | 不正なPDC、時点不一致、未ロードをF/0へ縮退させない統合証拠が必要 |
+| OE-05/06/07/08 | [02A「所有者の定義（確定事項）」](https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view)：指揮者→飼い主→F。[04「WWC 2.1.0 / WWW 1.1.0の読み取りAPI追加予定」](https://drive.google.com/file/d/1Py55wN7KsfMqIWfD9P2IwSDwXSzUBqeR/view)：未ロード保存データと読取失敗の公開契約が必要 | `SavedEntityOwner` の局所分類だけでは、WWC/WWW/WCLの実保存データ・公開APIの存在と完全性を証明しない |
+| OE-09/10/11/12/13 | [02A「所有者の定義（確定事項）」「プレイヤー登録条件」](https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view)：現在BANまたはplayerdata欠損はD、復帰時再評価、標準/IP/導入外部BANを対象 | `BanEvidence` は宣言済みソースの証拠を集約するだけ。実導入の全BAN提供元、IP→UUID対応付け、playerdataの現物確認が未達 |
+
+**承認と未決の切り分け**：02Aの見出し「確定事項」および02Bの具体的な規則は製品設計上の既存決定として引用できる。一方、両ファイルのfront matterは `status: draft` であり、正規CAT Process/PI/TCEの承認履歴やConfirmed状態を自動的には立証しない。新しい「読取不能の扱い」「外部BANの未検知時の政策」「旧看板のUUID不在を確証する手段」をこの表から決定しない。次のCAT入力では各規則の原文・版・決定者根拠を個別に検証する。
+
 ## 判定順序
 
 1. **読取の完全性**：対象コンテナ・個体・保護・提供元・必要なBAN情報・保存/ロード時点の証拠が揃ったかを検査する。未読取・不一致・提供元不明は`INCOMPLETE`として決算を停止する。これは「所有者がいない」と同義ではない。
