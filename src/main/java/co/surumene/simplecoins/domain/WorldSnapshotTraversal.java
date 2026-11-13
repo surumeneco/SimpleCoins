@@ -159,6 +159,10 @@ public final class WorldSnapshotTraversal {
             visitor.player(entry.getKey(), data);
             players = Math.addExact(players, 1);
         }
+        // Detect new MCA / offline playerdata sources that were not included
+        // in the initial manifest. Existing-file hashes cannot detect their
+        // presence; use the original bounded discovery roots and scope.
+        manifest.requireUnchangedDiscovery();
         // Check EVERY authoritative input again, including already visited
         // regions. The caller must discard all staged values on any mismatch.
         // This is a drift detector, not a substitute for freezing Paper worlds.
