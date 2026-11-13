@@ -143,4 +143,55 @@ class SettlementStartupCoordinatorTest {
         assertEquals(AdmissionBarrier.State.STOPPED, barrier.state());
         assertFalse(barrier.mayAdmit());
     }
+
+    @Test void failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed() {
+        AdmissionBarrier barrier = new AdmissionBarrier();
+        Queue disk = new Queue(), main = new Queue();
+        IOException scannerFailure = new IOException("unreadable settlement snapshot");
+        IllegalStateException dispatchFailure = new IllegalStateException("shutdown dispatch rejected");
+        AtomicInteger signalCalls = new AtomicInteger();
+        var coordinator = new SettlementStartupCoordinator<>(barrier, disk, main,
+                () -> { throw scannerFailure; },
+                value -> fail("failed scan cannot publish"), () -> true,
+                error -> {
+                    signalCalls.incrementAndGet();
+                    throw dispatchFailure;
+                });
+
+        coordinator.start();
+        disk.next();
+
+        assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        assertFalse(barrier.mayAdmit());
+        assertSame(scannerFailure, coordinator.failure().orElseThrow());
+        assertArrayEquals(new Throwable[]{dispatchFailure}, scannerFailure.getSuppressed());
+        assertEquals(1, signalCalls.get());
+        assertTrue(main.tasks.isEmpty());
+    }
+
+    @Test void rejectedBackgroundExecutorWithThrowingFailureSignalNeverSchedulesWork() {
+        AdmissionBarrier barrier = new AdmissionBarrier();
+        RejectedExecutionException rejection = new RejectedExecutionException("worker pool stopped");
+        IllegalStateException signalFailure = new IllegalStateException("shutdown signal failed");
+        AtomicInteger signalCalls = new AtomicInteger();
+        Executor rejected = task -> { throw rejection; };
+        var coordinator = new SettlementStartupCoordinator<String>(
+                barrier, rejected, task -> fail("main thread must not be scheduled"),
+                () -> fail("source stage must never run"),
+                value -> fail("publisher must not run"), () -> true,
+                error -> {
+                    signalCalls.incrementAndGet();
+                    throw signalFailure;
+                });
+
+        coordinator.start();
+
+        assertEquals(AdmissionBarrier.State.FAILED, barrier.state());
+        assertFalse(barrier.mayAdmit());
+        assertSame(rejection, coordinator.failure().orElseThrow());
+        assertArrayEquals(new Throwable[]{signalFailure}, rejection.getSuppressed());
+        assertEquals(1, signalCalls.get());
+        assertThrows(IllegalStateException.class, coordinator::start);
+        assertEquals(1, signalCalls.get());
+    }
 }
