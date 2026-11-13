@@ -35,6 +35,7 @@ language: ja
 | ban-coverage-05 | 個人保護対象の主所有者UUIDに有効なplayerdataがある/ない | BANを確認済みの世代値とし、存在する場合は個人またはD、存在しない場合はDとする。EveryoneはF優先 | playerdata有無・BAN・Everyone |
 | ban-coverage-06 | 出所が未検証の任意Set<UUID>のみを外部から渡す | このCandidateによる情報源完結性の証明と称さない | 従来stage APIとの証拠境界 |
 | ban-coverage-07 | PaperのLIVE Chunk/オンラインPlayerが保存NBTと同じ候補世代に含まれる | 保存側とLIVE側で同じBAN証拠を再利用し、オンラインPlayerが無額でもBAN情報の欠落を検出。LIVE所有者分類の未検証フラグは採用しない | IP BANのみのオンラインPlayer、保存側clear、LIVE missing evidence、従来API互換 |
+| ban-coverage-08 | Paperサーバーの標準プロフィールBAN情報をUUIDから取得する | メインスレッドで`OfflinePlayer.isBanned()`を読んだ実観測だけを`paper-profile`のBANNED/CLEARとし、API例外・UUID不一致・証拠欠落はIOExceptionで拒否。IP BAN・外部BANの代替とはしない | 真/偽・失敗・UUID不一致・空UUIDのリーダ単体試験、Paper APIコンパイル |
 
 ## Boundary
 
