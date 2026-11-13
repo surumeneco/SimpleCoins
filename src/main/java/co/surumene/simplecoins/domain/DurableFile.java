@@ -34,6 +34,9 @@ public final class DurableFile {
                                       boolean requireAbsent) throws IOException {
         Path parent = target.toAbsolutePath().getParent();
         Files.createDirectories(parent);
+        // Never silently replace an anomalous journal link (including dangling links).
+        if (!requireAbsent && Files.isSymbolicLink(target))
+            throw new IOException("Symbolic journal target cannot be replaced: " + target);
         Path temporary = Files.createTempFile(parent, ".pending-", ".tmp");
         try {
             try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
@@ -48,6 +51,10 @@ public final class DurableFile {
                 // replacing a reservation left by a crashed/competing writer.
                 Files.createLink(target, temporary);
             } else {
+                // Recheck immediately before the atomic replacement, while
+                // acknowledging this is not an inter-process path lock.
+                if (Files.isSymbolicLink(target))
+                    throw new IOException("Symbolic journal target cannot be replaced: " + target);
                 Files.move(temporary, target,
                         StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             }
