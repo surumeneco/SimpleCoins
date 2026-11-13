@@ -151,6 +151,41 @@ class PaperCapturedHybridSettlementTest {
                 4096, 4096, OWNER));
     }
 
+    private static final UUID LATE_PLAYER =
+            UUID.fromString("00000000-0000-0000-0000-000000008003");
+
+    @Test void unchangedDiscoveredSourceSetCompletesAfterLiveClassification() throws Exception {
+        playerdata(OFFLINE, 3);
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope(), 100);
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                captured(false), new HashSet<>());
+        var result = capture.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER).pending().commit();
+        assertEquals(BigInteger.valueOf(500), result.statistics().worldTotal());
+    }
+
+    @Test void latePlayerdataCreatedByLiveOwnerLookupInvalidatesCandidate() throws Exception {
+        playerdata(OFFLINE, 3);
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope(), 100);
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                captured(false), new HashSet<>());
+        assertThrows(IOException.class, () -> capture.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, (source, value) -> {
+                    playerdata(LATE_PLAYER, 1);
+                    return OWNER.classify(source, value);
+                }));
+        assertThrows(IllegalStateException.class, () -> capture.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
     @Test void savedReadFailureDoesNotAllowRetryingStaleLiveCapture() throws Exception {
         var absent = directory.resolve("playerdata/missing.dat");
         var manifest = new WorldStorageDiscovery.Manifest(List.of(),
