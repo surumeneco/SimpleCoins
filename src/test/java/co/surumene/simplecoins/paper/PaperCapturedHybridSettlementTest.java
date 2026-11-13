@@ -186,6 +186,36 @@ class PaperCapturedHybridSettlementTest {
                 4096, 4096, OWNER));
     }
 
+    @Test void postSavedLiveClassificationCannotSilentlyChangeExistingSourceBytes()
+            throws Exception {
+        Path saved = playerdata(OFFLINE, 3);
+        byte[] original = Files.readAllBytes(saved);
+        var priorMtime = Files.getLastModifiedTime(saved);
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope(), 100);
+        var capture = PaperCapturedHybridSettlement.fromObserved(
+                captured(false), new HashSet<>());
+
+        // GZIP bytes 4-7 are the header mtime, not monetary payload.
+        // Change one header byte and restore the file's NIO mtime:
+        // identical path, size, logical money, and metadata; different SHA-256.
+        assertThrows(IOException.class, () -> capture.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, (source, value) -> {
+                    byte[] changed = Files.readAllBytes(saved);
+                    changed[4] ^= 0x41;
+                    Files.write(saved, changed);
+                    Files.setLastModifiedTime(saved, priorMtime);
+                    assertEquals(original.length, Files.size(saved));
+                    return OWNER.classify(source, value);
+                }));
+        assertThrows(IllegalStateException.class, () -> capture.stageCandidate(
+                manifest, scope(), Set.of(),
+                (world, position) -> null, (world, chunk) -> Map.of(),
+                4096, 4096, OWNER));
+    }
+
     @Test void savedReadFailureDoesNotAllowRetryingStaleLiveCapture() throws Exception {
         var absent = directory.resolve("playerdata/missing.dat");
         var manifest = new WorldStorageDiscovery.Manifest(List.of(),
