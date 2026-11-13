@@ -19,10 +19,12 @@ public final class BedrockPack {
         }
         requireSafeOutput(pack);
         requireSafeOutput(mapping);
+        requireDistinctOutputs(pack, mapping);
         Files.createDirectories(pack.toAbsolutePath().getParent());
         Files.createDirectories(mapping.toAbsolutePath().getParent());
         requireSafeOutput(pack);
         requireSafeOutput(mapping);
+        requireDistinctOutputs(pack, mapping);
         Path temporary = Files.createTempFile(pack.toAbsolutePath().getParent(), "bedrock-", ".zip");
         Path temporaryMapping = Files.createTempFile(mapping.toAbsolutePath().getParent(), "mapping-", ".json");
         try {
@@ -69,11 +71,27 @@ public final class BedrockPack {
             // Validate both destinations before either atomic replacement.
             requireSafeOutput(pack);
             requireSafeOutput(mapping);
+            requireDistinctOutputs(pack, mapping);
             PackArchivePublication.publish(temporary, pack);
             PackArchivePublication.publish(temporaryMapping, mapping);
         } finally {
             Files.deleteIfExists(temporary);
             Files.deleteIfExists(temporaryMapping);
+        }
+    }
+
+    /**
+     * Two independent artifacts must never target the same physical output.
+     * Recheck before publication so an existing ZIP cannot be replaced by
+     * its JSON mapping through a hard-link alias.
+     */
+    private static void requireDistinctOutputs(Path pack, Path mapping) throws IOException {
+        Path left = pack.toAbsolutePath().normalize();
+        Path right = mapping.toAbsolutePath().normalize();
+        if (left.equals(right) || (Files.exists(left, LinkOption.NOFOLLOW_LINKS)
+                && Files.exists(right, LinkOption.NOFOLLOW_LINKS)
+                && Files.isSameFile(left, right))) {
+            throw new IOException("Bedrock pack archive and Geyser mapping share an output");
         }
     }
 
