@@ -51,12 +51,21 @@ public final class BlockEntitySettlementImport {
     public static void stageChunk(SettlementAccumulator settlement, String source,
                                   String world, Map<String,Object> chunk,
                                   OwnershipResolver resolver) throws IOException {
+        stageChunk(settlement, source, world, chunk, resolver, new java.util.HashSet<>());
+    }
+
+    /** For one whole saved-data generation, share wallet UUIDs across sources. */
+    public static void stageChunk(SettlementAccumulator settlement, String source,
+                                  String world, Map<String,Object> chunk,
+                                  OwnershipResolver resolver,
+                                  Set<UUID> seenWallets) throws IOException {
+        Objects.requireNonNull(seenWallets, "saved wallet identities");
         Objects.requireNonNull(settlement);
         Objects.requireNonNull(resolver);
         try {
             if (world == null || world.isBlank())
                 throw new IOException("A physical world identity is required");
-            Map<String, BigInteger> assets = StoredBlockEntityAssets.extract(chunk);
+            Map<String, BigInteger> assets = StoredBlockEntityAssets.extract(chunk, seenWallets);
             // One physical container has one owner in a settlement snapshot,
             // even when it contains currency in multiple inventory slots.
             Map<String, Ownership> ownershipByBlock = new java.util.HashMap<>();
