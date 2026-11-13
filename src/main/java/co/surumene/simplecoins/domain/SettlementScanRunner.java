@@ -13,6 +13,10 @@ import java.util.UUID;
  * ownership, BAN state and all other sources must be reconciled separately.
  */
 public final class SettlementScanRunner {
+    // Represents completed, bounded discovery with no disk files to account.
+    // It is never synthesized for a manual Manifest without trusted roots.
+    private static final String EMPTY_DISCOVERY_SOURCE = "saved:verified-empty-discovery";
+
     private SettlementScanRunner() {}
 
     @FunctionalInterface
@@ -112,6 +116,10 @@ public final class SettlementScanRunner {
         Objects.requireNonNull(entityOwners);
         Set<UUID> banned = Set.copyOf(currentlyBanned);
         Set<String> savedSources = manifest.requiredSourceIds();
+        boolean verifiedEmptyDiscovery =
+                savedSources.isEmpty() && manifest.origin() != null;
+        if (verifiedEmptyDiscovery)
+            savedSources = Set.of(EMPTY_DISCOVERY_SOURCE);
         Set<String> required = savedSources;
         if (partition != null) {
             // A hybrid plan MUST NOT make the on-disk copy disappear and
@@ -168,6 +176,10 @@ public final class SettlementScanRunner {
                     }
                 }, partition);
 
+        // A verified empty discovery is a real zero-input generation. Close
+        // its synthetic source only after the full bounded manifest recheck.
+        if (verifiedEmptyDiscovery)
+            pending.completeSource(EMPTY_DISCOVERY_SOURCE);
         // A world source may contain multiple chunks. Completion is valid only
         // after traversal of every file and playerdata has returned successfully.
         for (WorldStorageDiscovery.SourceFile source : manifest.worldFiles())
