@@ -23,6 +23,20 @@ class PaperLoadedChunkAssetsContractTest {
         assertThrows(UnsupportedOperationException.class, () -> slice.entries().clear());
     }
 
+    @Test void playerInventoryHolderIsNeverAlsoAChunkEntityInventorySource() {
+        // Player implements InventoryHolder and LivingEntity. An unconditional
+        // InventoryHolder branch would account live Player contents twice.
+        assertFalse(PaperLoadedChunkAssets.isIndependentInventoryHolder(
+                org.bukkit.entity.Player.class));
+        assertFalse(PaperLoadedChunkAssets.isIndependentInventoryHolder(
+                org.bukkit.entity.Zombie.class));
+        assertTrue(PaperLoadedChunkAssets.isIndependentInventoryHolder(
+                org.bukkit.entity.minecart.StorageMinecart.class));
+        assertFalse(PaperLoadedChunkAssets.isIndependentInventoryHolder(
+                org.bukkit.entity.Item.class));
+        assertFalse(PaperLoadedChunkAssets.isIndependentInventoryHolder(null));
+    }
+
     @Test void nullOrNonpositiveCurrencyCannotEnterAResultEntry() {
         assertThrows(IllegalArgumentException.class, () ->
                 new PaperLoadedChunkAssets.Entry("slot", "world", BigInteger.ZERO));
