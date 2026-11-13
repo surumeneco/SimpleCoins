@@ -38,6 +38,7 @@ language: ja
 | closure-05 | A new source is unreadable/symbolic or discovery exceeds the original budget | Fail closed, do not regard the file as zero assets | discovery safety |
 | closure-06 | A caller built a Manifest manually with no trusted discovery roots | Do not invent proof of directory closure; retain the existing read-only candidate limit | manually constructed fixture remains explicitly unproven |
 | closure-07 | Discovery set is unchanged | Does not prove intermediate create/remove ABA, Paper memory synchronization, external owner/BAN, journal integrity or admission readiness | no publication claim |
+| closure-08 | Saved Manifest was discovered with one WorldScope, but later staged with a different scope | Refuse staging instead of using a saved file set selected by incompatible world inclusion rules | mismatched scope Red, identical scope positive |
 
 ## Boundary
 
