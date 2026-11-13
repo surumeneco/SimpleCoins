@@ -44,7 +44,8 @@ class BanCoveredSettlementStageTest {
         try (DataOutputStream out = new DataOutputStream(bytes)) {
             out.writeByte(10); out.writeUTF("");
             out.writeByte(9); out.writeUTF("Inventory"); out.writeByte(10);
-            out.writeInt(1);
+            out.writeInt(count > 0 ? 1 : 0);
+            if (count > 0) {
             out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
             out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
             out.writeByte(3); out.writeUTF("count"); out.writeInt(count);
@@ -53,6 +54,7 @@ class BanCoveredSettlementStageTest {
             out.writeByte(10); out.writeUTF("PublicBukkitValues");
             out.writeByte(3); out.writeUTF("simplecoins:denomination"); out.writeInt(100);
             out.writeByte(0); out.writeByte(0); out.writeByte(0); out.writeByte(0);
+            }
             out.writeByte(9); out.writeUTF("EnderItems"); out.writeByte(10); out.writeInt(0);
             out.writeByte(0);
         }
