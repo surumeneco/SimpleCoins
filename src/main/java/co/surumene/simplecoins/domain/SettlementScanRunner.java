@@ -54,6 +54,64 @@ public final class SettlementScanRunner {
         return path.toAbsolutePath().normalize().toString();
     }
 
+    /**
+     * Source-aware saved NBT staging. Resolve BAN and present playerdata from
+     * the SAME captured evidence generation, never from booleans supplied by
+     * the BlockLocker/Entity owner callbacks. Neither callback is itself
+     * evidence of correct owner identification or external plugin coverage.
+     *
+     * An unobserved owner UUID aborts the entire candidate (not treated as
+     * a non-banned player). This does not authorize publication or login.
+     */
+    public static Staged stageWithBanCoverage(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldScope scope,
+            BanSourceCoverage banSources,
+            BlockOwnerLookup blockOwners,
+            EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes,
+            int maximumInflatedBytes) throws IOException {
+        Objects.requireNonNull(manifest, "saved manifest");
+        Objects.requireNonNull(banSources, "complete BAN source observations");
+        Objects.requireNonNull(blockOwners, "external block owner resolver");
+        Objects.requireNonNull(entityOwners, "external entity owner resolver");
+        // All discovered saved players must have complete BAN observations
+        // before any world data is read or any asset staged.
+        Set<UUID> banned = banSources.bannedAmong(manifest.playerDataFiles().keySet());
+        Set<UUID> existingPlayers = manifest.playerDataFiles().keySet();
+        BlockOwnerLookup validatedBlocks = (world, position) -> {
+            var owner = blockOwners.resolve(world, position);
+            if (owner == null) return null;
+            if (owner.owner() == null || owner.everyoneProtected())
+                return new BlockEntitySettlementImport.Ownership(
+                        owner.owner(), owner.everyoneProtected(), false, false);
+            return new BlockEntitySettlementImport.Ownership(
+                    owner.owner(), false, banSources.currentlyBanned(owner.owner()),
+                    existingPlayers.contains(owner.owner()));
+        };
+        EntityOwnerLookup validatedEntities = (world, chunk) -> {
+            var owners = entityOwners.resolve(world, chunk);
+            if (owners == null)
+                throw new IOException("Missing Entity ownership evidence");
+            Map<String, ResolvedEntitySettlementImport.Ownership> validated =
+                    new java.util.HashMap<>();
+            for (var entry : owners.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null)
+                    throw new IOException("Invalid Entity ownership decision");
+                UUID owner = entry.getValue().owner();
+                var updated = owner == null
+                        ? new ResolvedEntitySettlementImport.Ownership(null, false, false)
+                        : new ResolvedEntitySettlementImport.Ownership(
+                                owner, banSources.currentlyBanned(owner),
+                                existingPlayers.contains(owner));
+                validated.put(entry.getKey(), updated);
+            }
+            return Map.copyOf(validated);
+        };
+        return stage(manifest, scope, banned, validatedBlocks, validatedEntities,
+                maximumCompressedBytes, maximumInflatedBytes);
+    }
+
     public static Staged stage(WorldStorageDiscovery.Manifest manifest,
                                WorldScope scope,
                                Set<UUID> currentlyBanned,
