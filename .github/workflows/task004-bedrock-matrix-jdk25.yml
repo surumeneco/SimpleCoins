@@ -1,0 +1,36 @@
+name: Task004 Bedrock matrix JDK25
+
+on:
+  push:
+    branches:
+      - feature/queue-b-task004-bedrock-matrix-20261109
+  pull_request:
+    branches: [develop]
+    paths:
+      - src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java
+      - .github/workflows/task004-bedrock-matrix-jdk25.yml
+
+permissions:
+  contents: read
+
+jobs:
+  bedrock-matrix-junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Execute exact Bedrock matrix JUnit test
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest'
+      - name: Preserve exact JUnit XML evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task004-bedrock-matrix-junit-xml
+          path: build/test-results/test/*.xml
+          if-no-files-found: error
