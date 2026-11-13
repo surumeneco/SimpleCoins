@@ -190,6 +190,11 @@ public final class WorldSnapshotTraversal {
                 visitor.player(entry.getKey(), data);
             players = Math.addExact(players, 1);
         }
+        // Existing input hashes alone cannot detect a new MCA/UUID.dat file
+        // appearing in an otherwise untouched source directory.
+        // Revisit the complete original source-root discovery before final
+        // content hashes. A hand-constructed fixture cannot claim this proof.
+        manifest.requireUnchangedDiscovery();
         // Check EVERY authoritative input again, including already visited
         // regions. The caller must discard all staged values on any mismatch.
         // This is a drift detector, not a substitute for freezing Paper worlds.
