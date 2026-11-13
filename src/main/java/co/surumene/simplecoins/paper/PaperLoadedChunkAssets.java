@@ -90,6 +90,16 @@ public final class PaperLoadedChunkAssets {
         public boolean isCompleteSettlementSource() { return false; }
     }
 
+    /**
+     * Online Players own a separate source; never read them through Chunk entities.
+     * Other LivingEntity inventories may alias equipment and need explicit proof.
+     */
+    static boolean isIndependentInventoryHolder(Class<?> type) {
+        return type != null
+                && InventoryHolder.class.isAssignableFrom(type)
+                && !LivingEntity.class.isAssignableFrom(type);
+    }
+
     public static Slice scan(Chunk chunk, int maxTiles, int maxEntities,
                              int maxSlots, int maxSerializedBytes,
                              int maxInflatedBytes) throws IOException {
@@ -213,7 +223,8 @@ public final class PaperLoadedChunkAssets {
                     }
                 }
                 continue;
-            } else if (entity instanceof InventoryHolder holder) {
+            } else if (entity instanceof InventoryHolder holder
+                    && isIndependentInventoryHolder(entity.getClass())) {
                 // LivingEntity gear is handled in the preceding branch. Player
                 // inventory is a separate source and cannot be counted here.
                 Inventory held = holder.getInventory();
