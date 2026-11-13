@@ -46,6 +46,41 @@ public final class WorldSnapshotTraversal {
     private record SourceStamp(Object physicalKey, long size,
                                java.nio.file.attribute.FileTime modified, String sha256) {}
 
+    /**
+     * Immutable proof of the exact saved file bytes checked by one traversal.
+     * This can detect changes during subsequent LIVE classification without
+     * starting a second baseline scan. It does not freeze disk or Paper memory.
+     */
+    public static final class ContentWitness {
+        private final WorldStorageDiscovery.Manifest manifest;
+        private final Map<Path, SourceStamp> stamps;
+
+        private ContentWitness(WorldStorageDiscovery.Manifest manifest,
+                               Map<Path, SourceStamp> stamps) {
+            this.manifest = Objects.requireNonNull(manifest);
+            this.stamps = Map.copyOf(stamps);
+        }
+
+        public void requireUnchanged() throws IOException {
+            // Recheck directory closure too, including formerly empty roots.
+            // A hand-created Manifest cannot claim that proof.
+            manifest.requireUnchangedDiscovery();
+            for (var entry : stamps.entrySet()) {
+                if (!entry.getValue().equals(stamp(entry.getKey())))
+                    throw new IOException("Authoritative saved source changed after traversal: "
+                            + entry.getKey());
+            }
+        }
+    }
+
+    /** Validated at traversal time; its witness can be rechecked later. */
+    public record Verified(Report report, ContentWitness witness) {
+        public Verified {
+            Objects.requireNonNull(report);
+            Objects.requireNonNull(witness);
+        }
+    }
+
     private static SourceStamp stamp(Path path) throws IOException {
         BasicFileAttributes before = Files.readAttributes(path, BasicFileAttributes.class,
                 LinkOption.NOFOLLOW_LINKS);
@@ -108,6 +143,19 @@ public final class WorldSnapshotTraversal {
                                   int maximumInflatedBytes,
                                   Visitor visitor,
                                   SavedLiveSourcePartition partition) throws IOException {
+        return traverseVerified(manifest, maximumCompressedBytes,
+                maximumInflatedBytes, visitor, partition).report();
+    }
+
+    /**
+     * Retain exactly the source stamps from the same successful traversal,
+     * so downstream LIVE callbacks can validate the saved generation again.
+     */
+    public static Verified traverseVerified(WorldStorageDiscovery.Manifest manifest,
+                                            int maximumCompressedBytes,
+                                            int maximumInflatedBytes,
+                                            Visitor visitor,
+                                            SavedLiveSourcePartition partition) throws IOException {
         Objects.requireNonNull(manifest, "manifest");
         Objects.requireNonNull(visitor, "visitor");
         if (maximumCompressedBytes < 1 || maximumInflatedBytes < 1)
@@ -208,7 +256,8 @@ public final class WorldSnapshotTraversal {
                         + entry.getKey());
         }
         if (partition != null) partition.finish();
-        return new Report(files, chunks, players);
+        return new Verified(new Report(files, chunks, players),
+                new ContentWitness(manifest, before));
     }
 
     /**
