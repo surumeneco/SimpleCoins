@@ -22,16 +22,16 @@ public final class PaperLoadedWorldAssets {
 
     public record Report(String world, int scannedChunks, int scannedBlockInventories,
                          int scannedItemEntities, int scannedDisplayEntities,
-                         int scannedEquipmentEntities, int unhandledTileEntities,
-                         int unhandledOtherEntities, int scannedSlots,
-                         List<PaperLoadedChunkAssets.Entry> entries) {
+                         int scannedEquipmentEntities, int scannedInventoryEntities,
+                         int unhandledTileEntities, int unhandledOtherEntities,
+                         int scannedSlots, List<PaperLoadedChunkAssets.Entry> entries) {
         /** Preserve both previous report constructors. */
         public Report(String world, int scannedChunks, int scannedBlockInventories,
                       int scannedItemEntities, int unhandledTileEntities,
                       int unhandledOtherEntities, int scannedSlots,
                       List<PaperLoadedChunkAssets.Entry> entries) {
             this(world, scannedChunks, scannedBlockInventories,
-                    scannedItemEntities, 0, 0, unhandledTileEntities,
+                    scannedItemEntities, 0, 0, 0, unhandledTileEntities,
                     unhandledOtherEntities, scannedSlots, entries);
         }
         public Report(String world, int scannedChunks, int scannedBlockInventories,
@@ -39,13 +39,23 @@ public final class PaperLoadedWorldAssets {
                       int unhandledTileEntities, int unhandledOtherEntities,
                       int scannedSlots, List<PaperLoadedChunkAssets.Entry> entries) {
             this(world, scannedChunks, scannedBlockInventories,
-                    scannedItemEntities, scannedDisplayEntities, 0,
+                    scannedItemEntities, scannedDisplayEntities, 0, 0,
+                    unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
+        }
+        public Report(String world, int scannedChunks, int scannedBlockInventories,
+                      int scannedItemEntities, int scannedDisplayEntities,
+                      int scannedEquipmentEntities, int unhandledTileEntities,
+                      int unhandledOtherEntities, int scannedSlots,
+                      List<PaperLoadedChunkAssets.Entry> entries) {
+            this(world, scannedChunks, scannedBlockInventories,
+                    scannedItemEntities, scannedDisplayEntities, scannedEquipmentEntities, 0,
                     unhandledTileEntities, unhandledOtherEntities, scannedSlots, entries);
         }
         public Report {
             if (world == null || world.isBlank() || scannedChunks < 0 ||
                     scannedBlockInventories < 0 || scannedItemEntities < 0 ||
                     scannedDisplayEntities < 0 || scannedEquipmentEntities < 0 ||
+                    scannedInventoryEntities < 0 ||
                     unhandledTileEntities < 0 || unhandledOtherEntities < 0 ||
                     scannedSlots < 0)
                 throw new IllegalArgumentException("Invalid loaded world report");
@@ -93,7 +103,7 @@ public final class PaperLoadedWorldAssets {
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedChunkAssets.Entry> entries = new ArrayList<>();
         int tiles = 0, entities = 0, blocks = 0, itemEntities = 0;
-        int displayEntities = 0, equippedEntities = 0;
+        int displayEntities = 0, equippedEntities = 0, inventoryEntities = 0;
         int otherTiles = 0, otherEntities = 0, slots = 0;
 
         for (Chunk chunk : loaded) {
@@ -111,7 +121,8 @@ public final class PaperLoadedWorldAssets {
             int nextTiles = Math.addExact(slice.scannedBlockInventories(), slice.unhandledTileEntities());
             int nextEntities = Math.addExact(Math.addExact(
                     Math.addExact(slice.scannedItemEntities(), slice.scannedDisplayEntities()),
-                    slice.scannedEquipmentEntities()), slice.unhandledOtherEntities());
+                    slice.scannedEquipmentEntities()),
+                    Math.addExact(slice.scannedInventoryEntities(), slice.unhandledOtherEntities()));
             if (nextTiles > maxTiles - tiles || nextEntities > maxEntities - entities ||
                     slice.scannedSlots() > maxSlots - slots)
                 throw new IOException("Loaded-world scan aggregate budget exhausted");
@@ -122,11 +133,13 @@ public final class PaperLoadedWorldAssets {
             itemEntities += slice.scannedItemEntities();
             displayEntities += slice.scannedDisplayEntities();
             equippedEntities += slice.scannedEquipmentEntities();
+            inventoryEntities += slice.scannedInventoryEntities();
             otherTiles += slice.unhandledTileEntities();
             otherEntities += slice.unhandledOtherEntities();
             entries.addAll(slice.entries());
         }
         return new Report(world.getName(), loaded.length, blocks, itemEntities,
-                displayEntities, equippedEntities, otherTiles, otherEntities, slots, entries);
+                displayEntities, equippedEntities, inventoryEntities,
+                otherTiles, otherEntities, slots, entries);
     }
 }
