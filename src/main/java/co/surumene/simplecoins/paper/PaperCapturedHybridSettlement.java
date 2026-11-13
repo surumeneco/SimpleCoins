@@ -127,11 +127,14 @@ public final class PaperCapturedHybridSettlement {
         // provided. A failure never returns the staged result to the caller.
         HybridLiveSourceStage.stage(staged, selection,
                 observed.sources(), liveOwnership);
-        // Ownership callbacks run after the saved traversal. Do not return a
-        // candidate if those callbacks introduced new authoritative disk
-        // sources that were absent from the original bounded discovery.
-        // This set check cannot prove atomic cross-memory/disk quiescence.
-        manifest.requireUnchangedDiscovery();
+        // LIVE owner callbacks execute after the saved files were parsed.
+        // Verify both the directory set and the SAME pre-parse file fingerprints
+        // again: same-size / same-mtime byte rewrites must invalidate this
+        // candidate instead of returning stale monetary amounts.
+        // This is a boundary detector, not an atomic memory/disk snapshot.
+        if (staged.savedContentWitness() == null)
+            throw new IOException("Saved monetary source fingerprint evidence unavailable");
+        staged.savedContentWitness().requireUnchanged();
         return staged;
     }
 }
