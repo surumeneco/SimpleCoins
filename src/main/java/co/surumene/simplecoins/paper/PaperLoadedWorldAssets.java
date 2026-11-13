@@ -87,6 +87,23 @@ public final class PaperLoadedWorldAssets {
             throw new IOException("Loaded Paper Chunk set changed during monetary scan");
     }
 
+    /** Fail closed if a previously captured World no longer has the exact loaded-Chunk set. */
+    static void requireLoadedChunkCoordinates(World world, Set<Long> original)
+            throws IOException {
+        Objects.requireNonNull(world, "captured World");
+        Objects.requireNonNull(original, "captured Chunk coordinates");
+        Chunk[] loaded = world.getLoadedChunks();
+        if (loaded == null)
+            throw new IOException("Loaded Paper Chunk list missing during final source recheck");
+        Set<Long> current = new HashSet<>();
+        for (Chunk chunk : loaded) {
+            if (chunk == null || chunk.getWorld() != world || !chunk.isLoaded() ||
+                    !current.add(chunkCoordinate(chunk.getX(), chunk.getZ())))
+                throw new IOException("Invalid or duplicate loaded Paper Chunk during source recheck");
+        }
+        requireStableChunkCoordinates(original, current);
+    }
+
     /**
      * No chunk loading or generation is performed. The entire selected set
      * is inspected on the primary thread, under explicit hard resource budgets.
@@ -188,16 +205,7 @@ public final class PaperLoadedWorldAssets {
         // Verify coverage at the end, not just the first World.getLoadedChunks
         // snapshot. Even an equal-sized replacement means that currency in
         // one source was missed and a different source was counted stale.
-        Chunk[] afterScan = Objects.requireNonNull(world.getLoadedChunks(),
-                "Loaded world Chunk set missing at scan completion");
-        Set<Long> afterCoordinates = new HashSet<>();
-        for (Chunk candidate : afterScan) {
-            if (candidate == null || candidate.getWorld() != world ||
-                    !candidate.isLoaded() ||
-                    !afterCoordinates.add(chunkCoordinate(candidate.getX(), candidate.getZ())))
-                throw new IOException("Invalid/duplicate loaded Chunk after scan");
-        }
-        requireStableChunkCoordinates(chunkCoordinates, afterCoordinates);
+        requireLoadedChunkCoordinates(world, chunkCoordinates);
         return new Report(world.getName(), loaded.length, blocks, itemEntities,
                 displayEntities, equippedEntities, inventoryEntities,
                 otherTiles, otherEntities, slots, entries);

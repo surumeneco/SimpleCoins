@@ -28,6 +28,22 @@ import org.bukkit.World;
 public final class PaperLiveUniverseAssets {
     private PaperLiveUniverseAssets() {}
 
+    /** Snapshot of one World’s actually observed loaded Chunk coordinate identities. */
+    static record WorldCapture(World world, Set<Long> coordinates) {
+        WorldCapture {
+            Objects.requireNonNull(world, "captured World");
+            coordinates = Set.copyOf(coordinates);
+        }
+    }
+
+    /** Recheck EVERY previously scanned World after later Worlds and Players are read. */
+    static void requireWorldSourceSetsStillLoaded(List<WorldCapture> captures)
+            throws IOException {
+        for (WorldCapture capture : captures)
+            PaperLoadedWorldAssets.requireLoadedChunkCoordinates(
+                    capture.world(), capture.coordinates());
+    }
+
     public record Budget(int maxWorlds, int maxChunks, int maxTileEntities,
                          int maxEntities, int maxSlots, int maxPlayers,
                          int maxSerializedBytes, int maxInflatedBytes) {
@@ -216,9 +232,11 @@ public final class PaperLiveUniverseAssets {
         Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedWorldAssets.Report> captured = new ArrayList<>();
         List<HybridLiveSourceStage.Source> sources = new ArrayList<>();
+        List<WorldCapture> worldCaptures = new ArrayList<>();
         int chunks = 0, tiles = 0, entities = 0, slots = 0;
 
         for (World world : selection) {
+            Set<Long> scannedCoordinates = new HashSet<>();
             var report = PaperLoadedWorldAssets.scan(world,
                     Math.max(1, budget.maxChunks() - chunks),
                     Math.max(1, budget.maxTileEntities() - tiles),
@@ -227,6 +245,9 @@ public final class PaperLiveUniverseAssets {
                     budget.maxSerializedBytes(), budget.maxInflatedBytes(),
                     wallets, entitiesSeen, physicalSlots,
                     slice -> {
+                        if (!scannedCoordinates.add(PaperLoadedWorldAssets.chunkCoordinate(
+                                slice.chunkX(), slice.chunkZ())))
+                            throw new IOException("Repeated captured Paper Chunk coordinate");
                         var chunk = new SavedLiveSourcePartition.Chunk(
                                 slice.world(), slice.chunkX(), slice.chunkZ());
                         var values = slice.entries().stream()
@@ -251,6 +272,7 @@ public final class PaperLiveUniverseAssets {
             entities = Math.addExact(entities, readEntities);
             slots = Math.addExact(slots, report.scannedSlots());
             captured.add(report);
+            worldCaptures.add(new WorldCapture(world, scannedCoordinates));
         }
 
         // Player storage is world-independent, even when selected Worlds is
@@ -268,6 +290,9 @@ public final class PaperLiveUniverseAssets {
                     .toList();
             sources.add(new HybridLiveSourceStage.PlayerSource(player.owner(), values));
         }
+        // An earlier World may have changed while subsequent Worlds or Players
+        // were scanned. Per-World post-scan checks cannot detect that drift.
+        requireWorldSourceSetsStillLoaded(worldCaptures);
         return new Observed(new Report(captured, online,
                 chunks, tiles, entities, slots), sources);
     }
