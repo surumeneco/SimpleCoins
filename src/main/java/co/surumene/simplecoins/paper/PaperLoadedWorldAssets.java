@@ -85,7 +85,25 @@ public final class PaperLoadedWorldAssets {
                               int maxEntities, int maxSlots,
                               int maxSerializedBytes, int maxInflatedBytes)
             throws IOException {
+        return scan(world, maxChunks, maxTiles, maxEntities, maxSlots,
+                maxSerializedBytes, maxInflatedBytes,
+                new HashSet<>(), new HashSet<>(), new HashSet<>());
+    }
+
+    /**
+     * Reuse a single wallet/entity/physical-slot identity generation across
+     * all selected worlds, rather than resetting it for every World.
+     * These mutable sets MUST be discarded on any scan failure.
+     */
+    static Report scan(World world, int maxChunks, int maxTiles,
+                       int maxEntities, int maxSlots,
+                       int maxSerializedBytes, int maxInflatedBytes,
+                       Set<UUID> walletIds, Set<UUID> entityIds,
+                       Set<String> physicalSlots) throws IOException {
         Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(walletIds, "shared wallet identities");
+        Objects.requireNonNull(entityIds, "shared Entity identities");
+        Objects.requireNonNull(physicalSlots, "shared physical-slot identities");
         if (maxChunks < 1 || maxTiles < 1 || maxEntities < 1 ||
                 maxSlots < 1 || maxSerializedBytes < 1 || maxInflatedBytes < 1)
             throw new IllegalArgumentException("All loaded-world scan budgets must be positive");
@@ -98,9 +116,6 @@ public final class PaperLoadedWorldAssets {
             throw new IOException("Loaded world chunk count exceeds scan budget");
 
         Set<Long> chunkCoordinates = new HashSet<>();
-        Set<UUID> walletIds = new HashSet<>();
-        Set<UUID> entityIds = new HashSet<>();
-        Set<String> physicalSlots = new HashSet<>();
         List<PaperLoadedChunkAssets.Entry> entries = new ArrayList<>();
         int tiles = 0, entities = 0, blocks = 0, itemEntities = 0;
         int displayEntities = 0, equippedEntities = 0, inventoryEntities = 0;
