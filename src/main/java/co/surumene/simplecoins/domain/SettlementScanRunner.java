@@ -30,7 +30,15 @@ public final class SettlementScanRunner {
     /** Pending accounting state only; no commit or publication is performed. */
     public record Staged(SettlementAccumulator pending,
                          WorldSnapshotTraversal.Report report,
-                         Set<String> requiredSourceIds) {
+                         Set<String> requiredSourceIds,
+                         WorldSnapshotTraversal.ContentWitness savedContentWitness) {
+        /** Compatibility for isolated, manually created stage fixtures. */
+        public Staged(SettlementAccumulator pending,
+                      WorldSnapshotTraversal.Report report,
+                      Set<String> requiredSourceIds) {
+            this(pending, report, requiredSourceIds, null);
+        }
+
         public Staged {
             Objects.requireNonNull(pending);
             Objects.requireNonNull(report);
@@ -121,7 +129,7 @@ public final class SettlementScanRunner {
         // wallet UUID as separate currency for two different players.
         Set<UUID> seenSavedWallets = sharedWalletIds;
 
-        WorldSnapshotTraversal.Report report = WorldSnapshotTraversal.traverse(
+        WorldSnapshotTraversal.Verified verified = WorldSnapshotTraversal.traverseVerified(
                 manifest, maximumCompressedBytes, maximumInflatedBytes,
                 new WorldSnapshotTraversal.Visitor() {
                     @Override
@@ -176,6 +184,6 @@ public final class SettlementScanRunner {
                     pending.completeSource(sourceId(entry.getValue()));
             }
         }
-        return new Staged(pending, report, required);
+        return new Staged(pending, verified.report(), required, verified.witness());
     }
 }

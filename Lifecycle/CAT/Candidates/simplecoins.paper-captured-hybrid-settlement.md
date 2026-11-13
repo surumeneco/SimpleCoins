@@ -36,7 +36,8 @@ language: ja
 | paper-bridge-06 | Paper capture中にWorld・Playerが欠ける | 空資産とみなさず読取全体を失敗させる | 既存`Observed`およびPaper検証 |
 | paper-bridge-07 | 一回限りの候補が成功する | 同時点性や全ワールド/保護/BAN/仕訳の完成は主張しない | admissionは常に閉 |
 | paper-bridge-08 | saved走査後にLIVE所有者分類中、新たなregionまたはplayerdataソースが出現する | 決算候補を返す前に元Manifestの保存ソース発見集合を再検証し、増減や再発見失敗を検知した場合はIOExceptionで拒否 | post-LIVE callbackによる保存ソース増加と不変control |
+| paper-bridge-09 | 保存NBTを読み終えた後、LIVE所有者分類中に既存MCA/MCC/playerdataファイルが書換え・置換される | 保存走査が検証済みの全ファイルについて、同じ読取世代の物理identity・サイズ・更新時刻・SHA-256をLIVE分類完了後にも再照合し、変化時は候補を返さずIOExceptionで拒否 | 同サイズ／同mtimeのGZIPヘッダ書換え、正常系、再使用拒否 |
 
 ## Boundary
 
-`Capture`はメインスレッドのPaper読取から作成し、保存NBTの処理は安全な別実行文脈で行う。実世界が両読取の間に変わらないことは別の世代バリアで証明する必要があり、出力は公開できない決算候補である。未検証の所有者をFreeと推定する動作を認めない。本ArtifactはCAT CandidateでありConfirmed仕様や正式Gate合格ではない。
+`Capture`はメインスレッドのPaper読取から作成し、保存NBTの処理は安全な別実行文脈で行う。保存ファイルの走査完了からLIVE分類の完了までの既知ファイル指紋は追加検証するが、世界データ全体が両読取の間に変わらないことは別の世代バリアで証明する必要があり、出力は公開できない決算候補である。未検証の所有者をFreeと推定する動作を認めない。本ArtifactはCAT CandidateでありConfirmed仕様や正式Gate合格ではない。
