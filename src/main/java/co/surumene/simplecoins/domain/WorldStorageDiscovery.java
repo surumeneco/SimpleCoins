@@ -44,10 +44,47 @@ public final class WorldStorageDiscovery {
         }
     }
 
-    public record Manifest(List<SourceFile> worldFiles, Map<UUID, Path> playerDataFiles) {
+    /**
+     * Immutable inputs of a real discovery pass. A hand-constructed Manifest
+     * deliberately has no such proof; its isolated NBT reader tests are not
+     * evidence that all filesystem sources were discovered.
+     */
+    public record DiscoveryOrigin(Map<String, Path> worldFolders, WorldScope scope,
+                                  int maximumEntries) {
+        public DiscoveryOrigin {
+            worldFolders = Map.copyOf(worldFolders);
+            if (worldFolders.isEmpty() || maximumEntries < 1)
+                throw new IllegalArgumentException("Invalid discovery provenance");
+            Objects.requireNonNull(scope, "World inclusion scope");
+        }
+    }
+
+    public record Manifest(List<SourceFile> worldFiles, Map<UUID, Path> playerDataFiles,
+                           DiscoveryOrigin origin) {
+        public Manifest(List<SourceFile> worldFiles, Map<UUID, Path> playerDataFiles) {
+            this(worldFiles, playerDataFiles, null);
+        }
+
         public Manifest {
             worldFiles = List.copyOf(worldFiles);
             playerDataFiles = Map.copyOf(playerDataFiles);
+        }
+
+        /**
+         * A source content digest cannot catch a NEW file omitted from the
+         * original manifest. Compare complete bounded discovery sets after
+         * traversal; use roots, not inferred parent paths, so empty source
+         * directories are covered too.
+         *
+         * Manual fixtures have no origin; they remain unproven read candidates.
+         */
+        public void requireUnchangedDiscovery() throws IOException {
+            if (origin == null) return;
+            Manifest after = discover(origin.worldFolders(), origin.scope(),
+                    origin.maximumEntries());
+            if (!worldFiles.equals(after.worldFiles()) ||
+                    !playerDataFiles.equals(after.playerDataFiles()))
+                throw new IOException("Authoritative saved source set changed during traversal");
         }
 
         /** Canonical closure keys for all mandatory settlement sources. */
@@ -82,6 +119,7 @@ public final class WorldStorageDiscovery {
         List<SourceFile> worldFiles = new ArrayList<>();
         Map<UUID, Path> players = new HashMap<>();
         Set<Path> worldRoots = new HashSet<>();
+        Map<String, Path> provenanceRoots = new HashMap<>();
         // All authoritative source categories share one physical-identity set.
         // A hard link between playerdata and a region is not two independent inputs.
         Map<Object, Path> sourceIdentityByKey = new HashMap<>();
@@ -106,6 +144,7 @@ public final class WorldStorageDiscovery {
                     throw new IOException("Overlapping world storage roots: " + existingRoot + " and " + root);
             }
             worldRoots.add(root);
+            provenanceRoots.put(worldName, root);
             if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("World storage root missing or symbolic: " + root);
 
@@ -185,7 +224,8 @@ public final class WorldStorageDiscovery {
         worldFiles.sort(Comparator.comparing(SourceFile::world)
                 .thenComparing(a -> a.path().toString())
                 .thenComparing(SourceFile::kind));
-        return new Manifest(worldFiles, players);
+        return new Manifest(worldFiles, players,
+                new DiscoveryOrigin(provenanceRoots, scope, maximumEntries));
     }
 
     /**
