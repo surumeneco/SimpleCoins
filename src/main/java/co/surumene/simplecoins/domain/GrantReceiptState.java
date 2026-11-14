@@ -58,10 +58,14 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
     }
 
     /** Start one pending grant after the preceding receipt was verified. */
-    public GrantReceiptState begin(GrantLedger.Grant grant) {
-        Objects.requireNonNull(grant, "grant");
-        if (active() || grant.delivered() || grant.sequence() <= completedSequence)
+    public GrantReceiptState begin(GrantLedger ledger, UUID player, GrantLedger.Grant handle) {
+        verify(ledger, player);
+        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
+        if (active() || grant.sequence() <= completedSequence)
             throw new IllegalStateException("Cannot start stale or concurrent issuance receipt");
+        for (var pending : ledger.pending(player))
+            if (pending.sequence() < grant.sequence())
+                throw new IllegalStateException("Cannot start after an earlier pending grant");
         return new GrantReceiptState(completedSequence, grant.sequence(), grant.id(), 0);
     }
 
@@ -70,7 +74,10 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
      * prefix. The caller must physically save these stacks and this next
      * receipt together before exposing the inventory or acknowledging a grant.
      */
-    public GrantReceiptState advance(GrantLedger.Grant grant, GrantDeliveryBatchPlanner.Batch batch) {
+    public GrantReceiptState advance(GrantLedger ledger, UUID player,
+                                     GrantLedger.Grant handle, GrantDeliveryBatchPlanner.Batch batch) {
+        verify(ledger, player);
+        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
         requireSamePending(grant);
         Objects.requireNonNull(batch, "delivery batch");
         if (batch.stacks().isEmpty())
@@ -86,7 +93,9 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
      * The separate Paper adapter must persist the inventory and this state
      * together before calling GrantLedger.acknowledge.
      */
-    public GrantReceiptState complete(GrantLedger.Grant grant) {
+    public GrantReceiptState complete(GrantLedger ledger, UUID player, GrantLedger.Grant handle) {
+        verify(ledger, player);
+        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
         requireSamePending(grant);
         if (partialValue != grant.amount())
             throw new IllegalStateException("Cannot complete a partially delivered grant");
@@ -94,6 +103,22 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
         if (!checked.complete())
             throw new IllegalStateException("Grant was not fully delivered");
         return new GrantReceiptState(grant.sequence(), 0, null, 0);
+    }
+
+    /** Never trust a caller-created grant solely because its UUID and sequence match. */
+    private static GrantLedger.Grant requireAuthenticPending(GrantLedger ledger,
+                                                             UUID player, GrantLedger.Grant handle) {
+        Objects.requireNonNull(ledger, "issuance ledger");
+        Objects.requireNonNull(player, "player UUID");
+        Objects.requireNonNull(handle, "grant handle");
+        for (var pending : ledger.pending(player)) {
+            if (pending.sequence() == handle.sequence()) {
+                if (!pending.equals(handle))
+                    throw new IllegalStateException("Grant handle differs from durable reservation");
+                return pending;
+            }
+        }
+        throw new IllegalStateException("Grant is missing, delivered or belongs to another player");
     }
 
     private void requireSamePending(GrantLedger.Grant grant) {
