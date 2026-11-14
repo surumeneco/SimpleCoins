@@ -7,6 +7,9 @@ on:
       - 'Lifecycle/Works/simplecoins.v2.geyser-real-loader-verification.md'
       - 'src/main/java/co/surumene/simplecoins/domain/GeyserResourceInstaller.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'src/main/resources/plugin.yml'
+      - 'src/test/java/co/surumene/simplecoins/PaperBootstrapDescriptorCandidateTest.java'
+      - 'Lifecycle/Works/simplecoins.v2.geyser-bootstrap-order.md'
 
 permissions:
   contents: read
@@ -147,6 +150,23 @@ jobs:
           grep -F 'Registered 10 custom items' paper-reload.log
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-reload.log
           grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED: changed=false' paper-reload.log
+          # Check the actual enable order in both real Geyser boots,
+          # not only the plugin.yml declaration or Geyser's async item registry.
+          python3 - <<'PY'
+          from pathlib import Path
+          for phase in ('stage', 'reload'):
+              lines = Path(f'paper-{phase}.log').read_text(
+                  encoding='utf-8', errors='replace').splitlines()
+              provider = [i for i, line in enumerate(lines)
+                          if '[Geyser-Spigot] Enabling Geyser-Spigot' in line]
+              consumer = [i for i, line in enumerate(lines)
+                          if '[SimpleCoins] Enabling SimpleCoins' in line]
+              assert len(provider) == 1 and len(consumer) == 1, (
+                  phase, 'missing or duplicated plugin-enable event')
+              assert provider[0] < consumer[0], (
+                  phase, 'SimpleCoins enabled before the Geyser provider')
+              print(f'REAL_GEYSER_ENABLE_ORDER_PASSED: {phase}')
+          PY
           python3 - <<'PY'
           from pathlib import Path
           log = Path('paper-reload.log').read_text(encoding='utf-8', errors='replace')
