@@ -1,0 +1,175 @@
+name: Paper 26.2 authentic Geyser custom-item restart smoke
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/paper-geyser-real-loader-smoke.yml'
+      - 'Lifecycle/Works/simplecoins.v2.geyser-real-loader-verification.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/GeyserResourceInstaller.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+
+permissions:
+  contents: read
+
+jobs:
+  authentic-geyser-restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Unit tests, production JAR and independent admission guard
+        run: |
+          set -euo pipefail
+          gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+      - name: Download checksum-pinned official Paper and Geyser-Spigot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-Geyser-Live-CI/1.0' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          paper_url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          paper_sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$paper_url" in https://fill-data.papermc.io/*) ;; *) exit 1;; esac
+          [[ "$paper_sha" =~ ^[a-fA-F0-9]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$paper_url" -o smoke/paper.jar
+          printf '%s  %s\n' "$paper_sha" smoke/paper.jar | sha256sum -c -
+
+          # Pinned Geyser release/build; never float 'latest' in a verification receipt.
+          geyser_version='2.11.1'
+          geyser_build=1210
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-Geyser-Live-CI/1.0' \
+            "https://download.geysermc.org/v2/projects/geyser/versions/${geyser_version}/builds/${geyser_build}" \
+            -o smoke/geyser-build.json
+          jq -e --arg v "$geyser_version" --argjson b "$geyser_build" \
+            '.project_id == "geyser" and .version == $v and .build == $b' smoke/geyser-build.json
+          geyser_sha=$(jq -r '.downloads.spigot.sha256 // empty' smoke/geyser-build.json)
+          [[ "$geyser_sha" =~ ^[a-fA-F0-9]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-Geyser-Live-CI/1.0' \
+            "https://download.geysermc.org/v2/projects/geyser/versions/${geyser_version}/builds/${geyser_build}/downloads/spigot" \
+            -o smoke/plugins/Geyser-Spigot.jar
+          printf '%s  %s\n' "$geyser_sha" smoke/plugins/Geyser-Spigot.jar | sha256sum -c -
+          echo "GEYSER_OFFICIAL_ARTIFACT_PINNED: version=${geyser_version} build=${geyser_build} sha256=${geyser_sha}"
+      - name: Generate real Geyser config and run guarded staging / restart cycles
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25578\n' > smoke/server.properties
+          cd smoke
+          run_paper() {
+            local phase="$1" ready=0 server_pid
+            mkfifo "console-${phase}.in"
+            java -Xms256M -Xmx1024M -jar paper.jar nogui \
+              < "console-${phase}.in" > "paper-${phase}.log" 2>&1 &
+            server_pid=$!
+            exec 3> "console-${phase}.in"
+            for _ in $(seq 1 180); do
+              if grep -Fq 'Done (' "paper-${phase}.log"; then ready=1; break; fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                echo "Paper unexpectedly exited in phase ${phase}"
+                cat "paper-${phase}.log"
+                exec 3>&-
+                return 1
+              fi
+              sleep 1
+            done
+            if [ "$ready" != 1 ]; then
+              echo "Paper startup not completed in phase ${phase}"
+              cat "paper-${phase}.log"
+              printf 'stop\n' >&3 || true
+              exec 3>&-
+              wait "$server_pid" || true
+              return 1
+            fi
+            # Wait for Geyser background mappings/resources startup to settle.
+            sleep 5
+            printf 'stop\n' >&3
+            exec 3>&-
+            wait "$server_pid"
+            grep -F 'Saving worlds' "paper-${phase}.log"
+            grep -Fi 'Geyser' "paper-${phase}.log" >/dev/null
+            echo "PAPER_GEYSER_CYCLE_COMPLETE: ${phase}"
+          }
+
+          # First start uses Geyser only to bootstrap its actual config directory.
+          run_paper 'bootstrap'
+          grep -F 'Registered 1 custom items' paper-bootstrap.log
+          test -s plugins/Geyser-Spigot/config.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          config = Path('plugins/Geyser-Spigot/config.yml')
+          text = config.read_text(encoding='utf-8')
+          pattern = r'(?m)^([ \t]*enable-custom-content:[ \t]*)(?:true|false)([ \t]*(?:#.*)?)$'
+          edited, count = re.subn(pattern, r'\g<1>true\g<2>', text)
+          assert count == 1, 'Real Geyser config lacks unique enable-custom-content option'
+          config.write_text(edited, encoding='utf-8')
+          print('REAL_GEYSER_CUSTOM_CONTENT_ENABLED')
+          PY
+
+          cp ../build/libs/SimpleCoins-1.0.0.jar plugins/SimpleCoins.jar
+          cp ../admission-guard/build/libs/admission-guard-1.0.0.jar plugins/SimpleCoinsGuard.jar
+          run_paper 'stage'
+          # The control Geyser boot has one built-in custom item. With the
+          # nine SimpleCoins mapping entries, the real registry reports ten.
+          grep -F 'Registered 10 custom items' paper-stage.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-stage.log
+          grep -F 'Settlement engine not connected; player admission remains disabled.' paper-stage.log
+          grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED: changed=true' paper-stage.log
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          src = Path('plugins/SimpleCoins/geyser')
+          dst = Path('plugins/Geyser-Spigot')
+          for a,b in [
+              (src/'SimpleCoins.mcpack', dst/'packs/simplecoins-generated.mcpack'),
+              (src/'simplecoins.json', dst/'custom_mappings/simplecoins-generated.json')]:
+              assert a.is_file() and b.is_file(), (a,b)
+              assert sha256(a.read_bytes()).digest() == sha256(b.read_bytes()).digest(), b
+          assert (dst/'simplecoins-managed-resources').is_file()
+          print('REAL_GEYSER_PROVIDER_FILES_STAGED_BYTE_EXACT')
+          PY
+
+          # Verify a subsequent real Geyser startup preserves all nine added items.
+          # Some Geyser versions initialize the registry AFTER SimpleCoins onEnable;
+          # do not infer a universally necessary restart from a staged file alone.
+          run_paper 'reload'
+          grep -F 'Registered 10 custom items' paper-reload.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-reload.log
+          grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED: changed=false' paper-reload.log
+          python3 - <<'PY'
+          from pathlib import Path
+          log = Path('paper-reload.log').read_text(encoding='utf-8', errors='replace')
+          errors = [
+              line for line in log.splitlines()
+              if ('ERROR' in line or 'SEVERE' in line)
+              and any(token in line.lower() for token in ('geyser','custom mapping','custom item','resource pack'))
+          ]
+          if errors:
+              raise SystemExit('Real Geyser startup/load emitted errors:\n' + '\n'.join(errors))
+          assert 'Geyser' in log, 'Geyser plugin never appeared in actual Paper log'
+          assert Path('plugins/Geyser-Spigot/custom_mappings/simplecoins-generated.json').is_file()
+          print('REAL_GEYSER_NINE_ADDITIONAL_ITEMS_REGISTERED: baseline=1, staging=10, restart=10')
+          print('REAL_GEYSER_RESTART_SMOKE_PASSED: provider booted, staged files persisted, no attributed load errors')
+          print('LIMIT: registration counts alone do not prove item-by-item client mapping, Bedrock client delivery, or rendering')
+          PY
+      - name: Preserve all three Paper logs for verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-real-geyser-restart-logs
+          path: |
+            smoke/paper-*.log
+            smoke/geyser-build.json
+          if-no-files-found: ignore
+          retention-days: 7
