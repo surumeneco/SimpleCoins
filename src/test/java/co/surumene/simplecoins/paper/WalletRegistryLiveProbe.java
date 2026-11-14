@@ -25,9 +25,25 @@ public final class WalletRegistryLiveProbe extends JavaPlugin {
             var recipe = Bukkit.getRecipe(new NamespacedKey("simplecoins", "wallet"));
             if (!(recipe instanceof ShapedRecipe shaped))
                 throw new IllegalStateException("Missing SimpleCoins wallet recipe");
-            if (!java.util.Arrays.equals(
-                    new String[]{" L ", "LIL", " L "}, shaped.getShape()))
-                throw new IllegalStateException("Unexpected wallet shaped recipe: "+java.util.Arrays.toString(shaped.getShape()));
+            // Paper 26.2 normalizes ShapedRecipe rows into generated keys
+            // (for example "abc", "def", "ghi"). Compare the actual slot
+            // ingredients instead of the symbolic source recipe characters.
+            String[] shape = shaped.getShape();
+            if (shape.length != 3) throw new IllegalStateException("Wallet must use a 3x3 shape");
+            var ingredients = shaped.getIngredientMap();
+            for (int row = 0; row < 3; row++) {
+                if (shape[row].length() != 3)
+                    throw new IllegalStateException("Wallet shape must be three columns");
+                for (int col = 0; col < 3; col++) {
+                    Material expected = row == 1 && col == 1 ? Material.IRON_INGOT
+                            : (row == 1 || col == 1) ? Material.LEATHER : Material.AIR;
+                    var ingredient = ingredients.get(shape[row].charAt(col));
+                    Material actual = ingredient == null ? Material.AIR : ingredient.getType();
+                    if (actual != expected)
+                        throw new IllegalStateException("Wallet ingredient mismatch at "
+                                + row + ":" + col + "; expected=" + expected + " actual=" + actual);
+                }
+            }
             verifyFreshWallet(shaped.getResult(), Material.BUNDLE);
             Set<NamespacedKey> keys = new HashSet<>();
             for (DyeColor dye : DyeColor.values()) {
