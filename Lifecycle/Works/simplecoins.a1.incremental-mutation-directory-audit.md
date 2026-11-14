@@ -72,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [live unknown monetary file](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637711); [JUnit](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637659); [known-record audit](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637633); [head watchdog](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637635); [static](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637702) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -83,6 +83,14 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Observed source/test evidence
+
+- JUnit test-first at `1baef34a85da621b9a3e636888f63505cf70e01f`: [run #43583447639](https://github.com/surumeneco/SimpleCoins/actions/runs/43583447639) failed `compileTestJava` for missing `auditNextDirectoryEntry()`, ordinary Red and NOT formal CAT-generated Red.
+- The implemented `NormalMutationJournal.auditNextDirectoryEntry()` retains a `DirectoryStream` cursor, examines at most one `*.mutation` path per call and rejects unknown, malformed, aliased or noncanonical record names against the synchronized journal memory. It closes the stream on exhaustion, failure and journal close. The existing Paper 5-second watchdog visits at most 16 directory entries plus 16 known record values per heartbeat.
+- Domain JUnit includes known records, empty directory, new legitimate tail, unknown valid-looking copy, noncanonical record name aliases, and close cleanup. The design is eventually consistent across repeated directory iterations, not an atomic directory snapshot or a guaranteed fixed detection deadline for a very large journal.
+- At code HEAD `56bb56e135e844ebfa73a14c16e2f95901c8eead`, [official Paper 26.2 build 134 CI #43583637711](https://github.com/surumeneco/SimpleCoins/actions/runs/43583637711) used the independent guard and a test-only journal fixture. It duplicated `1.mutation` into a **new and untracked** `2.mutation` while the server was running, without changing existing record or the checksummed journal head. The real Paper logs reported `SIMPLECOINS_JOURNAL_WATCHDOG_FAILED` and `Monetary journal unexpected directory record integrity failed`, and the process stopped without login/RCON/console stop. The CI emitted `PAPER_UNKNOWN_MONETARY_RECORD_FAILSTOP_PASSED`.
+- JUnit, prior record tamper Paper smoke, prior head-watchdog Paper smoke and Phase6 static verifier all passed at code HEAD. Full saved-money reconciliation, BAN source capture, journal/source mutations between sweeps, authoritatively frozen world generation, CAT semantic approval and formal Process/PI/TCE Gates, actual production use and JE/BE verification remain **not-run**.
 
 ## Source-grounded boundaries
 
