@@ -203,6 +203,43 @@ class NormalMutationJournalTest {
         }
     }
 
+    @Test void phaseTransitionMustNotEraseChecksumValidExternalRecordReplacement() throws Exception {
+        try (var journal = new NormalMutationJournal(root)) {
+            journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
+                    NormalMutationJournal.Account.free(), 100);
+            Path record = root.resolve("1.mutation");
+            byte[] payload = DurableFile.read(record, 512);
+            // Change the lowest value byte, then recompute a VALID durable
+            // checksum. The HEAD and writer lock remain untouched.
+            payload[payload.length - 2] ^= 1;
+            DurableFile.write(record, payload);
+            byte[] changed = Files.readAllBytes(record);
+
+            assertThrows(IOException.class, () -> journal.markEventApplied(TX_A));
+            assertArrayEquals(changed, Files.readAllBytes(record),
+                    "The phase transition must not overwrite discrepant evidence");
+            assertThrows(IllegalStateException.class, journal::checkHealthy);
+        }
+    }
+
+    @Test void duplicateOperationMustNotTrustChangedDurableRecord() throws Exception {
+        try (var journal = new NormalMutationJournal(root)) {
+            journal.prepare(TX_A, NormalMutationJournal.Account.player(ALICE),
+                    NormalMutationJournal.Account.free(), 100);
+            Path record = root.resolve("1.mutation");
+            byte[] payload = DurableFile.read(record, 512);
+            payload[payload.length - 2] ^= 1;
+            DurableFile.write(record, payload);
+            byte[] changed = Files.readAllBytes(record);
+
+            assertThrows(IOException.class, () -> journal.prepare(TX_A,
+                    NormalMutationJournal.Account.player(ALICE),
+                    NormalMutationJournal.Account.free(), 100));
+            assertArrayEquals(changed, Files.readAllBytes(record));
+            assertThrows(IllegalStateException.class, journal::checkHealthy);
+        }
+    }
+
     @Test void headTamperingRevokesLiveJournalHealth() throws Exception {
         try (var journal = new NormalMutationJournal(root)) {
             journal.prepare(TX_A, NormalMutationJournal.Account.external(),
