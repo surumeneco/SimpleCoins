@@ -5,6 +5,7 @@ on:
     paths:
       - 'admission-guard/**'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'Lifecycle/Works/simplecoins.grants.startup-persistent-verification.md'
       - 'src/main/resources/plugin.yml'
       - '.github/workflows/paper-guarded-bootstrap-smoke.yml'
 
@@ -72,6 +73,11 @@ jobs:
           test -f plugins/SimpleCoins/normal-mutations/head || { echo 'RED_JOURNAL_HEAD_NOT_CREATED'; exit 1; }
           test -f plugins/SimpleCoins/normal-mutations/.writer.lock || { echo 'RED_JOURNAL_LOCK_NOT_CREATED'; exit 1; }
           echo 'PAPER_NORMAL_JOURNAL_OPEN_VERIFIED'
+          test -f plugins/SimpleCoins/grants/head || {
+            echo 'RED_ISSUANCE_JOURNAL_HEAD_NOT_CREATED'; exit 1;
+          }
+          grep -F 'SIMPLECOINS_ISSUANCE_JOURNAL_OPEN_VERIFIED' paper.log
+          echo 'PAPER_GRANT_JOURNAL_OPEN_VERIFIED'
           printf 'stop\n' >&3
           exec 3>&-
           wait "$server_pid"
@@ -84,6 +90,7 @@ jobs:
           set -euo pipefail
           cd smoke
           test -f plugins/SimpleCoins/normal-mutations/head
+          cp plugins/SimpleCoins/normal-mutations/head normal-head-good
           echo 'intentionally corrupt journal checkpoint' > plugins/SimpleCoins/normal-mutations/head
           # No console-issued stop: corrupt accounting must terminate Paper
           # on its own instead of leaving an unprotected server online.
@@ -100,6 +107,30 @@ jobs:
           grep -F 'Failed to initialize guarded accounting' paper-corrupt.log
           grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper-corrupt.log
           echo 'PAPER_CORRUPT_JOURNAL_FAILSTOP_PASSED'
+      - name: Corrupt issuance grant journal head and require guarded fail-stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          # Restore the valid normal-mutation head from before its fail-stop
+          # test. Only the issuance grant journal should be corrupt here.
+          cp normal-head-good plugins/SimpleCoins/normal-mutations/head
+          test -f plugins/SimpleCoins/grants/head
+          echo 'intentionally corrupt issuance grant head' > plugins/SimpleCoins/grants/head
+          set +e
+          timeout --signal=TERM --kill-after=5s 150s java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-corrupt-grants.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo 'Paper did not stop after issuance journal corruption' >&2
+            tail -120 paper-corrupt-grants.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-corrupt-grants.log
+          grep -F 'Cannot open durable issuance grant journal' paper-corrupt-grants.log
+          grep -F 'Failed to initialize guarded accounting' paper-corrupt-grants.log
+          grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper-corrupt-grants.log
+          echo 'PAPER_GRANT_JOURNAL_CORRUPTION_FAILSTOP_PASSED'
       - name: Upload Paper diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
