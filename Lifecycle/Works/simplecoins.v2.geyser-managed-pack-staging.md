@@ -73,7 +73,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [Paper fake-Geyser provider staging](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842541); [Java/JUnit](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842389); [prior currency packs](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842380); [guarded startup](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842530); [BlockLocker](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842420); [profile BAN](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842478); [wallet](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842412); [coin](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842391); [static](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842487) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -84,6 +84,15 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Observed source-backed implementation and CI
+
+- Test-first head `a75cf209a8a0388034670b6165ba021481a230d7`: Java/JUnit [CI #43585582475](https://github.com/surumeneco/SimpleCoins/actions/runs/43585582475) failed compilation because `GeyserResourceInstaller` did not exist. This is ordinary source-observed Red, not CAT-generated normative Red.
+- Current implementation uses only Geyser-Spigot's *actual Bukkit provider object* for a data folder; it never guesses a server path. When Nexo is absent, SimpleCoins verifies `gameplay.enable-custom-content=true`, then uses the pre-existing `ManagedResources` hash-owned manifest to stage only `packs/simplecoins-generated.mcpack` and `custom_mappings/simplecoins-generated.json` from the private #406 archives. A changed copy requires **a subsequent Geyser restart** to be loaded.
+- When Nexo is enabled, SimpleCoins does not create/deliver a second Java/Bedrock pack and removes only verified previously managed Geyser files. JUnit confirms no unowned/modified Geyser pack is overwritten, invalid sources fail, re-staging is idempotent with respect to contents, Nexo cleanup preserves other plugins' packs.
+- [Actual isolated Paper 26.2 build 134 #43585842541](https://github.com/surumeneco/SimpleCoins/actions/runs/43585842541) passed at code head `6c144ebbf231cc4846fe3f23eebbb74131f54d54`. A **test-only stub named Geyser-Spigot** supplied the Bukkit plugin/data-folder contract and `gameplay.enable-custom-content=true`; it is NOT a real Geyser engine. Server log `SIMPLECOINS_GEYSER_PACK_STAGED: changed=true`, then filesystem byte checks against generated pack and mapping with managed manifest, yielded `PAPER_MANAGED_GEYSER_STAGING_PASSED`; independent guard denied admission throughout.
+- All thirteen CI families succeeded on that code head: Paper resource generation, fake-Geyser integration, guarded startup, journal/history/directory controls, owner/BAN probes, saved discovery, coin/wallet, JUnit and static verifier. This is *not* Geyser custom content loaded or actual BE client delivery.
+- CAT normative gates, actual Geyser-Spigot JAR, Nexo/Scaffolding delegation and resource reload, Java URL hosting and client receipt, JE/BE visual correctness, physical settlement and financial finality remain **not-run**.
 
 ## Observed constraints and staged implementation boundaries
 
