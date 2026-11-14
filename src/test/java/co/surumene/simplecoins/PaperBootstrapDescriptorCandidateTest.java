@@ -22,4 +22,19 @@ class PaperBootstrapDescriptorCandidateTest {
         assertTrue(JavaPlugin.class.isAssignableFrom(
                 Class.forName("co.surumene.simplecoins.SimpleCoinsPlugin")));
     }
+    @Test
+    void geyserSpigotIsOptionalButDeclaredBeforeSimpleCoinsBootstrap() throws Exception {
+        try (InputStream resource = getClass().getClassLoader().getResourceAsStream("plugin.yml")) {
+            assertNotNull(resource);
+            String yaml = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(yaml.contains("depend:\n  - SimpleCoinsGuard"),
+                    "The independent default-deny guard must remain a hard dependency");
+            int softdepends = yaml.indexOf("\nsoftdepend:\n");
+            assertTrue(softdepends > 0, "Geyser is optional, not a hard dependency");
+            String optionalProviders = yaml.substring(softdepends + "\nsoftdepend:\n".length());
+            assertTrue(optionalProviders.lines().anyMatch(line -> line.equals("  - Geyser-Spigot")),
+                    "Geyser must enable before SimpleCoins stages its custom content");
+        }
+    }
+
 }
