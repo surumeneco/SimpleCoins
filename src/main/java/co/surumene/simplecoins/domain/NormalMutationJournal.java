@@ -10,6 +10,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
+import java.nio.file.DirectoryStream;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -88,6 +89,10 @@ public final class NormalMutationJournal implements AutoCloseable {
     private boolean closed;
     private boolean failed;
     private long nextAuditSequence = 1;
+    // One OS directory cursor is retained across bounded Paper heartbeats.
+    // Weakly consistent new entries will be checked on a subsequent pass.
+    private DirectoryStream<Path> auditDirectoryStream;
+    private java.util.Iterator<Path> auditDirectoryIterator;
 
     public NormalMutationJournal(Path storage) throws IOException {
         Objects.requireNonNull(storage, "storage");
@@ -275,6 +280,59 @@ public final class NormalMutationJournal implements AutoCloseable {
         return true;
     }
 
+    /**
+     * Read at most one canonical *.mutation directory entry. The record
+     * decoder audit checks known record bytes separately. This companion
+     * detects untracked, noncanonical and unexpected FILE IDENTITIES without
+     * doing an O(n) directory listing inside a Paper heartbeat.
+     *
+     * DirectoryStream may not observe additions during an existing pass:
+     * this is eventual corruption detection, not a frozen filesystem view.
+     */
+    public synchronized boolean auditNextDirectoryEntry() {
+        checkHealthy();
+        try {
+            if (auditDirectoryIterator == null) {
+                auditDirectoryStream = Files.newDirectoryStream(directory, "*.mutation");
+                auditDirectoryIterator = auditDirectoryStream.iterator();
+            }
+            if (!auditDirectoryIterator.hasNext()) {
+                resetDirectoryAudit();
+                return false;
+            }
+            Path entry = auditDirectoryIterator.next();
+            String name = entry.getFileName().toString();
+            if (!name.endsWith(".mutation"))
+                throw new IOException("Unexpected source returned by journal directory filter");
+            String identity = name.substring(0, name.length() - ".mutation".length());
+            final long sequence;
+            try {
+                sequence = Long.parseLong(identity);
+            } catch (NumberFormatException malformed) {
+                throw new IOException("Malformed monetary journal record filename: " + name,
+                        malformed);
+            }
+            if (sequence < 1 || !name.equals(sequence + ".mutation")
+                    || !entries.containsKey(sequence))
+                throw new IOException("Unexpected monetary journal file: " + name);
+            return true;
+        } catch (IOException | RuntimeException corruption) {
+            failed = true;
+            try { resetDirectoryAudit(); }
+            catch (IOException cleanup) { corruption.addSuppressed(cleanup); }
+            throw new IllegalStateException(
+                    "Monetary journal unexpected directory record integrity failed",
+                    corruption);
+        }
+    }
+
+    private void resetDirectoryAudit() throws IOException {
+        DirectoryStream<Path> existing = auditDirectoryStream;
+        auditDirectoryStream = null;
+        auditDirectoryIterator = null;
+        if (existing != null) existing.close();
+    }
+
     /** Detect missing, replaced or symbolic writer lock files before mutation. */
     private Object requireWriterLockFileKey() throws IOException {
         for (Path parent = writerLockPath.getParent(); parent != null; parent = parent.getParent()) {
@@ -372,7 +430,10 @@ public final class NormalMutationJournal implements AutoCloseable {
     @Override public synchronized void close() throws IOException {
         if (closed) return;
         closed = true;
-        try { writerLock.release(); }
-        finally { lockChannel.close(); }
+        try { resetDirectoryAudit(); }
+        finally {
+            try { writerLock.release(); }
+            finally { lockChannel.close(); }
+        }
     }
 }
