@@ -10,14 +10,15 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * Cheap, periodic liveness check for the single-writer monetary journal.
- * It does NOT audit mutation files or prove saved-world commit/reconciliation.
+ * Bounded periodic liveness and rolling record/directory checks for the
+ * single-writer monetary journal. Neither check proves saved-world settlement.
  */
 public final class PaperNormalJournalWatchdog implements AutoCloseable {
     private static final long FIRST_CHECK_TICKS = 20L;
     private static final long CHECK_PERIOD_TICKS = 100L;
     // Fixed work bound per five-second heartbeat. No full record scan per tick.
     private static final int RECORDS_PER_HEARTBEAT = 16;
+    private static final int DIRECTORY_ENTRIES_PER_HEARTBEAT = 16;
 
     private final JavaPlugin plugin;
     private final NormalMutationJournal journal;
@@ -66,6 +67,9 @@ public final class PaperNormalJournalWatchdog implements AutoCloseable {
             journal.checkHealthy();
             for (int i = 0; i < RECORDS_PER_HEARTBEAT; i++) {
                 if (!journal.auditNextRecord()) break;
+            }
+            for (int i = 0; i < DIRECTORY_ENTRIES_PER_HEARTBEAT; i++) {
+                if (!journal.auditNextDirectoryEntry()) break;
             }
         }, tripped, failure -> {
             if (closed.get()) return;
