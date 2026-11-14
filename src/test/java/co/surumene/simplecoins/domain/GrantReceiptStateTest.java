@@ -50,6 +50,19 @@ class GrantReceiptStateTest {
                         .verify(ledger, player));
     }
 
+    @Test void forgedGrantAmountCannotAdvanceOrFinishReceipt() throws Exception {
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(temp.resolve("forged-handle"));
+        var authentic = ledger.reserve(player, 5200, "console");
+        var forged = new GrantLedger.Grant(authentic.sequence(), authentic.id(),
+                player, 5000, authentic.issuer(), authentic.createdMillis(),
+                false, CoinDenomination.FIVE_THOUSAND, 1);
+        var state = GrantReceiptState.empty().begin(authentic);
+        var foreignBatch = GrantDeliveryBatchPlanner.next(forged, 0, 1);
+        assertThrows(IllegalStateException.class,
+                () -> state.advance(forged, foreignBatch));
+    }
+
     @Test void forgedBatchAndMalformedStateFailClosed() throws Exception {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(temp.resolve("batch"));
