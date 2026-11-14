@@ -175,6 +175,20 @@ public final class NormalMutationJournal implements AutoCloseable {
     }
 
     /**
+     * Reusing or replacing a record must not erase a checksum-valid,
+     * externally altered journal entry before the cyclic historical audit
+     * reaches it. This is a bounded one-record check, not an atomic
+     * cross-process compare-and-swap.
+     */
+    private void requirePersistedMatch(Mutation expected) throws IOException {
+        Mutation stored = decode(DurableFile.read(
+                recordPath(expected.sequence()), MAX_RECORD_BYTES));
+        if (!expected.equals(stored))
+            throw new IOException("Monetary journal record diverged before reuse: "
+                    + expected.sequence());
+    }
+
+    /**
      * Idempotently reserve one proposed physical movement before Paper edits
      * the corresponding inventory/Entity. This does not mint or transfer money.
      */
@@ -187,6 +201,8 @@ public final class NormalMutationJournal implements AutoCloseable {
             Mutation old = entries.get(previous);
             if (!old.from().equals(from) || !old.to().equals(to) || old.amount() != amount)
                 throw new IllegalStateException("Conflicting duplicate monetary operation ID");
+            try { requirePersistedMatch(old); }
+            catch (IOException failure) { failed = true; throw failure; }
             return new Preparation(old, false);
         }
         long next = entries.isEmpty() ? 1 : Math.addExact(entries.lastKey(), 1);
@@ -212,6 +228,10 @@ public final class NormalMutationJournal implements AutoCloseable {
         Long sequence = operationIds.get(Objects.requireNonNull(operationId));
         if (sequence == null) throw new IllegalArgumentException("Unknown mutation operation ID");
         Mutation before = entries.get(sequence);
+        // Even an idempotent EVENT_APPLIED replay must first prove that the
+        // physical record still matches the version used by this writer.
+        try { requirePersistedMatch(before); }
+        catch (IOException failure) { failed = true; throw failure; }
         if (before.phase() == Phase.EVENT_APPLIED) return before;
         Mutation after = before.eventApplied();
         try { DurableFile.write(recordPath(sequence), encode(after)); }
