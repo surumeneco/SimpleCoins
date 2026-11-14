@@ -8,6 +8,7 @@ depend:
   - SimpleCoinsGuard
 description: SimpleCoins Paper bootstrap - settlement integration is not yet available
 softdepend:
+  - Geyser-Spigot
   - Nexo
   - BlockLocker
   - WWC
