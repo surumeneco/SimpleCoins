@@ -83,3 +83,10 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 - **Tests-first**: 5,200C with one slot = 5,000C then 2x100C, exact denomination 129 coins = stack counts 64/64/1 across three one-slot batches, 0 free slots preserves state, invalid partial amount (e.g. 100C before 5,000C) rejected, too-large grant refuses unbounded materialization. The immutable output remains bounded.
 - **Out of scope**: actual Paper ItemStack insertion, filesystem playerdata receipt save/flush, durable ledger acknowledgement, world/journal monetary settlement, player admission, online/offline resolution and public command names. This Work alone **does not prove exactly-once delivery**; that needs crash-injection at every physical save stage.
 - **CAT boundaries**: issue-work Draft only, no self-Confirmed formal Process/PI/TCE; mechanical Work contract validation and ordinary JUnit Red/Green are distinct from normative CAT process/model/implementation Gates.
+
+## Observed Red / Green and concurrent develop change
+
+- Red head 9fbf9794dd6f7b55ce00f682399c42295fd5707d: [Domain foundation run 43609984719](https://github.com/surumeneco/SimpleCoins/actions/runs/43609984719) failed as expected because new GrantDeliveryBatchPlanner type was absent.
+- Green head 9de089fad6fc8c997e09ba29ca0ffffba1a5491d: [Domain foundation run 43610110370](https://github.com/surumeneco/SimpleCoins/actions/runs/43610110370) completed successfully for the added planner and existing Domain/guard JUnit regressions.
+- Concurrent target: [PR #414](https://github.com/surumeneco/SimpleCoins/pull/414) was squash-merged as 51936c1f556acb16346b1b6953527f90d263ea2c. Both Works change different files. The newly triggered PR check must verify the combination against the newer develop target before integrating this one.
+- At this entry: final combined CI, actual playerdata save, real issuance, formal CAT Gates, and release are not yet verified.
