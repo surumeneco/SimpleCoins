@@ -29,6 +29,7 @@ spec_status: unknown
 | https://github.com/surumeneco/SimpleCoins/blob/69d6a0b2c40ac52257d7950cbc998faa03909d8e/src/main/java/co/surumene/simplecoins/paper/PaperProfileBanSource.java |
 | https://github.com/surumeneco/SimpleCoins/blob/69d6a0b2c40ac52257d7950cbc998faa03909d8e/src/test/java/co/surumene/simplecoins/paper/PaperProfileBanSourceTest.java |
 | https://github.com/surumeneco/SimpleCoins/pull/395 |
+| https://github.com/surumeneco/SimpleCoins/actions/runs/43562318323 |
 
 ## Scope
 
@@ -71,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43562318323 (Paper live probe); https://github.com/surumeneco/SimpleCoins/actions/runs/43562318294 (Java/JUnit at 91d2573) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -92,11 +93,11 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 ## Verification acceptance and evidence still required
 
-1. On isolated Paper 26.2 build 134 with the actual SimpleCoins/guard plugin versions, invoke the profile observer on Paper's main thread for one banned and one unbanned profile with known UUIDs; record resulting source ID, BANNED/CLEAR and execution log. This must be a read-only probe; no admission opening. A dedicated CI isolation probe (test-only Java class/JAR + workflow) may satisfy this after its actual Paper execution and logs are independently checked. **Not run yet.**
-2. Exercise non-main-thread, missing/mismatched UUID and unreadable provider cases; verify fail-closed errors without interpreting them as CLEAR. Existing pure proxy tests cover part; real Paper invocation is **not run**.
+1. On isolated Paper 26.2 build 134 with the actual SimpleCoins/guard plugin versions, invoke the profile observer on Paper's main thread for one banned and one unbanned profile with known UUIDs; record resulting source ID, BANNED/CLEAR and execution log. This read-only probe **passed on isolated Paper 26.2 build 134** at GitHub head `91d2573077fa826694260cc0bd93237016456a2a` (run #43562318323, log marker `PAPER_PROFILE_BAN_ISOLATED_SUCCESS`). The standard BAN and independent guard remained active; no admission opened.
+2. Exercise non-main-thread, missing/mismatched UUID and unreadable provider cases; verify fail-closed errors without interpreting them as CLEAR. Existing pure proxy tests cover mismatched response/provider failure; isolated live Paper also verified null UUID and off-primary-thread `IOException` at head `91d2573`. Unreadable-provider injection in Paper itself remains **not-run**.
 3. Audit the active server's standard IP BAN and every external BAN provider plus UUID-to-IP subject identification. If any provider or identity mapping cannot be proven complete, mark full `BanSourceCoverage` **blocked**; do not create placeholder CLEAR observations. **Unverified.**
 4. Only after 1–3 and the distinct owner/BlockLocker/WWC/WWW prerequisites are established may Issue #3 use one matching saved+LIVE generation. This Work must not publish monetary statistics or allow logins. **Not ready.**
 
 ## Stage and handoff
 
-`issue-work / verification` is the current scope. There is no approved CAT Confirmed Process/PI/TCE decision reference in this Work; product CAT process-closure/model/implementation Gates remain `not-run`. A future implementation Work must take actual normative confirmation and standalone Red/Green evidence before any production edit.
+`issue-work / verification` is the current scope. The isolated standard profile adapter verification (items 1 and part of 2) is complete; IP/external BAN enumeration and UUID/IP mapping (item 3) remain blocked/unverified. There is no approved CAT Confirmed Process/PI/TCE decision reference in this Work; product CAT process-closure/model/implementation Gates remain `not-run`. A future implementation Work must take actual normative confirmation and standalone Red/Green evidence before any production edit.
