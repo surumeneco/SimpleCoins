@@ -13,14 +13,14 @@ class GrantReceiptStateTest {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(temp.resolve("ledger"));
         var grant = ledger.reserve(player, 5200, "console");
-        var start = GrantReceiptState.empty().begin(grant);
+        var start = GrantReceiptState.empty().begin(ledger, player, grant);
         start.verify(ledger, player);
-        var first = start.advance(grant, GrantDeliveryBatchPlanner.next(grant, 0, 1));
+        var first = start.advance(ledger, player, grant, GrantDeliveryBatchPlanner.next(grant, 0, 1));
         assertEquals(5000, first.partialValue());
         first.verify(new GrantLedger(temp.resolve("ledger")), player);
-        assertThrows(IllegalStateException.class, () -> first.complete(grant));
-        var full = first.advance(grant, GrantDeliveryBatchPlanner.next(grant, 5000, 1));
-        var receipt = full.complete(grant);
+        assertThrows(IllegalStateException.class, () -> first.complete(ledger, player, grant));
+        var full = first.advance(ledger, player, grant, GrantDeliveryBatchPlanner.next(grant, 5000, 1));
+        var receipt = full.complete(ledger, player, grant);
         assertEquals(grant.sequence(), receipt.completedSequence());
         assertFalse(receipt.active());
         receipt.verify(ledger, player);
@@ -57,24 +57,24 @@ class GrantReceiptStateTest {
         var forged = new GrantLedger.Grant(authentic.sequence(), authentic.id(),
                 player, 5000, authentic.issuer(), authentic.createdMillis(),
                 false, CoinDenomination.FIVE_THOUSAND, 1);
-        var state = GrantReceiptState.empty().begin(authentic);
+        var state = GrantReceiptState.empty().begin(ledger, player, authentic);
         var foreignBatch = GrantDeliveryBatchPlanner.next(forged, 0, 1);
         assertThrows(IllegalStateException.class,
-                () -> state.advance(forged, foreignBatch));
+                () -> state.advance(ledger, player, forged, foreignBatch));
     }
 
     @Test void forgedBatchAndMalformedStateFailClosed() throws Exception {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(temp.resolve("batch"));
         var grant = ledger.reserve(player, 5200, "console");
-        var state = GrantReceiptState.empty().begin(grant);
+        var state = GrantReceiptState.empty().begin(ledger, player, grant);
         var canonical = GrantDeliveryBatchPlanner.next(grant, 0, 1);
         var forged = new GrantDeliveryBatchPlanner.Batch(canonical.stacks(), 0, 5200, true);
-        assertThrows(IllegalStateException.class, () -> state.advance(grant, forged));
+        assertThrows(IllegalStateException.class, () -> state.advance(ledger, player, grant, forged));
         assertThrows(IllegalStateException.class,
-                () -> state.advance(grant, GrantDeliveryBatchPlanner.next(grant, 0, 0)));
-        var next = state.advance(grant, canonical);
-        assertThrows(IllegalStateException.class, () -> next.advance(grant, canonical));
+                () -> state.advance(ledger, player, grant, GrantDeliveryBatchPlanner.next(grant, 0, 0)));
+        var next = state.advance(ledger, player, grant, canonical);
+        assertThrows(IllegalStateException.class, () -> next.advance(ledger, player, grant, canonical));
         assertThrows(IllegalArgumentException.class, () -> new GrantReceiptState(-1, 0, null, 0));
         assertThrows(IllegalArgumentException.class, () -> new GrantReceiptState(2, 2, UUID.randomUUID(), 0));
         assertThrows(IllegalArgumentException.class, () -> new GrantReceiptState(0, 0, UUID.randomUUID(), 0));
