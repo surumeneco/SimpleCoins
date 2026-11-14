@@ -94,3 +94,16 @@ tasks.register<Jar>("paperJournalRecordProbeJar") {
         rename { "plugin.yml" }
     }
 }
+
+ 
+// Mock Geyser data-folder contract only; not an actual Geyser distribution.
+tasks.register<Jar>("paperFakeGeyserProviderJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsFakeGeyser")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/GeyserManagedLiveProbe.class")
+    }
+    from("tests/paper-geyser-managed-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
