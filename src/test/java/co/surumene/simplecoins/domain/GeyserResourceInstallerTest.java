@@ -18,6 +18,22 @@ class GeyserResourceInstallerTest {
         return JavaCurrencyPack.build(temp.resolve("source"), names);
     }
 
+    @Test void rejectsGeyserMappingWhenCoinModelAndBedrockIdentifierDisagree()
+            throws Exception {
+        var generated = candidate();
+        String mapping = Files.readString(generated.bedrockMapping());
+        String valid = "\\"model\\":\\"simplecoins:coin_5\\"";
+        String invalid = "\\"model\\":\\"simplecoins:coin_1\\"";
+        assertTrue(mapping.contains(valid));
+        Path changed = temp.resolve("wrong-model.json");
+        Files.writeString(changed, mapping.replace(valid, invalid));
+        Path provider = temp.resolve("wrong-model");
+        assertThrows(IOException.class, () -> GeyserResourceInstaller.stage(
+                provider, generated.bedrockArchive(), changed, true));
+        assertFalse(Files.exists(provider.resolve("simplecoins-managed-resources")),
+                "Invalid Geyser model must never be installed or claimed");
+    }
+
     @Test void installsTwoOwnedGeyserArtifactsWithoutTouchingForeignPacks() throws Exception {
         var staged = candidate();
         Path provider = temp.resolve("Geyser-Spigot");
