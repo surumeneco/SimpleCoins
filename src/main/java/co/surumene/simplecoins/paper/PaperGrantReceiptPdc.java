@@ -50,6 +50,16 @@ public final class PaperGrantReceiptPdc {
         container.set(RECEIPT, PersistentDataType.BYTE_ARRAY, encode(state));
     }
 
+    /** Exact playerdata BYTE_ARRAY envelope; callers must still verify against GrantLedger. */
+    public static byte[] toSavedBytes(GrantReceiptState receipt) {
+        return encode(Objects.requireNonNull(receipt, "receipt"));
+    }
+
+    /** Decode saved NBT PDC bytes without interpreting a missing field as empty. */
+    public static GrantReceiptState fromSavedBytes(byte[] savedBytes) {
+        return decode(Objects.requireNonNull(savedBytes, "saved receipt bytes"));
+    }
+
     private static byte[] encode(GrantReceiptState state) {
         ByteBuffer buffer = ByteBuffer.allocate(RECORD_BYTES);
         buffer.putInt(MAGIC);
