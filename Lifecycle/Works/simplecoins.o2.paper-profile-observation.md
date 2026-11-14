@@ -49,7 +49,7 @@ Multiple IDs in one cell are separated by `;`.
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/* | — | — |
+| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/*;build.gradle.kts;src/test/java/co/surumene/simplecoins/paper/ProfileBanLiveProbe.java;.github/workflows/paper-profile-ban-live-smoke.yml | — | src/test/java/co/surumene/simplecoins/paper/ProfileBanLiveProbe.java |
 
 ## Checks
 
@@ -85,14 +85,14 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 ## Work scope and checked source state
 
-- Target: Paper 26.2, SimpleCoins 1.0.0, Issue #4 / O2a **verification only**, not a new runtime release or normative decision.
+- Target: Paper 26.2, SimpleCoins 1.0.0, Issue #4 / O2a **verification only**, not a new runtime release or normative decision. Permitted test-only build/probe/workflow files are scoped in Repositories; no production Java sources or plugin entrypoint changes.
 - Inspected `develop@69d6a0b2c40ac52257d7950cbc998faa03909d8e`. PR #395 is already merged; this Work must not recreate its profile adapter.
 - `PaperProfileBanSource.observe(UUID)` requires the primary thread, checks returned UUID, reads `OfflinePlayer.isBanned()`, and fails on missing/mismatched/unreliable responses. Existing test class exercises true, false, null provider, UUID mismatch, missing arguments through a proxy, **not live Bukkit**.
 - `paper-profile: CLEAR` is **not** proof of `paper-ip: CLEAR` or any external provider; `BanSourceCoverage.capture` requires each independently declared source per UUID. This Work does not establish the completeness of the required provider list or a time-frozen cross-provider generation.
 
 ## Verification acceptance and evidence still required
 
-1. On isolated Paper 26.2 build 134 with the actual SimpleCoins/guard plugin versions, invoke the profile observer on Paper's main thread for one banned and one unbanned profile with known UUIDs; record resulting source ID, BANNED/CLEAR and execution log. This must be a read-only probe; no admission opening. **Not run.**
+1. On isolated Paper 26.2 build 134 with the actual SimpleCoins/guard plugin versions, invoke the profile observer on Paper's main thread for one banned and one unbanned profile with known UUIDs; record resulting source ID, BANNED/CLEAR and execution log. This must be a read-only probe; no admission opening. A dedicated CI isolation probe (test-only Java class/JAR + workflow) may satisfy this after its actual Paper execution and logs are independently checked. **Not run yet.**
 2. Exercise non-main-thread, missing/mismatched UUID and unreadable provider cases; verify fail-closed errors without interpreting them as CLEAR. Existing pure proxy tests cover part; real Paper invocation is **not run**.
 3. Audit the active server's standard IP BAN and every external BAN provider plus UUID-to-IP subject identification. If any provider or identity mapping cannot be proven complete, mark full `BanSourceCoverage` **blocked**; do not create placeholder CLEAR observations. **Unverified.**
 4. Only after 1–3 and the distinct owner/BlockLocker/WWC/WWW prerequisites are established may Issue #3 use one matching saved+LIVE generation. This Work must not publish monetary statistics or allow logins. **Not ready.**
