@@ -9,6 +9,8 @@ import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletCrafting;
 import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
+import co.surumene.simplecoins.paper.WorldScopeConfigReader;
+import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import org.bukkit.Bukkit;
@@ -34,6 +36,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private NormalMutationJournal normalJournal;
     private CoinExchangeRecipes exchangeRecipes;
     private WalletCrafting walletCrafting;
+    private PaperSavedSourceDiscovery sourceDiscovery;
 
     @Override
     public void onEnable() {
@@ -67,6 +70,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // The death listener is intentionally NOT registered until real
             // issuance and physical world settlement can be reconciled.
             WanderingTraderDropConfigReader.read(getConfig());
+            WorldScopeConfigReader.Loaded sourceScope = WorldScopeConfigReader.read(getConfig());
             EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
             Map<CoinDenomination, String> fallback = CoinItemCodec.defaultNames();
             for (CoinDenomination coin : CoinDenomination.values()) {
@@ -111,9 +115,24 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // classloader; it never opens while journal/scan are not connected.
             getServer().getServicesManager().register(
                     AdmissionPermit.class, publication::mayAdmit, this, ServicePriority.Normal);
+            // Capture Paper world folders on its main thread, but walk their
+            // saved files off-thread. This is not a staged monetary settlement
+            // and MUST NOT publish statistics or open player admission.
+            sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
+                    sourceScope.maxSourceEntries(), () -> {
+                        publication.revoke();
+                        admission.fatalFailure();
+                        getLogger().severe("Saved-source discovery failed; stopping Paper.");
+                        Bukkit.shutdown();
+                    });
+            sourceDiscovery.start();
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (sourceDiscovery != null) {
+                sourceDiscovery.close();
+                sourceDiscovery = null;
+            }
             if (walletCrafting != null) {
                 try { walletCrafting.unregister(); }
                 catch (RuntimeException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
@@ -138,6 +157,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (sourceDiscovery != null) {
+            sourceDiscovery.close();
+            sourceDiscovery = null;
+        }
         // Remove the cross-plugin permission service before tearing down state.
         // The independent guard then denies, even after this plugin is disabled.
         getServer().getServicesManager().unregisterAll(this);
