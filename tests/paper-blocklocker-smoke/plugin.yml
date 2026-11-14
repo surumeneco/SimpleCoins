@@ -1,0 +1,8 @@
+name: SimpleCoinsBlockLockerLiveProbe
+version: '1.0.0-ci-only'
+main: co.surumene.simplecoins.paper.BlockLockerLiveProbe
+api-version: '26.2'
+load: POSTWORLD
+depend:
+  - SimpleCoins
+  - BlockLocker

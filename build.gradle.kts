@@ -68,3 +68,16 @@ tasks.register<Jar>("paperWalletRegistryProbeJar") {
         rename { "plugin.yml" }
     }
 }
+
+ 
+// Source-bounded BlockLocker integration probe: separate from shipped main JAR.
+tasks.register<Jar>("paperBlockLockerLiveProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsBlockLockerLiveProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/BlockLockerLiveProbe.class")
+    }
+    from("tests/paper-blocklocker-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
