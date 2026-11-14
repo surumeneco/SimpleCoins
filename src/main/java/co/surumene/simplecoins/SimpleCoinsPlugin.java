@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletCrafting;
 import co.surumene.simplecoins.paper.WalletMenu;
+import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import org.bukkit.Bukkit;
@@ -62,6 +63,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // installing handlers. Prior money remains identified by fixed PDC,
             // not display name, currency suffix or newly lowered wallet caps.
             saveDefaultConfig();
+            // Validate the approved 10%/nine-denomination trader policy now.
+            // The death listener is intentionally NOT registered until real
+            // issuance and physical world settlement can be reconciled.
+            WanderingTraderDropConfigReader.read(getConfig());
             EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
             Map<CoinDenomination, String> fallback = CoinItemCodec.defaultNames();
             for (CoinDenomination coin : CoinDenomination.values()) {
