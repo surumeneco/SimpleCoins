@@ -51,4 +51,41 @@ class BlockLockerLiveEvidenceTest {
                 Optional.of("Alice"), List.of("Alice"), null,
                 value -> Optional.of(ALICE)));
     }
+
+    @Test void refusesUnloadedDoubleChestPartnerBeforeProviderLookup() throws Exception {
+        var left = org.bukkit.block.data.type.Chest.Type.LEFT;
+        var right = org.bukkit.block.data.type.Chest.Type.RIGHT;
+        var single = org.bukkit.block.data.type.Chest.Type.SINGLE;
+        // A north-facing LEFT half at x=15 requires the adjacent x=16
+        // chunk, but the RIGHT half's partner lies within x=14.
+        assertThrows(IOException.class, () -> BlockLockerLiveEvidence.requireLoadedPartner(
+                15, 4, org.bukkit.block.BlockFace.NORTH, left,
+                (cx, cz) -> cx == 0 && cz == 0));
+        assertDoesNotThrow(() -> BlockLockerLiveEvidence.requireLoadedPartner(
+                15, 4, org.bukkit.block.BlockFace.NORTH, right,
+                (cx, cz) -> cx == 0 && cz == 0));
+        // Other orientations and negative chunk coordinates must not be
+        // rounded toward zero or have LEFT/RIGHT reversed.
+        assertThrows(IOException.class, () -> BlockLockerLiveEvidence.requireLoadedPartner(
+                0, 4, org.bukkit.block.BlockFace.NORTH, right,
+                (cx, cz) -> cx == 0 && cz == 0));
+        assertThrows(IOException.class, () -> BlockLockerLiveEvidence.requireLoadedPartner(
+                15, 4, org.bukkit.block.BlockFace.SOUTH, right,
+                (cx, cz) -> cx == 0 && cz == 0));
+        assertThrows(IOException.class, () -> BlockLockerLiveEvidence.requireLoadedPartner(
+                4, 15, org.bukkit.block.BlockFace.EAST, left,
+                (cx, cz) -> cx == 0 && cz == 0));
+        assertThrows(IOException.class, () -> BlockLockerLiveEvidence.requireLoadedPartner(
+                4, 0, org.bukkit.block.BlockFace.WEST, left,
+                (cx, cz) -> cx == 0 && cz == 0));
+        // A single chest must never access an arbitrary neighboring chunk.
+        assertDoesNotThrow(() -> BlockLockerLiveEvidence.requireLoadedPartner(
+                15, 15, org.bukkit.block.BlockFace.NORTH, single,
+                (cx, cz) -> false));
+        assertDoesNotThrow(() -> BlockLockerLiveEvidence.requireLoadedPartner(
+                15, 4, org.bukkit.block.BlockFace.NORTH, left,
+                (cx, cz) -> cx == 1 && cz == 0));
+    }
+
+
 }

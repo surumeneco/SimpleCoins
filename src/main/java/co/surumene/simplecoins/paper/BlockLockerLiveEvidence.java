@@ -8,6 +8,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.BiPredicate;
+import org.bukkit.block.BlockFace;
 import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
 import org.bukkit.plugin.Plugin;
@@ -61,6 +63,40 @@ public final class BlockLockerLiveEvidence {
     }
 
     /**
+     * BlockLocker may inspect the other half when locating a double-chest
+     * protection. Check its Chunk WITHOUT calling getRelative/getBlockAt,
+     * which could load an otherwise unobserved saved source.
+     *
+     * LEFT/RIGHT are the chest's halves; the matching half lies to the
+     * player's right/left respectively when looking in the chest's facing.
+     */
+    static void requireLoadedPartner(int x, int z, BlockFace facing,
+                                    org.bukkit.block.data.type.Chest.Type type,
+                                    BiPredicate<Integer, Integer> isLoaded) throws IOException {
+        Objects.requireNonNull(facing, "chest facing");
+        Objects.requireNonNull(type, "chest half");
+        Objects.requireNonNull(isLoaded, "loaded chunk witness");
+        if (type == org.bukkit.block.data.type.Chest.Type.SINGLE) return;
+        boolean left = type == org.bukkit.block.data.type.Chest.Type.LEFT;
+        BlockFace partner = switch (facing) {
+            case NORTH -> left ? BlockFace.EAST : BlockFace.WEST;
+            case SOUTH -> left ? BlockFace.WEST : BlockFace.EAST;
+            case EAST -> left ? BlockFace.SOUTH : BlockFace.NORTH;
+            case WEST -> left ? BlockFace.NORTH : BlockFace.SOUTH;
+            default -> throw new IOException("Unsupported double chest facing: " + facing);
+        };
+        final int otherX, otherZ;
+        try {
+            otherX = Math.addExact(x, partner.getModX());
+            otherZ = Math.addExact(z, partner.getModZ());
+        } catch (ArithmeticException overflow) {
+            throw new IOException("Double chest companion coordinates overflow", overflow);
+        }
+        if (!isLoaded.test(Math.floorDiv(otherX, 16), Math.floorDiv(otherZ, 16)))
+            throw new IOException("Double chest companion Chunk is not loaded");
+    }
+
+    /**
      * Reads currently loaded BlockLocker protection evidence. A provider
      * absence/version mismatch is NOT an unprotected container and cannot
      * be converted to Free. Only genuinely missing protection in the live
@@ -74,6 +110,10 @@ public final class BlockLockerLiveEvidence {
         if (!block.getWorld().isChunkLoaded(Math.floorDiv(block.getX(), 16),
                 Math.floorDiv(block.getZ(), 16)))
             throw new IOException("Cannot classify an unloaded BlockLocker container");
+        if (block.getBlockData() instanceof org.bukkit.block.data.type.Chest chest) {
+            requireLoadedPartner(block.getX(), block.getZ(), chest.getFacing(), chest.getType(),
+                    (cx, cz) -> block.getWorld().isChunkLoaded(cx, cz));
+        }
         Plugin plugin = Bukkit.getPluginManager().getPlugin(PLUGIN_NAME);
         if (plugin == null || !plugin.isEnabled())
             throw new IOException("BlockLocker provider is absent or disabled");
