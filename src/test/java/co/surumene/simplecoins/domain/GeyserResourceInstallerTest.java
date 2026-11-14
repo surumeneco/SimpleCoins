@@ -35,6 +35,49 @@ class GeyserResourceInstallerTest {
                 "Invalid Geyser model must never be installed or claimed");
     }
 
+    @Test void rejectsMappingWithAppendedJsonOrInvalidUtf8() throws Exception {
+        var generated = candidate();
+        byte[] original = Files.readAllBytes(generated.bedrockMapping());
+        byte[] invalidUtf8 = java.util.Arrays.copyOf(original, original.length + 1);
+        invalidUtf8[original.length] = (byte) 0xC3;
+        Path malformed = temp.resolve("invalid-utf8.json");
+        Files.write(malformed, invalidUtf8);
+        Path utf8Provider = temp.resolve("invalid-utf8-provider");
+        assertThrows(IOException.class, () -> GeyserResourceInstaller.stage(
+                utf8Provider, generated.bedrockArchive(), malformed, true));
+        assertFalse(Files.exists(utf8Provider.resolve("simplecoins-managed-resources")));
+
+        Path appended = temp.resolve("appended-json.json");
+        Files.writeString(appended, Files.readString(generated.bedrockMapping())
+                + "\n{\"format_version\":2}");
+        Path appendedProvider = temp.resolve("extra-json-provider");
+        assertThrows(IOException.class, () -> GeyserResourceInstaller.stage(
+                appendedProvider, generated.bedrockArchive(), appended, true));
+        assertFalse(Files.exists(appendedProvider.resolve("simplecoins-managed-resources")));
+    }
+
+    @Test void rejectsMappingWithWrongIconOrStackComponent() throws Exception {
+        var generated = candidate();
+        String mapping = Files.readString(generated.bedrockMapping());
+        Path invalidIcon = temp.resolve("wrong-icon.json");
+        String icon = "\"icon\":\"simplecoins:coin_5\"";
+        assertTrue(mapping.contains(icon));
+        Files.writeString(invalidIcon, mapping.replace(icon, "\"icon\":\"simplecoins:coin_1\""));
+        Path iconProvider = temp.resolve("wrong-icon-provider");
+        assertThrows(IOException.class, () -> GeyserResourceInstaller.stage(
+                iconProvider, generated.bedrockArchive(), invalidIcon, true));
+        assertFalse(Files.exists(iconProvider.resolve("simplecoins-managed-resources")));
+
+        Path invalidStack = temp.resolve("bad-stack-size.json");
+        String stack = "\"minecraft:max_stack_size\":64";
+        assertTrue(mapping.contains(stack));
+        Files.writeString(invalidStack, mapping.replace(stack, "\"minecraft:max_stack_size\":32"));
+        Path stackProvider = temp.resolve("bad-stack-provider");
+        assertThrows(IOException.class, () -> GeyserResourceInstaller.stage(
+                stackProvider, generated.bedrockArchive(), invalidStack, true));
+        assertFalse(Files.exists(stackProvider.resolve("simplecoins-managed-resources")));
+    }
+
     @Test void installsTwoOwnedGeyserArtifactsWithoutTouchingForeignPacks() throws Exception {
         var staged = candidate();
         Path provider = temp.resolve("Geyser-Spigot");
