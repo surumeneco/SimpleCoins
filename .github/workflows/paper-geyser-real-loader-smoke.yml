@@ -103,6 +103,7 @@ jobs:
 
           # First start uses Geyser only to bootstrap its actual config directory.
           run_paper 'bootstrap'
+          grep -F 'Registered 1 custom items' paper-bootstrap.log
           test -s plugins/Geyser-Spigot/config.yml
           python3 - <<'PY'
           from pathlib import Path
@@ -119,6 +120,9 @@ jobs:
           cp ../build/libs/SimpleCoins-1.0.0.jar plugins/SimpleCoins.jar
           cp ../admission-guard/build/libs/admission-guard-1.0.0.jar plugins/SimpleCoinsGuard.jar
           run_paper 'stage'
+          # The control Geyser boot has one built-in custom item. With the
+          # nine SimpleCoins mapping entries, the real registry reports ten.
+          grep -F 'Registered 10 custom items' paper-stage.log
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-stage.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper-stage.log
           grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED: changed=true' paper-stage.log
@@ -136,8 +140,11 @@ jobs:
           print('REAL_GEYSER_PROVIDER_FILES_STAGED_BYTE_EXACT')
           PY
 
-          # Geyser only reads custom mappings and packs at its own startup.
+          # Verify a subsequent real Geyser startup preserves all nine added items.
+          # Some Geyser versions initialize the registry AFTER SimpleCoins onEnable;
+          # do not infer a universally necessary restart from a staged file alone.
           run_paper 'reload'
+          grep -F 'Registered 10 custom items' paper-reload.log
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-reload.log
           grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED: changed=false' paper-reload.log
           python3 - <<'PY'
@@ -152,8 +159,9 @@ jobs:
               raise SystemExit('Real Geyser startup/load emitted errors:\n' + '\n'.join(errors))
           assert 'Geyser' in log, 'Geyser plugin never appeared in actual Paper log'
           assert Path('plugins/Geyser-Spigot/custom_mappings/simplecoins-generated.json').is_file()
+          print('REAL_GEYSER_NINE_ADDITIONAL_ITEMS_REGISTERED: baseline=1, staging=10, restart=10')
           print('REAL_GEYSER_RESTART_SMOKE_PASSED: provider booted, staged files persisted, no attributed load errors')
-          print('LIMIT: not proof of actual custom-item registration, Bedrock client delivery, or rendering')
+          print('LIMIT: registration counts alone do not prove item-by-item client mapping, Bedrock client delivery, or rendering')
           PY
       - name: Preserve all three Paper logs for verification
         if: always()
