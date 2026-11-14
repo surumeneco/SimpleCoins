@@ -1,0 +1,138 @@
+name: Paper 26.2 managed Geyser resource directory staging (stub provider)
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/main/java/co/surumene/simplecoins/domain/GeyserResourceInstaller.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/GeyserResourceInstallerTest.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/GeyserManagedLiveProbe.java'
+      - 'tests/paper-geyser-managed-smoke/**'
+      - 'build.gradle.kts'
+      - 'src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'src/main/resources/plugin.yml'
+      - '.github/workflows/paper-geyser-managed-smoke.yml'
+
+jobs:
+  managed-geyser-stub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build and verify both plugin JARs
+        run: |
+          gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperFakeGeyserProviderJar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -F 'GeyserManagedLiveProbe.class'; then exit 1; fi
+      - name: Download pinned Paper 26.2 build 134 with checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-Paper-CI/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) echo "Unexpected Paper download URL" >&2; exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Boot actual Paper with fake Geyser plugin and verify managed staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp build/libs/SimpleCoinsFakeGeyser-1.0.0.jar smoke/plugins/Geyser-Spigot.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25577\n' > smoke/server.properties
+          cd smoke
+          mkfifo console.in
+          java -Xms256M -Xmx1024M -jar paper.jar nogui < console.in > paper.log 2>&1 &
+          server_pid=$!
+          exec 3> console.in
+          cleanup() {
+            printf 'stop\n' >&3 2>/dev/null || true
+            exec 3>&- || true
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Done (' paper.log; then ready=1; break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper exited before loading both plugins'; cat paper.log; exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then echo 'Paper startup timed out'; cat paper.log; exit 1; fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
+          grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
+          test -f plugins/SimpleCoins/normal-mutations/head || { echo 'RED_JOURNAL_HEAD_NOT_CREATED'; exit 1; }
+          test -f plugins/SimpleCoins/normal-mutations/.writer.lock || { echo 'RED_JOURNAL_LOCK_NOT_CREATED'; exit 1; }
+          echo 'PAPER_NORMAL_JOURNAL_OPEN_VERIFIED'
+          grep -F 'SIMPLECOINS_CURRENCY_PACKS_GENERATED' paper.log
+          grep -F 'SIMPLECOINS_GEYSER_TEST_PROVIDER_READY' paper.log
+          grep -F 'SIMPLECOINS_GEYSER_PACK_STAGED' paper.log
+          test -f plugins/SimpleCoins/SimpleCoins-java.zip
+          test -f plugins/SimpleCoins/geyser/SimpleCoins.mcpack
+          test -f plugins/SimpleCoins/geyser/simplecoins.json
+          printf 'stop\n' >&3
+          exec 3>&-
+          wait "$server_pid"
+          trap - EXIT
+          grep -F 'Saving worlds' paper.log
+          echo 'PAPER_GUARDED_FAKE_GEYSER_BOOT_STOP_PASSED'
+      - name: Validate all Java/Bedrock pack assets and mapping after real Paper run
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, zipfile
+          p=pathlib.Path("smoke/plugins/SimpleCoins")
+          je=p/"SimpleCoins-java.zip"
+          be=p/"geyser/SimpleCoins.mcpack"
+          mapping=p/"geyser/simplecoins.json"
+          expected={f"coin_{n}" for n in (1,5,10,50,100,500,1000,5000,10000)}
+          with zipfile.ZipFile(je) as j, zipfile.ZipFile(be) as b:
+              assert j.testzip() is None and b.testzip() is None
+              jm=json.loads(j.read("pack.mcmeta"))
+              assert jm["pack"]["min_format"]==[88,0]
+              assert jm["pack"]["max_format"]==[88,0]
+              assert len(j.namelist())==28, j.namelist()
+              out=json.loads(mapping.read_text(encoding="utf-8"))
+              definitions=out["items"]["minecraft:paper"]
+              assert len(definitions)==9, len(definitions)
+              assert {v["bedrock_identifier"] for v in definitions}=={f"simplecoins:{id}" for id in expected}
+              for id in expected:
+                  assert f"assets/simplecoins/items/{id}.json" in j.namelist()
+                  item=json.loads(j.read(f"assets/simplecoins/items/{id}.json"))
+                  assert item["model"]["model"] == f"simplecoins:item/{id}"
+                  assert f"assets/simplecoins/models/item/{id}.json" in j.namelist()
+                  native=j.read(f"assets/simplecoins/textures/item/{id}.png")
+                  bedrock=b.read(f"textures/items/{id}.png")
+                  assert native==bedrock and native.startswith(bytes([137,80,78,71,13,10,26,10]))
+          assert len(list((p/"images").glob("*.png")))==9
+          provider=pathlib.Path("smoke/plugins/Geyser-Spigot")
+          assert (provider/"simplecoins-managed-resources").is_file()
+          assert (provider/"packs/simplecoins-generated.mcpack").read_bytes()==be.read_bytes()
+          assert (provider/"custom_mappings/simplecoins-generated.json").read_bytes()==mapping.read_bytes()
+          print("PAPER_MANAGED_GEYSER_STAGING_PASSED: stub provider data folder, owned pack/mapping, default-deny; not real Geyser")
+          PY
+      - name: Upload Paper diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-geyser-managed-stub-log
+          path: smoke/*.log
+          if-no-files-found: ignore
+          retention-days: 7
