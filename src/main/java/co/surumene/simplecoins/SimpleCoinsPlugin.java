@@ -4,6 +4,7 @@ import co.surumene.simplecoins.domain.AdmissionBarrier;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
+import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.JavaCurrencyPack;
 import co.surumene.simplecoins.domain.GeyserResourceInstaller;
@@ -37,6 +38,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
     private NormalMutationJournal normalJournal;
+    private GrantLedger issuanceGrants;
     private PaperNormalJournalWatchdog normalJournalWatchdog;
     private CoinExchangeRecipes exchangeRecipes;
     private WalletCrafting walletCrafting;
@@ -65,6 +67,19 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             } catch (IOException journalFailure) {
                 throw new IllegalStateException(
                         "Cannot open durable normal mutation journal", journalFailure);
+            }
+            // The preexisting issuance GrantLedger is also authoritative
+            // durable evidence. Check/replay it at guarded startup instead of
+            // silently treating a corrupt or unexamined grant as empty.
+            // Opening it DOES NOT issue coins, apply a receipt, or authorize
+            // any player to log in; delivery reconciliation remains pending.
+            try {
+                issuanceGrants = new GrantLedger(
+                        getDataFolder().toPath().resolve("grants"));
+                getLogger().info("SIMPLECOINS_ISSUANCE_JOURNAL_OPEN_VERIFIED");
+            } catch (IOException grantFailure) {
+                throw new IllegalStateException(
+                        "Cannot open durable issuance grant journal", grantFailure);
             }
             // After startup verification, continuously check that the durable
             // monetary journal's writer lock/head remains valid. Corruption
