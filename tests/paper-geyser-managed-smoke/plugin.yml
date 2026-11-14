@@ -1,0 +1,5 @@
+name: Geyser-Spigot
+version: '0.0.0-ci-stub'
+main: co.surumene.simplecoins.paper.GeyserManagedLiveProbe
+api-version: '26.2'
+load: POSTWORLD
