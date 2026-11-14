@@ -77,8 +77,10 @@ public final class SavedGrantReceiptUniverseAudit {
         // A late-appearing source would invalidate all observations; a
         // source-set recheck is NOT a simultaneous content-generation witness.
         manifest.requireUnchangedDiscovery();
-        try { ledger.historySnapshot(); }
-        catch (IllegalStateException corrupt) {
+        try {
+            if (!history.equals(ledger.historySnapshot()))
+                throw new IOException("Issuance history changed during saved audit");
+        } catch (IllegalStateException corrupt) {
             throw new IOException("Issuance journal changed during saved audit", corrupt);
         }
         return new Report(receipts.size(), acknowledged, pending, awaiting);
