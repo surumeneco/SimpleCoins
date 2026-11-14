@@ -1,0 +1,7 @@
+name: SimpleCoinsWalletRegistryProbe
+version: '1.0.0-ci-only'
+main: co.surumene.simplecoins.paper.WalletRegistryLiveProbe
+api-version: '26.2'
+load: POSTWORLD
+depend:
+  - SimpleCoins
