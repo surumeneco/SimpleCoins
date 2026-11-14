@@ -62,7 +62,7 @@ spec_status: unknown
 | process-closure | not-run | Confirmed Process/PI/TCE not supplied |
 | model-conformance | not-run | No Confirmed CAT specification |
 | implementation-conformance | not-run | No normative specification to compile |
-| ci | not-run | New candidate branch not yet checked |
+| ci | passed | [Final production+descriptor head CI #43594493324](https://github.com/surumeneco/SimpleCoins/actions/runs/43594493324) and [authentic Paper/Geyser CI #43594493330](https://github.com/surumeneco/SimpleCoins/actions/runs/43594493330), both at a6fbc4ac5c24790ed47750a4319101fafaad2ec6 |
 | merge | not-run | Unreviewed candidate |
 | real-use | not-run | Client compatibility not tested by dependency metadata |
 
@@ -73,3 +73,11 @@ spec_status: unknown
 - Preserved expected behavior: with Geyser installed, its bootstrap should precede SimpleCoins; without Geyser, SimpleCoins should still be able to start in guarded JE-only mode. A `softdepend: Geyser-Spigot` descriptor edge provides the conditional ordering without a hard dependency.
 - TDD test-first: in the descriptor test, require the optional provider after `softdepend:`, and preserve the `depend: SimpleCoinsGuard` hard dependency. The expected Red is the missing optional edge. Green changes only the descriptor.
 - Official Paper real-Geyser smoke checks actual enabling order (not merely the ordering listed in YAML) and full Java regressions remain the merge gate. This Work is source-bound issue-work Draft, not authority to mark CAT process/model gates as passed. No new gameplay or JE/BE public release is authorized.
+
+## Observed Red → Green and real-provider proof (2026-11-14)
+
+- **Red**: JUnit `PaperBootstrapDescriptorCandidateTest.geyserSpigotIsOptionalButDeclaredBeforeSimpleCoinsBootstrap` failed at line 35 on test-only `786d2d58de405201a939bb1c756fc195c1b90310`, [Domain foundation #43593881207](https://github.com/surumeneco/SimpleCoins/actions/runs/43593881207). The exact missing descriptor entry, not a code compilation error, was confirmed from the current YAML blob `f8e2b81e31a094ece8db834d00b66a0dbac90c7f`.
+- **Green**: only `softdepend: Geyser-Spigot` was added to the production descriptor; the `SimpleCoinsGuard` hard dependency remains. JUnit regression and six other CI families succeeded on final source `a6fbc4ac5c24790ed47750a4319101fafaad2ec6`.
+- **Authentic Paper/Geyser**: [CI #43594493330](https://github.com/surumeneco/SimpleCoins/actions/runs/43594493330) obtained checksum-verified Geyser-Spigot 2.11.1 build 1210 and Paper 26.2 build 134, booted with Geyser alone, then with SimpleCoins, then restarted. It reported `REAL_GEYSER_ENABLE_ORDER_PASSED` for both staged and reload boots, 1→10→10 custom-item registry counts, and byte-exact managed resources.
+- **Optional case**: the same test removed the Geyser provider JAR and booted SimpleCoins with the default-deny guard, observing `REAL_PAPER_GEYSER_OPTIONAL_BOOT_PASSED` and its no-provider warning; JE candidate assets were generated. This is not a Bedrock client acceptance test, complete settlement, or permission to publish 1.0.0.
+- **CAT distinction**: the pinned Chat runtime `896cae8313a533a3c74073a8c3150daad314ff90` was locally checksum/tree verified and CLI-launchable. CAT normative Process/PI/TCE confirmation, closure, model-conformance and implementation-conformance are **not-run**. JUnit/CI Green does not substitute for them.
