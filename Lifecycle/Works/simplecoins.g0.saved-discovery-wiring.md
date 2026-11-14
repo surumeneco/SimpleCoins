@@ -73,7 +73,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43571183830 (Paper saved discovery); https://github.com/surumeneco/SimpleCoins/actions/runs/43571183840 (Gradle/JUnit); https://github.com/surumeneco/SimpleCoins/actions/runs/43571183771 (guarded Paper); https://github.com/surumeneco/SimpleCoins/actions/runs/43571183815 (wallet Paper); https://github.com/surumeneco/SimpleCoins/actions/runs/43571183829 (coin Paper); https://github.com/surumeneco/SimpleCoins/actions/runs/43571183776 (static) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -92,6 +92,14 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 - Capture the actual loaded Paper World names and `getWorldFolder()` paths on the main thread; run ONLY the filesystem walk on a Bukkit asynchronous task, with a strict, configurable count budget. Keep the atomic admission guard blocked and normal journal valid throughout. Do not call main-thread-only Bukkit methods from the worker.
 - A completed discovery manifest is **not** an accounting snapshot. Do not mark settlement Complete, publish any statistics, authorize players, register issuance, or infer full set completeness from just a directory walk. Persistent source content, loaded world data and external ownership/BAN evidence need separate gates.
 - On failed bounded discovery, preserve default-deny and request safe server stop via a main-thread task; on plugin shutdown, prevent a late worker from modifying state or scheduling a stop after disabling. Project implementation should not block the Paper main thread for bulk disk I/O.
+
+## Source-backed Red and live Paper observation
+
+- Test-first head `f81e9be79ed5da76551c374f31d8f1916e88206f`: [run #43570880943](https://github.com/surumeneco/SimpleCoins/actions/runs/43570880943) failed as expected in `compileTestJava` because strict `WorldScopeConfigReader` did not yet exist. This is NOT a CAT generated Red Gate.
+- Implementation head `3ea09f87b71149d2733a87f52dece8f0e9d4d067`: [official Paper 26.2 build 134 run #43571183830](https://github.com/surumeneco/SimpleCoins/actions/runs/43571183830) passed with observed server marker `SIMPLECOINS_SAVED_DISCOVERY_OBSERVED worldRoots=3 authoritativeFiles=3 playerdataFiles=0 (UNPUBLISHED; admission remains disabled)` and `PAPER_SAVED_DISCOVERY_OBSERVED_WITH_ADMISSION_CLOSED`.
+- JUnit world-scope configuration parsing and source visit budgets passed with Java25/Gradle. Guarded startup, corrupt monetary journal fail-stop, profile BAN, wallet/coin recipe regressions are distinct; cited CI includes executed jobs.
+- Selected source paths come from actual Paper `World.getWorldFolder()`, captured synchronously. The bounded discovery and source-set reinspection run asynchronously; failures or timeouts request shutdown on main thread. This establishes neither saved-file content consistency with LIVE world state nor BlockLocker, BAN provider, WWC/WWW ownership, full asset snapshot, monetary transaction replay or permission to admit players.
+- Product CAT normative Process/PI/TCE closure, model and implementation conformance, and full settlement real-use remain `not-run`; do not promote this Work to Confirmed.
 
 ## Acceptance boundaries
 
