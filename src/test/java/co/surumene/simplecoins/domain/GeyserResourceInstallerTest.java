@@ -22,8 +22,9 @@ class GeyserResourceInstallerTest {
             throws Exception {
         var generated = candidate();
         String mapping = Files.readString(generated.bedrockMapping());
-        String valid = "\\"model\\":\\"simplecoins:coin_5\\"";
-        String invalid = "\\"model\\":\\"simplecoins:coin_1\\"";
+        char quote = '"';
+        String valid = quote + "model" + quote + ":" + quote + "simplecoins:coin_5" + quote;
+        String invalid = quote + "model" + quote + ":" + quote + "simplecoins:coin_1" + quote;
         assertTrue(mapping.contains(valid));
         Path changed = temp.resolve("wrong-model.json");
         Files.writeString(changed, mapping.replace(valid, invalid));
