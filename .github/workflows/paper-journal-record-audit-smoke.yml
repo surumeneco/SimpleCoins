@@ -83,7 +83,8 @@ jobs:
 
           # The normal head stays valid; only an old PREPARED mutation is tampered.
           # The rotating history audit must detect this, not the cheap head guard.
-          test "$(wc -c < plugins/SimpleCoins/normal-mutations/head)" -eq 8
+          head_sha_before=$(sha256sum plugins/SimpleCoins/normal-mutations/head | awk '{print $1}')
+          test -n "$head_sha_before"
           printf 'record content has been tampered by isolated CI' > plugins/SimpleCoins/normal-mutations/1.mutation
           seen=0
           for _ in $(seq 1 35); do
@@ -116,6 +117,11 @@ jobs:
           wait "$server_pid"
           trap - EXIT
           exec 3>&-
+          head_sha_after=$(sha256sum plugins/SimpleCoins/normal-mutations/head | awk '{print $1}')
+          if [ "$head_sha_before" != "$head_sha_after" ]; then
+            echo 'Journal head changed: this test must be about historical records only' >&2
+            exit 1
+          fi
           grep -F 'SIMPLECOINS_JOURNAL_WATCHDOG_FAILED' paper.log
           grep -F 'Monetary journal historical record integrity failed' paper.log
           grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper.log
