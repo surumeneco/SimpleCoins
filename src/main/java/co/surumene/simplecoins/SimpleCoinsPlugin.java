@@ -6,6 +6,7 @@ import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.JavaCurrencyPack;
+import co.surumene.simplecoins.domain.GeyserResourceInstaller;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletCrafting;
 import co.surumene.simplecoins.paper.WalletMenu;
@@ -110,22 +111,55 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // Build private JE/BE pack candidates from the approved nine
             // stable coin IDs. Pack distribution and Nexo delegation remain
             // separate and do NOT qualify as a full 1.0.0 release.
-            if (!getServer().getPluginManager().isPluginEnabled("Nexo")) {
-                try {
+            // Only the actual installed Geyser plugin supplies the target
+            // data directory. Geyser loads mappings during its own startup,
+            // so new files need a subsequent Geyser/server restart.
+            org.bukkit.plugin.Plugin geyser =
+                    getServer().getPluginManager().getPlugin("Geyser-Spigot");
+            boolean nexo = getServer().getPluginManager().isPluginEnabled("Nexo");
+            try {
+                if (!nexo) {
                     var generated = JavaCurrencyPack.build(getDataFolder().toPath(), names);
                     getLogger().info("SIMPLECOINS_CURRENCY_PACKS_GENERATED: Java="
                             + generated.javaArchive().getFileName()
                             + ", Bedrock=" + generated.bedrockArchive().getFileName()
                             + ", mapping=" + generated.bedrockMapping().getFileName()
-                            + "; private staging only; not distributed to clients");
-                } catch (IOException invalidPack) {
-                    throw new IllegalStateException(
-                            "Cannot build complete self-managed JE/BE currency pack", invalidPack);
+                            + "; Java pack not served; client display not yet verified");
+                    if (geyser != null && geyser.isEnabled()) {
+                        java.nio.file.Path geyserRoot = geyser.getDataFolder().toPath();
+                        java.nio.file.Path config = geyserRoot.resolve("config.yml");
+                        if (!java.nio.file.Files.isRegularFile(config,
+                                java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                            throw new IOException("Geyser config.yml is absent or not a real file");
+                        var yaml = org.bukkit.configuration.file.YamlConfiguration
+                                .loadConfiguration(config.toFile());
+                        Object enabled = yaml.get("gameplay.enable-custom-content");
+                        boolean permitted = Boolean.TRUE.equals(enabled);
+                        var result = GeyserResourceInstaller.stage(geyserRoot,
+                                generated.bedrockArchive(), generated.bedrockMapping(), permitted);
+                        getLogger().warning("SIMPLECOINS_GEYSER_PACK_STAGED: changed="
+                                + result.changed()
+                                + "; Geyser restart required if changed; "
+                                + "not proof of Bedrock client delivery");
+                    } else {
+                        getLogger().warning("Geyser-Spigot not present; Bedrock pack not installed.");
+                    }
+                } else {
+                    if (geyser != null && geyser.isEnabled()) {
+                        boolean cleaned = GeyserResourceInstaller.removeOwned(
+                                geyser.getDataFolder().toPath());
+                        if (cleaned)
+                            getLogger().warning(
+                                    "SIMPLECOINS_GEYSER_NEXO_CLEANUP: prior owned files removed;"
+                                    + " restart Geyser; Scaffolding/BE delegation is not verified");
+                    }
+                    getLogger().warning(
+                            "Nexo detected; SimpleCoins pack generation suppressed. "
+                            + "Delegated JE/BE distribution is not yet verified.");
                 }
-            } else {
-                getLogger().warning(
-                        "Nexo detected; SimpleCoins pack generation suppressed. "
-                        + "Delegated JE/BE distribution is not yet verified.");
+            } catch (IOException invalidPack) {
+                throw new IllegalStateException(
+                        "Cannot stage verified JE/BE currency resources", invalidPack);
             }
             CoinItemCodec coinCodec = new CoinItemCodec(names);
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
