@@ -29,3 +29,16 @@ tasks.test {
     useJUnitPlatform()
     jvmArgs("-ea")
 }
+
+ 
+// Isolated Paper observation probe: test classes only, never packaged in SimpleCoins.
+tasks.register<Jar>("paperProfileBanProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsProfileBanProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/ProfileBanLiveProbe.class")
+    }
+    from("tests/paper-profile-ban-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
