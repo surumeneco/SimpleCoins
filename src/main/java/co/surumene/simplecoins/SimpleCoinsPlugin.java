@@ -11,6 +11,7 @@ import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
 import co.surumene.simplecoins.paper.WorldScopeConfigReader;
 import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
+import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import org.bukkit.Bukkit;
@@ -26,14 +27,15 @@ import java.util.logging.Level;
 /**
  * Restricted bootstrap feasibility fixture for Paper 26.2.
  *
- * No authoritative settlement scanner, atomic cache publisher, or journal
- * monitor is connected yet. Access is intentionally denied for every player.
+ * No authoritative settlement scanner, atomic cache publisher, or complete
+ * journal reconciliation is connected yet. Admission stays blocked for all players.
  * This MUST NOT be deployed as the finished SimpleCoins 1.0.0 plugin.
  */
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
     private NormalMutationJournal normalJournal;
+    private PaperNormalJournalWatchdog normalJournalWatchdog;
     private CoinExchangeRecipes exchangeRecipes;
     private WalletCrafting walletCrafting;
     private PaperSavedSourceDiscovery sourceDiscovery;
@@ -62,6 +64,17 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 throw new IllegalStateException(
                         "Cannot open durable normal mutation journal", journalFailure);
             }
+            // After startup verification, continuously check that the durable
+            // monetary journal's writer lock/head remains valid. Corruption
+            // must stop Paper without waiting for a login or new mutation.
+            // This cheap liveness check does not prove world commit.
+            normalJournalWatchdog = new PaperNormalJournalWatchdog(
+                    this, normalJournal, () -> {
+                        publication.revoke();
+                        admission.fatalFailure();
+                        Bukkit.shutdown();
+                    });
+            normalJournalWatchdog.start();
             // Validate every operator-controlled monetary setting before
             // installing handlers. Prior money remains identified by fixed PDC,
             // not display name, currency suffix or newly lowered wallet caps.
@@ -129,6 +142,11 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (normalJournalWatchdog != null) {
+                try { normalJournalWatchdog.close(); }
+                catch (RuntimeException closeFailure) { failure.addSuppressed(closeFailure); }
+                normalJournalWatchdog = null;
+            }
             if (sourceDiscovery != null) {
                 sourceDiscovery.close();
                 sourceDiscovery = null;
@@ -157,6 +175,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (normalJournalWatchdog != null) {
+            normalJournalWatchdog.close();
+            normalJournalWatchdog = null;
+        }
         if (sourceDiscovery != null) {
             sourceDiscovery.close();
             sourceDiscovery = null;
