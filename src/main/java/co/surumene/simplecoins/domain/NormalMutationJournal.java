@@ -87,6 +87,7 @@ public final class NormalMutationJournal implements AutoCloseable {
     private final boolean unreconciledOnStartup;
     private boolean closed;
     private boolean failed;
+    private long nextAuditSequence = 1;
 
     public NormalMutationJournal(Path storage) throws IOException {
         Objects.requireNonNull(storage, "storage");
@@ -239,6 +240,39 @@ public final class NormalMutationJournal implements AutoCloseable {
             failed = true;
             throw new IllegalStateException("Monetary journal integrity failed; stop issuing", failure);
         }
+    }
+
+    /**
+     * Check precisely one historical on-disk record using the current,
+     * synchronized in-memory value. This is an incremental corruption audit
+     * rather than a whole-journal scan on the Paper main thread.
+     *
+     * A valid-looking but stale EVENT_APPLIED/PREPARED record, missing record,
+     * or changed issuer/account/amount is fatal. Legitimate tail additions
+     * and phase transitions are read from current state on every invocation.
+     *
+     * This does not scan for newly inserted untracked filenames: complete
+     * source-set verification remains a separate full-audit obligation.
+     */
+    public synchronized boolean auditNextRecord() {
+        checkHealthy();
+        Map.Entry<Long, Mutation> next = entries.ceilingEntry(nextAuditSequence);
+        if (next == null) next = entries.firstEntry();
+        if (next == null) return false;
+        try {
+            Mutation persisted = decode(DurableFile.read(
+                    recordPath(next.getKey()), MAX_RECORD_BYTES));
+            if (!next.getValue().equals(persisted))
+                throw new IOException("Durable monetary journal record changed: "
+                        + next.getKey());
+        } catch (IOException | RuntimeException corruption) {
+            failed = true;
+            throw new IllegalStateException(
+                    "Monetary journal historical record integrity failed; stop issuing",
+                    corruption);
+        }
+        nextAuditSequence = next.getKey() == Long.MAX_VALUE ? 1 : next.getKey() + 1;
+        return true;
     }
 
     /** Detect missing, replaced or symbolic writer lock files before mutation. */
