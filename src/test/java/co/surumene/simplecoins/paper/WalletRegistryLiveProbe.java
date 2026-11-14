@@ -42,10 +42,20 @@ public final class WalletRegistryLiveProbe extends JavaPlugin {
                 ItemStack vanillaBundle = new ItemStack(Material.BUNDLE, 1);
                 // At least one predicate must reject a native unmarked bundle.
                 if (dyeRecipe.getChoiceList().stream()
-                        .allMatch(choice -> choice.test(vanillaBundle)))
+                        .anyMatch(choice -> choice.test(vanillaBundle)))
                     throw new IllegalStateException("Ordinary bundle accepted as wallet: " + key);
             }
             if (keys.size() != 16) throw new IllegalStateException("Expected 16 dye colors");
+            // Exercise actual Paper ItemStack cloning/PDC for a nonzero wallet.
+            WalletItemCodec codec = new WalletItemCodec(UUID::randomUUID, "C");
+            ItemStack created = codec.create();
+            var original = codec.read(created).orElseThrow();
+            ItemStack filled = codec.withBalance(created, 12345L);
+            ItemStack recolored = codec.recolor(filled, Material.BLUE_BUNDLE);
+            var after = codec.read(recolored).orElseThrow();
+            if (!after.id().equals(original.id()) || after.balance() != 12345L
+                    || recolored.getMaxStackSize() != 1)
+                throw new IllegalStateException("Recolor changed durable wallet identity or balance");
             getLogger().info("PAPER_WALLET_REGISTRY_PASSED: 1 creation, 16 dyes,"
                     + " marked single-stack results; no player GUI assertion");
         } catch (Exception failure) {
