@@ -72,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43568887746 (isolated real Paper wallet registry); https://github.com/surumeneco/SimpleCoins/actions/runs/43568887813 (JUnit); https://github.com/surumeneco/SimpleCoins/actions/runs/43568887761 (guard + corrupt journal); https://github.com/surumeneco/SimpleCoins/actions/runs/43568887725 (coin), https://github.com/surumeneco/SimpleCoins/actions/runs/43568887809 (profile BAN), https://github.com/surumeneco/SimpleCoins/actions/runs/43568887733 (static) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -90,6 +90,14 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 - Checked `develop@bf1237dbb937cb5405b8344898c1e6c8d1ff018c`: `WalletBalance` domain exists; `SimpleCoinsPlugin` now registers 20 coin recipes, but no wallet codec, crafting, GUI listener, or wallet config is in develop. Old unmerged PR #319 includes candidate classes to review and adapt; its absence from develop is not proof of successful behavior.
 - Runtime scope: adapt selected wallet classes from PR #319 after source review, register them **only after journal startup validation**, preserve independent default-deny admission (never call `publication` commit), and atomically rollback recipes on bootstrap exception. Stage wallet codec and GUI for future physical journal integration; no claim of crash-safe in-game transfers before the general settlement is completed.
 - Require a test-only Paper 26.2 build 134 probe that observes wallet crafting registry, native ordinary bundle rejection, stable PDC wallet semantics and shutdown cleanup; independent JUnit for rollback/compensation. Keep the probe OUT of production JAR.
+
+## Observed test-first evidence
+
+- Initial wallet test-only PR head `b2211d112ddc3788d2e3cd85d82444148fb74a6a`: isolated Paper build 134 run [43568275362](https://github.com/surumeneco/SimpleCoins/actions/runs/43568275362) reached the real server and failed for the expected reason: `Missing SimpleCoins wallet recipe`. This is observed Red, **not** script-owned normative CAT TDD Red.
+- Integrated source head `1b53aa30737ca5191a15fd4506eee27facfa96f7`: [Paper wallet registry](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887746) **passed** with the marker `PAPER_WALLET_ISOLATED_SUCCESS`. Test checks the actual 3×3 ingredient grid (Paper generates symbolic letters on retrieval), 1 creation + 16 dyed variations, PDC UUID, numerical zero initial balance, max stack 1, marked-wallet-only ingredients and preserved UUID + 12345 balance across Paper recolor.
+- The source reuses PR #319 only after review; the current plugin first verifies its persistent normal monetary journal, then validates currency names/unit and wallet cap, registers both coin and wallet recipes and GUI, and keeps the independent guard default-deny. Shutdown/bootstrap failure removes owned recipes; no finished snapshot is published.
+- Independent [Gradle/JUnit](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887813), [guarded startup + corrupt journal](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887761), [coin recipes](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887725), [profile BAN](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887809), [Phase6 static](https://github.com/surumeneco/SimpleCoins/actions/runs/43568887733) all passed at that code head.
+- Wallet transaction compensation is **in-memory only**. JE/BE GUI player input, shutdown/crash durability, offline currency mutations, general journal integration and product CAT formal Gates remain **not-run**. This is not a production-ready SimpleCoins.
 
 ## Acceptance boundaries
 
