@@ -5,6 +5,7 @@ import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
 import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.JavaCurrencyPack;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletCrafting;
 import co.surumene.simplecoins.paper.WalletMenu;
@@ -106,6 +107,26 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             }
             if (capacity < 0) throw new IllegalArgumentException("Negative wallet max balance");
 
+            // Build private JE/BE pack candidates from the approved nine
+            // stable coin IDs. Pack distribution and Nexo delegation remain
+            // separate and do NOT qualify as a full 1.0.0 release.
+            if (!getServer().getPluginManager().isPluginEnabled("Nexo")) {
+                try {
+                    var generated = JavaCurrencyPack.build(getDataFolder().toPath(), names);
+                    getLogger().info("SIMPLECOINS_CURRENCY_PACKS_GENERATED: Java="
+                            + generated.javaArchive().getFileName()
+                            + ", Bedrock=" + generated.bedrockArchive().getFileName()
+                            + ", mapping=" + generated.bedrockMapping().getFileName()
+                            + "; private staging only; not distributed to clients");
+                } catch (IOException invalidPack) {
+                    throw new IllegalStateException(
+                            "Cannot build complete self-managed JE/BE currency pack", invalidPack);
+                }
+            } else {
+                getLogger().warning(
+                        "Nexo detected; SimpleCoins pack generation suppressed. "
+                        + "Delegated JE/BE distribution is not yet verified.");
+            }
             CoinItemCodec coinCodec = new CoinItemCodec(names);
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
             exchangeRecipes = new CoinExchangeRecipes(this, coinCodec);
