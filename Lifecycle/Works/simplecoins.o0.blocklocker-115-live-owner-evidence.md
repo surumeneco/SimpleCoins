@@ -51,7 +51,7 @@ Multiple IDs in one cell are separated by `;`.
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/*;src/main/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidence.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidenceTest.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java;tests/paper-blocklocker-smoke/*;build.gradle.kts;.github/workflows/paper-blocklocker-live-smoke.yml | src/main/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidence.java | src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidenceTest.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java;tests/paper-blocklocker-smoke/*;build.gradle.kts;.github/workflows/paper-blocklocker-live-smoke.yml |
+| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/*;src/main/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidence.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidenceTest.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java;tests/paper-blocklocker-smoke/*;build.gradle.kts;.github/workflows/paper-blocklocker-115-live-smoke.yml | src/main/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidence.java | src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidenceTest.java;src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java;tests/paper-blocklocker-smoke/*;build.gradle.kts;.github/workflows/paper-blocklocker-115-live-smoke.yml |
 
 ## Checks
 
@@ -73,7 +73,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [Paper 26.2 + BlockLocker 1.15 live](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441989); [JUnit](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441863); [Phase6 static](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441855); [wallet](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441864); [profile BAN](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441869); [coin](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441839) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -100,3 +100,10 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 2. Run official Paper 26.2 build 134 with pinned v1.15 BlockLocker release JAR, standalone SimpleCoinsGuard/SimpleCoins and a test-only probe; verify actual unprotected and protected sign states with main-thread API. Any mismatch must be reported as incomplete rather than inventing a success.
 3. Ensure no BlockLocker API class is packaged/shaded into SimpleCoins and no test plugin is shipped. Keep admission closed throughout.
 4. Product CAT Process/PI/TCE confirmation, saved+LIVE accounting completeness and live owner→BAN/playerdata final classification remain independent not-run gates.
+
+## Verified observed evidence (2026-11-14)
+
+- At GitHub branch HEAD `a745d6e194530c3ee07ff5cb2f6f2e56b360bedc`, the six source-head CI workflows completed successfully. The dedicated official Paper 26.2 build 134 + pinned `blocklocker-1.15.jar` SHA-256 run [43572441989](https://github.com/surumeneco/SimpleCoins/actions/runs/43572441989) observed `PAPER_BLOCKLOCKER_115_OWNER_PASSED` and `PAPER_BLOCKLOCKER_115_READ_ONLY_SUCCESS` in actual server logs. The fixture contains an unprotected chest, UUID-bearing `Name#UUID` protected chest, an `[Everyone]` protection with unresolved main name, and an owner-name-only protection rejected as unknown.
+- Source-only JUnit classification, actual API lookup via verified provider release, version lock, off-thread rejection, no guessed player name-to-UUID and guarded startup have been checked independently. The main JAR does not include BlockLocker API classes or test plugin classes; no published snapshot or admission opening occurs.
+- Saved/unloaded BlockLocker signs and complex structures (double chest, chunk borders, front/back variants), complete BAN evidence and saved/LIVE temporal closure remain **not-run**. The adapter is a limited loaded-Block observation, not full O0/O1 closure.
+- This is an `issue-work` Draft. Its shape may pass CAT validation, but CAT normative Process/PI/TCE, implementation conformance, oracle semantics and real player tests remain **not-run**. Do not label this Work Confirmed.
