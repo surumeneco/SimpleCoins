@@ -72,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43567623310 (real Paper coin registry); https://github.com/surumeneco/SimpleCoins/actions/runs/43567623326 (Gradle/JUnit); https://github.com/surumeneco/SimpleCoins/actions/runs/43567623380 (static); https://github.com/surumeneco/SimpleCoins/actions/runs/43567623388 (guarded bootstrap) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -91,6 +91,13 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 - Goal: enable/disable precisely the 20 recipe registry entries with existing `CoinExchangeRecipes`, retaining default-deny login and fail-stop journal behavior. Registration errors must not leave partially installed recipes.
 - Test-first evidence: isolated Paper 26.2 build 134 can prove 20 recipe IDs and genuine coin results are available, without admitting a player or claiming completed journal/settlement; enforce no probe class in production JAR.
 - This is a Draft Work, not a legitimate Confirmed Process/PI/TCE. All formal product CAT Gates remain not-run; no fabricated approval is asserted.
+
+## Test-first and integration evidence
+
+- Initial source HEAD `e6a36db8f4ff981242f1e1a48cbb4d727ad36f9e`: real Paper 26.2 smoke run [43567387928](https://github.com/surumeneco/SimpleCoins/actions/runs/43567387928) **failed for expected missing registry key** `simplecoins:exchange_n1_f1` after Gradle successfully built all test and production JARs. This is independently observed Red, NOT a formal CAT generated Red Gate.
+- Production wiring at source HEAD `167e9689588194e152060ac19b7e077190e74f23`: [real Paper smoke 43567623310](https://github.com/surumeneco/SimpleCoins/actions/runs/43567623310) **passed**, with log marker `PAPER_COIN_RECIPES_ISOLATED_SUCCESS`. Existing domain/guard/static runs 43567623326/43567623380/43567623388 passed. Paper standard BAN smoke 43567623402 remains distinct.
+- The inserted registration runs **after** normal monetary journal validation and before guarded admission service registration. On disable or bootstrap exception the plugin unregisters recipes. This does not connect a physical monetary event journal and does not open admission.
+- This candidate behavior is source-backed by user-confirmed gameplay design and actual Paper registry evidence. CAT normative process/model/implementation conformance remain `not-run`; this Work does not self-Confirm a Process/PI/TCE.
 
 ## Acceptance boundaries
 
