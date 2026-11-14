@@ -1,0 +1,7 @@
+name: SimpleCoinsJournalRecordProbe
+version: '1.0.0-ci-only'
+main: co.surumene.simplecoins.paper.JournalRecordLiveProbe
+api-version: '26.2'
+load: POSTWORLD
+depend:
+  - SimpleCoins
