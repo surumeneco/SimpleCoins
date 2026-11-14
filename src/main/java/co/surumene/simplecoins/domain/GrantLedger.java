@@ -91,10 +91,34 @@ public final class GrantLedger {
         checkHealthy();
         return grants.values().stream().filter(g -> g.player().equals(player) && !g.delivered()).toList();
     }
+    /**
+     * A playerdata receipt refers to a durable reservation, not an arbitrary
+     * caller-supplied Grant with a plausible owner and sequence. Its immutable
+     * attributes must match our journal before it can be treated as applied.
+     *
+     * The delivered flag is deliberately excluded: the same reservation may
+     * have been acknowledged since the caller obtained its immutable handle.
+     */
+    private Grant requireAuthenticReservation(Grant handle) {
+        Objects.requireNonNull(handle, "grant handle");
+        Grant stored = grants.get(handle.sequence());
+        if (stored == null
+                || !stored.id().equals(handle.id())
+                || !stored.player().equals(handle.player())
+                || stored.amount() != handle.amount()
+                || !stored.issuer().equals(handle.issuer())
+                || stored.createdMillis() != handle.createdMillis()
+                || stored.denomination() != handle.denomination()
+                || stored.coinCount() != handle.coinCount())
+            throw new IllegalStateException("Grant handle disagrees with durable reservation");
+        return stored;
+    }
+
     public synchronized boolean wasApplied(Grant grant, long savedReceipt) {
         checkHealthy();
-        validateReceipt(grant.player(), savedReceipt);
-        return savedReceipt >= grant.sequence();
+        Grant stored = requireAuthenticReservation(grant);
+        validateReceipt(stored.player(), savedReceipt);
+        return savedReceipt >= stored.sequence();
     }
     public synchronized void validateReceipt(UUID player, long receipt) {
         checkHealthy();
@@ -113,8 +137,8 @@ public final class GrantLedger {
     }
     public synchronized void acknowledge(Grant grant, long savedReceipt) throws IOException {
         checkHealthy();
-        Grant current = grants.get(grant.sequence());
-        if (current == null || !current.id().equals(grant.id()) || !wasApplied(current, savedReceipt))
+        Grant current = requireAuthenticReservation(grant);
+        if (!wasApplied(current, savedReceipt))
             throw new IllegalStateException("Cannot acknowledge an unapplied grant");
         if (current.delivered()) return;
         Grant complete = current.completed();
