@@ -73,7 +73,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [Paper JE/BE artifact generation](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887742); [JUnit domain](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887755); [wallet](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887818); [coin](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887782); [saved discovery](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887748); [guarded bootstrap](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887795); [journal watchdog](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887753); [static](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887934) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -84,6 +84,15 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Source-backed Red / Green observations
+
+- Test-first source-only head `ca98187caa7802598dddc37cdfa127e9b4423607`: [JUnit run #43584570694](https://github.com/surumeneco/SimpleCoins/actions/runs/43584570694) failed compilation because `JavaCurrencyPack` was not yet present. This is an observed ordinary Red, not formal CAT-generated TDD evidence.
+- Independently confirmed Mojang's Java Edition 26.2 resource-pack format **88.0** ([official release note](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-2)). Generated private staging builds `SimpleCoins-java.zip` with exactly 28 entries (1 pack metadata + nine texture/model/item triples), nine default PNGs only when missing, and matching Bedrock `SimpleCoins.mcpack` + `simplecoins.json` via the existing `BedrockPack` implementation. Fixed `simplecoins:coin_<value>` model IDs, PDC codec and currency values are unchanged.
+- [Official isolated Paper 26.2 build 134 run #43584887742](https://github.com/surumeneco/SimpleCoins/actions/runs/43584887742) **passed** at code head `19cf4afd5e5635f58cbf93e75e08cb3a2ebbaba3`. Real server emitted `SIMPLECOINS_CURRENCY_PACKS_GENERATED`; post-boot verifier checked nine Java item models with stable IDs, 9 Bedrock mappings, matching PNG bytes, PNG signatures and both ZIP integrity, producing `PAPER_CURRENCY_JE_BE_ARTIFACTS_PASSED`.
+- Separate Java25/JUnit and previous guarded bootstrap, currency/wallet recipes, journal and saved-source CI all passed on that code head.
+- The current build path runs only while Nexo is absent and after durable normal journal/config checks. Even though private image files and candidate packs now exist, actual Java client resource-pack URL hosting/download, Geyser managed installation/reload, Bedrock client download, Nexo delegation, old-client cache transition and JE/BE visuals are **not tested**. No pack is transmitted and no monetary admission permit is granted.
+- This is a source-bound `issue-work` Draft with unconfirmed product semantics. CAT normative Process/PI/TCE Gates and generated model/vectors remain **not-run**, not converted to passed by CI.
 
 ## Source-grounded design boundary
 
