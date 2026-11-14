@@ -111,7 +111,7 @@ jobs:
                   assert f"assets/simplecoins/models/item/{id}.json" in j.namelist()
                   native=j.read(f"assets/simplecoins/textures/item/{id}.png")
                   bedrock=b.read(f"textures/items/{id}.png")
-                  assert native==bedrock and native.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                  assert native==bedrock and native.startswith(bytes([137,80,78,71,13,10,26,10]))
           assert len(list((p/"images").glob("*.png")))==9
           print("PAPER_CURRENCY_JE_BE_ARTIFACTS_PASSED: 9 PNGs, 9 fixed JE item_model IDs, BE mappings, guard denied")
           PY
