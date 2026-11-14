@@ -1,0 +1,121 @@
+name: Paper 26.2 live monetary journal watchdog
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperNormalJournalWatchdog.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/PaperNormalJournalWatchdogTest.java'
+      - '.github/workflows/paper-normal-journal-watchdog-smoke.yml'
+jobs:
+  fail-stop-without-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build both guarded Paper plugin artifacts and run JUnit
+        run: |
+          gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+      - name: Download pinned official Paper with verified upstream SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-Paper-CI/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Corrupt durable head AFTER startup; require autonomous watchdog stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25573\n' > smoke/server.properties
+          cd smoke
+          mkfifo console.in
+          java -Xms256M -Xmx1024M -jar paper.jar nogui < console.in > paper.log 2>&1 &
+          server_pid=$!
+          exec 3> console.in
+          cleanup() {
+            printf 'stop\n' >&3 2>/dev/null || true
+            exec 3>&- || true
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 140); do
+            if grep -Fq 'Done (' paper.log && test -f plugins/SimpleCoins/normal-mutations/head; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper exited before live-corruption injection' >&2
+              tail -120 paper.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then tail -120 paper.log; exit 1; fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
+          grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
+
+          # Eight ASCII bytes parse as a valid-sized but wrong sequence;
+          # this mutates an existing durable head while Paper remains running.
+          printf 'corrupt!' > plugins/SimpleCoins/normal-mutations/head
+          seen=0
+          for _ in $(seq 1 35); do
+            if grep -Fq 'SIMPLECOINS_JOURNAL_WATCHDOG_FAILED' paper.log; then
+              seen=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper stopped without the required journal watchdog evidence' >&2
+              tail -120 paper.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$seen" != 1 ]; then
+            echo 'Paper never detected live monetary journal corruption' >&2
+            tail -150 paper.log
+            exit 1
+          fi
+          stopped=0
+          for _ in $(seq 1 35); do
+            if ! kill -0 "$server_pid" 2>/dev/null; then stopped=1; break; fi
+            sleep 1
+          done
+          if [ "$stopped" != 1 ]; then
+            echo 'Watchdog logged failure but Paper remained alive without a player login' >&2
+            tail -150 paper.log
+            exit 1
+          fi
+          wait "$server_pid"
+          trap - EXIT
+          exec 3>&-
+          grep -F 'SIMPLECOINS_JOURNAL_WATCHDOG_FAILED' paper.log
+          grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper.log
+          echo 'PAPER_LIVE_JOURNAL_WATCHDOG_FAILSTOP_PASSED'
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-live-journal-watchdog
+          path: smoke/*.log
+          if-no-files-found: ignore
+          retention-days: 7
