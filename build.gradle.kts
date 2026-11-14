@@ -55,3 +55,16 @@ tasks.register<Jar>("paperCoinRecipesProbeJar") {
         rename { "plugin.yml" }
     }
 }
+
+ 
+// Wallet recipe probe lives in test output only, separate from the shipped JAR.
+tasks.register<Jar>("paperWalletRegistryProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsWalletRegistryProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/WalletRegistryLiveProbe.class")
+    }
+    from("tests/paper-wallet-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
