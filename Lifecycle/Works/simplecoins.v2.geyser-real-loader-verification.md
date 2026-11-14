@@ -63,7 +63,7 @@ spec_status: unknown
 | process-closure | not-run | No legitimate Confirmed Process/PI/TCE authority |
 | model-conformance | not-run | Verification-only issue-work |
 | implementation-conformance | not-run | No production change |
-| ci | not-run | Real-provider workflow outcome pending |
+| ci | passed | [Real Geyser restart CI #43592439060](https://github.com/surumeneco/SimpleCoins/actions/runs/43592439060) at c5501fab9326c9628dee4eb44c111e2b803124e9; test, official downloads and 3 real Paper cycles succeeded |
 | merge | not-run | Pending CI |
 | real-use | not-run | No Bedrock client or Nexo available |
 
@@ -75,3 +75,11 @@ spec_status: unknown
 - Restart the actual Geyser/Paper runtime: detect startup/config/mapping/pack load errors and verify the staged files remain. The test must fail rather than silently report success if Geyser cannot start or cannot accept the source file.
 - Separate a real Geyser **startup/loader smoke** from actual Geyser custom-item registration and a Bedrock client receiving/rendering the resources. Without positive runtime proof, report the latter as **unverified**, even if startup succeeds.
 - Keep publication disabled and avoid any edits to production Java code, Nexo install, main branch, or deployed server. Existing speculative CAT candidates are not normative Confirmed sources. This is a verification Work in issue-work, not a formal CAT conformance Gate.
+
+## Verified authentic-provider receipt (2026-11-14)
+
+- [GitHub Actions #43592439060](https://github.com/surumeneco/SimpleCoins/actions/runs/43592439060) completed success on PR #408 head `c5501fab9326c9628dee4eb44c111e2b803124e9`. The complete Gradle JUnit/JAR build, official Paper/Geyser SHA-256 checks and **all three** real Paper cycles succeeded.
+- Actual downloaded Geyser-Spigot `2.11.1` build `1210`, official SHA-256 `996c1f1997c2db2f9baf802a6a42b374ffadb8d1527638ba5ad765b06b085ecb`.
+- Authenticated **Geyser startup** generated `plugins/Geyser-Spigot/config.yml`; the test explicitly enabled `enable-custom-content` in this generated file. The next guarded startup logged `SIMPLECOINS_GEYSER_PACK_STAGED: changed=true`, with SHA-256 matching original pack/mapping bytes. The final Geyser restart logged `changed=false`, no detected Geyser-associated ERROR/SEVERE lines and retained both artifacts.
+- A passing real-provider restart still does **not** prove that Geyser registered all nine custom items internally, that a Bedrock client received/loaded the pack, nor any JE/Nexo/Scaffolding scenario. Guarded player admission remained closed. No production Java or `main` release changes were made.
+- The Work is syntax-ready by the pinned CAT 896cae83 `cat_artifact_lint.py` (`PASS`, blob b9ac28b9cec67e63ccf8d32efc0c9a6b41a58aa8 before this receipt). This is **not** a formal process/model/conformance Gate.
