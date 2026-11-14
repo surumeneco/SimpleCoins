@@ -36,3 +36,7 @@ statistics:
   default-enabled: true
   enabled-worlds: []
   disabled-worlds: []
+settlement:
+  # Bounds the entire saved-source directory walk at each guarded startup.
+  # An exhausted budget fails closed; increase only after monitoring the VPS.
+  max-source-entries: 1000000
