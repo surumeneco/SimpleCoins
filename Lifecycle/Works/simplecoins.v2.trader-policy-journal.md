@@ -72,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43569953798 (Gradle/JUnit), https://github.com/surumeneco/SimpleCoins/actions/runs/43569953782 (guarded Paper), https://github.com/surumeneco/SimpleCoins/actions/runs/43569953840 (coin Paper), https://github.com/surumeneco/SimpleCoins/actions/runs/43569953786 (wallet Paper), https://github.com/surumeneco/SimpleCoins/actions/runs/43569953818 (static) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -89,6 +89,13 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 - The current `develop` at issue intake `34f3bcca389b1366d2c9734fd90f95ff54a49370` has pure `WanderingTraderDropPolicy` and `TraderDropStackPlan` but no Paper config parser, no trader issuance journal, and no death-event listener registration.
 - Restore/review existing candidate Paper config parser, issuance receipt journal and test cases, without declaring their historical branch production-ready; stage the event adapter as **unregistered source** only. Actively validate all supplied config fields on bootstrap, with defaults in `config.yml` consistent with the current user direction. Do **not** create physical currency while monetary settlement/normal mutation accounting are disconnected.
 - Test positive/nonpositive config, nine weights, replay and crash receipt states, recovery fail-closed; full real-world death/event, physical spawn, and crash-resilient settlement reconciliation are separate blocked activities until all authoritative sources/owner evidence and admission gates are established.
+
+## Observed test-first evidence
+
+- On head `1a8274319e4ad1567b71f359332c351222c15a7f`, [run #43569737469](https://github.com/surumeneco/SimpleCoins/actions/runs/43569737469) failed `compileTestJava` as expected because `TraderIssuanceJournal` and `WanderingTraderDropConfigReader` were not yet present. This is a source-observed pre-implementation failure, not a formal CAT Red Gate.
+- Production Java at `5b692e7275ff07287d8833a6f28fe745f3367770` restores the reviewed parser, read-only staged death-event adapter and crash-safe receipt journal. `config.yml` now carries **0.1** chance, initial one coin and the 9 denomination 511-total weight profile; the old 50% JUnit oracle was corrected to 10%. Main startup validates the policy and keeps the death listener unregistered.
+- [JUnit/Gradle](https://github.com/surumeneco/SimpleCoins/actions/runs/43569953798), [guarded Paper bootstrap including corrupt monetary journal](https://github.com/surumeneco/SimpleCoins/actions/runs/43569953782), [coin registry](https://github.com/surumeneco/SimpleCoins/actions/runs/43569953840), [wallet registry](https://github.com/surumeneco/SimpleCoins/actions/runs/43569953786), [Phase6 static](https://github.com/surumeneco/SimpleCoins/actions/runs/43569953818) succeeded at the code head.
+- There is no physical trader drop and no issuance accounting until all-world settlement; `TraderIssuanceJournal` EVENT_RECORDED is **not** evidence of saved world currency. Paper death/issuance real-use and product normative CAT Process/PI/TCE Gates remain **not-run**.
 
 ## Acceptance boundaries
 
