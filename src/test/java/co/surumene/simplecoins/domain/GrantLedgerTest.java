@@ -9,6 +9,61 @@ import org.junit.jupiter.api.io.TempDir;
 class GrantLedgerTest {
     @TempDir Path directory;
 
+    @Test void alteredReservationCannotUseAnotherPhysicalGrantsReceipt() throws Exception {
+        UUID player = UUID.randomUUID();
+        var ledger = new GrantLedger(directory.resolve("grant-identity"));
+        var original = ledger.reserveCoins(player, CoinDenomination.FIVE, 4, "console");
+        long receipt = original.sequence();
+        assertTrue(ledger.wasApplied(original, receipt));
+
+        var wrongId = new GrantLedger.Grant(original.sequence(), UUID.randomUUID(),
+                player, original.amount(), original.issuer(), original.createdMillis(),
+                false, original.denomination(), original.coinCount());
+        assertThrows(IllegalStateException.class,
+                () -> ledger.wasApplied(wrongId, receipt));
+
+        var forgedAmount = new GrantLedger.Grant(original.sequence(), original.id(),
+                player, original.amount() + 5, original.issuer(), original.createdMillis(),
+                false, original.denomination(), original.coinCount() + 1);
+        assertThrows(IllegalStateException.class,
+                () -> ledger.wasApplied(forgedAmount, receipt));
+
+        var unknownSequence = new GrantLedger.Grant(original.sequence() + 1,
+                original.id(), player, original.amount(), original.issuer(),
+                original.createdMillis(), false, original.denomination(), original.coinCount());
+        assertThrows(IllegalStateException.class,
+                () -> ledger.wasApplied(unknownSequence, receipt));
+
+        assertEquals(original, ledger.pending(player).getFirst());
+    }
+
+    @Test void acknowledgementCannotAcceptChangedIssuerOrCreationTimeForSameGrantId()
+            throws Exception {
+        UUID player = UUID.randomUUID();
+        var path = directory.resolve("acknowledgement-identity");
+        var ledger = new GrantLedger(path);
+        var original = ledger.reserve(player, 100, "console");
+        var wrongIssuer = new GrantLedger.Grant(original.sequence(), original.id(), player,
+                original.amount(), "other-issuer", original.createdMillis(),
+                false, null, 0);
+        var wrongTimestamp = new GrantLedger.Grant(original.sequence(), original.id(), player,
+                original.amount(), original.issuer(), original.createdMillis() + 1,
+                false, null, 0);
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(wrongIssuer, original.sequence()));
+        assertThrows(IllegalStateException.class,
+                () -> ledger.acknowledge(wrongTimestamp, original.sequence()));
+        assertEquals(original, ledger.pending(player).getFirst());
+
+        // A saved receipt may be acknowledged later using the original
+        // pre-acknowledgement handle, even though the stored 'delivered' bit
+        // was changed by a successful acknowledgement.
+        ledger.acknowledge(original, original.sequence());
+        assertTrue(ledger.wasApplied(original, original.sequence()));
+        ledger.acknowledge(original, original.sequence());
+        assertTrue(new GrantLedger(path).pending(player).isEmpty());
+    }
+
     @Test void reservationSurvivesRestartUntilPlayerReceiptConfirmsDelivery() throws Exception {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(directory.resolve("grants"));
