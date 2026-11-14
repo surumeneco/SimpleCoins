@@ -27,7 +27,7 @@ public final class WalletRegistryLiveProbe extends JavaPlugin {
                 throw new IllegalStateException("Missing SimpleCoins wallet recipe");
             if (!java.util.Arrays.equals(
                     new String[]{" L ", "LIL", " L "}, shaped.getShape()))
-                throw new IllegalStateException("Unexpected wallet shaped recipe");
+                throw new IllegalStateException("Unexpected wallet shaped recipe: "+java.util.Arrays.toString(shaped.getShape()));
             verifyFreshWallet(shaped.getResult(), Material.BUNDLE);
             Set<NamespacedKey> keys = new HashSet<>();
             for (DyeColor dye : DyeColor.values()) {
