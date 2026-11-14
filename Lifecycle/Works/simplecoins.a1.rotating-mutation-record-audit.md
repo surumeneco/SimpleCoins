@@ -72,7 +72,7 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [Paper historical record tamper](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812507); [JUnit foundation](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812553); [head watchdog](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812499); [coin](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812501); [wallet](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812503); [BlockLocker](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812535); [profile BAN](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812552); [static](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812568) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -83,6 +83,15 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Test-first and actual Paper observations
+
+- Domain/JUnit test-first head `85867cf0f9c4517d0146961b6a76b5fe05312e05` failed compilation in [CI run #43582403784](https://github.com/surumeneco/SimpleCoins/actions/runs/43582403784) because `NormalMutationJournal.auditNextRecord()` did not yet exist. This is observed ordinary test-first Red, **not** CAT normatively generated Red.
+- The implemented journal rotates an ascending cursor and compares at most one *current* record with durable decoded bytes per call; after finding no records it returns immediately. It permanently marks a journal unhealthy on mismatched/missing records, while legitimate phase/tail changes use synchronized current state. The existing five-second Paper watchdog audits at most 16 records per heartbeat. Unknown inserted file names and full world monetary state remain outside this incremental observation.
+- First live CI [#43582649535](https://github.com/surumeneco/SimpleCoins/actions/runs/43582649535) did **not** validate runtime logic: the test wrongly expected the checksummed `head` envelope file to be exactly eight raw bytes. It exited before writing the bad record. Corrected the fixture to compare the head SHA-256 before/after while modifying only `1.mutation`.
+- Real isolated Paper 26.2 build 134 [CI #43582812507](https://github.com/surumeneco/SimpleCoins/actions/runs/43582812507) then passed: test-only plugin prepared one durable `PREPARED` movement without issuing physical currency; CI changed only the saved historical record while the server remained live. Paper logged `SIMPLECOINS_JOURNAL_WATCHDOG_FAILED` with `Monetary journal historical record integrity failed` and shut itself down without login/console stop. The job observed `PAPER_HISTORICAL_RECORD_TAMPER_FAILSTOP_PASSED`. Test plugin is not in the shipped JAR.
+- All eight CI families passed at code HEAD `658a7498e51fc415bab9ad1b276098beff6741c6`: domain JUnit, historical audit Paper, prior head watchdog Paper, coin/wallet Paper, BlockLocker 1.15 Paper, Paper profile BAN and startup static verifier.
+- Work remains an unconfirmed `issue-work` Draft: semantic approval and formal CAT Process/PI/TCE Gates, saved-world reconciliation, full journal source-set audits, JE/BE client tests, production deployment and real player verification are **not-run**.
 
 ## Source-grounded boundaries
 
