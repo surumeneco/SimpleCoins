@@ -47,7 +47,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/*;src/main/resources/plugin.yml;src/test/java/co/surumene/simplecoins/PaperBootstrapDescriptorCandidateTest.java | src/main/resources/plugin.yml | src/test/java/co/surumene/simplecoins/PaperBootstrapDescriptorCandidateTest.java |
+| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/*;src/main/resources/plugin.yml;src/test/java/co/surumene/simplecoins/PaperBootstrapDescriptorCandidateTest.java;.github/workflows/paper-geyser-real-loader-smoke.yml | src/main/resources/plugin.yml | src/test/java/co/surumene/simplecoins/PaperBootstrapDescriptorCandidateTest.java;.github/workflows/paper-geyser-real-loader-smoke.yml |
 
 ## Checks
 
@@ -72,4 +72,4 @@ spec_status: unknown
 - Its `plugin.yml` currently declares `softdepend` for Nexo, BlockLocker, WWC, WWW and WCL, **not** Geyser-Spigot, so the ordering is incidental. PR #408 demonstrates successful real provider ordering in one environment, not a guaranteed loader edge in others.
 - Preserved expected behavior: with Geyser installed, its bootstrap should precede SimpleCoins; without Geyser, SimpleCoins should still be able to start in guarded JE-only mode. A `softdepend: Geyser-Spigot` descriptor edge provides the conditional ordering without a hard dependency.
 - TDD test-first: in the descriptor test, require the optional provider after `softdepend:`, and preserve the `depend: SimpleCoinsGuard` hard dependency. The expected Red is the missing optional edge. Green changes only the descriptor.
-- Official Paper smoke and full Java regressions remain the merge gate. This Work is source-bound issue-work Draft, not authority to mark CAT process/model gates as passed. No new gameplay or JE/BE public release is authorized.
+- Official Paper real-Geyser smoke checks actual enabling order (not merely the ordering listed in YAML) and full Java regressions remain the merge gate. This Work is source-bound issue-work Draft, not authority to mark CAT process/model gates as passed. No new gameplay or JE/BE public release is authorized.
