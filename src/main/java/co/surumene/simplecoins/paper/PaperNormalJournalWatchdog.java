@@ -16,6 +16,8 @@ import org.bukkit.scheduler.BukkitTask;
 public final class PaperNormalJournalWatchdog implements AutoCloseable {
     private static final long FIRST_CHECK_TICKS = 20L;
     private static final long CHECK_PERIOD_TICKS = 100L;
+    // Fixed work bound per five-second heartbeat. No full record scan per tick.
+    private static final int RECORDS_PER_HEARTBEAT = 16;
 
     private final JavaPlugin plugin;
     private final NormalMutationJournal journal;
@@ -60,7 +62,12 @@ public final class PaperNormalJournalWatchdog implements AutoCloseable {
 
     private void poll() {
         if (closed.get()) return;
-        checkOnce(journal::checkHealthy, tripped, failure -> {
+        checkOnce(() -> {
+            journal.checkHealthy();
+            for (int i = 0; i < RECORDS_PER_HEARTBEAT; i++) {
+                if (!journal.auditNextRecord()) break;
+            }
+        }, tripped, failure -> {
             if (closed.get()) return;
             BukkitTask running = task;
             if (running != null) running.cancel();
