@@ -81,3 +81,16 @@ tasks.register<Jar>("paperBlockLockerLiveProbeJar") {
         rename { "plugin.yml" }
     }
 }
+
+ 
+// Test-only journal corruption probe; never shipped in the production JAR.
+tasks.register<Jar>("paperJournalRecordProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsJournalRecordProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/JournalRecordLiveProbe.class")
+    }
+    from("tests/paper-journal-record-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
