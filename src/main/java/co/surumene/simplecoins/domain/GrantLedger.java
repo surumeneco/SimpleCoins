@@ -87,6 +87,15 @@ public final class GrantLedger {
         grants.put(next, grant);
         return grant;
     }
+    /**
+     * Immutable all-subject view of the currently verified issuance evidence.
+     * A successful view alone is NOT proof that saved playerdata survived.
+     */
+    public synchronized List<Grant> historySnapshot() {
+        checkHealthy();
+        return List.copyOf(grants.values());
+    }
+
     public synchronized List<Grant> pending(UUID player) {
         checkHealthy();
         return grants.values().stream().filter(g -> g.player().equals(player) && !g.delivered()).toList();
