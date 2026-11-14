@@ -53,15 +53,15 @@ jobs:
           cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
           cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
           cp build/libs/SimpleCoinsCoinRecipesProbe-1.0.0.jar smoke/plugins/SimpleCoinsCoinRecipesProbe.jar
-          printf 'eula=true\\n' > smoke/eula.txt
-          printf 'online-mode=false\\nwhite-list=true\\nenforce-whitelist=true\\nserver-ip=127.0.0.1\\nserver-port=25570\\n' > smoke/server.properties
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25570\n' > smoke/server.properties
           cd smoke
           mkfifo console.in
           java -Xms256M -Xmx1024M -jar paper.jar nogui < console.in > paper.log 2>&1 &
           server_pid=$!
           exec 3> console.in
           cleanup() {
-            printf 'stop\\n' >&3 2>/dev/null || true
+            printf 'stop\n' >&3 2>/dev/null || true
             exec 3>&- || true
             kill "$server_pid" 2>/dev/null || true
           }
@@ -88,7 +88,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
           grep -F 'PAPER_COIN_RECIPES_REGISTERED_PASSED' paper.log
-          printf 'stop\\n' >&3
+          printf 'stop\n' >&3
           exec 3>&-
           wait "$server_pid"
           trap - EXIT
