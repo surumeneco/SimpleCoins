@@ -42,3 +42,16 @@ tasks.register<Jar>("paperProfileBanProbeJar") {
         rename { "plugin.yml" }
     }
 }
+
+ 
+// Separate Paper-only registry probe; never package its JavaPlugin in the main JAR.
+tasks.register<Jar>("paperCoinRecipesProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsCoinRecipesProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/CoinRecipesLiveProbe.class")
+    }
+    from("tests/paper-coin-recipes-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}

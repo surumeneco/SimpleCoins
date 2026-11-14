@@ -4,6 +4,8 @@ import co.surumene.simplecoins.domain.AdmissionBarrier;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
+import co.surumene.simplecoins.paper.CoinExchangeRecipes;
+import co.surumene.simplecoins.paper.CoinItemCodec;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.ServicePriority;
@@ -22,6 +24,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private SettlementSnapshotPublisher publication;
     private NormalMutationJournal normalJournal;
+    private CoinExchangeRecipes exchangeRecipes;
 
     @Override
     public void onEnable() {
@@ -47,6 +50,14 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 throw new IllegalStateException(
                         "Cannot open durable normal mutation journal", journalFailure);
             }
+            // Register the existing value-preserving currency recipes only after
+            // the durable journal has been checked. This does not permit players
+            // or authorize physical currency issuance before settlement.
+            exchangeRecipes = new CoinExchangeRecipes(this,
+                    new CoinItemCodec(CoinItemCodec.defaultNames()));
+            exchangeRecipes.register();
+            if (exchangeRecipes.registeredCount() != 20)
+                throw new IllegalStateException("Incomplete coin exchange registration");
             getServer().getPluginManager().registerEvents(
                     new SettlementAdmissionListener(admission, publication), this);
             // Read-only service is served through the independent guard's
@@ -56,6 +67,11 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (exchangeRecipes != null) {
+                try { exchangeRecipes.unregister(); }
+                catch (RuntimeException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+                exchangeRecipes = null;
+            }
             if (normalJournal != null) {
                 try { normalJournal.close(); }
                 catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
@@ -73,6 +89,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         // Remove the cross-plugin permission service before tearing down state.
         // The independent guard then denies, even after this plugin is disabled.
         getServer().getServicesManager().unregisterAll(this);
+        if (exchangeRecipes != null) {
+            try { exchangeRecipes.unregister(); }
+            catch (RuntimeException recipeFailure) {
+                getLogger().log(Level.SEVERE, "Failed to remove coin exchange recipes", recipeFailure);
+            }
+            exchangeRecipes = null;
+        }
         if (normalJournal != null) {
             try { normalJournal.close(); }
             catch (IOException closeFailure) {
