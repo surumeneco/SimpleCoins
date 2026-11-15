@@ -51,6 +51,12 @@ public final class PaperSaveProbe extends JavaPlugin {
                 Bukkit.shutdown();
                 return;
             }
+            // The CI harness owns SIGKILL after this marker. Do not run
+            // Paper's shutdown hooks before the save-before-ack crash check.
+            if ("save".equals(phase) && Boolean.getBoolean("a02.probe.awaitSigkill")) {
+                getLogger().info("PAPER_A02_UNACKED_CRASH_POINT_READY");
+                return;
+            }
             Bukkit.shutdown();
         }, 30L);
     }
