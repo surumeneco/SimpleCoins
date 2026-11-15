@@ -20,6 +20,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Run canonical CAT Work structural validator (not normative Gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.zero-player-external-writer-probe.md
       - name: Build production and isolated probe without packaging it in product
         shell: bash
         run: |
