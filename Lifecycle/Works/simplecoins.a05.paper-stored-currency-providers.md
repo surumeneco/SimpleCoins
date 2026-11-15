@@ -50,7 +50,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | — | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md;tests/paper-wcl-services-probe/build.gradle.kts;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | — | tests/paper-wcl-services-probe/build.gradle.kts;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
 
 ## Checks
 
@@ -79,7 +79,7 @@ spec_status: unknown
 
 1. Load the exact four release-JAR blobs and isolated SimpleCoins under default-deny login. Reuse the already measured two-provider registration check. No real player login, VPS world, real balance or production source mutation.
 2. Build a genuine SimpleCoins PDC+item_model coin and store it in an actual Paper `SHULKER_BOX` `BlockStateMeta`. Pass that shulker as WWC's authenticated `equipment_shulker_box` serialized ItemStack and a valid `follow_target` UUID. Invoke the packaged WWC reader's `readStored`; verify the returned `StoredItem` bytes preserve the physical shulker and real nested coin, with no flattening/double count.
-3. Spawn one disposable Chicken with that exact PDC on the real Paper main thread; compare `readLoaded(entityId)` to `readStored(entityId,...)` by entity UUID, world UUID, relationship and serialized item bytes. This establishes read-path identity, not a correct accounting deduplication implementation.
+3. Load the probe's disposable chunk **before** spawning one Chicken. Without loading more chunks in the reader path, require the Chicken to be indexed/valid, then compare `readLoaded(entityId)` to `readStored(entityId,...)` by entity UUID, world UUID, relationship and serialized item bytes. This establishes read-path identity, not a correct accounting deduplication implementation.
 4. Construct a version-3 WWW runtime fixture using the **published byte format implemented by the production codec** (magic, optional owner/commander, slot-indexed serialized ItemStacks, pedigree and override terminators). Pass it through the packaged WWW `readStored` with authentic schema marker and verify the returned weapon and cargo bytes are real individually tagged coins, and both owner and commander UUIDs survive intact. A manually written fixture is a reader-input test, not proof of a production writer lifecycle.
 5. Corrupt WWC and WWW schemas independently; require explicit `Failure(UNSUPPORTED_SCHEMA)` instead of `NotFound`, `Success(empty)` or arbitrary fallback. The empty/unrelated entity case remains `NotFound`.
 6. If a packaged version disagrees with the documented source format, fail the executable probe, preserve the actual error and bound a follow-up verification. Do not edit the provider's storage or attempt a speculative fallback.
