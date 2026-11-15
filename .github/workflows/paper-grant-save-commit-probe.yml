@@ -93,6 +93,7 @@ jobs:
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-save.log
+          grep -F 'PAPER_A02_FULL_INVENTORY_NO_DELIVERY_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_SAVE_DISABLED_VOID_RETURN_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_REAL_SAVE_INVENTORY_RECEIPT_PAIR_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_REAL_COIN_RECEIPT_UNACKED_PASSED' paper-a02-save.log
@@ -132,6 +133,7 @@ jobs:
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-reload.log
           grep -F 'PAPER_A02_RESTART_REAL_LOAD_PAIR_PASSED' paper-a02-reload.log
+          grep -F 'PAPER_A02_EXISTING_STORAGE_RESTART_PRESERVED_PASSED' paper-a02-reload.log
           grep -F 'PAPER_A02_RESTART_RECOVER_ACK_PASSED' paper-a02-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-reload.log; then exit 1; fi
       - name: Upload scoped diagnostic evidence

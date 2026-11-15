@@ -7,6 +7,7 @@ import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
 import co.surumene.simplecoins.domain.PlayerDataReader;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -123,17 +124,20 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (!(rawInv instanceof List<?> inventory))
             throw new IllegalStateException("Inventory absent from real playerdata: " + root.keySet());
         boolean matches = false;
+        boolean preserved = false;
         for (Object raw : inventory) {
             if (raw instanceof Map<?, ?> item
-                    && "minecraft:paper".equals(item.get("id"))
-                    && item.get("count") instanceof Number count
-                    && count.intValue() == PAPER_COUNT) {
-                matches = true;
-                break;
+                    && item.get("count") instanceof Number count) {
+                if ("minecraft:paper".equals(item.get("id"))
+                        && count.intValue() == PAPER_COUNT) matches = true;
+                if ("minecraft:stone".equals(item.get("id"))
+                        && count.intValue() == 2
+                        && item.get("Slot") instanceof Number slot
+                        && slot.intValue() == 9) preserved = true;
             }
         }
-        if (!matches)
-            throw new IllegalStateException("Saved paper stack not found: " + inventory);
+        if (!matches || !preserved)
+            throw new IllegalStateException("Saved coin or unrelated item lost: " + inventory);
     }
 
     private void savePhase(Player player) throws Exception {
@@ -144,10 +148,29 @@ public final class PaperSaveProbe extends JavaPlugin {
         GrantLedger.Grant grant = ledger.reserve(ID, ISSUED_VALUE, "a02-ci");
         if (grant.sequence() != 1)
             throw new IllegalStateException("Expected first reserved grant");
+        // Real Paper storage with no vacant slot must not stage a grant
+        // or alter any unrelated original item.
+        ItemStack[] full = new ItemStack[PaperGrantInventorySlotPlan.STORAGE_SLOTS];
+        for (int i = 0; i < full.length; i++) full[i] = new ItemStack(Material.STONE, 64);
+        player.getInventory().setStorageContents(full);
+        ItemStack[] unchanged = player.getInventory().getStorageContents();
+        var denied = PaperGrantInventorySlotPlan.stage(
+                ledger, ID, grant, GrantReceiptState.empty(), unchanged);
+        if (denied.isPresent())
+            throw new IllegalStateException("Full Paper inventory unexpectedly permits a grant");
+        if (!Arrays.equals(unchanged, player.getInventory().getStorageContents()))
+            throw new IllegalStateException("Full inventory preflight altered stored items");
+        if (ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Full-inventory preflight acknowledged grant");
+        getLogger().info("PAPER_A02_FULL_INVENTORY_NO_DELIVERY_PASSED");
+        player.getInventory().setStorageContents(
+                new ItemStack[PaperGrantInventorySlotPlan.STORAGE_SLOTS]);
+
         byte[] receipt = expectedReceipt(grant);
         ItemStack coin = new CoinItemCodec(CoinItemCodec.defaultNames())
                 .create(CoinDenomination.fromValue((int) ISSUED_VALUE), PAPER_COUNT);
         player.getInventory().setItem(0, coin);
+        player.getInventory().setItem(9, new ItemStack(Material.STONE, 2));
         PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), completedReceipt(grant));
 
         // Paper's real playerIo.save returns silently under this Spigot setting.
@@ -225,6 +248,10 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (!new CoinItemCodec(CoinItemCodec.defaultNames()).identify(item)
                 .filter(d -> d.value() == ISSUED_VALUE).isPresent())
             throw new IllegalStateException("Restored paper has invalid real coin PDC/model");
+        ItemStack retained = player.getInventory().getItem(9);
+        if (retained == null || retained.getType() != Material.STONE || retained.getAmount() != 2)
+            throw new IllegalStateException("Unrelated existing storage was not restored");
+        getLogger().info("PAPER_A02_EXISTING_STORAGE_RESTART_PRESERVED_PASSED");
         GrantReceiptState pdc = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
         if (!pdc.equals(completedReceipt(grant)))
             throw new IllegalStateException("Saved receipt PDC was not restored");
