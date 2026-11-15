@@ -10,6 +10,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md'
       - 'Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md'
+      - 'Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md'
 permissions:
   contents: read
 
@@ -44,6 +45,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -157,8 +160,14 @@ jobs:
               persist)
                 grep -F 'PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_FAR_TWO_STORED_PROVIDER_FIXTURES_SAVED_PASSED' "paper-a05-$phase.log"
                 if ! find world -type f -path '*/entities/r.0.0.mca' -size +0c | grep -q .; then
                   echo 'Actual Paper Entity Anvil region file was not created' >&2
+                  find world -name '*.mca' -print
+                  exit 1
+                fi
+                if ! find world -type f -path '*/entities/r.1.1.mca' -size +0c | grep -q .; then
+                  echo 'Far unloaded saved Entity Anvil source missing' >&2
                   find world -name '*.mca' -print
                   exit 1
                 fi
@@ -180,7 +189,8 @@ jobs:
                 grep -F 'PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED' paper-a05-offline-mca.log ;;
               reload)
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
-                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log" ;;
+                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log" ;;
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
