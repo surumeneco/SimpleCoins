@@ -123,7 +123,7 @@ public final class WclServicesProbe extends JavaPlugin {
             StorageSnapshot live = success(wwc.readLoaded(chicken.getUniqueId()), "WWC loaded");
             StorageSnapshot saved = success(wwc.readStored(chicken.getUniqueId(), world.getUID(),
                     Optional.of(new StorageSnapshot.Position(
-                            chicken.getX(), chicken.getY(), chicken.getZ())),
+                            chicken.getLocation().getX(), chicken.getLocation().getY(), chicken.getLocation().getZ())),
                     chicken.getPersistentDataContainer()), "WWC stored");
             assertChickenStorage(live, chicken.getUniqueId(), world.getUID(),
                     chickenCommander, storedShulker, coins);
