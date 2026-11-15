@@ -1,0 +1,38 @@
+name: Chat isolated SimpleCoins source snapshot (read only)
+on:
+  push:
+    branches:
+      - infra/chat-snapshot-20261115-a00
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: 357c6b4aee9804e09eb1ee7689a438b37b864699
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate fixed Git provenance, then archive only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "357c6b4aee9804e09eb1ee7689a438b37b864699"
+          test "$(git rev-parse HEAD^{tree})" = "75cbd2c2c6b4cf95679a0960b5877bf3cb6962ea"
+          mkdir -p staging
+          git archive --format=tar HEAD | gzip -n -9 > staging/project.tar.gz
+          sha256sum staging/project.tar.gz > staging/project.sha256
+          git ls-tree -r --name-only HEAD | wc -l > staging/tracked-file-count.txt
+          printf '%s\n' '357c6b4aee9804e09eb1ee7689a438b37b864699' > staging/commit.txt
+          printf '%s\n' '75cbd2c2c6b4cf95679a0960b5877bf3cb6962ea' > staging/tree.txt
+          echo "Snapshot fixed HEAD: 357c6b4aee9804e09eb1ee7689a438b37b864699"
+          cat staging/project.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-snapshot-357c6b4
+          path: staging/
+          if-no-files-found: error
+          retention-days: 1
