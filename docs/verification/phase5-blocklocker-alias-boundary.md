@@ -1,6 +1,6 @@
 # Phase 5 — BlockLocker localized runtime alias contract
 
-Status: **source-verified integration evidence and an open Red defect**, not a Confirmed CAT specification or Paper runtime acceptance. This document records the common source contract for existing Draft Red PRs [#49](https://github.com/surumeneco/SimpleCoins/pull/49), [#53](https://github.com/surumeneco/SimpleCoins/pull/53), and [#68](https://github.com/surumeneco/SimpleCoins/pull/68) without merging their test-only changes or modifying their branches.
+Status: **historical, fixed-source integration observation**. This document records the source contract and Red cases originally examined in Draft PRs [#49](https://github.com/surumeneco/SimpleCoins/pull/49), [#53](https://github.com/surumeneco/SimpleCoins/pull/53), and [#68](https://github.com/surumeneco/SimpleCoins/pull/68). The Red and branch states are not asserted to persist on current `develop`. Re-evaluate against the current BlockLocker 1.15 target, [Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A04, and [Issue #4](https://github.com/surumeneco/SimpleCoins/issues/4). This is not CAT Confirmed or Paper acceptance.
 
 ## Source-of-truth distinction
 

@@ -1,6 +1,6 @@
 # SimpleCoins 1.0.0 — JE/BE resource-pack delivery acceptance handoff
 
-Status: **not-run on a real Paper 26.2 server / JE or BE client**. Leaf TASK-20261101-006. This is an executable verification protocol, not evidence of passing.
+Status: **verification protocol, not evidence of successful real Paper 26.2 or JE/BE client tests**. Current run ownership and remaining acceptance are [Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A17/H01 and [Issue #6](https://github.com/surumeneco/SimpleCoins/issues/6); retired TaskQueue identifiers are historical only. Individual test run results must be recorded against the exact deployed HEAD/JAR/client.
 
 ## Environment and immutable evidence
 

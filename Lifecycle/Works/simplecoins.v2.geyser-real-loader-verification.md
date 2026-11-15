@@ -54,7 +54,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| ci-geyser-real-restart | verification | GitHub Actions | . | .github/workflows/paper-geyser-real-loader-smoke.yml | real-provider-startup;staging;restart | official pinned Paper and Geyser JAR | action logs;owned pack;mapping;no-load-errors | 900 |
+The authentic-provider smoke is a GitHub Actions workflow (`.github/workflows/paper-geyser-real-loader-smoke.yml`), not a local JUnit Check. It is retained below as external CI evidence, rather than declaring an unsupported CAT Check runner.
 
 ## Gates
 

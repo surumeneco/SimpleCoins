@@ -5,8 +5,8 @@
 SimpleCoins 1.0.0の起動時全件決算・仕訳・発行予約・障害復旧について、**実行すべき故障注入と成功判定**を固定する検証計画。仕様の新規決定や実機検証済み宣言ではない。
 
 - 設計正本：[02B_データ収集・決算処理](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view) の起動時/停止時決算、データ静止条件、世代一括切替、仕訳と異常時の未公開。
-- TaskQueue：`TASK-20261101-005`（整合スナップショット・仕訳・障害復旧）。子タスクの完了だけでSimpleCoins 1.0.0のリリース可否を決定しない。
-- 関連実装：`DurableFile.java`（`develop`、保存プリミティブ）、[GrantLedger候補PR #10](https://github.com/surumeneco/SimpleCoins/pull/10)（Draft）。[リンク境界の検証](phase6-durable-link-boundary.md)は別資料に保持し、ここで重複記載しない。
+- 現行の追跡先：[Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A01/A02/A08と[Issue #3](https://github.com/surumeneco/SimpleCoins/issues/3) / [#5](https://github.com/surumeneco/SimpleCoins/issues/5) / [#6](https://github.com/surumeneco/SimpleCoins/issues/6)。旧TaskQueueの完了状態ではG0/G3の受入を判断しない。
+- 関連実装：対象HEADの[`DurableFile.java`](../../src/main/java/co/surumene/simplecoins/domain/DurableFile.java)、[`GrantLedger.java`](../../src/main/java/co/surumene/simplecoins/domain/GrantLedger.java)、`NormalMutationJournal.java`等を照合する。**永続プリミティブや保存前後の読戻しが存在することは、物理配布・全件決算の原子性を証明しない**。[リンク境界の検証](phase6-durable-link-boundary.md)は別資料に保持する。
 - CATのConfirmed、Process/PI/TCE機械Gate、Paper実機試験、二重書込防止の決定は別々の証拠を必要とする。
 
 ## 実行の前提

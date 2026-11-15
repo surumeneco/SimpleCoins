@@ -53,7 +53,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| descriptor | verification | JUnit | . | gradle test --tests co.surumene.simplecoins.PaperBootstrapDescriptorCandidateTest | geyser-order-optional-provider | plugin.yml;Paper startup code | JUnit report | 180 |
+| descriptor | regression | junit | @repo:simplecoins | gradle test --tests co.surumene.simplecoins.PaperBootstrapDescriptorCandidateTest | geyser-order-optional-provider | plugin.yml;Paper startup code | JUnit report | 180 |
 
 ## Gates
 
