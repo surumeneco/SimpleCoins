@@ -43,6 +43,29 @@ public final class CoinRecipesLiveProbe extends JavaPlugin {
                         throw new IllegalStateException("Unstable coin ingredient identity: " + key);
                 }
             }
+            // Real Paper ItemFactory/ItemStack serialization smoke for the
+            // offline grant planner. Standalone JUnit cannot construct Paper
+            // item stacks without the server's ItemFactory.
+            ItemStack[] storage = new ItemStack[36];
+            storage[6] = codec.create(co.surumene.simplecoins.domain.CoinDenomination.FIVE, 1);
+            var originalSlots = PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(storage);
+            if (!originalSlots.equals(PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(
+                    storage.clone())))
+                throw new IllegalStateException("Unstable Paper ItemStack fingerprint");
+            storage[6] = storage[6].clone();
+            storage[6].setAmount(2);
+            if (originalSlots.equals(PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(storage)))
+                throw new IllegalStateException("Grant slot count drift was not detected");
+            storage[6] = codec.create(
+                    co.surumene.simplecoins.domain.CoinDenomination.HUNDRED, 1);
+            if (originalSlots.equals(PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(storage)))
+                throw new IllegalStateException("Grant slot PDC/denomination drift was not detected");
+            storage[6] = null;
+            if (originalSlots.equals(PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(storage)))
+                throw new IllegalStateException("Grant slot removal was not detected");
+            getLogger().info("PAPER_GRANT_STORAGE_FINGERPRINT_PASSED: genuine coin count,"
+                    + " PDC denomination, disappearance and stable snapshots");
+
             getLogger().info("PAPER_COIN_RECIPES_REGISTERED_PASSED: 20 recipes, exact PDC,"
                     + " results and ordinary-paper exclusion; no crafting-player assertion");
         } catch (Exception failure) {
