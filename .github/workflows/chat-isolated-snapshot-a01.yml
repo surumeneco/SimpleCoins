@@ -1,0 +1,35 @@
+name: Chat A01 isolated feature source snapshot
+on:
+  push:
+    branches:
+      - infra/chat-snapshot-20261115-a01
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: cf846151463838bc35ac664935263bc3285b3e36
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify source and create read-only snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "cf846151463838bc35ac664935263bc3285b3e36"
+          test "$(git rev-parse HEAD^{tree})" = "89f618b93d73daf1423b48cae8de1cc3a86b3d0c"
+          mkdir -p staging
+          git archive --format=tar HEAD | gzip -n -9 > staging/project.tar.gz
+          sha256sum staging/project.tar.gz > staging/project.sha256
+          printf '%s\n' 'cf846151463838bc35ac664935263bc3285b3e36' > staging/commit.txt
+          printf '%s\n' '89f618b93d73daf1423b48cae8de1cc3a86b3d0c' > staging/tree.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-pr429-snapshot
+          path: staging/
+          if-no-files-found: error
+          retention-days: 1
