@@ -64,7 +64,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43742248253 (official Paper integration, CAT structure only) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -77,6 +77,13 @@ spec_status: unknown
 - Convert only recognized, type-verified saved `BukkitValues` values to detached Bukkit `PersistentDataContainer` objects without inventing, repairing or changing missing fields; dispatch WWC and WWW individually to their **actual registered** `WonderfulStorageReader.readStored` methods. Confirm WWC's reconstructed shulker still contains the real two 5000-unit coins and follow-target; WWW's v3 decoded state retains owner/commander and weapon/cargo genuine currency.
 - Reject duplicate tagged sources, missing/wrong type, absent PDC, bad runtime/version and any chunk-load side effect. No grouping of a missing provider into zero-valued money.
 - Keep prior full Paper save/offline-JVM MCA/reload tests and Domain/static CI green.
+
+## Verified bounded result
+
+- Actual official Paper 26.2 build 134, exact PR head `4145bed2d6178bed0e56d0275a7a77a06f665fcb`: [CI #43742248253](https://github.com/surumeneco/SimpleCoins/actions/runs/43742248253), plus Domain foundation #43742248336 and Phase6 static #43742248327, all successful. Work `contract_valid:true`, `semantic_approval_verified:false`; no formal CAT gates ran.
+- First Paper process saved one WWC-typed Chicken containing a real SimpleCoins 5000-unit coin ×2 inside a serialized ShulkerBox, and one WWW-typed Wolf with distinct owner/commander and 10000-unit coin weapon + 1000-unit coin ×5 cargo in **far Chunk 40,40**; Paper's actual `entities/r.1.1.mca` was produced.
+- In the **independent next Paper JVM**, before touching Chunk 40,40, `world.isChunkLoaded(40,40)` was false. The test used `AnvilRegionReader.scan` on the real saved Entity MCA, validated both unique UUIDs and type-correct saved `BukkitValues`/runtime bytes against process-A witnesses, reconstructed only those recognized keys in detached `PersistentDataContainer` instances and called **actual registered** `WonderfulStorageReader.readStored` providers. Their returned serialized ItemStacks reproduced the WWC nested money and WWW owner/commander + both cargo classes. Source log `PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED source=entities/r.1.1.mca entities=2 regionChunk=40,40 totalCoins=25000`.
+- After readback, `world.isChunkLoaded(40,40)` remained false. Existing process A/B reload and standalone offline JVM tests from PR #442/#443 also passed. All fixture entities have **manually typed provider PDC**, not provider-managed genome lifecycle.
 
 ## Boundary
 
