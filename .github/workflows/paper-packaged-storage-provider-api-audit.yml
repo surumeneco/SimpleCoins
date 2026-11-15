@@ -1,0 +1,78 @@
+name: A05 pinned distribution WCL WWC WWW storage provider ABI audit
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/paper-packaged-storage-provider-api-audit.yml'
+      - 'Lifecycle/Works/simplecoins.a05.packaged-storage-provider-api-audit.md'
+permissions:
+  contents: read
+
+jobs:
+  inspect-packaged-abi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate A05 Work structure (not normative approval)
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.packaged-storage-provider-api-audit.md
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: server-snapshot
+          sparse-checkout: |
+            plugins/WonderfulCoreLibrary-0.1.0.jar
+            plugins/WhatAWonderfulChicken-2.1.0.jar
+            plugins/WhatAWonderfulWolf-1.1.1.jar
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify fixed Git blobs and report actual packaged provider classes and ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd server-snapshot
+          test "$(git rev-parse HEAD)" = '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          wcl=plugins/WonderfulCoreLibrary-0.1.0.jar
+          wwc=plugins/WhatAWonderfulChicken-2.1.0.jar
+          www=plugins/WhatAWonderfulWolf-1.1.1.jar
+          test "$(git hash-object "$wcl")" = '64ab60fc7f8b2ef07c4712d410c3f4d10f022698'
+          test "$(git hash-object "$wwc")" = 'f4e4c26565d105d75d6865042909a29b13a82757'
+          test "$(git hash-object "$www")" = 'e94e7430ed97b28ba0b19035238e1b00e83b0077'
+          for jar in "$wcl" "$wwc" "$www"; do
+            unzip -tqq "$jar"
+            echo "PACKAGE $(basename "$jar") bytes=$(stat -c %s "$jar")"
+            unzip -p "$jar" plugin.yml | grep -E '^name:|^version:|^depend:|^softdepend:' || true
+          done
+          echo 'PINNED_SERVER_JAR_BLOBS_VERIFIED'
+          function check_class() {
+            local jar="$1" class="$2" label="$3"
+            if unzip -Z1 "$jar" | grep -Fxq "$class"; then
+              echo "A05_CLASS_PRESENT $label $class"
+            else
+              echo "A05_CLASS_ABSENT $label $class"
+            fi
+          }
+          check_class "$wcl" 'co/surumene/wcl/plugin/inventory/WonderfulStorageReader.class' WCL
+          check_class "$wcl" 'co/surumene/wcl/api/inventory/StorageReadResult.class' WCL_API
+          check_class "$wcl" 'co/surumene/wcl/api/inventory/StorageSnapshot.class' WCL_API
+          check_class "$wwc" 'co/surumene/whatawonderfulchicken/service/WonderfulChickenStorageReader.class' WWC
+          check_class "$www" 'co/surumene/www/persistence/WonderfulWolfStorageReader.class' WWW
+          if unzip -Z1 "$wcl" | grep -Fxq 'co/surumene/wcl/plugin/inventory/WonderfulStorageReader.class'; then
+            echo 'A05_WCL_ACTUAL_BYTECODE_CONTRACT_BEGIN'
+            javap -classpath "$wcl" co.surumene.wcl.plugin.inventory.WonderfulStorageReader
+            echo 'A05_WCL_ACTUAL_BYTECODE_CONTRACT_END'
+          fi
+          echo 'A05_PACKAGED_JAR_CAPABILITY_AUDIT_FINISHED'
