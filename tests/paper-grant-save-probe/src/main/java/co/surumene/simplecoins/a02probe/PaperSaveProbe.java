@@ -2,9 +2,15 @@ package co.surumene.simplecoins.a02probe;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.GrantLedger;
+import co.surumene.simplecoins.domain.GrantReceiptState;
+import co.surumene.simplecoins.domain.PlayerDataReader;
+import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -12,10 +18,8 @@ import java.util.UUID;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -26,9 +30,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class PaperSaveProbe extends JavaPlugin {
     private static final UUID ID = UUID.fromString("00000000-0000-0000-0000-00000000a002");
-    private static final NamespacedKey RECEIPT =
-            new NamespacedKey("simplecoins", "grant_receipt_v1");
-    private static final int PAPER_COUNT = 3;
+    private static final int PAPER_COUNT = 1;
+    private static final long ISSUED_VALUE = 5000;
 
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(getServer().getIp()) || !getServer().getOnlinePlayers().isEmpty()) {
@@ -55,15 +58,19 @@ public final class PaperSaveProbe extends JavaPlugin {
                 .resolve("world/players/data/" + ID + ".dat");
     }
 
-    private byte[] expectedReceipt() throws ReflectiveOperationException {
-        ClassLoader owner = getServer().getPluginManager().getPlugin("SimpleCoins")
-                .getClass().getClassLoader();
-        Class<?> receiptType = Class.forName(
-                "co.surumene.simplecoins.domain.GrantReceiptState", true, owner);
-        Class<?> codec = Class.forName(
-                "co.surumene.simplecoins.paper.PaperGrantReceiptPdc", true, owner);
-        Object empty = receiptType.getMethod("empty").invoke(null);
-        return (byte[]) codec.getMethod("toSavedBytes", receiptType).invoke(null, empty);
+    private Path grantDirectory() {
+        return getServer().getWorldContainer().toPath().toAbsolutePath().normalize()
+                .resolve("a02-test-grant-ledger");
+    }
+
+    private static GrantReceiptState completedReceipt(GrantLedger.Grant grant) {
+        // The physical item and this completed cursor will be persisted
+        // together BEFORE the durable ledger is acknowledged.
+        return new GrantReceiptState(grant.sequence(), 0, null, 0);
+    }
+
+    private static byte[] expectedReceipt(GrantLedger.Grant grant) {
+        return PaperGrantReceiptPdc.toSavedBytes(completedReceipt(grant));
     }
 
     private Player createDetachedPlayer() throws ReflectiveOperationException {
@@ -89,16 +96,9 @@ public final class PaperSaveProbe extends JavaPlugin {
         return player;
     }
 
-    /** Call the production read-only compressed NBT decoder, never fake NBT. */
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readDisk(Path file) throws ReflectiveOperationException {
-        ClassLoader owner = getServer().getPluginManager().getPlugin("SimpleCoins")
-                .getClass().getClassLoader();
-        Class<?> reader = Class.forName(
-                "co.surumene.simplecoins.domain.PlayerDataReader", true, owner);
-        Object result = reader.getMethod("read", Path.class, int.class, int.class)
-                .invoke(null, file, 1024 * 1024, 16 * 1024 * 1024);
-        return (Map<String, Object>) result;
+    /** Call the actual production read-only compressed NBT decoder. */
+    private Map<String, Object> readDisk(Path file) throws Exception {
+        return PlayerDataReader.read(file, 1024 * 1024, 16 * 1024 * 1024);
     }
 
     private void assertSavedPair(Path file, byte[] expected) throws Exception {
@@ -108,7 +108,7 @@ public final class PaperSaveProbe extends JavaPlugin {
         Object rawValues = root.get("BukkitValues");
         if (!(rawValues instanceof Map<?, ?> values))
             throw new IllegalStateException("Missing BukkitValues: " + root.keySet());
-        Object savedReceipt = values.get(RECEIPT.toString());
+        Object savedReceipt = values.get(PaperGrantReceiptPdc.RECEIPT.toString());
         if (!(savedReceipt instanceof byte[] bytes) || !Arrays.equals(bytes, expected))
             throw new IllegalStateException("PDC receipt mismatch in real playerdata");
         Object rawInv = root.get("Inventory");
@@ -132,9 +132,15 @@ public final class PaperSaveProbe extends JavaPlugin {
         Path file = dataFile();
         if (Files.exists(file))
             throw new IllegalStateException("Probe requires fresh UUID playerdata");
-        byte[] receipt = expectedReceipt();
-        player.getInventory().setItem(0, new ItemStack(Material.PAPER, PAPER_COUNT));
-        player.getPersistentDataContainer().set(RECEIPT, PersistentDataType.BYTE_ARRAY, receipt);
+        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger.Grant grant = ledger.reserve(ID, ISSUED_VALUE, "a02-ci");
+        if (grant.sequence() != 1)
+            throw new IllegalStateException("Expected first reserved grant");
+        byte[] receipt = expectedReceipt(grant);
+        ItemStack coin = new CoinItemCodec(CoinItemCodec.defaultNames())
+                .create(CoinDenomination.fromValue((int) ISSUED_VALUE), PAPER_COUNT);
+        player.getInventory().setItem(0, coin);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), completedReceipt(grant));
 
         // Paper's real playerIo.save returns silently under this Spigot setting.
         Field disabled = Class.forName("org.spigotmc.SpigotConfig")
@@ -152,7 +158,10 @@ public final class PaperSaveProbe extends JavaPlugin {
 
         player.saveData();
         assertSavedPair(file, receipt);
+        if (ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Saved grant was acknowledged too early");
         getLogger().info("PAPER_A02_REAL_SAVE_INVENTORY_RECEIPT_PAIR_PASSED");
+        getLogger().info("PAPER_A02_REAL_COIN_RECEIPT_UNACKED_PASSED");
 
         // A subsequent disabled save must not change this authoritative disk generation.
         player.getInventory().setItem(0, new ItemStack(Material.STONE, 1));
@@ -164,21 +173,58 @@ public final class PaperSaveProbe extends JavaPlugin {
         }
         assertSavedPair(file, receipt);
         getLogger().info("PAPER_A02_STALE_DISK_AFTER_VOID_SAVE_PASSED");
+
+        // Force Paper's real safeReplaceFile to fail with a nonempty directory
+        // at the target UUID.dat path. It catches/logs the I/O failure instead
+        // of propagating it to CraftPlayer.saveData's caller.
+        Path stashed = file.resolveSibling(ID + ".a02-probe-stashed");
+        Files.move(file, stashed);
+        Files.createDirectory(file);
+        Files.writeString(file.resolve("prevent-replacement"), "test only");
+        try {
+            player.saveData();
+            if (!Files.isDirectory(file))
+                throw new IllegalStateException("Injected I/O failure unexpectedly replaced directory");
+            if (ledger.pending(ID).size() != 1)
+                throw new IllegalStateException("Failed save acknowledged a grant");
+        } finally {
+            Files.deleteIfExists(file.resolve("prevent-replacement"));
+            if (Files.isDirectory(file)) Files.delete(file);
+            Files.move(stashed, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+        assertSavedPair(file, receipt);
+        getLogger().info("PAPER_A02_SAVE_EXCEPTION_SWALLOWED_NO_ACK_PASSED");
     }
 
     private void reloadPhase(Player player) throws Exception {
         Path file = dataFile();
-        byte[] receipt = expectedReceipt();
+        GrantLedger ledger = new GrantLedger(grantDirectory());
+        List<GrantLedger.Grant> pending = ledger.pending(ID);
+        if (pending.size() != 1)
+            throw new IllegalStateException("Expected one saved-but-unacknowledged grant");
+        GrantLedger.Grant grant = pending.getFirst();
+        byte[] receipt = expectedReceipt(grant);
         assertSavedPair(file, receipt);
         player.loadData(); // real CraftPlayer -> PlayerDataStorage.load
         ItemStack item = player.getInventory().getItem(0);
         if (item == null || item.getType() != Material.PAPER
                 || item.getAmount() != PAPER_COUNT)
             throw new IllegalStateException("Saved inventory was not restored");
-        byte[] pdc = player.getPersistentDataContainer().get(
-                RECEIPT, PersistentDataType.BYTE_ARRAY);
-        if (!Arrays.equals(receipt, pdc))
+        if (!new CoinItemCodec(CoinItemCodec.defaultNames()).identify(item)
+                .filter(d -> d.value() == ISSUED_VALUE).isPresent())
+            throw new IllegalStateException("Restored paper has invalid real coin PDC/model");
+        GrantReceiptState pdc = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (!pdc.equals(completedReceipt(grant)))
             throw new IllegalStateException("Saved receipt PDC was not restored");
         getLogger().info("PAPER_A02_RESTART_REAL_LOAD_PAIR_PASSED");
+
+        // A real save-before-ack crash boundary: on a fresh process the
+        // physical receipt is already persisted, but the ledger is pending.
+        if (!ledger.wasApplied(grant, pdc.completedSequence()))
+            throw new IllegalStateException("Persisted receipt not matched to reservation");
+        ledger.acknowledge(grant, pdc.completedSequence());
+        if (!new GrantLedger(grantDirectory()).pending(ID).isEmpty())
+            throw new IllegalStateException("Recovered acknowledgement did not persist");
+        getLogger().info("PAPER_A02_RESTART_RECOVER_ACK_PASSED");
     }
 }
