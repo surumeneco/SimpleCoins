@@ -6,134 +6,138 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
-import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+/** Pure preflight tests; real Paper ItemStack serialization needs Paper smoke. */
 class PaperGrantInventorySlotPlanTest {
     @TempDir Path root;
 
-    private static ItemStack[] storageWithFreeSlots(int count) {
-        ItemStack[] slots = new ItemStack[36];
-        for (int i = count; i < slots.length; i++)
-            slots[i] = new ItemStack(Material.STONE, 1);
-        return slots;
+    private static PaperGrantInventorySlotPlan.StorageSnapshot storageWithFreeSlots(int free) {
+        List<String> contents = new ArrayList<>(Collections.nCopies(36, "stone:1"));
+        for (int i = 0; i < free; i++) contents.set(i, null);
+        return new PaperGrantInventorySlotPlan.StorageSnapshot(contents);
+    }
+
+    private static PaperGrantInventorySlotPlan.StorageSnapshot withSlot(
+            PaperGrantInventorySlotPlan.StorageSnapshot prior, int index, String item) {
+        var changed = new ArrayList<>(prior.fingerprints());
+        changed.set(index, item);
+        return new PaperGrantInventorySlotPlan.StorageSnapshot(changed);
     }
 
     @Test void amountGrantAllocatesCanonicalCoinsWithoutTouchingOccupiedStorage() throws Exception {
         var ledger = new GrantLedger(root.resolve("amount"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserve(player, 5200, "console");
-        ItemStack[] storage = storageWithFreeSlots(2);
-        var originalLast = storage[35].clone();
+        var storage = storageWithFreeSlots(2);
         var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
                 GrantReceiptState.empty(), storage).orElseThrow();
 
-        assertEquals(2, plan.placements().size());
-        assertEquals(new PaperGrantInventorySlotPlan.Slot(0,
-                CoinDenomination.FIVE_THOUSAND, 1), plan.placements().get(0));
-        assertEquals(new PaperGrantInventorySlotPlan.Slot(1,
-                CoinDenomination.HUNDRED, 2), plan.placements().get(1));
+        assertEquals(List.of(
+                new PaperGrantInventorySlotPlan.Slot(0, CoinDenomination.FIVE_THOUSAND, 1),
+                new PaperGrantInventorySlotPlan.Slot(1, CoinDenomination.HUNDRED, 2)),
+                plan.placements());
         assertEquals(grant.sequence(), plan.nextReceipt().completedSequence());
         assertFalse(plan.nextReceipt().active());
         assertEquals(GrantReceiptState.empty(), plan.previousReceipt());
-        assertEquals(originalLast, storage[35]);
-        assertNull(storage[0]);
-        assertNull(storage[1]);
+        assertEquals("stone:1", storage.fingerprints().get(35));
+        assertTrue(storage.vacant(0));
+        assertTrue(storage.vacant(1));
         plan.requireUnchanged(GrantReceiptState.empty(), storage);
-        assertThrows(UnsupportedOperationException.class, () -> plan.placements().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> plan.placements().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> storage.fingerprints().set(0, "fake"));
     }
 
-    @Test void partialGrantResumesWhenOneMoreRealStorageSlotIsFree() throws Exception {
+    @Test void partialGrantResumesWhenAnotherPhysicalStorageSlotBecomesFree() throws Exception {
         var ledger = new GrantLedger(root.resolve("partial"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserve(player, 5200, "console");
-        ItemStack[] storage = storageWithFreeSlots(1);
+        var storage = storageWithFreeSlots(1);
         var first = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
                 GrantReceiptState.empty(), storage).orElseThrow();
-        assertEquals(1, first.placements().size());
-        assertEquals(CoinDenomination.FIVE_THOUSAND, first.placements().getFirst().denomination());
+        assertEquals(List.of(new PaperGrantInventorySlotPlan.Slot(0,
+                CoinDenomination.FIVE_THOUSAND, 1)), first.placements());
         assertTrue(first.nextReceipt().active());
         assertEquals(5000L, first.nextReceipt().partialValue());
 
-        storage[0] = new ItemStack(Material.PAPER, 1);
-        storage[1] = null;
+        var afterFirstSave = withSlot(storage, 0, "issued-coin-5000:1");
+        afterFirstSave = withSlot(afterFirstSave, 1, null);
         var second = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
-                first.nextReceipt(), storage).orElseThrow();
-        assertEquals(new PaperGrantInventorySlotPlan.Slot(1,
-                CoinDenomination.HUNDRED, 2), second.placements().getFirst());
+                first.nextReceipt(), afterFirstSave).orElseThrow();
+        assertEquals(List.of(new PaperGrantInventorySlotPlan.Slot(1,
+                CoinDenomination.HUNDRED, 2)), second.placements());
         assertEquals(grant.sequence(), second.nextReceipt().completedSequence());
         assertFalse(second.nextReceipt().active());
         assertEquals(1, ledger.pending(player).size());
-        assertEquals(Material.PAPER, storage[0].getType());
-        assertNull(storage[1]);
+        assertEquals("issued-coin-5000:1", afterFirstSave.fingerprints().get(0));
+        assertTrue(afterFirstSave.vacant(1));
     }
 
-    @Test void exactCoinsKeepOriginalDenominationAnd64ItemLimit() throws Exception {
+    @Test void exactCoinsKeepChosenDenominationAnd64ItemLimit() throws Exception {
         var ledger = new GrantLedger(root.resolve("exact"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserveCoins(player, CoinDenomination.FIVE, 129, "console");
-        ItemStack[] storage = storageWithFreeSlots(2);
+        var storage = storageWithFreeSlots(2);
         var first = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
                 GrantReceiptState.empty(), storage).orElseThrow();
-        assertEquals(2, first.placements().size());
-        assertEquals(64, first.placements().get(0).count());
-        assertEquals(64, first.placements().get(1).count());
-        assertEquals(CoinDenomination.FIVE, first.placements().get(1).denomination());
+        assertEquals(List.of(
+                new PaperGrantInventorySlotPlan.Slot(0, CoinDenomination.FIVE, 64),
+                new PaperGrantInventorySlotPlan.Slot(1, CoinDenomination.FIVE, 64)),
+                first.placements());
         assertEquals(640L, first.nextReceipt().partialValue());
 
-        storage[0] = new ItemStack(Material.PAPER, 64);
-        storage[1] = new ItemStack(Material.PAPER, 64);
-        storage[2] = null;
+        var nextStorage = withSlot(storage, 0, "coin-5:64");
+        nextStorage = withSlot(nextStorage, 1, "coin-5:64");
+        nextStorage = withSlot(nextStorage, 2, null);
         var last = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
-                first.nextReceipt(), storage).orElseThrow();
-        assertEquals(new PaperGrantInventorySlotPlan.Slot(2,
-                CoinDenomination.FIVE, 1), last.placements().getFirst());
-        assertTrue(last.nextReceipt().completedSequence() > 0);
+                first.nextReceipt(), nextStorage).orElseThrow();
+        assertEquals(List.of(new PaperGrantInventorySlotPlan.Slot(2,
+                CoinDenomination.FIVE, 1)), last.placements());
+        assertEquals(grant.sequence(), last.nextReceipt().completedSequence());
     }
 
-    @Test void fullInventoryProducesNoPlanAndDoesNotAdvanceReceipt() throws Exception {
+    @Test void fullInventoryCreatesNoPlanAndKeepsGrantPending() throws Exception {
         var ledger = new GrantLedger(root.resolve("full"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserve(player, 5200, "console");
-        ItemStack[] filled = storageWithFreeSlots(0);
-        ItemStack[] before = Arrays.stream(filled).map(ItemStack::clone).toArray(ItemStack[]::new);
+        var filled = storageWithFreeSlots(0);
         assertTrue(PaperGrantInventorySlotPlan.stage(ledger, player, grant,
                 GrantReceiptState.empty(), filled).isEmpty());
-        assertArrayEquals(before, filled);
+        assertEquals("stone:1", filled.fingerprints().get(0));
         assertEquals(1, ledger.pending(player).size());
     }
 
-    @Test void changedInventoryOrReceiptIsRejectedBeforeAnyLaterCommit() throws Exception {
+    @Test void changedStorageOrReceiptIsRejectedBeforeFutureCommit() throws Exception {
         var ledger = new GrantLedger(root.resolve("drift"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserve(player, 5200, "console");
-        ItemStack[] storage = storageWithFreeSlots(2);
+        var storage = storageWithFreeSlots(2);
         var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
                 GrantReceiptState.empty(), storage).orElseThrow();
-        storage[35].setAmount(2);
-        assertThrows(IllegalStateException.class,
-                () -> plan.requireUnchanged(GrantReceiptState.empty(), storage));
-        storage[35].setAmount(1);
-        storage[0] = new ItemStack(Material.DIRT, 1);
-        assertThrows(IllegalStateException.class,
-                () -> plan.requireUnchanged(GrantReceiptState.empty(), storage));
-        storage[0] = null;
-        assertThrows(IllegalStateException.class,
-                () -> plan.requireUnchanged(new GrantReceiptState(grant.sequence(), 0, null, 0), storage));
+        assertThrows(IllegalStateException.class, () -> plan.requireUnchanged(
+                GrantReceiptState.empty(), withSlot(storage, 35, "stone:2")));
+        assertThrows(IllegalStateException.class, () -> plan.requireUnchanged(
+                GrantReceiptState.empty(), withSlot(storage, 0, "dirt:1")));
+        assertThrows(IllegalStateException.class, () -> plan.requireUnchanged(
+                new GrantReceiptState(grant.sequence(), 0, null, 0), storage));
+        plan.requireUnchanged(GrantReceiptState.empty(), storage);
     }
 
-    @Test void foreignAndForgedGrantOrWrongStorageAreaNeverPlansPhysicalIssuance() throws Exception {
+    @Test void foreignAndForgedGrantOrInvalidStorageCannotPlanIssuance() throws Exception {
         var ledger = new GrantLedger(root.resolve("invalid"));
         UUID player = UUID.randomUUID();
         var grant = ledger.reserve(player, 5200, "console");
         var forged = new GrantLedger.Grant(grant.sequence(), grant.id(), grant.player(), 5000,
                 grant.issuer(), grant.createdMillis(), false,
                 CoinDenomination.FIVE_THOUSAND, 1);
-        ItemStack[] storage = storageWithFreeSlots(2);
+        var storage = storageWithFreeSlots(2);
         assertThrows(IllegalStateException.class,
                 () -> PaperGrantInventorySlotPlan.stage(ledger, player, forged,
                         GrantReceiptState.empty(), storage));
@@ -141,8 +145,8 @@ class PaperGrantInventorySlotPlanTest {
                 () -> PaperGrantInventorySlotPlan.stage(ledger, UUID.randomUUID(), grant,
                         GrantReceiptState.empty(), storage));
         assertThrows(IllegalArgumentException.class,
-                () -> PaperGrantInventorySlotPlan.stage(ledger, player, grant,
-                        GrantReceiptState.empty(), new ItemStack[41]));
+                () -> new PaperGrantInventorySlotPlan.StorageSnapshot(
+                        Collections.nCopies(41, null)));
         assertThrows(IllegalArgumentException.class,
                 () -> new PaperGrantInventorySlotPlan.Slot(36, CoinDenomination.FIVE, 1));
     }
