@@ -8,6 +8,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
+      - 'Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md'
 permissions:
   contents: read
 
@@ -38,6 +39,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -154,7 +157,19 @@ jobs:
                   echo 'Actual Paper Entity Anvil region file was not created' >&2
                   find world -name '*.mca' -print
                   exit 1
-                fi ;;
+                fi
+                # The first Paper JVM is fully stopped. Inspect its actual
+                # Entity Anvil file with our EXISTING production read-only
+                # Anvil parser in a standalone non-Bukkit Java process.
+                # This must not load chunks or reconstruct an Entity via Paper.
+                java -cp "../tests/paper-wcl-services-probe/build/libs/SimpleCoinsWclServicesProbe.jar:../build/libs/SimpleCoins-1.0.0.jar" \
+                  co.surumene.simplecoins.a05probe.OfflineEntityRegionProbe \
+                  "world/dimensions/minecraft/overworld/entities/r.0.0.mca" \
+                  "plugins/SimpleCoinsWclServicesProbe/wwc-physical-entity-uuid.txt" \
+                  "plugins/SimpleCoinsWclServicesProbe/wwc-shulker-coins.b64" \
+                  | tee paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_WWC_MONEY_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED' paper-a05-offline-mca.log ;;
               reload)
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log" ;;
             esac
