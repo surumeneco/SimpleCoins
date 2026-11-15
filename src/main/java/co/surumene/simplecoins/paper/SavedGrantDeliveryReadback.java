@@ -93,7 +93,7 @@ public final class SavedGrantDeliveryReadback {
             throws IOException {
         if (!"minecraft:paper".equals(item.get("id")))
             throw new IOException("Saved grant output is not PAPER");
-        Object rawCount = item.getOrDefault("count", Integer.valueOf(1));
+        Object rawCount = item.containsKey("count") ? item.get("count") : Integer.valueOf(1);
         if (!(rawCount instanceof Byte || rawCount instanceof Short
                 || rawCount instanceof Integer || rawCount instanceof Long)
                 || ((Number) rawCount).longValue() != slot.count())
