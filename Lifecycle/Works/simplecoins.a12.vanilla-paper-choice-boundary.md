@@ -68,7 +68,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43729100572 (real Paper ingredient/listener observation + canonical Work contract only) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -85,3 +85,12 @@ spec_status: unknown
 ## Authority
 
 Verification-only `issue-work` Draft. Any behavioral source change requires normative Confirmed Process/PI/TCE and official Gates. CI green is not normative confirmation, completed consumption coverage, G0 or admission approval.
+
+## Observed Paper 26.2 boundary (2026-11-15)
+
+The detached probe ran on official Paper 26.2 build 134 with zero players and default-deny admission: [CI #43729100572](https://github.com/surumeneco/SimpleCoins/actions/runs/43729100572).
+
+- The authentic 5000-unit PDC/model PAPER coin matched **11** distinct vanilla `minecraft:` shaped/shapeless `RecipeChoice.MaterialChoice` ingredients: `book`, `bordure_indented_banner_pattern`, `cartography_table`, `creeper_banner_pattern`, `field_masoned_banner_pattern`, `firework_rocket_simple`, `flower_banner_pattern`, `map`, `mojang_banner_pattern`, `name_tag`, `skull_banner_pattern`.
+- The current `CoinExchangeRecipes` listener was found registered on all three Paper crafting-event handler lists: `PrepareItemCraftEvent`, `CraftItemEvent`, `CrafterCraftEvent`.
+- **Interpretation:** the material-only recipe predicate accepts the tagged coin, so the registered guards are necessary. This does **not** demonstrate a successful consuming craft, a guard bypass, or the safety of trading/cartography/other third-party routes. These require independent end-to-end event tests.
+- Only source-bound technical verification and ordinary CI were run, not CAT Process/Model/Implementation formal Gates.
