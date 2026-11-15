@@ -1,0 +1,117 @@
+name: Paper 26.2 zero-player external monetary writer proof
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tests/paper-zero-player-writer-probe/**'
+      - '.github/workflows/paper-zero-player-writer-probe.yml'
+      - 'Lifecycle/Works/simplecoins.a01.zero-player-external-writer-probe.md'
+
+jobs:
+  zero-player-external-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build production and isolated probe without packaging it in product
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-zero-player-writer-probe jar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+          unzip -p tests/paper-zero-player-writer-probe/build/libs/SimpleCoinsZeroPlayerWriterProbe.jar plugin.yml |
+            grep -F 'name: SimpleCoinsZeroPlayerWriterProbe'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq 'ZeroPlayerWriterProbe.class'; then
+            echo 'CI probe leaked into SimpleCoins production artifact' >&2
+            exit 1
+          fi
+      - name: Download verified official Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A01-Probe/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) echo "Unexpected Paper URL" >&2; exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Install isolated plugins with independent admission default-deny
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp tests/paper-zero-player-writer-probe/build/libs/SimpleCoinsZeroPlayerWriterProbe.jar smoke/plugins/WriterProbe.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25597\n' > smoke/server.properties
+      - name: First and second Paper process alter persistent currency with zero players
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          region='world/dimensions/minecraft/overworld/region/r.0.0.mca'
+          for phase in seed mutate verify; do
+            set +e
+            timeout --signal=TERM --kill-after=8s 160s \
+              java -Da01.probe.phase="$phase" -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > "paper-a01-$phase.log" 2>&1
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "Paper $phase exit=$status" >&2
+              tail -140 "paper-a01-$phase.log"
+              exit 1
+            fi
+            grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' "paper-a01-$phase.log"
+            grep -F 'Settlement engine not connected; player admission remains disabled.' "paper-a01-$phase.log"
+            if grep -Fq 'PAPER_A01_ZERO_PLAYER_PROBE_FAILED' "paper-a01-$phase.log"; then
+              tail -140 "paper-a01-$phase.log"; exit 1
+            fi
+            case "$phase" in
+              seed)
+                grep -F 'PAPER_A01_ZERO_PLAYER_EXTERNAL_WRITER_SEED_PASSED' "paper-a01-$phase.log" ;;
+              mutate)
+                grep -F 'PAPER_A01_ZERO_PLAYER_EXTERNAL_WRITER_MUTATED_PASSED' "paper-a01-$phase.log" ;;
+              verify)
+                grep -F 'PAPER_A01_ZERO_PLAYER_RELOAD_NEW_VALUE_PASSED' "paper-a01-$phase.log" ;;
+            esac
+            if [ ! -f "$region" ]; then
+              echo "Expected current Paper 26.2 region file missing: $region" >&2
+              find world -name '*.mca' | head -30
+              exit 1
+            fi
+            if [ "$phase" = seed ]; then
+              sha256sum "$region" | tee region.seed.sha256
+            elif [ "$phase" = mutate ]; then
+              if sha256sum -c region.seed.sha256; then
+                echo 'Physical region file remained byte-identical after zero-player external mutation' >&2
+                exit 1
+              fi
+              sha256sum "$region" | tee region.mutated.sha256
+            else
+              sha256sum -c region.mutated.sha256
+            fi
+          done
+          echo 'PAPER_A01_ZERO_PLAYER_UNCONTROLLED_WRITER_COUNTEREXAMPLE_PASSED'
+      - name: Preserve only diagnostic logs and region checksums
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-a01-zero-player-writer-logs
+          path: |
+            smoke/*.log
+            smoke/*.sha256
+          if-no-files-found: ignore
+          retention-days: 7
