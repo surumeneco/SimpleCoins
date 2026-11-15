@@ -22,7 +22,8 @@ import java.util.Objects;
  * it is NOT a filesystem freeze or proof of a Paper saveData transaction.
  */
 public final class SavedPlayerdataContentWitness {
-    private record Stamp(Object fileKey, long size, FileTime modified, String sha256) {}
+    private record Stamp(Object fileKey, long size, FileTime modified,
+                         FileTime changed, String sha256) {}
 
     private final WorldStorageDiscovery.Manifest manifest;
     private final int maximumBytes;
@@ -85,6 +86,18 @@ public final class SavedPlayerdataContentWitness {
         }
     }
 
+    /** A restored mtime and digest do not restore the Unix inode ctime. */
+    private static FileTime unixChangeTime(Path file) throws IOException {
+        try {
+            Object raw = Files.getAttribute(file, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
+            if (raw instanceof FileTime value) return value;
+            throw new IOException("Saved playerdata Unix change time is unavailable: " + file);
+        } catch (UnsupportedOperationException unsupported) {
+            throw new IOException("Saved playerdata requires Unix ctime evidence: " + file,
+                    unsupported);
+        }
+    }
+
     private static Stamp stamp(Path file, int maximumBytes) throws IOException {
         // Caller-supplied paths cannot acquire a symbolic ancestor even if
         // the final file itself is regular and readable.
@@ -96,6 +109,7 @@ public final class SavedPlayerdataContentWitness {
                 file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!before.isRegularFile() || before.size() <= 0 || before.size() > maximumBytes)
             throw new IOException("Missing or out-of-budget saved playerdata: " + file);
+        FileTime beforeChange = unixChangeTime(file);
 
         final MessageDigest sha;
         try {
@@ -117,12 +131,14 @@ public final class SavedPlayerdataContentWitness {
         }
         BasicFileAttributes after = Files.readAttributes(
                 file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        FileTime afterChange = unixChangeTime(file);
         if (!after.isRegularFile() || count != before.size()
                 || count != after.size()
                 || !Objects.equals(before.fileKey(), after.fileKey())
-                || !before.lastModifiedTime().equals(after.lastModifiedTime()))
+                || !before.lastModifiedTime().equals(after.lastModifiedTime())
+                || !beforeChange.equals(afterChange))
             throw new IOException("Saved playerdata changed while hashing: " + file);
         return new Stamp(before.fileKey(), count, before.lastModifiedTime(),
-                HexFormat.of().formatHex(sha.digest()));
+                afterChange, HexFormat.of().formatHex(sha.digest()));
     }
 }
