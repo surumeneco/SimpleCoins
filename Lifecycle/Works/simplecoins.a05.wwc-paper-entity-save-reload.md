@@ -68,7 +68,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43735175572 (exact source CI, official Paper restart/readback only; formal CAT Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -82,6 +82,14 @@ spec_status: unknown
 - Distinguish readback from the reader's PDC conversion and from the full game lifecycle; an artificial PDC marker is not equivalent to a genuinely spawned and genome-initialized WWC individual.
 - Keep all independent no-entity, WWW fixture and corrupt-schema regressions green. Record any provider lifecycle rewrite/erase and diagnose whether the test fixture violates the official WWC generation contract before interpreting it as a product bug.
 - This proves only a particular real Paper entity persistence/reload path. It does not prove unloaded entity region discovery without chunk load, owner/BAN classification, all source completeness, G0 atomic generation or permitted player admission.
+
+## Verified Paper evidence
+
+- [Official Paper 26.2 build 134, CI #43735175572](https://github.com/surumeneco/SimpleCoins/actions/runs/43735175572): authenticated CAT Work structural validator returned `contract_valid:true`, `semantic_approval_verified:false`; both JUnit/Gradle and Paper smoke completed successfully on head `db6644554c1c1e65127edde7a53811bbc957cb10`.
+- Distinct Paper process **A** created a valid Bukkit-indexed Chicken in a preloaded disposable Chunk 4,4, attached the real SimpleCoins coin-valued ShulkerBox bytes in WWC-compatible PDC, wrote a saved UUID witness and invoked world save. The workflow confirmed a nonempty real entities `r.0.0.mca` Anvil region.
+- Distinct Paper process **B** loaded the **same** disk-backed world, located exactly one matching scoreboard-tagged Chicken in the known test chunk, and verified the original exact Chicken UUID and world UUID, WWC `readLoaded` and `readStored` responses, `follow_target`, one serialized shulker and genuine 5000-unit coin ×2. Source log markers: `PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED`, `PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED` and `PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED`.
+- No synthetic new Chicken or currency is inserted on process B. The prior two-provider registration, WWW v3 mock saved-item fixture, and unsupported-schema rejection also passed on all three process boots.
+- This confirms Paper Entity **save/restart/reload for a manually WWC-typed PDC test fixture**. It does not claim that a naturally generated genome-initialized WWC entity or loaded/unloaded mixed source generation has been verified, or that SimpleCoins's settlement publisher is safe to enable.
 
 ## Authority
 
