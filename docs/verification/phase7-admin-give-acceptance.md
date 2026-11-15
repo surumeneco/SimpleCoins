@@ -2,7 +2,7 @@
 
 ## 目的と権威境界
 
-TaskQueue `TASK-20261101-006` の運営機能について、実装・実機検証の受入観測を定義する。**本書はテスト計画であり、機能の実装済み・CAT Gate合格・Paper実機合格を意味しない。**
+SimpleCoins 1.0.0の運営機能について、実装・実機検証の受入観測を定義する。現行の作業は[Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A02/A09/A15と[Issue #6](https://github.com/surumeneco/SimpleCoins/issues/6)を参照する。旧TaskQueueのIDは現在の実行指示ではない。**本書はテスト計画であり、機能の実装済み・CAT Gate合格・Paper実機合格を意味しない。**
 
 確定仕様の出典：
 - [03_運営設定・コマンド](https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view) — giveの2形式、権限、既知オフライン対象、予約と受領
