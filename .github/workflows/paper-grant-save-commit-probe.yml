@@ -1,0 +1,144 @@
+name: Paper 26.2 disposable playerdata save and reload probe
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tests/paper-grant-save-probe/**'
+      - '.github/workflows/paper-grant-save-commit-probe.yml'
+      - 'Lifecycle/Works/simplecoins.a02.paper-save-commit-verification.md'
+
+jobs:
+  real-paper-playerdata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build production guard and isolated probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-grant-save-probe jar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+          unzip -p tests/paper-grant-save-probe/build/libs/SimpleCoinsPaperSaveProbe.jar plugin.yml |
+            grep -F 'name: SimpleCoinsPaperSaveProbe'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq 'PaperSaveProbe.class'; then
+            echo 'Disposable probe incorrectly packaged in SimpleCoins product JAR' >&2
+            exit 1
+          fi
+      - name: Download and hash-verify official Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A02-Probe/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) echo "Unexpected Paper URL" >&2; exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Install only disposable Paper plugins
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp tests/paper-grant-save-probe/build/libs/SimpleCoinsPaperSaveProbe.jar smoke/plugins/SaveProbe.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25598\n' > smoke/server.properties
+      - name: Save, inject a failed write, then SIGKILL before journal acknowledgement
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          java -Da02.probe.phase=save -Da02.probe.awaitSigkill=true \
+            -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-a02-save.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -KILL "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          crash_ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-save.log; then
+              tail -150 paper-a02-save.log
+              exit 1
+            fi
+            if grep -Fq 'PAPER_A02_UNACKED_CRASH_POINT_READY' paper-a02-save.log; then
+              crash_ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper exited before crash injection' >&2
+              tail -150 paper-a02-save.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$crash_ready" != 1 ]; then
+            echo 'Timed out waiting for confirmed physical-save/ledger-pending boundary' >&2
+            tail -150 paper-a02-save.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-save.log
+          grep -F 'PAPER_A02_SAVE_DISABLED_VOID_RETURN_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_REAL_SAVE_INVENTORY_RECEIPT_PAIR_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_REAL_COIN_RECEIPT_UNACKED_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_STALE_DISK_AFTER_VOID_SAVE_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_SAVE_EXCEPTION_SWALLOWED_NO_ACK_PASSED' paper-a02-save.log
+          test -f world/players/data/00000000-0000-0000-0000-00000000a002.dat
+          if grep -Fq 'Saving worlds' paper-a02-save.log; then
+            echo 'Paper entered clean shutdown before SIGKILL' >&2
+            exit 1
+          fi
+          kill -KILL "$server_pid"
+          set +e
+          wait "$server_pid"
+          status=$?
+          set -e
+          trap - EXIT
+          if [ "$status" -ne 137 ]; then
+            echo "Expected signal 9 process termination (137), found $status" >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_SAVE_BEFORE_ACK_SIGKILL_INJECTED'
+      - name: Restart Paper and verify real data reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=reload -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > paper-a02-reload.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Paper reload phase failed (exit=$status)" >&2
+            tail -160 paper-a02-reload.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-reload.log
+          grep -F 'PAPER_A02_RESTART_REAL_LOAD_PAIR_PASSED' paper-a02-reload.log
+          grep -F 'PAPER_A02_RESTART_RECOVER_ACK_PASSED' paper-a02-reload.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-reload.log; then exit 1; fi
+      - name: Upload scoped diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-a02-save-reload-logs
+          path: smoke/*.log
+          if-no-files-found: ignore
+          retention-days: 7

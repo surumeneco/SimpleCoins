@@ -1,0 +1,7 @@
+name: SimpleCoinsPaperSaveProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a02probe.PaperSaveProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins]
+description: Disposable CI-only synthetic player saveData and reload experiment
