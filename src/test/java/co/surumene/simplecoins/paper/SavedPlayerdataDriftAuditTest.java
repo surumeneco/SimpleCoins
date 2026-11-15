@@ -68,6 +68,26 @@ class SavedPlayerdataDriftAuditTest {
         assertThrows(IOException.class, witness::requireUnchanged);
     }
 
+
+    @Test void restoredOriginalBytesAndMtimeMustStillInvalidateSavedPlayerdataWitness()
+            throws Exception {
+        UUID player = UUID.randomUUID();
+        Path source = save(player, GrantReceiptState.empty());
+        var witness = SavedPlayerdataContentWitness.capture(discover(), 65536);
+        byte[] original = Files.readAllBytes(source);
+        FileTime timestamp = Files.getLastModifiedTime(source);
+        byte[] changed = original.clone();
+        changed[changed.length / 2] ^= 1;
+        Files.write(source, changed);
+        Files.write(source, original);
+        Files.setLastModifiedTime(source, timestamp);
+        assertArrayEquals(original, Files.readAllBytes(source));
+        assertEquals(timestamp, Files.getLastModifiedTime(source));
+        // Original SHA-256, length, fileKey and mtime all agree. Unix ctime
+        // must reveal the intervening rewrite; this is not a global freeze.
+        assertThrows(IOException.class, witness::requireUnchanged);
+    }
+
     @Test void auditedReceiptMustNotPassAfterSamePathFileRollback() throws Exception {
         var ledger = new GrantLedger(temp.resolve("grants"));
         UUID player = UUID.randomUUID();

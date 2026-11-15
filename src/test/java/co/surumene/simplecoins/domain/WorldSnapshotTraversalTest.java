@@ -91,6 +91,33 @@ class WorldSnapshotTraversalTest {
         return path;
     }
 
+
+    @Test void restoredOriginalBytesAndMtimeMustStillInvalidateRegionWitness()
+            throws Exception {
+        Path source = region("region", 100);
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), new WorldScope(true,
+                        java.util.Set.of(), java.util.Set.of()), 256);
+        var visitor = new WorldSnapshotTraversal.Visitor() {
+            @Override public void chunk(WorldStorageDiscovery.SourceFile file,
+                                        AnvilRegionReader.Chunk data) { }
+            @Override public void player(UUID id, Map<String, Object> data) { }
+        };
+        var captured = WorldSnapshotTraversal.traverseVerified(
+                manifest, 65536, 65536, visitor, null);
+        byte[] before = Files.readAllBytes(source);
+        var mtime = Files.getLastModifiedTime(source);
+        byte[] changed = before.clone();
+        changed[changed.length - 1] ^= 1;
+        Files.write(source, changed);
+        Files.write(source, before);
+        Files.setLastModifiedTime(source, mtime);
+        assertArrayEquals(before, Files.readAllBytes(source));
+        assertEquals(mtime, Files.getLastModifiedTime(source));
+        // Content hash alone cannot witness a transient complete rollback.
+        assertThrows(IOException.class, captured.witness()::requireUnchanged);
+    }
+
     @Test void duplicateSavedEntityUuidAcrossDifferentChunksMustFailTraversal() throws Exception {
         Path first = savedEntityRegion("entities", 70);
         Path second = savedEntityRegion("other/entities", 70);

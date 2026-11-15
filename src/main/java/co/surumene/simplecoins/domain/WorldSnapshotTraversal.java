@@ -44,7 +44,8 @@ public final class WorldSnapshotTraversal {
      * Compare content as well as metadata, to detect same-size/mtime rewrites.
      */
     private record SourceStamp(Object physicalKey, long size,
-                               java.nio.file.attribute.FileTime modified, String sha256) {}
+                               java.nio.file.attribute.FileTime modified,
+                               java.nio.file.attribute.FileTime changed, String sha256) {}
 
     /**
      * Immutable proof of the exact saved file bytes checked by one traversal.
@@ -86,17 +87,37 @@ public final class WorldSnapshotTraversal {
                 LinkOption.NOFOLLOW_LINKS);
         if (!before.isRegularFile())
             throw new IOException("Snapshot source disappeared or ceased being regular: " + path);
+        java.nio.file.attribute.FileTime beforeChange = unixChangeTime(path);
         String fingerprint = contentFingerprint(path, before.size());
         // Guard the fingerprint read itself. A file swapping identities or
         // changing size/mtime during the digest is not a stable source.
         BasicFileAttributes after = Files.readAttributes(path, BasicFileAttributes.class,
                 LinkOption.NOFOLLOW_LINKS);
+        java.nio.file.attribute.FileTime afterChange = unixChangeTime(path);
         if (!after.isRegularFile() || !Objects.equals(before.fileKey(), after.fileKey())
                 || before.size() != after.size()
-                || !before.lastModifiedTime().equals(after.lastModifiedTime()))
+                || !before.lastModifiedTime().equals(after.lastModifiedTime())
+                || !beforeChange.equals(afterChange))
             throw new IOException("Snapshot source changed while fingerprinting: " + path);
         return new SourceStamp(before.fileKey(), before.size(),
-                before.lastModifiedTime(), fingerprint);
+                before.lastModifiedTime(), afterChange, fingerprint);
+    }
+
+    /**
+     * Ubuntu/ext4 change time advances even when a writer restores bytes and
+     * lastModifiedTime. On filesystems without Unix ctime, refusing the
+     * source is safer than accepting an uncheckable ABA as stable.
+     */
+    private static java.nio.file.attribute.FileTime unixChangeTime(Path source)
+            throws IOException {
+        try {
+            Object raw = Files.getAttribute(source, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
+            if (raw instanceof java.nio.file.attribute.FileTime time) return time;
+            throw new IOException("No Unix source change-time identity: " + source);
+        } catch (UnsupportedOperationException unsupported) {
+            throw new IOException("Saved source requires Unix ctime verification: " + source,
+                    unsupported);
+        }
     }
 
     /** Stream with a fixed 8 KiB buffer; no entire MCA/playerdata in memory. */
