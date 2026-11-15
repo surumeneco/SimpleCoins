@@ -33,6 +33,8 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -112,6 +114,9 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_SERVICES_REGISTERED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
       - name: Upload integration diagnostic logs
