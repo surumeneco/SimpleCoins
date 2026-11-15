@@ -88,6 +88,100 @@ public final class SavedGrantDeliveryReadback {
         return new Proof(saved, staged.placements().size(), matchedValue);
     }
 
+
+    /**
+     * Stronger offline-grant readback: compare two decoded playerdata roots
+     * from the same authenticated UUID. Existing physical items must survive
+     * unchanged; only previously vacant, staged coin slots may appear.
+     *
+     * This is a read-only logical transition proof. It does not prove that
+     * either NBT root is authoritative/current, that Paper saveData finished,
+     * or that a crash cannot replace the most recently observed bytes.
+     */
+    public static Proof verifyTransition(Map<String, Object> before,
+                                         Map<String, Object> after,
+                                         GrantLedger ledger, UUID expectedPlayer,
+                                         PaperGrantInventorySlotPlan staged)
+            throws IOException {
+        if (before == null || after == null || ledger == null
+                || expectedPlayer == null || staged == null)
+            throw new IOException("Incomplete before/after saved grant transition");
+        GrantReceiptState original = SavedGrantReceiptNbt.readAndVerify(
+                before, ledger, expectedPlayer);
+        if (!original.equals(staged.previousReceipt()))
+            throw new IOException("Saved prior receipt differs from the staged precondition");
+
+        // Extraction also verifies physical slot uniqueness and every nested
+        // monetary marker. Neither the old inventory nor the new one is
+        // allowed to conceal an uncountable counterfeit wallet/coin.
+        SavedPlayerAssets.extract(before);
+        Proof next = verify(after, ledger, expectedPlayer, staged);
+        Map<Integer, Map<?, ?>> oldInventory = inventoryBySlot(before);
+        Map<Integer, Map<?, ?>> newInventory = inventoryBySlot(after);
+        java.util.Set<Integer> granted = new java.util.HashSet<>();
+        for (PaperGrantInventorySlotPlan.Slot placement : staged.placements()) {
+            if (!granted.add(placement.index()))
+                throw new IOException("Repeated physical destination in grant placement");
+            if (oldInventory.containsKey(placement.index()))
+                throw new IOException("Grant destination was occupied before delivery: "
+                        + placement.index());
+        }
+        java.util.Set<Integer> allSlots = new java.util.HashSet<>(oldInventory.keySet());
+        allSlots.addAll(newInventory.keySet());
+        for (Integer slot : allSlots) {
+            if (granted.contains(slot)) continue;
+            if (!sameNbt(oldInventory.get(slot), newInventory.get(slot)))
+                throw new IOException("An unplanned saved inventory slot changed: " + slot);
+        }
+        if (!sameNbt(before.get("EnderItems"), after.get("EnderItems"))
+                || !sameNbt(before.get("equipment"), after.get("equipment")))
+            throw new IOException("An unplanned Ender Chest or equipment asset changed");
+        return next;
+    }
+
+    /** Compare decoded NBT, including primitive payload arrays by value. */
+    private static boolean sameNbt(Object a, Object b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a instanceof byte[] ba && b instanceof byte[] bb)
+            return java.util.Arrays.equals(ba, bb);
+        if (a instanceof int[] ia && b instanceof int[] ib)
+            return java.util.Arrays.equals(ia, ib);
+        if (a instanceof long[] la && b instanceof long[] lb)
+            return java.util.Arrays.equals(la, lb);
+        if (a instanceof Map<?, ?> ma && b instanceof Map<?, ?> mb) {
+            if (!ma.keySet().equals(mb.keySet())) return false;
+            for (var entry : ma.entrySet()) {
+                if (!sameNbt(entry.getValue(), mb.get(entry.getKey()))) return false;
+            }
+            return true;
+        }
+        if (a instanceof List<?> la && b instanceof List<?> lb) {
+            if (la.size() != lb.size()) return false;
+            for (int i = 0; i < la.size(); i++) {
+                if (!sameNbt(la.get(i), lb.get(i))) return false;
+            }
+            return true;
+        }
+        return a.equals(b);
+    }
+
+    private static Map<Integer, Map<?, ?>> inventoryBySlot(Map<String, Object> root)
+            throws IOException {
+        if (!(root.get("Inventory") instanceof List<?> inventory))
+            throw new IOException("Missing saved player storage for transition");
+        Map<Integer, Map<?, ?>> slots = new HashMap<>();
+        for (Object stack : inventory) {
+            if (!(stack instanceof Map<?, ?> item)
+                    || !(item.get("Slot") instanceof Number number))
+                throw new IOException("Invalid saved physical inventory item");
+            int index = number.intValue();
+            if (slots.putIfAbsent(index, item) != null)
+                throw new IOException("Duplicate saved inventory slot: " + index);
+        }
+        return slots;
+    }
+
     private static void requireOriginalCoinIdentity(Map<?, ?> item,
                                                     PaperGrantInventorySlotPlan.Slot slot)
             throws IOException {
