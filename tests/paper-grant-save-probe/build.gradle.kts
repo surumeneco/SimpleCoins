@@ -8,7 +8,11 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)) }
-dependencies { compileOnly("io.papermc.paper:paper-api:26.2.build.134-stable") }
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:26.2.build.134-stable")
+    // Probe only; production JAR is built first by the isolated CI.
+    compileOnly(files("../../build/libs/SimpleCoins-1.0.0.jar"))
+}
 tasks.jar {
     archiveFileName.set("SimpleCoinsPaperSaveProbe.jar")
     from("plugin.yml")
