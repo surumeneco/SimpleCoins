@@ -99,6 +99,40 @@ jobs:
           trap - EXIT
           grep -F 'Saving worlds' paper.log
           echo 'PAPER_SAVED_DISCOVERY_OBSERVED_WITH_ADMISSION_CLOSED'
+      - name: Orphan playerdata backup requires guarded Paper self-stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          # Use the actual Paper world folder in this isolated smoke server.
+          # A .dat_old is Paper's replacement backup, NEVER a replacement
+          # source of monetary value unless authority was explicitly restored.
+          mkdir -p world/playerdata
+          printf 'orphan crash-recovery fixture\n' > \
+            world/playerdata/00000000-0000-0000-0000-00000000beef.dat_old
+          test ! -e world/playerdata/00000000-0000-0000-0000-00000000beef.dat
+          # A console STOP is intentionally absent. The saved-source worker
+          # must revoke settlement admission and shut Paper down by itself.
+          set +e
+          timeout --signal=TERM --kill-after=5s 150s \
+            java -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-orphan-backup.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo 'Paper failed to self-stop on orphan playerdata backup' >&2
+            tail -120 paper-orphan-backup.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-orphan-backup.log
+          grep -F 'SIMPLECOINS_SAVED_DISCOVERY_FAILED' paper-orphan-backup.log
+          grep -F 'Orphan Paper playerdata backup requires recovery review:' paper-orphan-backup.log
+          grep -F 'Saved-source discovery failed; stopping Paper.' paper-orphan-backup.log
+          if grep -Fq 'SIMPLECOINS_SAVED_DISCOVERY_OBSERVED' paper-orphan-backup.log; then
+            echo 'An orphan backup incorrectly published a complete saved source set' >&2
+            exit 1
+          fi
+          echo 'PAPER_ORPHAN_PLAYERDATA_BACKUP_FAILSTOP_PASSED'
       - name: Upload Paper diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
