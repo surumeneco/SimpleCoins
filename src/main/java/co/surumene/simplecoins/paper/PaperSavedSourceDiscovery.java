@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,22 +55,35 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
             throw new IllegalStateException("Saved-source discovery is one-shot");
 
         Map<String, Path> worldRoots = new LinkedHashMap<>();
+        Set<Path> sharedPlayerRoots = new HashSet<>();
         for (World world : Bukkit.getWorlds()) {
             if (world == null || world.getName().isBlank())
                 throw new IllegalStateException("Invalid live Paper world");
-            Path prior = worldRoots.putIfAbsent(
-                    world.getName(), world.getWorldFolder().toPath().toAbsolutePath().normalize());
+            Path worldPath = world.getWorldPath().toAbsolutePath().normalize();
+            Path prior = worldRoots.putIfAbsent(world.getName(), worldPath);
+            // Paper 26.2 exposes a dimension folder here. Playerdata is a
+            // level-wide source at <level>/players/data, NOT a child of that
+            // dimension. Do not guess a sibling world name from Bukkit names.
+            Path namespaceFolder = worldPath.getParent();
+            Path dimensionsFolder = namespaceFolder == null ? null : namespaceFolder.getParent();
+            Path levelFolder = dimensionsFolder == null ? null : dimensionsFolder.getParent();
+            if (dimensionsFolder != null && levelFolder != null
+                    && dimensionsFolder.getFileName() != null
+                    && "dimensions".equals(dimensionsFolder.getFileName().toString())) {
+                sharedPlayerRoots.add(levelFolder);
+            }
             if (prior != null)
                 throw new IllegalStateException("Duplicate live Paper world name: " + world.getName());
         }
         if (worldRoots.isEmpty())
             throw new IllegalStateException("No loaded worlds for source inventory");
         Map<String, Path> immutableRoots = Map.copyOf(worldRoots);
+        Set<Path> immutablePlayerRoots = Set.copyOf(sharedPlayerRoots);
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 var manifest = WorldStorageDiscovery.discover(
-                        immutableRoots, scope, maxSourceEntries);
+                        immutableRoots, scope, maxSourceEntries, immutablePlayerRoots);
                 // A directory that gains a NEW saved file while being walked
                 // must not be reported as an unchanged discovered generation.
                 manifest.requireUnchangedDiscovery();
