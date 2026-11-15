@@ -34,11 +34,11 @@
 5. **整合性**：manifest取得だけでは資産の全件性を証明しない。実機では保存済みデータの読取、ロード済み状態との照合、外部提供元の完全性、スナップショット固定、決算の公開制御まで別々に証拠を残す。
 6. **判定**：各IDを`passed / failed / not-run / inconclusive`で記録し、対象HEAD、コマンド、実測結果、ログまたはテスト名を添える。全件性が不明なまま`passed`にしない。
 
-## 現行実装と未充足領域
+## 実装と受入条件の照合境界
 
-PR #34の`WorldStorageDiscovery`は、呼出側が渡したルートを有界に走査して候補manifestを返す**発見器**である。MCA内部のNBT/BlockEntity/Entity/ドロップを解析せず、Paper/Multiverseのワールド一覧の完全性、ロード済み状態との照合、時点一貫性、決算公開可否を証明しない。したがって、単体JUnitがGreenでもSD-01、SD-07〜10は未実証である。
+`WorldStorageDiscovery`／`PaperSavedSourceDiscovery`などの探索器が有界に候補ファイルを列挙できることと、NBT/BlockEntity/Entity/収納物の**全読取**、Paper/Multiverseの対象ワールド閉包、ロード済み状態との同一性、スナップショット時点の整合、決算の公開可否は別の検証対象である。単体JUnitの成功のみではSD-01・SD-07〜11の統合受入を満たさない。
 
-現在の回帰作業は[PR #34](https://github.com/surumeneco/SimpleCoins/pull/34)を基点とし、物理同一性（[#65](https://github.com/surumeneco/SimpleCoins/pull/65)、[#67](https://github.com/surumeneco/SimpleCoins/pull/67)）、保存元形状（[#66](https://github.com/surumeneco/SimpleCoins/pull/66)）、manifestソースの存在（[#71](https://github.com/surumeneco/SimpleCoins/pull/71)）、走査順序/予算（[#74](https://github.com/surumeneco/SimpleCoins/pull/74)）、symlink境界（[#76](https://github.com/surumeneco/SimpleCoins/pull/76)、[#77](https://github.com/surumeneco/SimpleCoins/pull/77)）を独立検証している。Draft Redは欠陥再現の証拠であって、修正済みの証拠ではない。
+旧[PR #34](https://github.com/surumeneco/SimpleCoins/pull/34)と関連PR #65〜77は、その時点の発見器・否定回帰の履歴であり、現行コードの完了状態ではない。**検証時は対象HEADのコードとIssue #423、現在のテスト／CIを直接照合する。** 実装の進捗に応じて本書へPR履歴を積層せず、検証対象・期待結果・未実施条件を保持する。
 
 ## 引渡し条件
 
