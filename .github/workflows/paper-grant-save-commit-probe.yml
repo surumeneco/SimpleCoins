@@ -56,20 +56,40 @@ jobs:
           cp tests/paper-grant-save-probe/build/libs/SimpleCoinsPaperSaveProbe.jar smoke/plugins/SaveProbe.jar
           printf 'eula=true\n' > smoke/eula.txt
           printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25598\n' > smoke/server.properties
-      - name: Save real Paper synthetic player and exercise disabled save
+      - name: Save, inject a failed write, then SIGKILL before journal acknowledgement
         shell: bash
         run: |
           set -euo pipefail
           cd smoke
-          set +e
-          timeout --signal=TERM --kill-after=10s 200s \
-            java -Da02.probe.phase=save -Xms256M -Xmx1024M -jar paper.jar nogui \
-              </dev/null > paper-a02-save.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Paper save phase failed (exit=$status)" >&2
-            tail -160 paper-a02-save.log
+          java -Da02.probe.phase=save -Da02.probe.awaitSigkill=true \
+            -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-a02-save.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -KILL "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          crash_ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-save.log; then
+              tail -150 paper-a02-save.log
+              exit 1
+            fi
+            if grep -Fq 'PAPER_A02_UNACKED_CRASH_POINT_READY' paper-a02-save.log; then
+              crash_ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper exited before crash injection' >&2
+              tail -150 paper-a02-save.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$crash_ready" != 1 ]; then
+            echo 'Timed out waiting for confirmed physical-save/ledger-pending boundary' >&2
+            tail -150 paper-a02-save.log
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-save.log
@@ -79,7 +99,21 @@ jobs:
           grep -F 'PAPER_A02_STALE_DISK_AFTER_VOID_SAVE_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_SAVE_EXCEPTION_SWALLOWED_NO_ACK_PASSED' paper-a02-save.log
           test -f world/players/data/00000000-0000-0000-0000-00000000a002.dat
-          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-save.log; then exit 1; fi
+          if grep -Fq 'Saving worlds' paper-a02-save.log; then
+            echo 'Paper entered clean shutdown before SIGKILL' >&2
+            exit 1
+          fi
+          kill -KILL "$server_pid"
+          set +e
+          wait "$server_pid"
+          status=$?
+          set -e
+          trap - EXIT
+          if [ "$status" -ne 137 ]; then
+            echo "Expected signal 9 process termination (137), found $status" >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_SAVE_BEFORE_ACK_SIGKILL_INJECTED'
       - name: Restart Paper and verify real data reload
         shell: bash
         run: |
