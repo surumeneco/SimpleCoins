@@ -70,7 +70,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43733754875 (actual Paper probe at verified source, not CAT normative Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -83,6 +83,15 @@ spec_status: unknown
 4. Construct a version-3 WWW runtime fixture using the **published byte format implemented by the production codec** (magic, optional owner/commander, slot-indexed serialized ItemStacks, pedigree and override terminators). Pass it through the packaged WWW `readStored` with authentic schema marker and verify the returned weapon and cargo bytes are real individually tagged coins, and both owner and commander UUIDs survive intact. A manually written fixture is a reader-input test, not proof of a production writer lifecycle.
 5. Corrupt WWC and WWW schemas independently; require explicit `Failure(UNSUPPORTED_SCHEMA)` instead of `NotFound`, `Success(empty)` or arbitrary fallback. The empty/unrelated entity case remains `NotFound`.
 6. If a packaged version disagrees with the documented source format, fail the executable probe, preserve the actual error and bound a follow-up verification. Do not edit the provider's storage or attempt a speculative fallback.
+
+## Observed evidence and boundary
+
+- [Official Paper 26.2 build 134 CI #43733754875](https://github.com/surumeneco/SimpleCoins/actions/runs/43733754875) passed the pinned CAT Work structural validator (`contract_valid:true`, `semantic_approval_verified:false`), Gradle compilation/regression and the live isolated WGL/WCL/WWC/WWW probe. The feature changes only a CI-only verifier and its Work/Gradle wiring.
+- **WWC:** in a disposable chunk loaded **before** entity spawn, the actual Bukkit indexed and valid Chicken's PDC contained a serialized `SHULKER_BOX` with the genuine SimpleCoins PDC/model 5000-unit coin ×2. The packaged reader's `readLoaded` and `readStored` returned the same entity/world UUID, `follow_target` and one unflattened `StoredItem("shulker")`; deserializing the returned ItemStack recovered the nested physical coins.
+- **WWW:** the shipped reader accepted a version-3 runtime byte fixture following the production codec's documented record structure, returning separate `StoredItem("weapon")` (one real 10000-unit coin) and `StoredItem("cargo:7")` (five real 1000-unit coins) with intact `owner` and `commander` UUIDs. This establishes read-side protocol compatibility, **not** an actual WWW entity save/read round trip.
+- For deliberately unsupported schema numbers, both readers returned `Failure(code="UNSUPPORTED_SCHEMA")` rather than silently omitting a source. Unknown/untyped individual input remained `NotFound`; the scan coordinator must still distinguish expected-but-missing sources.
+- The initial unprepared chicken at an unprepared chunk was not registered with Bukkit and the earlier [CI #43732953282](https://github.com/surumeneco/SimpleCoins/actions/runs/43732953282) rejected the failed `readLoaded`. The fixture now explicitly preloads its disposable chunk, requires registered/valid entity state and never invokes a chunk-loading `getChunk()` during provider readback. Do **not** interpret the failure as a regression in a legitimate already-loaded WWC individual.
+- These observations do not prove all loaded/archived WWC or WWW entity sources are discovered once, all assigned owners are authoritative, or source-generation atomicity. Product G1/G0 and CAT Process/Model/Implementation Gates remain not-run.
 
 ## Non-goals
 
