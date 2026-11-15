@@ -66,7 +66,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43740989379 (bounded Paper registry/guard counterexample, not physical craft or CAT Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -80,6 +80,21 @@ spec_status: unknown
 - If the registry refuses replacement, record that actual constraint. If it accepts replacement and the current guard still says `isApproved=true` for the original coin matrix, record a concrete **guard trust-boundary counterexample**, not a completed player craft or final security exploit.
 - No product source change, no actual monetary balance, no player connection. Do not publish settlement, open guard, or infer real JE/BE craft/trading safety.
 - A confirmed weakness must be narrowed to the required additional output/registry integrity invariant for legitimate normative review; it is not permission to alter production without Confirmed Process/PI/TCE and formal CAT Gates.
+
+## Measured Paper 26.2 counterexample
+
+- Exact test HEAD `b11443d787594e6cbb5424eb8dbc79d6fbfce068` ran on official Paper 26.2 build 134 with authentic SimpleCoins `CoinItemCodec` money, product `CoinExchangeRecipes` event listener retrieved from actual `CraftItemEvent` registry, default-deny admission and zero players. [CI #43740989379](https://github.com/surumeneco/SimpleCoins/actions/runs/43740989379) had contract-valid Draft structure (`semantic_approval_verified:false`), Gradle, Paper and static CI success.
+- **All 20** actual registered exchange output+input combinations were verified against the `CoinExchangeFormula` output PDC/quantity and accepted by the real guard; a wrong denomination in each matrix was rejected. Logs: `PAPER_A12_ALL_TWENTY_REAL_EXCHANGE_INPUT_OUTPUT_APPROVALS_PASSED`.
+- The isolated test removed only `simplecoins:exchange_n1_f1`, installed a different `ShapelessRecipe` with **the same key** and **STONE output**, and confirmed via Paper `Bukkit.getRecipe` that the replacement was active. The original coin matrix nevertheless received `guard.isApproved(replacement,matrix)==true`. Exact Paper log: `PAPER_A12_KEY_ONLY_APPROVAL_VALUE_LOSS_COUNTEREXAMPLE key=simplecoins:exchange_n1_f1 result=STONE guardedInputCoins=PAPER`.
+- The original registered recipe was restored in `finally` and rechecked on the isolated server (`PAPER_A12_DISPOSABLE_RECIPE_RESTORED_PASSED`). No real user inventory or ledger was used or modified.
+- This is a **verified result-integrity trust-boundary violation in the guard's approval decision**, not a real human-client finished craft nor a proof that another enabled plugin currently attacks the registry. An external plugin with registry mutation privileges could violate physical exchange invariance; release readiness must keep this unresolved until an approved repair and integration tests exist.
+
+## Required repair behavior (proposal, not authorization)
+
+- An accepted coin exchange must independently prove the **actual current recipe and visible result ItemStack** match the approved `CoinExchangeFormula` output denomination, amount and stable PDC/model, in addition to validating each consumed input slot. A recipe key by itself cannot certify output value.
+- Check Prepare/Craft/Crafter and any altered output event path, including conflicts from later-priority/other plugin listeners; fail closed on mismatch and avoid creating/consuming physical value without a journaled mutation.
+- Define precisely when the result and inventory are authoritative, and what event/post-event verification means under Paper's mutable recipe registry. If a guaranteed atomic observation cannot be established, preserve admission denial rather than claiming G0/A12.
+- Create or reuse genuine Process/PI/TCE and formal CAT Gates before editing production; retain this verification-only Work as source evidence, not self-Confirmed approval.
 
 ## Interpretation boundary
 
