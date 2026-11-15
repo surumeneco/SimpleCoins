@@ -52,6 +52,29 @@ public final class SavedPlayerdataContentWitness {
         return new SavedPlayerdataContentWitness(manifest, maximumCompressedBytes, observed);
     }
 
+    /**
+     * Capture only one authoritative UUID file, not every other player's
+     * data. The discovery provenance is still required and revalidated on
+     * both sides so an omitted or newly inserted file cannot be passed off
+     * as a complete current saved-file universe.
+     */
+    public static SavedPlayerdataContentWitness capturePlayer(
+            WorldStorageDiscovery.Manifest manifest,
+            java.util.UUID player, int maximumCompressedBytes) throws IOException {
+        if (manifest == null || manifest.origin() == null || player == null)
+            throw new IOException("Unproven playerdata source or owner");
+        if (maximumCompressedBytes < 1)
+            throw new IllegalArgumentException("Invalid playerdata witness byte budget");
+        manifest.requireUnchangedDiscovery();
+        Path path = manifest.playerDataFiles().get(player);
+        if (path == null || !path.getFileName().toString().equals(player + ".dat"))
+            throw new IOException("Missing authoritative playerdata file for " + player);
+        Path canonical = path.toAbsolutePath().normalize();
+        return new SavedPlayerdataContentWitness(manifest,
+                maximumCompressedBytes,
+                Map.of(canonical, stamp(canonical, maximumCompressedBytes)));
+    }
+
     public void requireUnchanged() throws IOException {
         manifest.requireUnchangedDiscovery();
         for (var entry : observed.entrySet()) {
