@@ -8,6 +8,9 @@ import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,6 +21,8 @@ import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Location;
+import org.bukkit.Chunk;
+import org.bukkit.entity.Entity;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
 import org.bukkit.entity.Chicken;
@@ -91,6 +96,13 @@ public final class WclServicesProbe extends JavaPlugin {
                 }
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
+                String phase = System.getProperty("a05.probe.phase", "baseline");
+                switch (phase) {
+                    case "baseline" -> { }
+                    case "persist" -> persistChickenEntity(world, selected);
+                    case "reload" -> reloadChickenEntity(world, selected);
+                    default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
+                }
                 Bukkit.shutdown();
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A05_SERVICES_PROBE_FAILED", failure);
@@ -297,5 +309,94 @@ public final class WclServicesProbe extends JavaPlugin {
     private static void writeItem(DataOutputStream out, byte[] bytes) throws IOException {
         out.writeInt(bytes.length);
         out.write(bytes);
+    }
+
+    private static final String PERSISTENCE_TAG = "simplecoins-a05-persisted-wwc-probe";
+    private static final UUID PERSISTENCE_FOLLOW =
+            UUID.fromString("00000000-0000-0000-0000-00000000a055");
+
+    private Path persistedIdFile() {
+        return getDataFolder().toPath().resolve("wwc-physical-entity-uuid.txt");
+    }
+
+    private Path persistedCoinFile() {
+        return getDataFolder().toPath().resolve("wwc-shulker-coins.b64");
+    }
+
+    /** Phase one: a real Vanilla Chicken carrying WWC-readable PDC, saved by Paper itself. */
+    private void persistChickenEntity(World world, Map<String, WonderfulStorageReader> providers)
+            throws Exception {
+        Path entityIdFile = persistedIdFile();
+        if (Files.exists(entityIdFile) || Files.exists(persistedCoinFile()))
+            throw new IllegalStateException("Persistence fixture must start from a clean test world");
+        Chunk chunk = world.getChunkAt(4, 4); // disposable test-world fixture ONLY
+        if (!chunk.isLoaded()) throw new IllegalStateException("Paper did not load fixture chunk");
+        Chicken chicken = world.spawn(new Location(world, 72.5, 120, 72.5), Chicken.class);
+        chicken.addScoreboardTag(PERSISTENCE_TAG);
+        byte[] shulker = createMoneyShulker();
+        seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        if (!chicken.isValid() || Bukkit.getEntity(chicken.getUniqueId()) == null)
+            throw new IllegalStateException("Fixture was not registered with Paper Entity tracking");
+        assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
+                        "WWC persistence save preflight"),
+                chicken.getUniqueId(), world.getUID(), PERSISTENCE_FOLLOW,
+                shulker, new CoinItemCodec(CoinItemCodec.defaultNames()));
+        Files.createDirectories(getDataFolder().toPath());
+        Files.writeString(entityIdFile, chicken.getUniqueId().toString() + "\n");
+        Files.writeString(persistedCoinFile, Base64.getEncoder().encodeToString(shulker) + "\n");
+        world.save();
+        getLogger().info("PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
+                + " entity=" + chicken.getUniqueId()
+                + " chunk=4,4 world=" + world.getUID());
+        // Do not remove fixture before shutdown: the next JVM must load it from the real region.
+    }
+
+    /** Phase two: no fixture reconstruction; read the actual Paper entity saved by phase one. */
+    private void reloadChickenEntity(World world, Map<String, WonderfulStorageReader> providers)
+            throws Exception {
+        Path entityIdFile = persistedIdFile();
+        if (!Files.isRegularFile(entityIdFile) || !Files.isRegularFile(persistedCoinFile()))
+            throw new IllegalStateException("First Paper process did not provide fixture identities");
+        UUID id = UUID.fromString(Files.readString(entityIdFile).strip());
+        byte[] expected = Base64.getDecoder().decode(Files.readString(persistedCoinFile).strip());
+        Chunk chunk = world.getChunkAt(4, 4); // explicitly load known fixture chunk only
+        Chicken found = null;
+        int tagged = 0;
+        for (Entity candidate : chunk.getEntities()) {
+            if (!candidate.getScoreboardTags().contains(PERSISTENCE_TAG)) continue;
+            tagged++;
+            if (!(candidate instanceof Chicken chicken))
+                throw new IllegalStateException("Wrong tagged Entity class after Paper reload");
+            found = chicken;
+        }
+        if (tagged != 1 || found == null || !found.isValid()
+                || !id.equals(found.getUniqueId())
+                || Bukkit.getEntity(id) == null)
+            throw new IllegalStateException("Saved Paper Chicken missing or duplicated after restart"
+                    + " found=" + tagged + " expectedEntity=" + id);
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        StorageSnapshot loaded = success(providers.get("wwc").readLoaded(id), "WWC reloaded LIVE");
+        StorageSnapshot stored = success(providers.get("wwc").readStored(id, world.getUID(),
+                Optional.of(new StorageSnapshot.Position(found.getLocation().getX(),
+                        found.getLocation().getY(), found.getLocation().getZ())),
+                found.getPersistentDataContainer()), "WWC reloaded stored PDC");
+        assertChickenStorage(loaded, id, world.getUID(), PERSISTENCE_FOLLOW, expected, coins);
+        assertChickenStorage(stored, id, world.getUID(), PERSISTENCE_FOLLOW, expected, coins);
+        if (!loaded.items().equals(stored.items()) || !loaded.relationships().equals(stored.relationships()))
+            throw new IllegalStateException("Reloaded WWC sources disagree");
+        getLogger().info("PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED"
+                + " entity=" + id + " world=" + world.getUID());
+    }
+
+    private static byte[] createMoneyShulker() {
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack shulker = new ItemStack(Material.SHULKER_BOX);
+        if (!(shulker.getItemMeta() instanceof BlockStateMeta meta)
+                || !(meta.getBlockState() instanceof ShulkerBox box))
+            throw new IllegalStateException("Real ShulkerBox BlockStateMeta unavailable");
+        box.getInventory().setItem(0, coins.create(CoinDenomination.FIVE_THOUSAND, 2));
+        meta.setBlockState(box);
+        shulker.setItemMeta(meta);
+        return shulker.serializeAsBytes();
     }
 }
