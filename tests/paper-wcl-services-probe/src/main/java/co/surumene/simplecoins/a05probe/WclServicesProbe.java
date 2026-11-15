@@ -120,11 +120,21 @@ public final class WclServicesProbe extends JavaPlugin {
         try {
             seedChickenStorage(chicken.getPersistentDataContainer(), chickenCommander, storedShulker);
             WonderfulStorageReader wwc = providers.get("wwc");
-            StorageSnapshot live = success(wwc.readLoaded(chicken.getUniqueId()), "WWC loaded");
+            // Distinguish actual Bukkit entity indexing from PDC decoder behavior.
+            var loadedEntity = Bukkit.getEntity(chicken.getUniqueId());
+            var rawType = chicken.getPersistentDataContainer().get(
+                    new NamespacedKey("whatawonderfulchicken", "type"), PersistentDataType.STRING);
+            getLogger().info("PAPER_A05_WWC_LOADED_DIAGNOSTIC"
+                    + " indexed=" + (loadedEntity != null)
+                    + " entityClass=" + (loadedEntity == null ? "null" : loadedEntity.getClass().getName())
+                    + " isValid=" + chicken.isValid()
+                    + " chunkLoaded=" + chicken.getLocation().getChunk().isLoaded()
+                    + " type=" + rawType);
             StorageSnapshot saved = success(wwc.readStored(chicken.getUniqueId(), world.getUID(),
                     Optional.of(new StorageSnapshot.Position(
                             chicken.getLocation().getX(), chicken.getLocation().getY(), chicken.getLocation().getZ())),
                     chicken.getPersistentDataContainer()), "WWC stored");
+            StorageSnapshot live = success(wwc.readLoaded(chicken.getUniqueId()), "WWC loaded");
             assertChickenStorage(live, chicken.getUniqueId(), world.getUID(),
                     chickenCommander, storedShulker, coins);
             assertChickenStorage(saved, chicken.getUniqueId(), world.getUID(),
