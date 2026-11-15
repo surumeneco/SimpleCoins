@@ -69,7 +69,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43728221982 (bounded Paper source proof and canonical Work structure; not normative CAT conformance) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -88,3 +88,11 @@ spec_status: unknown
 
 - Draft verification under `issue-work`: no production code, normative Confirmed, source schema, user session, deployment or public gate action.
 - External CI proves only the actual probe. CAT formal closure, model, implementation conformance and semantic approval remain not-run; do not infer them from CI Green.
+## Observed bounded result (2026-11-15)
+
+- On a disposable official Paper 26.2 build 134, with an independent admission default-deny guard and no network players, the separate writer plugin saved one genuine 5000-unit coin in a loaded overworld chest. Actual `dimensions/minecraft/overworld/region/r.0.0.mca` SHA-256: `408944f75eeb8697e34aec8cad62625d10fca1d92969fa08ac4d5a67f9dd54c2`.
+- Next clean process start under the same zero-player condition observed one authentic coin, changed it to two and saved. Region SHA-256 changed to `9e5a5906748eed7ac945bb0b570bf728b04b8ea0258c2c96941b61ed2b4f7145`.
+- Third process start loaded two authentic coins in the same chest and finished without exposing admission. Its entire region hash changed again due to ordinary save/reload metadata; the **real ItemStack state**, not unchanged bytes across an extra startup, is the correct third-stage oracle.
+- Real Paper CI [#43728221982](https://github.com/surumeneco/SimpleCoins/actions/runs/43728221982) passed, including the fixed pinned CAT Work `validate` (`contract_valid=true`, `semantic_approval_verified=false`). Domain and Phase6 static workflows at this HEAD also passed. None is a formal normative Gate or proof of arbitrary external writer quiescence.
+- Therefore a G0 mode that treats a player count of zero as equivalent to absence of monetary writers violates the already accepted 02B assumption. A stronger provable writer barrier, source-generation reconciliation or enforced fail-closed mode is necessary. This Work selects **no** implementation architecture.
+
