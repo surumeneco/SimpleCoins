@@ -18,25 +18,37 @@ import java.util.UUID;
  */
 public final class OfflineEntityRegionProbe {
     private static final String MARKER = "simplecoins-a05-persisted-wwc-probe";
+    private static final String WOLF_MARKER = "simplecoins-a05-persisted-www-probe";
     private static final UUID FOLLOW =
             UUID.fromString("00000000-0000-0000-0000-00000000a055");
 
     private OfflineEntityRegionProbe() {}
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3)
-            throw new IllegalArgumentException("Expected region path, UUID witness and shulker bytes");
+        if (args.length != 5)
+            throw new IllegalArgumentException(
+                    "Expected region, WWC UUID/item and WWW UUID/runtime evidence");
         Path region = Path.of(args[0]).toAbsolutePath().normalize();
         Path uuidFile = Path.of(args[1]).toAbsolutePath().normalize();
         Path shulkerFile = Path.of(args[2]).toAbsolutePath().normalize();
-        for (Path file : List.of(region, uuidFile, shulkerFile))
+        Path wolfUuidFile = Path.of(args[3]).toAbsolutePath().normalize();
+        Path wolfRuntimeFile = Path.of(args[4]).toAbsolutePath().normalize();
+        for (Path file : List.of(region, uuidFile, shulkerFile, wolfUuidFile, wolfRuntimeFile))
             if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Missing or non-regular required fixture file: " + file);
 
         UUID expectedEntity = UUID.fromString(Files.readString(uuidFile).strip());
         byte[] expectedItem = Base64.getDecoder().decode(Files.readString(shulkerFile).strip());
         if (expectedItem.length < 8) throw new IOException("Invalid original serialized ItemStack");
+        UUID expectedWolf = UUID.fromString(Files.readString(wolfUuidFile).strip());
+        if (expectedWolf.equals(expectedEntity))
+            throw new IOException("WWC and WWW fixtures must have independent Entity identities");
+        byte[] expectedWolfRuntime = Base64.getDecoder().decode(
+                Files.readString(wolfRuntimeFile).strip());
+        if (expectedWolfRuntime.length < 32)
+            throw new IOException("Invalid original WWW v3 runtime payload");
         int[] found = {0};
+        int[] foundWolf = {0};
         int[] chunks = {0};
 
         AnvilRegionReader.scan(region, 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
@@ -55,7 +67,29 @@ public final class OfflineEntityRegionProbe {
                 if (!(raw instanceof Map<?, ?> entity))
                     throw new IOException("Non-compound Entity entry");
                 Object tags = entity.get("Tags");
-                if (!(tags instanceof List<?> list) || !list.contains(MARKER)) continue;
+                if (!(tags instanceof List<?> list)) continue;
+                if (list.contains(WOLF_MARKER)) {
+                    foundWolf[0]++;
+                    if (list.contains(MARKER) || chunk.x() != 4 || chunk.z() != 4)
+                        throw new IOException("Invalid saved WWW fixture source identity/chunk");
+                    UUID wolfId = decodeUuid(entity.get("UUID"));
+                    if (!expectedWolf.equals(wolfId) || !"minecraft:wolf".equals(entity.get("id")))
+                        throw new IOException("Saved WWW type or UUID differs from first JVM");
+                    if (!(entity.get("BukkitValues") instanceof Map<?, ?> wolfPdc))
+                        throw new IOException("Saved Wolf lacks Paper BukkitValues PDC");
+                    if (!"wonderful_wolf".equals(wolfPdc.get("whatawonderfulwolf:type"))
+                            || !(wolfPdc.get("whatawonderfulwolf:schema_version")
+                                    instanceof Integer schema) || schema != 1)
+                        throw new IOException("Saved Wolf lacks expected WWW schema");
+                    if (!(wolfPdc.get("whatawonderfulwolf:runtime_state") instanceof byte[] runtime)
+                            || !Arrays.equals(expectedWolfRuntime, runtime))
+                        throw new IOException("Saved WWW owner/commander/item runtime source changed");
+                    System.out.println("PAPER_A05_OFFLINE_MCA_WWW_MONEY_OWNER_PHYSICAL_SOURCE_PASSED"
+                            + " entity=" + wolfId + " chunk=" + chunk.x() + "," + chunk.z()
+                            + " runtimeBytes=" + runtime.length);
+                    continue;
+                }
+                if (!list.contains(MARKER)) continue;
                 found[0]++;
                 if (chunk.x() != 4 || chunk.z() != 4)
                     throw new IOException("Tagged Chicken moved outside expected Anvil chunk");
@@ -83,9 +117,10 @@ public final class OfflineEntityRegionProbe {
                         + " source=" + region.getFileName());
             }
         });
-        if (found[0] != 1)
-            throw new IOException("Saved WWC tagged Entity expected exactly once, got " + found[0]
-                    + " in " + chunks[0] + " Anvil chunks");
+        if (found[0] != 1 || foundWolf[0] != 1)
+            throw new IOException("Saved WWC/WWW Entity sources require one of each, got WWC="
+                    + found[0] + " WWW=" + foundWolf[0] + " in " + chunks[0] + " Anvil chunks");
+        System.out.println("PAPER_A05_OFFLINE_MCA_TWO_PROVIDERS_DISTINCT_SOURCES_PASSED");
         System.out.println("PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED");
     }
 
