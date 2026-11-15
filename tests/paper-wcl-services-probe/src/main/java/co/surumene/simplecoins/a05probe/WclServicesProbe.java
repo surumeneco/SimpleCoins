@@ -26,6 +26,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
 import org.bukkit.entity.Chicken;
+import org.bukkit.entity.Wolf;
 import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.World;
@@ -312,6 +313,9 @@ public final class WclServicesProbe extends JavaPlugin {
     }
 
     private static final String PERSISTENCE_TAG = "simplecoins-a05-persisted-wwc-probe";
+    private static final String WOLF_PERSISTENCE_TAG = "simplecoins-a05-persisted-www-probe";
+    private static final UUID WOLF_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000a052");
+    private static final UUID WOLF_COMMANDER = UUID.fromString("00000000-0000-0000-0000-00000000a053");
     private static final UUID PERSISTENCE_FOLLOW =
             UUID.fromString("00000000-0000-0000-0000-00000000a055");
 
@@ -323,11 +327,20 @@ public final class WclServicesProbe extends JavaPlugin {
         return getDataFolder().toPath().resolve("wwc-shulker-coins.b64");
     }
 
+    private Path persistedWolfIdFile() {
+        return getDataFolder().toPath().resolve("www-physical-entity-uuid.txt");
+    }
+
+    private Path persistedWolfRuntimeFile() {
+        return getDataFolder().toPath().resolve("www-runtime-state.b64");
+    }
+
     /** Phase one: a real Vanilla Chicken carrying WWC-readable PDC, saved by Paper itself. */
     private void persistChickenEntity(World world, Map<String, WonderfulStorageReader> providers)
             throws Exception {
         Path entityIdFile = persistedIdFile();
-        if (Files.exists(entityIdFile) || Files.exists(persistedCoinFile()))
+        if (Files.exists(entityIdFile) || Files.exists(persistedCoinFile())
+                || Files.exists(persistedWolfIdFile()) || Files.exists(persistedWolfRuntimeFile()))
             throw new IllegalStateException("Persistence fixture must start from a clean test world");
         Chunk chunk = world.getChunkAt(4, 4); // disposable test-world fixture ONLY
         if (!chunk.isLoaded()) throw new IllegalStateException("Paper did not load fixture chunk");
@@ -344,7 +357,31 @@ public final class WclServicesProbe extends JavaPlugin {
         Files.createDirectories(getDataFolder().toPath());
         Files.writeString(entityIdFile, chicken.getUniqueId().toString() + "\n");
         Files.writeString(persistedCoinFile(), Base64.getEncoder().encodeToString(shulker) + "\n");
+
+        // A different real Paper Entity, using the shipped WWW reader's schema.
+        // Deliberately fixture-typed PDC: not an initialized/managed WWW wolf.
+        Wolf wolf = world.spawn(new Location(world, 74.5, 120, 74.5), Wolf.class);
+        wolf.addScoreboardTag(WOLF_PERSISTENCE_TAG);
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        byte[] runtime = wolfRuntimeFixture(WOLF_OWNER, WOLF_COMMANDER,
+                coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
+                coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
+        PersistentDataContainer wolfPdc = wolf.getPersistentDataContainer();
+        wolfPdc.set(new NamespacedKey("whatawonderfulwolf", "type"),
+                PersistentDataType.STRING, "wonderful_wolf");
+        wolfPdc.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
+                PersistentDataType.INTEGER, 1);
+        wolfPdc.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
+                PersistentDataType.BYTE_ARRAY, runtime);
+        if (!wolf.isValid() || Bukkit.getEntity(wolf.getUniqueId()) == null)
+            throw new IllegalStateException("WWW fixture not registered as valid Paper Wolf");
+        assertPersistedWolf(providers.get("www"), wolf.getUniqueId(), world.getUID(), wolfPdc, coins);
+        Files.writeString(persistedWolfIdFile(), wolf.getUniqueId().toString() + "\n");
+        Files.writeString(persistedWolfRuntimeFile(),
+                Base64.getEncoder().encodeToString(runtime) + "\n");
         world.save();
+        getLogger().info("PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
+                + " entity=" + wolf.getUniqueId() + " world=" + world.getUID());
         getLogger().info("PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
                 + " entity=" + chicken.getUniqueId()
                 + " chunk=4,4 world=" + world.getUID());
@@ -386,6 +423,65 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IllegalStateException("Reloaded WWC sources disagree");
         getLogger().info("PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED"
                 + " entity=" + id + " world=" + world.getUID());
+
+        if (!Files.isRegularFile(persistedWolfIdFile())
+                || !Files.isRegularFile(persistedWolfRuntimeFile()))
+            throw new IllegalStateException("Missing first-JVM WWW evidence");
+        UUID wolfId = UUID.fromString(Files.readString(persistedWolfIdFile()).strip());
+        byte[] runtime = Base64.getDecoder().decode(
+                Files.readString(persistedWolfRuntimeFile()).strip());
+        Wolf foundWolf = null;
+        int matchingWolves = 0;
+        for (Entity candidate : chunk.getEntities()) {
+            if (!candidate.getScoreboardTags().contains(WOLF_PERSISTENCE_TAG)) continue;
+            matchingWolves++;
+            if (!(candidate instanceof Wolf wolf))
+                throw new IllegalStateException("Tagged WWW fixture is not a Paper Wolf");
+            foundWolf = wolf;
+        }
+        if (matchingWolves != 1 || foundWolf == null || !foundWolf.isValid()
+                || !wolfId.equals(foundWolf.getUniqueId())
+                || Bukkit.getEntity(wolfId) == null)
+            throw new IllegalStateException("Persisted WWW fixture Wolf absent/duplicated");
+        byte[] savedRuntime = foundWolf.getPersistentDataContainer().get(
+                new NamespacedKey("whatawonderfulwolf", "runtime_state"),
+                PersistentDataType.BYTE_ARRAY);
+        if (!Arrays.equals(runtime, savedRuntime))
+            throw new IllegalStateException("WWW runtime changed across Paper restart");
+        assertPersistedWolf(providers.get("www"), wolfId, world.getUID(),
+                foundWolf.getPersistentDataContainer(), coins);
+        getLogger().info("PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED"
+                + " entity=" + wolfId + " world=" + world.getUID());
+    }
+
+    private static void assertPersistedWolf(WonderfulStorageReader www, UUID entity,
+                                            UUID world, PersistentDataContainer pdc,
+                                            CoinItemCodec coins) {
+        StorageSnapshot snapshot = success(
+                www.readStored(entity, world, Optional.empty(), pdc), "WWW persisted PDC");
+        if (!entity.equals(snapshot.entityId()) || !world.equals(snapshot.worldId())
+                || !WOLF_OWNER.equals(snapshot.relationships().get("owner"))
+                || !WOLF_COMMANDER.equals(snapshot.relationships().get("commander"))
+                || snapshot.items().size() != 2)
+            throw new IllegalStateException("WWW saved ownership/currency identity mismatch");
+        boolean seenWeapon = false, seenCargo = false;
+        for (var item : snapshot.items()) {
+            switch (item.slot()) {
+                case "weapon" -> {
+                    if (seenWeapon) throw new IllegalStateException("Duplicated weapon slot");
+                    assertCoin(item.bytes(), coins, CoinDenomination.TEN_THOUSAND, 1);
+                    seenWeapon = true;
+                }
+                case "cargo:7" -> {
+                    if (seenCargo) throw new IllegalStateException("Duplicated cargo slot");
+                    assertCoin(item.bytes(), coins, CoinDenomination.THOUSAND, 5);
+                    seenCargo = true;
+                }
+                default -> throw new IllegalStateException("Unrecognized WWW money slot " + item.slot());
+            }
+        }
+        if (!seenWeapon || !seenCargo)
+            throw new IllegalStateException("WWW coin slot evidence missing");
     }
 
     private static byte[] createMoneyShulker() {
