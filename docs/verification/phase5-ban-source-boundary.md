@@ -1,6 +1,6 @@
 # Phase 5 — BAN / IP BAN evidence boundary
 
-Status: **source-verified verification handoff** for `TASK-20261101-004`. This is not a Confirmed CAT specification, a deployed adapter, or Paper runtime acceptance. The source under inspection is the existing, unmerged Phase 5 owner-evidence branch (`feature/owner-evidence-20261101`); this document is independent of that branch.
+Status: **fixed-revision source observation / verification reference**. The blob SHAs below document the source examined when this text was written; they are not an assertion about today's `develop`, the original branch's merge state, a Confirmed CAT specification, deployed BAN adapter, or Paper runtime acceptance. Current source inventory and remaining IP/UUID/external BAN work are tracked in [Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A06 and [Issue #4](https://github.com/surumeneco/SimpleCoins/issues/4).
 
 ## Verified implementation boundary
 
