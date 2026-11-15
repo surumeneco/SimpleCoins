@@ -1,8 +1,8 @@
 # SimpleCoins Phase 7 — JE/BE・Geyser・Nexo 実機受入手順
 
-status: **verification-plan / not-run**  
-対象: `TASK-20261101-006`（運営照会・オフラインgive・配布検証）  
-実装参照: [SimpleCoins PR #2](https://github.com/surumeneco/SimpleCoins/pull/2)（Draft）。本書は未リリースの実装・予定動作を検証する手順であり、機能の実装済み・実機合格を宣言しない。
+status: **verification-plan（本文は実機の実行結果ではない）**  
+対象: SimpleCoins 1.0.0のJE/BE・Geyser・Nexo表示/配布。現行の範囲・担当は[Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A17/A18/H01と[Issue #6](https://github.com/surumeneco/SimpleCoins/issues/6)を参照する。  
+実装参照: **検査を実行するHEADのコード・生成物・CI**。旧PR #2のDraftを現時点の機能状態とみなさない。本書は実機合格を宣言せず、未実施ケースを勝手にpassへ変更しない。
 
 ## 実施条件と安全境界
 
