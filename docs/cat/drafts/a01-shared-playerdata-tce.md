@@ -16,7 +16,7 @@ language: ja
 
 # TCE: 共有プレイヤーデータ・ソース集合閉包 (Draft)
 
-網羅要求: open
+網羅要求: 部分
 
 ## 振る舞い
 | ID | 起点 | 条件 | 結果 | 効果 |
@@ -28,4 +28,4 @@ language: ja
 
 ## エビデンスと留保
 - 実Paper 26.2のDimension別`World#getWorldPath`に対し、現developは共有`players/data`をゼロ件とし、[#429](https://github.com/surumeneco/SimpleCoins/pull/429)は同じ実ルート由来の共有ディレクトリを別発見する。featureのJava独立再現とPaper smoke CIは成功し、利用者のCAT規範判断は未実施。
-- `網羅要求: open` は意図的であり、同一会計世代や全ソース形態への完全閉包を意味しない。このDraftの構造合格を正式のModel Gate成功に読み替えない。
+- `網羅要求: 部分` は意図的であり、同一会計世代や全ソース形態への完全閉包を意味しない。このDraftの構造合格を正式のModel Gate成功に読み替えない。
