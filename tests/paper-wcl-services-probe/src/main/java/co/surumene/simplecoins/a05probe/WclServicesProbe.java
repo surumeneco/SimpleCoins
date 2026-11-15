@@ -343,7 +343,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 shulker, new CoinItemCodec(CoinItemCodec.defaultNames()));
         Files.createDirectories(getDataFolder().toPath());
         Files.writeString(entityIdFile, chicken.getUniqueId().toString() + "\n");
-        Files.writeString(persistedCoinFile, Base64.getEncoder().encodeToString(shulker) + "\n");
+        Files.writeString(persistedCoinFile(), Base64.getEncoder().encodeToString(shulker) + "\n");
         world.save();
         getLogger().info("PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
                 + " entity=" + chicken.getUniqueId()
@@ -358,7 +358,7 @@ public final class WclServicesProbe extends JavaPlugin {
         if (!Files.isRegularFile(entityIdFile) || !Files.isRegularFile(persistedCoinFile()))
             throw new IllegalStateException("First Paper process did not provide fixture identities");
         UUID id = UUID.fromString(Files.readString(entityIdFile).strip());
-        byte[] expected = Base64.getDecoder().decode(Files.readString(persistedCoinFile).strip());
+        byte[] expected = Base64.getDecoder().decode(Files.readString(persistedCoinFile()).strip());
         Chunk chunk = world.getChunkAt(4, 4); // explicitly load known fixture chunk only
         Chicken found = null;
         int tagged = 0;
