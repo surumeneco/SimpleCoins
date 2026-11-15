@@ -11,7 +11,7 @@ refs: []
 entry: issue
 mode: shadow
 flow: issue-work
-work_kind: verification
+work_kind: implementation
 parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
@@ -75,4 +75,10 @@ spec_status: unknown
 - Paper 26.2 `World#getWorldFolder()` resolves a per-dimension storage path, whereas playerdata is located in the level root `players/data`. The current Paper integration must account for both without inventing additional monetary authority or silently treating missing playerdata as zero.
 - Enumerate loaded dimensions by their actual Paper world name under the existing WorldScope policy. Independently discover shared top-level `players/data` and legacy `playerdata` once per level storage root, even if all corresponding dimensions are scope-excluded.
 - A shared player's `UUID.dat` is recorded once; orphan `UUID.dat_old`, conflicting UUIDs, symlinked source, changed source set and visit-budget exhaustion fail closed. Do not scan an unrelated backup tree or allow overlapping region roots. Include these roots in repeated discovery closure.
-- Evidence is a structural verification/implementation candidate; existing 02B is design source. Normative Process/PI/TCE confirmation and formal CAT gates remain not-run; no admission release, atomic world settlement, complete G0 or G3 is claimed.
+- Evidence is a structural implementation Draft linked to existing 02B design source; source writes and ordinary CI must not be misrepresented as completed CAT normative Gates. Normative Process/PI/TCE confirmation and formal CAT gates remain not-run; no admission release, atomic world settlement, complete G0 or G3 is claimed.
+
+## Current implementation evidence
+
+- Paper 26.2 API: `CraftWorld#getWorldPath()` returns `storageSource.getDimensionPath(world.dimension())`; `World#getWorldFolder()` delegates to that path, not the global level root.
+- The independent `sharedPlayerRoots` parameter captures level roots once on the main thread and scans only `players/data` or legacy `playerdata`, preserving per-world WorldScope for regions.
+- A source-set recheck uses the same shared-root provenance. CI/fault-injection and user normative approval remain distinct from draft implementation.
