@@ -10,7 +10,9 @@ import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -174,23 +176,27 @@ public final class PaperSaveProbe extends JavaPlugin {
         assertSavedPair(file, receipt);
         getLogger().info("PAPER_A02_STALE_DISK_AFTER_VOID_SAVE_PASSED");
 
-        // Force Paper's real safeReplaceFile to fail with a nonempty directory
-        // at the target UUID.dat path. It catches/logs the I/O failure instead
-        // of propagating it to CraftPlayer.saveData's caller.
-        Path stashed = file.resolveSibling(ID + ".a02-probe-stashed");
-        Files.move(file, stashed);
-        Files.createDirectory(file);
-        Files.writeString(file.resolve("prevent-replacement"), "test only");
+        // Paper may move a blocking UUID.dat directory aside and still save.
+        // Instead remove ALL write permissions from the real parent directory
+        // while saving. This Linux CI probe must be a non-root user.
+        Path parent = file.getParent();
+        Set<PosixFilePermission> oldMode = Files.getPosixFilePermissions(parent);
+        Set<PosixFilePermission> readOnly = EnumSet.copyOf(oldMode);
+        readOnly.remove(PosixFilePermission.OWNER_WRITE);
+        readOnly.remove(PosixFilePermission.GROUP_WRITE);
+        readOnly.remove(PosixFilePermission.OTHERS_WRITE);
+        byte[] beforeFailure = Files.readAllBytes(file);
         try {
+            Files.setPosixFilePermissions(parent, readOnly);
+            if (Files.isWritable(parent))
+                throw new IllegalStateException("CI directory is still writable; fault not injected");
             player.saveData();
-            if (!Files.isDirectory(file))
-                throw new IllegalStateException("Injected I/O failure unexpectedly replaced directory");
+            if (!Arrays.equals(beforeFailure, Files.readAllBytes(file)))
+                throw new IllegalStateException("Failed save unexpectedly changed playerdata bytes");
             if (ledger.pending(ID).size() != 1)
                 throw new IllegalStateException("Failed save acknowledged a grant");
         } finally {
-            Files.deleteIfExists(file.resolve("prevent-replacement"));
-            if (Files.isDirectory(file)) Files.delete(file);
-            Files.move(stashed, file, StandardCopyOption.REPLACE_EXISTING);
+            Files.setPosixFilePermissions(parent, oldMode);
         }
         assertSavedPair(file, receipt);
         getLogger().info("PAPER_A02_SAVE_EXCEPTION_SWALLOWED_NO_ACK_PASSED");
