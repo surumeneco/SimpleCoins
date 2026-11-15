@@ -40,8 +40,8 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Disposable loopback/no-online-players CI only");
         }
         Bukkit.getScheduler().runTaskLater(this, () -> {
+            String phase = System.getProperty("a02.probe.phase", "save");
             try {
-                String phase = System.getProperty("a02.probe.phase", "save");
                 Player player = createDetachedPlayer();
                 if ("save".equals(phase)) savePhase(player);
                 else if ("reload".equals(phase)) reloadPhase(player);
