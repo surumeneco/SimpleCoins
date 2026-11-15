@@ -67,7 +67,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43740096615 (isolated Paper two-JVM, genuine Entity MCA; CAT formal Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -79,6 +79,14 @@ spec_status: unknown
 3. After Paper exits, use the existing standalone **non-Bukkit** offline Anvil scanner on that very same saved `entities/r.0.0.mca` to find the original tagged Wolf and compare physical Entity UUID, type, source chunk and original `BukkitValues` namespace/schema/v3 runtime bytes. Require exactly one tagged Wolf distinct from the WWC Chicken, preserving each as a separate authority.
 4. Reboot Paper as process B using the same world; find the same single Wolf via real Paper Chunk (no replacement fixture), compare the stored PDC via the distributed WWW reader and verify owner/commander and physical currency values. Since this manually typed test Wolf is **not** a genuine WWW managed individual with genome, it need not appear in WWW's `readLoaded` registry. Do not treat that NotFound as proof of a missing saved source.
 5. Keep all existing WWC/WWW registration, empty, corrupt-schema, WWC nested LIVE/Stored, real persistence/reload, offline Anvil and original product Gradle regressions green. Reject altered or absent PDC before reporting success.
+
+## Observed real-Paper result
+
+- [Paper 26.2 build 134, CI #43740096615](https://github.com/surumeneco/SimpleCoins/actions/runs/43740096615): exact source HEAD `5c1e8555ed8f55cd98300431a223ecfe17d23b6e`, current pinned Work validator `contract_valid:true` and `semantic_approval_verified:false`, Gradle test and Paper integration all passed. Exact blob-pinned WGL 1.0.1, WCL 0.1.0, WWC 2.1.0 and WWW 1.1.1 distributables were checked first.
+- Paper process A created a new indexed Wolf in the known disposable Chunk 4,4. Its WWW v1 typed PDC carried a v3 runtime with explicit different owner and commander UUIDs and genuine SimpleCoins 10000-unit weapon and five 1000-unit cargo coins. The shipped `readStored` API decoded those physical items and relation IDs before save. Paper then wrote the Entity Anvil.
+- Between Paper processes, **no server boot and no chunk load**: a standalone Java program using the production `AnvilRegionReader.scan` read `entities/r.0.0.mca`, validated the unique tagged Wolf's saved UUID/type, `BukkitValues` WWW marker/schema, **507 exact runtime bytes** against first-JVM evidence and its distinct identity from the WWC Chicken. Logs include `PAPER_A05_OFFLINE_MCA_WWW_MONEY_OWNER_PHYSICAL_SOURCE_PASSED` and `PAPER_A05_OFFLINE_MCA_TWO_PROVIDERS_DISTINCT_SOURCES_PASSED`.
+- Paper process B reloaded that same world and the original Wolf UUID from Entity MCA. The shipped WWW `readStored` API recovered both coins and owner/commander, while the original WWC Chicken's money remained preserved. `PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED` was emitted.
+- The Wolf was **manually seeded with correctly structured WWW PDC**, not generated and registered as a managed WWW individual; no `readLoaded` guarantee for WWW arises from this test. Entity MCA source discovery, offline PDC-to-API reconstruction, monetary deduplication, generation and BAN remain separate obligations.
 
 ## Limitations
 
