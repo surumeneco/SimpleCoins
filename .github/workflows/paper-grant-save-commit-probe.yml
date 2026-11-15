@@ -75,7 +75,9 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-save.log
           grep -F 'PAPER_A02_SAVE_DISABLED_VOID_RETURN_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_REAL_SAVE_INVENTORY_RECEIPT_PAIR_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_REAL_COIN_RECEIPT_UNACKED_PASSED' paper-a02-save.log
           grep -F 'PAPER_A02_STALE_DISK_AFTER_VOID_SAVE_PASSED' paper-a02-save.log
+          grep -F 'PAPER_A02_SAVE_EXCEPTION_SWALLOWED_NO_ACK_PASSED' paper-a02-save.log
           test -f world/players/data/00000000-0000-0000-0000-00000000a002.dat
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-save.log; then exit 1; fi
       - name: Restart Paper and verify real data reload
@@ -96,6 +98,7 @@ jobs:
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-reload.log
           grep -F 'PAPER_A02_RESTART_REAL_LOAD_PAIR_PASSED' paper-a02-reload.log
+          grep -F 'PAPER_A02_RESTART_RECOVER_ACK_PASSED' paper-a02-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-reload.log; then exit 1; fi
       - name: Upload scoped diagnostic evidence
         if: always()
