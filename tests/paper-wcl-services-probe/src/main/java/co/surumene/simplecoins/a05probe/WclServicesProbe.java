@@ -116,6 +116,11 @@ public final class WclServicesProbe extends JavaPlugin {
         shulker.setItemMeta(meta);
         byte[] storedShulker = shulker.serializeAsBytes();
         UUID chickenCommander = UUID.fromString("00000000-0000-0000-0000-00000000a051");
+        // The TEST fixture may load its own disposable chunk before spawning.
+        // A production reader must not cause chunk generation or synchronous loads.
+        world.getChunkAt(2, 2);
+        if (!world.isChunkLoaded(2, 2))
+            throw new IllegalStateException("Fixture chunk failed to load");
         Chicken chicken = world.spawn(new Location(world, 32.5, 120, 32.5), Chicken.class);
         try {
             seedChickenStorage(chicken.getPersistentDataContainer(), chickenCommander, storedShulker);
@@ -124,12 +129,14 @@ public final class WclServicesProbe extends JavaPlugin {
             var loadedEntity = Bukkit.getEntity(chicken.getUniqueId());
             var rawType = chicken.getPersistentDataContainer().get(
                     new NamespacedKey("whatawonderfulchicken", "type"), PersistentDataType.STRING);
+            boolean indexed = loadedEntity != null;
+            boolean valid = chicken.isValid();
+            boolean loadedChunk = world.isChunkLoaded(2, 2);
             getLogger().info("PAPER_A05_WWC_LOADED_DIAGNOSTIC"
-                    + " indexed=" + (loadedEntity != null)
-                    + " entityClass=" + (loadedEntity == null ? "null" : loadedEntity.getClass().getName())
-                    + " isValid=" + chicken.isValid()
-                    + " chunkLoaded=" + chicken.getLocation().getChunk().isLoaded()
-                    + " type=" + rawType);
+                    + " indexed=" + indexed + " isValid=" + valid
+                    + " chunkLoaded=" + loadedChunk + " type=" + rawType);
+            if (!indexed || !valid || !loadedChunk || !"wonderful_chicken".equals(rawType))
+                throw new IllegalStateException("Fixture must be registered before testing WWC LIVE");
             StorageSnapshot saved = success(wwc.readStored(chicken.getUniqueId(), world.getUID(),
                     Optional.of(new StorageSnapshot.Position(
                             chicken.getLocation().getX(), chicken.getLocation().getY(), chicken.getLocation().getZ())),
