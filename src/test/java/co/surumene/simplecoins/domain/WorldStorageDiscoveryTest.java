@@ -141,6 +141,73 @@ class WorldStorageDiscoveryTest {
                 Map.of("a", a, "b", b), new WorldScope(true, Set.of(), Set.of()), 100));
     }
 
+
+    @Test void orphanPlayerdataBackupCannotDisguiseMissingOwnerAsNoAssets() throws Exception {
+        // Paper 26.2 writes UUID.dat_old when replacing UUID.dat. A backup
+        // cannot be counted as current assets, but must not be ignored when
+        // it is the only remaining evidence of a player's saved inventory.
+        for (String directoryName : List.of("playerdata", "players/data")) {
+            Path root = directory.resolve(directoryName.replace('/', '_'));
+            UUID player = UUID.randomUUID();
+            Path backup = root.resolve(directoryName).resolve(player + ".dat_old");
+            Files.createDirectories(backup.getParent());
+            Files.writeString(backup, "older playerdata NBT");
+            assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                    Map.of("world", root), new WorldScope(true, Set.of(), Set.of()), 100),
+                    "Orphan backup is not an empty saved-playerdata source: " + backup);
+        }
+    }
+
+    @Test void excludedWorldStillRejectsOrphanPlayerdataBackup() throws Exception {
+        Path excluded = directory.resolve("excluded-backup");
+        UUID player = UUID.randomUUID();
+        Path backup = excluded.resolve("players/data/" + player + ".dat_old");
+        Files.createDirectories(backup.getParent());
+        Files.writeString(backup, "older playerdata NBT");
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("excluded", excluded),
+                new WorldScope(false, Set.of(), Set.of("excluded")), 100));
+    }
+
+    @Test void validPrimaryAndBackupUsePrimaryOnlyWithoutDoubleAccounting() throws Exception {
+        Path root = directory.resolve("paired-playerdata");
+        UUID player = UUID.randomUUID();
+        Path primary = root.resolve("players/data/" + player + ".dat");
+        Path backup = root.resolve("players/data/" + player + ".dat_old");
+        Files.createDirectories(primary.getParent());
+        Files.writeString(primary, "current playerdata");
+        Files.writeString(backup, "previous playerdata");
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", root), new WorldScope(true, Set.of(), Set.of()), 100);
+        assertEquals(Map.of(player, primary.toAbsolutePath()), manifest.playerDataFiles());
+        assertEquals(Set.of(primary.toAbsolutePath().normalize().toString()),
+                manifest.requiredSourceIds());
+        // A mid-audit loss of the authoritative primary cannot be substituted
+        // by a backup or accepted as an unchanged source generation.
+        Files.delete(primary);
+        assertThrows(IOException.class, manifest::requireUnchangedDiscovery);
+    }
+
+    @Test void nonCanonicalAndNonRegularPlayerdataBackupsAreNotInvisible() throws Exception {
+        Path root = directory.resolve("invalid-backup");
+        Path playerRoot = root.resolve("playerdata");
+        Files.createDirectories(playerRoot);
+        Path invalid = playerRoot.resolve("1-1-1-1-1.dat_old");
+        Files.writeString(invalid, "ambiguous UUID alias");
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", root), new WorldScope(true, Set.of(), Set.of()), 100));
+        Files.delete(invalid);
+        invalid = playerRoot.resolve("not-a-uuid.dat_old");
+        Files.writeString(invalid, "bad UUID");
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", root), new WorldScope(true, Set.of(), Set.of()), 100));
+        Files.delete(invalid);
+        Path nonregular = playerRoot.resolve(UUID.randomUUID() + ".dat_old");
+        Files.createDirectories(nonregular);
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", root), new WorldScope(true, Set.of(), Set.of()), 100));
+    }
+
     @Test void noncanonicalRegionNamesCannotAliasTheSameChunkCoordinates() throws Exception {
         Path regionDir = directory.resolve("world/region");
         Files.createDirectories(regionDir);

@@ -118,6 +118,11 @@ public final class WorldStorageDiscovery {
 
         List<SourceFile> worldFiles = new ArrayList<>();
         Map<UUID, Path> players = new HashMap<>();
+        // Paper retains UUID.dat_old during safe playerdata replacement.
+        // Backups do not contain current money authority, but a sole remaining
+        // backup means a current player source may be missing and must block
+        // settlement rather than appear to be an empty/nonexistent account.
+        Map<Path, UUID> candidateBackups = new HashMap<>();
         Set<Path> worldRoots = new HashSet<>();
         Map<String, Path> provenanceRoots = new HashMap<>();
         // All authoritative source categories share one physical-identity set.
@@ -180,17 +185,15 @@ public final class WorldStorageDiscovery {
 
                     String filename = file.getFileName().toString();
                     String parent = file.getParent().getFileName().toString();
-                    if (filename.endsWith(".dat") && isPlayerData(file, root)) {
-                        UUID uuid;
-                        try {
-                            uuid = UUID.fromString(filename.substring(0, filename.length() - 4));
-                        } catch (IllegalArgumentException badName) {
-                            throw new IOException("Invalid playerdata UUID: " + file, badName);
-                        }
-                        // UUID.fromString accepts abbreviated and mixed-case aliases.
-                        // Only the canonical filename is an authoritative Paper playerdata source.
-                        if (!filename.equals(uuid + ".dat"))
-                            throw new IOException("Noncanonical playerdata UUID filename: " + file);
+                    if (filename.endsWith(".dat_old") && isPlayerData(file, root)) {
+                        UUID uuid = canonicalPlayerUuid(file, ".dat_old");
+                        candidateBackups.put(file, uuid);
+                        // Hardlinked current and backup bytes cannot pass as
+                        // independent physical evidence.
+                        requireUniquePhysicalFile(file, attrs.fileKey(),
+                                sourceIdentityByKey, unkeyedSourcePaths, "playerdata backup");
+                    } else if (filename.endsWith(".dat") && isPlayerData(file, root)) {
+                        UUID uuid = canonicalPlayerUuid(file, ".dat");
                         Path previous = players.putIfAbsent(uuid, file);
                         if (previous != null)
                             throw new IOException("Ambiguous playerdata authority for " + uuid + ": " +
@@ -221,6 +224,18 @@ public final class WorldStorageDiscovery {
             });
         }
 
+        // Process after the entire walk: the filesystem enumeration order
+        // cannot decide whether a matching primary exists. A backup in
+        // another World/parent is not an authority for this UUID.
+        for (var entry : candidateBackups.entrySet()) {
+            Path backup = entry.getKey();
+            UUID player = entry.getValue();
+            Path adjacentPrimary = backup.resolveSibling(player + ".dat");
+            if (!adjacentPrimary.equals(players.get(player)))
+                throw new IOException("Orphan Paper playerdata backup requires recovery review: "
+                        + backup + "; expected current primary " + adjacentPrimary);
+        }
+
         worldFiles.sort(Comparator.comparing(SourceFile::world)
                 .thenComparing(a -> a.path().toString())
                 .thenComparing(SourceFile::kind));
@@ -236,7 +251,8 @@ public final class WorldStorageDiscovery {
     private static boolean isAuthoritativeSourcePath(Path path, Path root,
                                                       boolean includedWorld) {
         String filename = path.getFileName().toString();
-        if (filename.endsWith(".dat") && isPlayerData(path, root)) return true;
+        if (isPlayerData(path, root) && (filename.endsWith(".dat")
+                || filename.endsWith(".dat_old"))) return true;
         if (!includedWorld || !filename.endsWith(".mca")) return false;
         Path parent = path.getParent();
         if (parent == null || parent.getFileName() == null) return false;
@@ -307,6 +323,22 @@ public final class WorldStorageDiscovery {
         } catch (NumberFormatException failure) {
             throw new IOException("Invalid Anvil region coordinates: " + filename, failure);
         }
+    }
+
+    private static UUID canonicalPlayerUuid(Path source, String suffix)
+            throws IOException {
+        String name = source.getFileName().toString();
+        if (!name.endsWith(suffix))
+            throw new IOException("Invalid Paper playerdata source suffix: " + source);
+        UUID player;
+        try {
+            player = UUID.fromString(name.substring(0, name.length() - suffix.length()));
+        } catch (IllegalArgumentException invalid) {
+            throw new IOException("Invalid playerdata UUID: " + source, invalid);
+        }
+        if (!name.equals(player + suffix))
+            throw new IOException("Noncanonical playerdata UUID filename: " + source);
+        return player;
     }
 
     private static boolean isPlayerData(Path file, Path root) {
