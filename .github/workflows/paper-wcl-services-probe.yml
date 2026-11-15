@@ -6,6 +6,7 @@ on:
       - 'tests/paper-wcl-services-probe/**'
       - '.github/workflows/paper-wcl-services-probe.yml'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
+      - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
 permissions:
   contents: read
 
