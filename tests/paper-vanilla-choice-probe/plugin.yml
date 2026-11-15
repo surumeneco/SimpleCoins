@@ -1,0 +1,7 @@
+name: SimpleCoinsVanillaChoiceProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a12probe.VanillaChoiceProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins]
+description: CI-only vanilla ingredient-choice and event registration probe

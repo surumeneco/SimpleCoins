@@ -1,0 +1,7 @@
+name: SimpleCoinsWclServicesProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a05probe.WclServicesProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins, WonderfulCoreLibrary, WhatAWonderfulChicken, WhatAWonderfulWolf]
+description: Disposable CI-only multi-provider registration and empty-entity lookup verification
