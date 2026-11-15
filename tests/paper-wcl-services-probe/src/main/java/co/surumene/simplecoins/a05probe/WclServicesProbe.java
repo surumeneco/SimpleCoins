@@ -1,6 +1,7 @@
 package co.surumene.simplecoins.a05probe;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.List;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -101,7 +103,10 @@ public final class WclServicesProbe extends JavaPlugin {
                 switch (phase) {
                     case "baseline" -> { }
                     case "persist" -> persistChickenEntity(world, selected);
-                    case "reload" -> reloadChickenEntity(world, selected);
+                    case "reload" -> {
+                        verifyFarUnloadedStoredItems(world, selected);
+                        reloadChickenEntity(world, selected);
+                    }
                     default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
                 }
                 Bukkit.shutdown();
@@ -314,6 +319,9 @@ public final class WclServicesProbe extends JavaPlugin {
 
     private static final String PERSISTENCE_TAG = "simplecoins-a05-persisted-wwc-probe";
     private static final String WOLF_PERSISTENCE_TAG = "simplecoins-a05-persisted-www-probe";
+    private static final String FAR_WWC_TAG = "simplecoins-a05-unloaded-wwc-nbt";
+    private static final String FAR_WWW_TAG = "simplecoins-a05-unloaded-www-nbt";
+    private static final int FAR_CHUNK = 40;
     private static final UUID WOLF_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000a052");
     private static final UUID WOLF_COMMANDER = UUID.fromString("00000000-0000-0000-0000-00000000a053");
     private static final UUID PERSISTENCE_FOLLOW =
@@ -333,6 +341,9 @@ public final class WclServicesProbe extends JavaPlugin {
 
     private Path persistedWolfRuntimeFile() {
         return getDataFolder().toPath().resolve("www-runtime-state.b64");
+    }
+    private Path farWitness(String file) {
+        return getDataFolder().toPath().resolve("far-" + file);
     }
 
     /** Phase one: a real Vanilla Chicken carrying WWC-readable PDC, saved by Paper itself. */
@@ -379,6 +390,7 @@ public final class WclServicesProbe extends JavaPlugin {
         Files.writeString(persistedWolfIdFile(), wolf.getUniqueId().toString() + "\n");
         Files.writeString(persistedWolfRuntimeFile(),
                 Base64.getEncoder().encodeToString(runtime) + "\n");
+        persistFarUnloadedFixtures(world, providers, coins);
         world.save();
         getLogger().info("PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
                 + " entity=" + wolf.getUniqueId() + " world=" + world.getUID());
@@ -494,5 +506,170 @@ public final class WclServicesProbe extends JavaPlugin {
         meta.setBlockState(box);
         shulker.setItemMeta(meta);
         return shulker.serializeAsBytes();
+    }
+
+    /**
+     * Paper process A only: generate two saved monetary Entities away from
+     * all spawn chunks. They are both real Paper entities but manually typed
+     * WWC/WWW fixture PDC, not a game-managed genome-individual lifecycle.
+     */
+    private void persistFarUnloadedFixtures(World world,
+                                             Map<String, WonderfulStorageReader> providers,
+                                             CoinItemCodec coins) throws Exception {
+        for (String n : List.of("wwc-uuid.txt", "www-uuid.txt",
+                "wwc-shulker.b64", "www-runtime.b64")) {
+            if (Files.exists(farWitness(n)))
+                throw new IllegalStateException("Far-source evidence already exists: " + n);
+        }
+        Chunk far = world.getChunkAt(FAR_CHUNK, FAR_CHUNK);
+        if (!far.isLoaded()) throw new IllegalStateException("Cannot generate isolated far chunk");
+        double anchor = FAR_CHUNK * 16.0;
+        Chicken chicken = world.spawn(
+                new Location(world, anchor + 8.5, 120, anchor + 8.5), Chicken.class);
+        chicken.addScoreboardTag(FAR_WWC_TAG);
+        byte[] shulker = createMoneyShulker();
+        seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
+                "WWC far loaded pre-save"), chicken.getUniqueId(), world.getUID(),
+                PERSISTENCE_FOLLOW, shulker, coins);
+        Wolf wolf = world.spawn(
+                new Location(world, anchor + 10.5, 120, anchor + 10.5), Wolf.class);
+        wolf.addScoreboardTag(FAR_WWW_TAG);
+        byte[] runtime = wolfRuntimeFixture(WOLF_OWNER, WOLF_COMMANDER,
+                coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
+                coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
+        PersistentDataContainer pdc = wolf.getPersistentDataContainer();
+        pdc.set(new NamespacedKey("whatawonderfulwolf", "type"),
+                PersistentDataType.STRING, "wonderful_wolf");
+        pdc.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
+                PersistentDataType.INTEGER, 1);
+        pdc.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
+                PersistentDataType.BYTE_ARRAY, runtime);
+        assertPersistedWolf(providers.get("www"), wolf.getUniqueId(), world.getUID(), pdc, coins);
+        Files.writeString(farWitness("wwc-uuid.txt"), chicken.getUniqueId().toString() + "\n");
+        Files.writeString(farWitness("www-uuid.txt"), wolf.getUniqueId().toString() + "\n");
+        Files.writeString(farWitness("wwc-shulker.b64"),
+                Base64.getEncoder().encodeToString(shulker) + "\n");
+        Files.writeString(farWitness("www-runtime.b64"),
+                Base64.getEncoder().encodeToString(runtime) + "\n");
+        getLogger().info("PAPER_A05_FAR_TWO_STORED_PROVIDER_FIXTURES_SAVED_PASSED"
+                + " chunk=" + FAR_CHUNK + "," + FAR_CHUNK);
+    }
+
+    /**
+     * Paper process B: the two Entities are NOT loaded. The only input is
+     * actual read-only disk Entity Anvil NBT and the witnesses written by A.
+     * Reconstitute only type-checked PDC keys on detached ItemMeta and invoke
+     * the two real shipped WCL readStored providers, without getChunkAt.
+     */
+    private void verifyFarUnloadedStoredItems(World world,
+                                               Map<String, WonderfulStorageReader> providers)
+            throws Exception {
+        if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
+            throw new IllegalStateException("Far test chunk already loaded; cannot claim offline scan");
+        UUID wwcUuid = UUID.fromString(Files.readString(farWitness("wwc-uuid.txt")).strip());
+        UUID wwwUuid = UUID.fromString(Files.readString(farWitness("www-uuid.txt")).strip());
+        if (wwcUuid.equals(wwwUuid)) throw new IOException("Aliased WWC and WWW Entity identity");
+        byte[] wwcBytes = Base64.getDecoder().decode(
+                Files.readString(farWitness("wwc-shulker.b64")).strip());
+        byte[] wwwBytes = Base64.getDecoder().decode(
+                Files.readString(farWitness("www-runtime.b64")).strip());
+        Path region = world.getWorldPath()
+                .resolve("entities/r.1.1.mca").toAbsolutePath().normalize();
+        int[] recognized = {0, 0};
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        AnvilRegionReader.scan(region, 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
+            if (chunk.x() != FAR_CHUNK || chunk.z() != FAR_CHUNK) {
+                if (chunk.nbt().containsKey("Entities")) {
+                    for (Object raw : (List<?>) chunk.nbt().get("Entities")) {
+                        if (raw instanceof Map<?, ?> candidate
+                                && candidate.get("Tags") instanceof List<?> tags
+                                && (tags.contains(FAR_WWC_TAG) || tags.contains(FAR_WWW_TAG)))
+                            throw new IOException("Monetary fixture changed physical chunk");
+                    }
+                }
+                return;
+            }
+            if (!(chunk.nbt().get("Entities") instanceof List<?> entities))
+                throw new IOException("Offline far Entity Anvil chunk missing Entities list");
+            for (Object raw : entities) {
+                if (!(raw instanceof Map<?, ?> entity))
+                    throw new IOException("Malformed saved Entity compound");
+                if (!(entity.get("Tags") instanceof List<?> tags)) continue;
+                boolean chickenTag = tags.contains(FAR_WWC_TAG);
+                boolean wolfTag = tags.contains(FAR_WWW_TAG);
+                if (!chickenTag && !wolfTag) continue;
+                if (chickenTag && wolfTag)
+                    throw new IOException("Entity matches both independent storage providers");
+                UUID entityId = readSavedUuid(entity.get("UUID"));
+                if (!(entity.get("BukkitValues") instanceof Map<?, ?> stored))
+                    throw new IOException("Tagged far Entity has no saved BukkitValues PDC");
+                PersistentDataContainer detached = new ItemStack(Material.PAPER)
+                        .getItemMeta().getPersistentDataContainer();
+                if (chickenTag) {
+                    if (++recognized[0] != 1 || !wwcUuid.equals(entityId)
+                            || !"minecraft:chicken".equals(entity.get("id"))
+                            || !"wonderful_chicken".equals(
+                                    stored.get("whatawonderfulchicken:type"))
+                            || !(stored.get("whatawonderfulchicken:data_version")
+                                    instanceof Integer version) || version != 3
+                            || !PERSISTENCE_FOLLOW.toString().equals(
+                                    stored.get("whatawonderfulchicken:follow_target"))
+                            || !(stored.get("whatawonderfulchicken:equipment_shulker_box")
+                                    instanceof byte[] shulker)
+                            || !Arrays.equals(wwcBytes, shulker))
+                        throw new IOException("Saved far WWC source differs from original fixture");
+                    detached.set(new NamespacedKey("whatawonderfulchicken", "type"),
+                            PersistentDataType.STRING, "wonderful_chicken");
+                    detached.set(new NamespacedKey("whatawonderfulchicken", "data_version"),
+                            PersistentDataType.INTEGER, 3);
+                    detached.set(new NamespacedKey("whatawonderfulchicken", "follow_target"),
+                            PersistentDataType.STRING, PERSISTENCE_FOLLOW.toString());
+                    detached.set(new NamespacedKey("whatawonderfulchicken", "equipment_shulker_box"),
+                            PersistentDataType.BYTE_ARRAY, shulker);
+                    StorageSnapshot source = success(
+                            providers.get("wwc").readStored(entityId, world.getUID(),
+                                    Optional.empty(), detached), "WWC detached unloaded NBT");
+                    assertChickenStorage(source, wwcUuid, world.getUID(), PERSISTENCE_FOLLOW,
+                            wwcBytes, coins);
+                } else {
+                    if (++recognized[1] != 1 || !wwwUuid.equals(entityId)
+                            || !"minecraft:wolf".equals(entity.get("id"))
+                            || !"wonderful_wolf".equals(
+                                    stored.get("whatawonderfulwolf:type"))
+                            || !(stored.get("whatawonderfulwolf:schema_version")
+                                    instanceof Integer version) || version != 1
+                            || !(stored.get("whatawonderfulwolf:runtime_state")
+                                    instanceof byte[] runtime)
+                            || !Arrays.equals(wwwBytes, runtime))
+                        throw new IOException("Saved far WWW source differs from original fixture");
+                    detached.set(new NamespacedKey("whatawonderfulwolf", "type"),
+                            PersistentDataType.STRING, "wonderful_wolf");
+                    detached.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
+                            PersistentDataType.INTEGER, 1);
+                    detached.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
+                            PersistentDataType.BYTE_ARRAY, runtime);
+                    assertPersistedWolf(providers.get("www"), wwwUuid, world.getUID(),
+                            detached, coins);
+                }
+            }
+        });
+        if (recognized[0] != 1 || recognized[1] != 1)
+            throw new IOException("Unloaded WWC/WWW saved source count incomplete WWC="
+                    + recognized[0] + " WWW=" + recognized[1]);
+        if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
+            throw new IllegalStateException("Saved Entity read accidentally loaded far chunk");
+        getLogger().info("PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED"
+                + " source=entities/r.1.1.mca entities=2"
+                + " regionChunk=" + FAR_CHUNK + "," + FAR_CHUNK
+                + " totalCoins=25000");
+    }
+
+    private static UUID readSavedUuid(Object raw) throws IOException {
+        if (!(raw instanceof int[] values) || values.length != 4)
+            throw new IOException("Entity UUID is not canonical four-int saved NBT");
+        long hi = ((long) values[0] << 32) | Integer.toUnsignedLong(values[1]);
+        long lo = ((long) values[2] << 32) | Integer.toUnsignedLong(values[3]);
+        return new UUID(hi, lo);
     }
 }
