@@ -69,7 +69,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43730603946 (Git blob-verified distribution ABI audit, not live VPS or normative CAT gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -85,3 +85,12 @@ spec_status: unknown
 ## Authority
 
 `issue-work` verification only, no production source/code or actual plugin deployment. Formal CAT gates not-run, no self-Confirmed, no monetary publication and no admission change.
+
+## Verified result: server-repository packaged JAR ABI
+
+- On GitHub Actions [#43730603946](https://github.com/surumeneco/SimpleCoins/actions/runs/43730603946), the exact three Git blobs in pinned server snapshot `90aa2d0e0a5ea80c705fd67d717f463decaf2a32` passed Git hash, ZIP/JAR integrity and descriptor checks.
+- WCL `0.1.0` JAR includes `co/surumene/wcl/plugin/inventory/WonderfulStorageReader.class`, `StorageReadResult.class`, `StorageSnapshot.class`. Actual `javap` declares `String providerId()`, `StorageReadResult readLoaded(UUID)`, `StorageReadResult readStored(UUID,UUID,Optional<StorageSnapshot.Position>,PersistentDataContainer)`.
+- WWC `2.1.0` JAR includes `WonderfulChickenStorageReader.class`; WWW `1.1.1` includes `WonderfulWolfStorageReader.class`.
+- Current upstream source on 2026-11-15 also registers each as a Bukkit `WonderfulStorageReader` ServiceProvider in both plugins' `onEnable`, and unregisters them on disable. Packaged class/ABI presence does **not** prove runtime registration, lifecycle ordering, compatible invocation, source enumeration or installed VPS identity.
+- **No absent interface/class blocker in these tracked distributables**. A05's next technical stage is real-paper multi-provider enumeration/ABI behavior and loaded+stored source closure. Do not route the task into an automatic update of WCL/WWC/WWW or treat missing/unloaded sources as empty.
+- CAT `cat_flow validate` verified Work structure (`contract_valid:true`, `semantic_approval_verified:false`), not Process/Model/Implementation conformance.
