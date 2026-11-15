@@ -66,6 +66,55 @@ public final class CoinRecipesLiveProbe extends JavaPlugin {
             getLogger().info("PAPER_GRANT_STORAGE_FINGERPRINT_PASSED: genuine coin count,"
                     + " PDC denomination, disappearance and stable snapshots");
 
+            // Physical coin materialization is tested on authentic Paper because
+            // standalone domain JUnit has no Bukkit ItemFactory.
+            var issuance = new co.surumene.simplecoins.domain.GrantLedger(
+                    getDataFolder().toPath().resolve("grant-materializer-proof"));
+            var recipient = java.util.UUID.randomUUID();
+            var grant = issuance.reserve(recipient, 5200, "ci");
+            ItemStack[] deliveryStorage = new ItemStack[36];
+            for (int i = 1; i < deliveryStorage.length; i++)
+                deliveryStorage[i] = new ItemStack(Material.STONE, 1);
+            var originalReceipt = co.surumene.simplecoins.domain.GrantReceiptState.empty();
+            var firstDelivery = PaperGrantInventorySlotPlan.stage(
+                    issuance, recipient, grant, originalReceipt, deliveryStorage).orElseThrow();
+            ItemStack[] projected = PaperGrantInventoryMaterializer.buildCopy(
+                    firstDelivery, originalReceipt, deliveryStorage, codec);
+            if (deliveryStorage[0] != null || projected[0] == null
+                    || codec.identify(projected[0]).orElseThrow()
+                            != co.surumene.simplecoins.domain.CoinDenomination.FIVE_THOUSAND
+                    || projected[0].getAmount() != 1
+                    || firstDelivery.nextReceipt().partialValue() != 5000)
+                throw new IllegalStateException("Materializer altered original storage or value");
+            if (!deliveryStorage[35].equals(projected[35]))
+                throw new IllegalStateException("Materializer overwrote occupied storage");
+            boolean refused = false;
+            deliveryStorage[0] = new ItemStack(Material.DIRT, 1);
+            try {
+                PaperGrantInventoryMaterializer.buildCopy(
+                        firstDelivery, originalReceipt, deliveryStorage, codec);
+            } catch (IllegalStateException expected) {
+                refused = true;
+            }
+            if (!refused)
+                throw new IllegalStateException("Stale physical grant plan was accepted");
+            deliveryStorage[0] = projected[0];
+            deliveryStorage[1] = null;
+            var resumed = PaperGrantInventorySlotPlan.stage(issuance, recipient, grant,
+                    firstDelivery.nextReceipt(), deliveryStorage).orElseThrow();
+            ItemStack[] finalInventory = PaperGrantInventoryMaterializer.buildCopy(
+                    resumed, firstDelivery.nextReceipt(), deliveryStorage, codec);
+            if (deliveryStorage[1] != null
+                    || codec.identify(finalInventory[1]).orElseThrow()
+                            != co.surumene.simplecoins.domain.CoinDenomination.HUNDRED
+                    || finalInventory[1].getAmount() != 2
+                    || resumed.nextReceipt().completedSequence() != grant.sequence())
+                throw new IllegalStateException("Materializer lost remaining grant value");
+            if (issuance.pending(recipient).size() != 1)
+                throw new IllegalStateException("A staged grant was acknowledged or issued");
+            getLogger().info("PAPER_GRANT_COIN_MATERIALIZATION_PASSED: copy-only 5200C,"
+                    + " genuine coin PDC, full-slot pause, stale-state fail-closed");
+
             getLogger().info("PAPER_COIN_RECIPES_REGISTERED_PASSED: 20 recipes, exact PDC,"
                     + " results and ordinary-paper exclusion; no crafting-player assertion");
         } catch (Exception failure) {
