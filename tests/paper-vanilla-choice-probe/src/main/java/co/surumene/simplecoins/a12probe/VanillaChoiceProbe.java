@@ -8,7 +8,7 @@ import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.event.HandlerList;
-import org.bukkit.event.RegisteredListener;
+import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.event.block.CrafterCraftEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
