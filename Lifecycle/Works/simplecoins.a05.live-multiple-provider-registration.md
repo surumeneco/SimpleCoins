@@ -69,7 +69,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43731215531 (pinned distributed JARs on real Paper 26.2, Work structure only) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -86,3 +86,11 @@ spec_status: unknown
 ## Authority
 
 `issue-work` source-backed verification Draft only; no production source, connected real players, actual VPS, monetary writer, CAT normative Confirmed or formal Gates.
+
+## Real Paper 26.2 observed result (2026-11-15)
+
+- CI [#43731215531](https://github.com/surumeneco/SimpleCoins/actions/runs/43731215531) ran official Paper 26.2 build 134 with independent default-deny admission and zero connected players. It loaded pinned server-repository JAR blobs for WGL 1.0.1, WCL 0.1.0, WWC 2.1.0 and WWW 1.1.1 plus SimpleCoins and a separate disposable probe.
+- Both actual Bukkit services registered under the **same WCL `WonderfulStorageReader` class identity**. `Bukkit.getServicesManager().getRegistrations` enumerated exactly two distinct provider registrations, `wwc` and `www`, each owned by the correctly enabled plugin: `PAPER_A05_BOTH_PACKAGED_STORAGE_SERVICES_REGISTERED_PASSED providers=[wwc, www]`.
+- For an unknown entity UUID, each provider returned explicit `StorageReadResult.NotFound` from `readLoaded` and from `readStored` when supplied a genuinely blank Paper PDC. This verifies absent-entity semantics only; missing live/offline **expected** individuals must still be treated as incomplete coverage.
+- This is a direct Paper packaging/startup verification. It supersedes an unfounded assumption that the two existing APIs cannot coexist. It does **not** verify entity-specific snapshots, ownership fields, nested item monetary decoding, offline PDC discovery or synchronization with saved-world and BAN evidence. Current VPS-installed JAR identity remains unverified.
+- Pinned `cat_flow.py validate` reported `contract_valid:true`, `semantic_approval_verified:false`, `status:passed`. No normative CAT Process/Model/Implementation Gate passed.
