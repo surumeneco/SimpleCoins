@@ -33,12 +33,30 @@ public final class SavedGrantReceiptUniverseAudit {
     public static Report scan(WorldStorageDiscovery.Manifest manifest, GrantLedger ledger,
                               int maximumCompressedBytes, int maximumInflatedBytes)
             throws IOException {
+        return scan(manifest, ledger, maximumCompressedBytes, maximumInflatedBytes,
+                player -> { });
+    }
+
+    /** Test seam for deterministic same-path rollback after observing one player. */
+    @FunctionalInterface
+    interface AfterPlayerRead {
+        void observed(UUID player) throws IOException;
+    }
+
+    static Report scan(WorldStorageDiscovery.Manifest manifest, GrantLedger ledger,
+                       int maximumCompressedBytes, int maximumInflatedBytes,
+                       AfterPlayerRead afterRead) throws IOException {
         if (manifest == null || ledger == null || manifest.origin() == null)
             throw new IOException("Saved issuance audit requires a real discovered source manifest");
         if (maximumCompressedBytes < 1 || maximumInflatedBytes < 1)
             throw new IllegalArgumentException("Saved playerdata read limits must be positive");
 
-        manifest.requireUnchangedDiscovery();
+        if (afterRead == null)
+            throw new IllegalArgumentException("Missing saved playerdata observation callback");
+        // Capture exact compressed playerdata bytes BEFORE any receipt is read.
+        // An already-read player must not disappear or roll back unnoticed.
+        var witness = SavedPlayerdataContentWitness.capture(manifest,
+                maximumCompressedBytes);
         final java.util.List<GrantLedger.Grant> history;
         try {
             history = ledger.historySnapshot();
@@ -58,6 +76,7 @@ public final class SavedGrantReceiptUniverseAudit {
             GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(nbt, ledger, player);
             if (receipts.putIfAbsent(player, receipt) != null)
                 throw new IOException("Duplicate saved player receipt identity: " + player);
+            afterRead.observed(player);
         }
 
         int acknowledged = 0, pending = 0, awaiting = 0;
@@ -76,7 +95,7 @@ public final class SavedGrantReceiptUniverseAudit {
         }
         // A late-appearing source would invalidate all observations; a
         // source-set recheck is NOT a simultaneous content-generation witness.
-        manifest.requireUnchangedDiscovery();
+        witness.requireUnchanged();
         try {
             if (!history.equals(ledger.historySnapshot()))
                 throw new IOException("Issuance history changed during saved audit");
