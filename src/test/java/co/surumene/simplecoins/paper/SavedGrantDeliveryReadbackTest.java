@@ -149,6 +149,95 @@ class SavedGrantDeliveryReadbackTest {
                 saved(plan.nextReceipt(), coin), ledger, UUID.randomUUID(), plan));
     }
 
+
+    private static Map<String, Object> nonCurrency(int slot, int amount, byte[] data) {
+        return Map.of(
+                "Slot", Byte.valueOf((byte) slot),
+                "id", "minecraft:diamond",
+                "count", Integer.valueOf(amount),
+                "components", Map.of("minecraft:custom_data", Map.of("marker", data)));
+    }
+
+    private static Map<String, Object> initialSaved(List<Map<String, Object>> inventory) {
+        return saved(GrantReceiptState.empty(), inventory);
+    }
+
+    @Test void transitionPreservesExistingSlotsAndUnrelatedCustomData() throws Exception {
+        var ledger = new GrantLedger(temp.resolve("preserved"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "console");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var original = nonCurrency(9, 2, new byte[] {7, 8, 9});
+        var before = initialSaved(List.of(original));
+        var after = saved(plan.nextReceipt(), List.of(
+                coin(0, CoinDenomination.FIVE_THOUSAND, 1),
+                nonCurrency(9, 2, new byte[] {7, 8, 9})));
+        var proof = SavedGrantDeliveryReadback.verifyTransition(
+                before, after, ledger, player, plan);
+        assertEquals(BigInteger.valueOf(5000), proof.matchedMonetaryValue());
+        assertEquals(1, ledger.pending(player).size());
+    }
+
+    @Test void transitionRejectsLossMutationAndUnexpectedNewAssets() throws Exception {
+        var ledger = new GrantLedger(temp.resolve("preservation-failure"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "console");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var original = nonCurrency(9, 2, new byte[] {7, 8, 9});
+        var before = initialSaved(List.of(original));
+        var planned = coin(0, CoinDenomination.FIVE_THOUSAND, 1);
+        // The prior verify() accepts these despite loss/alteration elsewhere.
+        assertEquals(1, SavedGrantDeliveryReadback.verify(
+                saved(plan.nextReceipt(), List.of(planned)), ledger, player, plan).matchedStacks());
+
+        var invalid = List.of(
+                List.of(planned), // lost unrelated diamond
+                List.of(planned, nonCurrency(9, 3, new byte[] {7, 8, 9})),
+                List.of(planned, nonCurrency(9, 2, new byte[] {7, 8, 0})),
+                List.of(planned, original, nonCurrency(18, 1, new byte[] {1}))
+        );
+        for (var after : invalid) {
+            assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
+                    before, saved(plan.nextReceipt(), after), ledger, player, plan));
+        }
+    }
+
+    @Test void transitionRejectsOverwritePreexistingTargetAndForgedPriorReceipt()
+            throws Exception {
+        var ledger = new GrantLedger(temp.resolve("target-overwrite"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "console");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var newCoin = coin(0, CoinDenomination.FIVE_THOUSAND, 1);
+        assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
+                initialSaved(List.of(nonCurrency(0, 1, new byte[] {3}))),
+                saved(plan.nextReceipt(), List.of(newCoin)), ledger, player, plan));
+        assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
+                saved(plan.nextReceipt(), List.of()),
+                saved(plan.nextReceipt(), List.of(newCoin)), ledger, player, plan));
+    }
+
+    @Test void transitionRejectsEnderChestAndEquipmentDrift() throws Exception {
+        var ledger = new GrantLedger(temp.resolve("other-storage"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "console");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var before = initialSaved(List.of());
+        var after = new HashMap<String, Object>(saved(plan.nextReceipt(),
+                List.of(coin(0, CoinDenomination.FIVE_THOUSAND, 1))));
+        after.put("EnderItems", List.of(nonCurrency(4, 1, new byte[] {1})));
+        assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
+                before, after, ledger, player, plan));
+        after.remove("EnderItems");
+        after.put("equipment", Map.of("head", Map.of("id", "minecraft:diamond", "count", 1)));
+        assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
+                before, after, ledger, player, plan));
+    }
+
     @Test void realGzipPlayerdataParserYieldsSameReceiptAndPhysicalItemGeneration()
             throws Exception {
         var ledger = new GrantLedger(temp.resolve("compressed"));
