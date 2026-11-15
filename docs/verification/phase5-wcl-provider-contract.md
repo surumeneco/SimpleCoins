@@ -1,6 +1,6 @@
 # Phase 5 — WCL / WWC / WWW storage evidence contract
 
-Status: **source-verified integration evidence**, not a CAT Confirmed artifact and not a live Paper acceptance. Verified 2026-11-02 against the `develop` source of WonderfulCoreLibrary (WCL), WhatAWonderfulChicken (WWC), and WhatAWonderfulWolf (WWW). This document is a handoff for TASK-20261101-004; it does not implement a SimpleCoins adapter.
+Status: **dated source-verified integration reference**, not a CAT Confirmed artifact or live Paper acceptance. The tables preserve the 2026-11-02 WCL/WWC/WWW source blobs; [Issue #4](https://github.com/surumeneco/SimpleCoins/issues/4) has since verified `WonderfulStorageReader` implementation/service registration. The current remaining work is to bind and validate all providers, live/stored sources, and accounting-generation closure in SimpleCoins ([Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A05). This document is not proof of a deployed provider JAR or a complete SimpleCoins adapter.
 
 ## Verified source contract
 
