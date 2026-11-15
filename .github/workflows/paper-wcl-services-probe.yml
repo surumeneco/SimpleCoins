@@ -7,6 +7,7 @@ on:
       - '.github/workflows/paper-wcl-services-probe.yml'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
+      - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
 permissions:
   contents: read
 
@@ -35,6 +36,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -119,6 +122,44 @@ jobs:
           grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
+      - name: Verify world saved real WWC entity persists across a second Paper process
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          for phase in persist reload; do
+            set +e
+            timeout --signal=TERM --kill-after=5s 180s \
+              java -Da05.probe.phase="$phase" -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > "paper-a05-$phase.log" 2>&1
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "Paper A05 persisted entity phase=$phase exit=$status" >&2
+              tail -180 "paper-a05-$phase.log"
+              exit 1
+            fi
+            grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
+            if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a05-$phase.log"; then
+              tail -180 "paper-a05-$phase.log"
+              exit 1
+            fi
+            case "$phase" in
+              persist)
+                grep -F 'PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
+                if ! find world -type f -path '*/entities/r.0.0.mca' -size +0c | grep -q .; then
+                  echo 'Actual Paper Entity Anvil region file was not created' >&2
+                  find world -name '*.mca' -print
+                  exit 1
+                fi ;;
+              reload)
+                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log" ;;
+            esac
+          done
+          echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
