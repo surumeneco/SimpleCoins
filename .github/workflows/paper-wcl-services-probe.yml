@@ -9,6 +9,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md'
+      - 'Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md'
 permissions:
   contents: read
 
@@ -41,6 +42,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -153,6 +156,7 @@ jobs:
             case "$phase" in
               persist)
                 grep -F 'PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
                 if ! find world -type f -path '*/entities/r.0.0.mca' -size +0c | grep -q .; then
                   echo 'Actual Paper Entity Anvil region file was not created' >&2
                   find world -name '*.mca' -print
@@ -167,11 +171,16 @@ jobs:
                   "world/dimensions/minecraft/overworld/entities/r.0.0.mca" \
                   "plugins/SimpleCoinsWclServicesProbe/wwc-physical-entity-uuid.txt" \
                   "plugins/SimpleCoinsWclServicesProbe/wwc-shulker-coins.b64" \
+                  "plugins/SimpleCoinsWclServicesProbe/www-physical-entity-uuid.txt" \
+                  "plugins/SimpleCoinsWclServicesProbe/www-runtime-state.b64" \
                   | tee paper-a05-offline-mca.log
                 grep -F 'PAPER_A05_OFFLINE_MCA_WWC_MONEY_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_WWW_MONEY_OWNER_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_TWO_PROVIDERS_DISTINCT_SOURCES_PASSED' paper-a05-offline-mca.log
                 grep -F 'PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED' paper-a05-offline-mca.log ;;
               reload)
-                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log" ;;
+                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log" ;;
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
