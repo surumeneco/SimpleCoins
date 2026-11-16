@@ -7,12 +7,13 @@ on:
       - '.github/workflows/paper-grant-save-commit-probe.yml'
       - 'Lifecycle/Works/simplecoins.a02.paper-save-commit-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md'
 
 jobs:
   real-paper-playerdata:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,6 +33,8 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md
       - name: Build production guard and isolated probe
@@ -208,6 +211,28 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
+      - name: Fourth Paper process composes real grant plan, saved-file proof and durable ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.probe.phase=verified-delivery -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-verified-delivery.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Fourth Paper process failed (exit=$status)" >&2
+            tail -160 paper-a02-verified-delivery.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-verified-delivery.log
+          grep -F 'PAPER_A02_UNSAVED_PLAN_FILE_READBACK_REJECTED_PASSED' paper-a02-verified-delivery.log
+          grep -F 'PAPER_A02_REAL_PLAN_MATERIALIZER_SAVE_FILE_PROOF_PASSED' paper-a02-verified-delivery.log
+          grep -F 'PAPER_A02_VERIFIED_FILE_PROOF_BEFORE_ACK_PASSED durableGrants=2 pending=0' paper-a02-verified-delivery.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-verified-delivery.log; then exit 1; fi
+          echo 'PAPER_A02_REAL_PLAN_SAVE_PROOF_ACK_REAL_PAPER_PASSED'
       - name: Upload scoped diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
