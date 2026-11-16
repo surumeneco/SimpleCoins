@@ -8,6 +8,7 @@ on:
       - 'src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java'
       - 'tests/paper-blocklocker-smoke/**'
       - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md'
+      - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md'
       - 'build.gradle.kts'
       - '.github/workflows/paper-blocklocker-115-live-smoke.yml'
 jobs:
@@ -33,6 +34,8 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
@@ -124,6 +127,31 @@ jobs:
             paper-blocklocker-115-saved-signs.log
           test "$(grep -c '^PAPER_A04_SAVED_SIGN_RAW_SOURCE_VALIDATED' \
             paper-blocklocker-115-saved-signs.log)" -eq 5
+      - name: Restart actual Paper world and verify BlockLocker recovers the same protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          test -s plugins/SimpleCoinsBlockLockerLiveProbe/a04-probe-world-and-y.txt
+          set +e
+          timeout --signal=TERM --kill-after=10s 180s \
+            java -Da04.probe.phase=reload -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a04-reloaded.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Paper saved protection reload failed with $status" >&2
+            tail -160 paper-a04-reloaded.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a04-reloaded.log
+          grep -F 'PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED' paper-a04-reloaded.log
+          grep -F 'PAPER_BLOCKLOCKER_115_RELOADED_PROTECTION_PASSED' paper-a04-reloaded.log
+          if grep -Fq 'PAPER_BLOCKLOCKER_115_RELOAD_FAILED' paper-a04-reloaded.log; then
+            tail -140 paper-a04-reloaded.log
+            exit 1
+          fi
+          echo 'PAPER_A04_BLOCKLOCKER_SAVED_ANVIL_AND_RESTART_PROTECTION_PASSED'
       - name: Upload isolated provider diagnostics
         if: always()
         uses: actions/upload-artifact@v4
