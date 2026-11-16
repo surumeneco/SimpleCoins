@@ -73,7 +73,9 @@ public final class PaperSaveProbe extends JavaPlugin {
                 throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
             }
             Bukkit.shutdown();
-        }, 30L);
+        // The product's asynchronous saved-source/receipt audit must have
+        // finished before this disposable test begins issuing and saving.
+        }, 120L);
     }
 
     private Path dataFile() {
@@ -82,8 +84,26 @@ public final class PaperSaveProbe extends JavaPlugin {
     }
 
     private Path grantDirectory() {
-        return getServer().getWorldContainer().toPath().toAbsolutePath().normalize()
-                .resolve("a02-test-grant-ledger");
+        // The product's guarded startup audits THIS journal against Paper's
+        // real playerdata. An unrelated test journal creates a spurious
+        // unknown receipt and makes the second JVM correctly fail closed.
+        var product = getServer().getPluginManager().getPlugin("SimpleCoins");
+        if (product == null || !product.isEnabled())
+            throw new IllegalStateException("Product grant journal is not available");
+        return product.getDataFolder().toPath().resolve("grants");
+    }
+
+    /** Exercise the actual active issuance ledger, not a competing writer. */
+    private GrantLedger activeProductLedger() throws ReflectiveOperationException {
+        var product = getServer().getPluginManager().getPlugin("SimpleCoins");
+        if (product == null || !product.isEnabled())
+            throw new IllegalStateException("Product grant ledger unavailable");
+        Field field = product.getClass().getDeclaredField("issuanceGrants");
+        field.setAccessible(true);
+        Object value = field.get(product);
+        if (!(value instanceof GrantLedger ledger))
+            throw new IllegalStateException("Product did not initialize authentic GrantLedger");
+        return ledger;
     }
 
     private static GrantReceiptState completedReceipt(GrantLedger.Grant grant) {
@@ -158,7 +178,7 @@ public final class PaperSaveProbe extends JavaPlugin {
         Path file = dataFile();
         if (Files.exists(file))
             throw new IllegalStateException("Probe requires fresh UUID playerdata");
-        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger ledger = activeProductLedger();
         GrantLedger.Grant grant = ledger.reserve(ID, ISSUED_VALUE, "a02-ci");
         if (grant.sequence() != 1)
             throw new IllegalStateException("Expected first reserved grant");
@@ -247,7 +267,7 @@ public final class PaperSaveProbe extends JavaPlugin {
 
     private void reloadPhase(Player player) throws Exception {
         Path file = dataFile();
-        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger ledger = activeProductLedger();
         List<GrantLedger.Grant> pending = ledger.pending(ID);
         if (pending.size() != 1)
             throw new IllegalStateException("Expected one saved-but-unacknowledged grant");
@@ -397,7 +417,7 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
             throw new IllegalStateException("Real grant verification requires detached player");
 
-        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger ledger = activeProductLedger();
         var previous = ledger.historySnapshot();
         if (previous.size() != 1 || !previous.getFirst().delivered()
                 || !ledger.pending(ID).isEmpty())
