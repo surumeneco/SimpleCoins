@@ -66,10 +66,17 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43797990400 (official Paper real saved signs; CAT Work structure only) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Verified physical saved-source observations
+
+- [Official Paper 26.2 + BlockLocker v1.15 CI #43797990400](https://github.com/surumeneco/SimpleCoins/actions/runs/43797990400) ran on exact PR head `3fc9d7423913695a54f15320b803c0d46a9e3822` with hashed upstream BlockLocker JAR and separate default-deny admission guard. Existing loaded BlockLocker API proof (UUID owner, Everyone precedence, unknown owner fail-closed, cross-chunk 54-slot double chest, back-side Everyone) passed before clean Paper shutdown.
+- With Paper stopped, the standalone non-Bukkit Java process used production `AnvilRegionReader.scan` and `BlockLockerSavedSignCandidates.extractEvidence` on the **real** `region/r.0.0.mca`. All **five** persisted sign block entities were found once each at x=6,9,12,15 in Chunk (0,0) and x=21 in Chunk (1,0), y=65,z=5. Text contained the private header, two explicitly UUID-suffixed owner names, one front Everyone, one back More Users/Everyone, and one unresolved plain display name. Log: `PAPER_A04_FIVE_REAL_SAVED_BLOCKLOCKER_SIGNS_ACROSS_CHUNKS_PASSED`.
+- **Notable actual saved-format observation:** every one of these five sign candidates reported `pdcHintsPresent=false`. Thus the saved PDC hints parser by itself would find **zero** candidates for this legitimate BlockLocker v1.15 fixture. Raw saved modern front/back sign text is a necessary independent discovery stream; text without verified block topology and BlockLocker semantics is **not** an authoritative owner UUID.
+- Structural `cat_flow.py validate` reported `contract_valid:true`, `semantic_approval_verified:false`. This verifies standalone saved sign **source preservation**, not complete source-to-chest attachment, double-chest ownership or source generation, nor a CAT normative Gate.
 
 ## Bounded evidence acceptance
 
