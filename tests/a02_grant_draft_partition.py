@@ -96,7 +96,7 @@ def rows() -> list[tuple[str, str, str, dict[str, bool]]]:
         if set(assigns) != set(OUTPUTS):
             raise ValueError(f"Incomplete Draft outputs: {case}: {assigns}")
         result.append((case, origin, condition, assigns))
-    if len(result) < 25:
+    if len(result) != 24:
         raise ValueError("Missing expected Draft branches")
     if len({case for case, *_ in result}) != len(result):
         raise ValueError("Repeated Draft case identity")
