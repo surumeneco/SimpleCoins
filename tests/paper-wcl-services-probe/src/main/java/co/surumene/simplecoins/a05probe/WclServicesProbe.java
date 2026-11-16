@@ -3,6 +3,7 @@ package co.surumene.simplecoins.a05probe;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
@@ -579,23 +580,32 @@ public final class WclServicesProbe extends JavaPlugin {
         Path region = world.getWorldPath()
                 .resolve("entities/r.1.1.mca").toAbsolutePath().normalize();
 
-        // Verify the exact real saved Entity file through the production
-        // settlement traversal, including preflight physical source identity,
-        // duplicate Entity UUID rejection and post-traversal drift stamps.
-        // This one-file Manual Manifest has NO global source-set provenance.
-        WorldStorageDiscovery.Manifest boundedManifest = new WorldStorageDiscovery.Manifest(
-                List.of(new WorldStorageDiscovery.SourceFile(world.getName(),
-                        region, WorldStorageDiscovery.Kind.ENTITY)), Map.of());
+        // Obtain source closure from the real Paper World folder, not a
+        // hand-selected one-file Manifest. Both terrain and Entity Anvil,
+        // plus any world-independent playerdata, are mandatory observed input.
+        WorldStorageDiscovery.Manifest boundedManifest = WorldStorageDiscovery.discover(
+                Map.of(world.getName(), world.getWorldFolder().toPath()),
+                new WorldScope(true, Set.of(), Set.of()), 100000);
+        if (boundedManifest.origin() == null ||
+                boundedManifest.worldFiles().stream()
+                        .filter(input -> input.kind() == WorldStorageDiscovery.Kind.ENTITY
+                                && input.path().toAbsolutePath().normalize().equals(region))
+                        .count() != 1)
+            throw new IOException("Paper WorldFolder discovery omitted or duplicated the far Entity MCA");
         int[] traversed = {0, 0};
+        int[] visitedPlayers = {0};
+        int[] visitedChunks = {0};
         var verifiedTraversal = WorldSnapshotTraversal.traverseVerified(
                 boundedManifest, 2 * 1024 * 1024, 16 * 1024 * 1024,
                 new WorldSnapshotTraversal.Visitor() {
                     @Override public void chunk(WorldStorageDiscovery.SourceFile source,
                                                 AnvilRegionReader.Chunk saved) throws IOException {
-                        if (!source.path().toAbsolutePath().normalize().equals(region))
-                            throw new IOException("Traversal escaped the known saved Entity source");
+                        visitedChunks[0]++;
+                        // All discovered saved region/terrain sources are
+                        // visited and stamped, not only the chosen target.
+                        if (source.kind() != WorldStorageDiscovery.Kind.ENTITY) return;
                         if (!(saved.nbt().get("Entities") instanceof List<?> entities))
-                            throw new IOException("Traversed saved Chunk missing Entity list");
+                            throw new IOException("Traversed Entity Chunk missing saved Entities list");
                         for (Object raw : entities) {
                             if (!(raw instanceof Map<?, ?> entity)) continue;
                             if (!(entity.get("Tags") instanceof List<?> tags)) continue;
@@ -619,12 +629,17 @@ public final class WclServicesProbe extends JavaPlugin {
                     }
                     @Override public void player(UUID player, Map<String, Object> data)
                             throws IOException {
-                        throw new IOException("No playerdata authorized in this bounded Entity scan");
+                        if (player == null || data == null)
+                            throw new IOException("Incomplete discovered playerdata source");
+                        visitedPlayers[0]++;
                     }
                 }, null);
-        if (verifiedTraversal.report().regionFiles() != 1
+        if (verifiedTraversal.report().regionFiles() != boundedManifest.worldFiles().size()
+                || verifiedTraversal.report().chunks() != visitedChunks[0]
+                || verifiedTraversal.report().playerFiles() != visitedPlayers[0]
+                || visitedPlayers[0] != boundedManifest.playerDataFiles().size()
                 || traversed[0] != 1 || traversed[1] != 1)
-            throw new IOException("Saved Entity traversal did not locate both unique providers");
+            throw new IOException("Discovered Paper saved-source traversal was incomplete");
         if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
             throw new IOException("WorldSnapshotTraversal loaded the far world chunk");
         int[] recognized = {0, 0};
@@ -708,6 +723,13 @@ public final class WclServicesProbe extends JavaPlugin {
         // The *same* source stamp must survive the second, provider-owned
         // readStored pass: new bytes, ctime or physical identity are rejected.
         verifiedTraversal.witness().requireUnchanged();
+        boundedManifest.requireUnchangedDiscovery();
+        getLogger().info("PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED"
+                + " world=" + world.getName()
+                + " regionFiles=" + boundedManifest.worldFiles().size()
+                + " chunks=" + visitedChunks[0]
+                + " playerFiles=" + visitedPlayers[0]
+                + " provenance=true farChunkUnloaded=true");
         getLogger().info("PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED"
                 + " uniqueEntityIds=2 knownRegionFiles=1 chunkNeverLoaded=true");
         if (recognized[0] != 1 || recognized[1] != 1)
