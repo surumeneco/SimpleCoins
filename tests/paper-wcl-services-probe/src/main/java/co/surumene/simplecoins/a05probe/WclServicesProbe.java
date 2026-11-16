@@ -362,6 +362,13 @@ public final class WclServicesProbe extends JavaPlugin {
         chicken.addScoreboardTag(PERSISTENCE_TAG);
         byte[] shulker = createMoneyShulker();
         seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        // The fixture has no genome/phenotype payload. Unlike the detached
+        // Reader v3 checks, a real spawned Chicken is observed by WWC's
+        // lifecycle listener; v3 would falsely claim a complete genome.
+        // Use the reader-supported legacy v2 storage shape for this entity.
+        chicken.getPersistentDataContainer().set(
+                new NamespacedKey("whatawonderfulchicken", "data_version"),
+                PersistentDataType.INTEGER, 2);
         if (!chicken.isValid() || Bukkit.getEntity(chicken.getUniqueId()) == null)
             throw new IllegalStateException("Fixture was not registered with Paper Entity tracking");
         assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
@@ -532,6 +539,9 @@ public final class WclServicesProbe extends JavaPlugin {
         chicken.addScoreboardTag(FAR_WWC_TAG);
         byte[] shulker = createMoneyShulker();
         seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        chicken.getPersistentDataContainer().set(
+                new NamespacedKey("whatawonderfulchicken", "data_version"),
+                PersistentDataType.INTEGER, 2);
         assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
                 "WWC far loaded pre-save"), chicken.getUniqueId(), world.getUID(),
                 PERSISTENCE_FOLLOW, shulker, coins);
