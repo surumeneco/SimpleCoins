@@ -1,0 +1,118 @@
+name: CAT A02 grant Draft syntax and ACK-condition regression
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/drafts/a02-grant-delivery-process.md'
+      - 'docs/cat/drafts/a02-grant-delivery-pi.md'
+      - 'docs/cat/drafts/a02-grant-delivery-tce.md'
+      - 'Lifecycle/Works/simplecoins.a02.cat-partial-vs-complete-ack.md'
+      - '.github/workflows/cat-a02-grant-draft-lint.yml'
+
+jobs:
+  draft-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate actual pinned CAT issue Work and three Markdown Draft artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.cat-partial-vs-complete-ack.md
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py \
+            --files \
+              docs/cat/drafts/a02-grant-delivery-process.md \
+              docs/cat/drafts/a02-grant-delivery-pi.md \
+              docs/cat/drafts/a02-grant-delivery-tce.md
+      - name: Verify every partial/complete ACK distinction and disjointness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          import itertools
+          import re
+          from pathlib import Path
+
+          tce = Path("docs/cat/drafts/a02-grant-delivery-tce.md").read_text(encoding="utf-8")
+          pi = Path("docs/cat/drafts/a02-grant-delivery-pi.md").read_text(encoding="utf-8")
+          process = Path("docs/cat/drafts/a02-grant-delivery-process.md").read_text(encoding="utf-8")
+          assert "status: draft" in tce and "status: draft" in pi and "status: draft" in process
+          assert "| 入力.予約全額受領済 | 受信 | 真偽 | 必須 |" in pi
+          assert "| 観測.予約全額受領 |" in process
+
+          rows = {}
+          for line in tce.splitlines():
+              m = re.fullmatch(r"\| (v\w+|r\w+) \| ([^|]+) \| `([^`]+)` \| 1 \| `([^`]+)` \|", line)
+              if m:
+                  identifier, trigger, condition, effects = m.groups()
+                  assert identifier not in rows, identifier
+                  rows[identifier] = (trigger.strip(), condition, effects)
+          expected = {"v0", "v1", "v1p", "v2", "r0", "r1", "r1p", "r2"}
+          assert set(rows) == expected, rows.keys()
+
+          names = ["予約あり", "未ack", "保存済み現物受領対", "予約全額受領済",
+                   "保存世代証拠有効", "他収納保全", "矛盾あり"]
+          def condition_true(condition, state):
+              def atom(match):
+                  field, expected_truth = match.groups()
+                  if field not in state:
+                      raise AssertionError("Unknown TCE field: " + field)
+                  return str(state[field] == (expected_truth == "真"))
+              translated = re.sub(r"入力\.([\w]+)\s*==\s*(真|偽)", atom, condition)
+              translated = translated.replace("かつ", "and").replace("または", "or")
+              tree = ast.parse(translated, mode="eval")
+              def safe(node):
+                  if isinstance(node, ast.Expression):
+                      return safe(node.body)
+                  if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+                      values = [safe(v) for v in node.values]
+                      return all(values) if isinstance(node.op, ast.And) else any(values)
+                  if isinstance(node, ast.Constant) and type(node.value) is bool:
+                      return node.value
+                  raise AssertionError("Unexpected TCE condition syntax: " + translated)
+              return safe(tree)
+
+          base = dict(zip(names, [True, True, True, True, True, True, False]))
+          cases = [
+              ("complete", {}, "0", True),
+              ("partial", {"予約全額受領済": False}, "1p", False),
+              ("not-saved", {"予約全額受領済": False, "保存済み現物受領対": False}, "1", False),
+              ("bad-witness", {"保存世代証拠有効": False}, "2", False),
+              ("lost-storage", {"他収納保全": False}, "2", False),
+              ("contradiction", {"矛盾あり": True}, "2", False),
+          ]
+          for prefix in "vr":
+              for label, update, expected_id, expected_ack in cases:
+                  state = base | update
+                  hit = [identifier for identifier, (_, cond, _) in rows.items()
+                         if identifier.startswith(prefix) and condition_true(cond, state)]
+                  assert hit == [prefix + expected_id], (prefix, label, hit)
+                  effects = rows[hit[0]][2]
+                  actual_ack = bool(re.search(r"出力\.ack許可\s*=\s*真", effects))
+                  assert actual_ack == expected_ack, (prefix, label, effects)
+
+              # Brute-force all 128 combinations; no two TCE rows may overlap,
+              # and ACK may not occur for an incomplete/unsafe receipt.
+              for bits in itertools.product((False, True), repeat=len(names)):
+                  state = dict(zip(names, bits))
+                  hits = [identifier for identifier, (_, cond, _) in rows.items()
+                          if identifier.startswith(prefix) and condition_true(cond, state)]
+                  assert len(hits) <= 1, (prefix, state, hits)
+                  for identifier in hits:
+                      effects = rows[identifier][2]
+                      if re.search(r"出力\.ack許可\s*=\s*真", effects):
+                          assert (state["予約あり"] and state["未ack"]
+                                  and state["保存済み現物受領対"] and state["予約全額受領済"]
+                                  and state["保存世代証拠有効"] and state["他収納保全"]
+                                  and not state["矛盾あり"]), (prefix, state)
+          print("CAT_A02_DRAFT_PARTIAL_VS_COMPLETE_ACK_CASES_PASSED")
+          PY
