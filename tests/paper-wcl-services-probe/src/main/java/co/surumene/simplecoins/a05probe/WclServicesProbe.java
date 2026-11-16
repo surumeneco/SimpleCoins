@@ -688,7 +688,7 @@ public final class WclServicesProbe extends JavaPlugin {
                             || !"wonderful_chicken".equals(
                                     stored.get("whatawonderfulchicken:type"))
                             || !(stored.get("whatawonderfulchicken:data_version")
-                                    instanceof Integer version) || version != 3
+                                    instanceof Integer version) || version != 2
                             || !PERSISTENCE_FOLLOW.toString().equals(
                                     stored.get("whatawonderfulchicken:follow_target"))
                             || !(stored.get("whatawonderfulchicken:equipment_shulker_box")
@@ -698,7 +698,7 @@ public final class WclServicesProbe extends JavaPlugin {
                     detached.set(new NamespacedKey("whatawonderfulchicken", "type"),
                             PersistentDataType.STRING, "wonderful_chicken");
                     detached.set(new NamespacedKey("whatawonderfulchicken", "data_version"),
-                            PersistentDataType.INTEGER, 3);
+                            PersistentDataType.INTEGER, 2);
                     detached.set(new NamespacedKey("whatawonderfulchicken", "follow_target"),
                             PersistentDataType.STRING, PERSISTENCE_FOLLOW.toString());
                     detached.set(new NamespacedKey("whatawonderfulchicken", "equipment_shulker_box"),
