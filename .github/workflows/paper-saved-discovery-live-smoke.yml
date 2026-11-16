@@ -10,6 +10,7 @@ on:
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'src/main/resources/plugin.yml'
       - '.github/workflows/paper-saved-discovery-live-smoke.yml'
+      - 'Lifecycle/Works/simplecoins.a01.paper26-shared-playerdata-discovery.md'
 
 jobs:
   bounded-saved-source-walk:
@@ -24,6 +25,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate bounded A01 CAT Work structure (not a normative Gate)
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.paper26-shared-playerdata-discovery.md
       - name: Build and verify both plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
