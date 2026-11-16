@@ -10,12 +10,13 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-before-save-sigkill-recovery.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md'
 
 jobs:
   real-paper-playerdata:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 28
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -41,6 +42,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-before-save-sigkill-recovery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md
       - name: Build production guard and isolated probe
@@ -368,6 +371,101 @@ jobs:
           grep -F 'PAPER_A02_FINAL_SAVED_PRE_ACK_SIGKILL_SEVENTH_BOOT_ACK_ONLY_PASSED durableGrants=3 pending=0 originalMoneyPreserved=true' paper-a02-final-ack-recovery.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-final-ack-recovery.log; then exit 1; fi
           echo 'PAPER_A02_FINAL_RECEIPT_PRE_ACK_SIGKILL_ACK_ONLY_RECOVERY_PASSED'
+      - name: Eighth Paper JVM materializes unsaved grant then SIGKILLs before any player save
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          java -Da02.probe.phase=before-save-crash -Da02.probe.awaitSigkill=true \
+            -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-a02-before-save-crash.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -KILL "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-before-save-crash.log; then
+              tail -180 paper-a02-before-save-crash.log
+              exit 1
+            fi
+            if grep -Fq 'PAPER_A02_PRE_SAVE_SIGKILL_POINT_READY' paper-a02-before-save-crash.log; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Eighth Paper exited before pre-save SIGKILL' >&2
+              tail -180 paper-a02-before-save-crash.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo 'Missing genuine pre-save SIGKILL injection point' >&2
+            tail -180 paper-a02-before-save-crash.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-before-save-crash.log
+          grep -F 'PAPER_A02_PRE_SAVE_ABORT_UNPERSISTED_COIN_RECEIPT_PASSED pending=1 savedReceipt=3 stagedReceipt=4' paper-a02-before-save-crash.log
+          if grep -Fq 'Saving worlds' paper-a02-before-save-crash.log; then
+            echo 'Paper started normal shutdown before eighth SIGKILL' >&2
+            exit 1
+          fi
+          test -f world/players/data/00000000-0000-0000-0000-00000000a002.dat
+          kill -KILL "$server_pid"
+          set +e
+          wait "$server_pid"
+          status=$?
+          set -e
+          trap - EXIT
+          if [ "$status" -ne 137 ]; then
+            echo "Expected pre-save SIGKILL status 137, got $status" >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_PRE_SAVE_BEFORE_ACK_SIGKILL_INJECTED'
+      - name: Ninth independent Paper JVM refuses phantom money and persists exactly one resumed grant
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=recover-unsaved -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-recover-unsaved.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Ninth Paper pre-save recovery failed (exit=$status)" >&2
+            tail -180 paper-a02-recover-unsaved.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-recover-unsaved.log
+          grep -F 'PAPER_A02_PRESAVE_CRASH_NO_PHANTOM_MONEY_PASSED oldValue=660000 savedReceipt=3 pending=1' paper-a02-recover-unsaved.log
+          grep -F 'PAPER_A02_PRESAVE_RECOVERY_SAVED_PROOF_ACK_PASSED total=665000 pending=0' paper-a02-recover-unsaved.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-recover-unsaved.log; then exit 1; fi
+          echo 'PAPER_A02_PRE_SAVE_SIGKILL_SINGLE_RESUME_PASSED'
+      - name: Tenth Paper JVM ensures saved grant survives without duplicate reissue
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=unsaved-acked-reload -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-unsaved-acked-reload.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Tenth Paper post-recovery audit failed (exit=$status)" >&2
+            tail -180 paper-a02-unsaved-acked-reload.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-unsaved-acked-reload.log
+          grep -F 'PAPER_A02_PRESAVE_TENTH_BOOT_ACK_IDEMPOTENT_PASSED total=665000 durableGrants=4 pending=0' paper-a02-unsaved-acked-reload.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-unsaved-acked-reload.log; then exit 1; fi
+          echo 'PAPER_A02_PRESAVE_TENTH_JVM_NO_REISSUE_PASSED'
       - name: Upload scoped diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
