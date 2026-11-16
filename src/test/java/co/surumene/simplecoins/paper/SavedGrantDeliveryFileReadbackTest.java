@@ -135,6 +135,83 @@ class SavedGrantDeliveryFileReadbackTest {
                 () -> write(player, GrantReceiptState.empty(), false, "minecraft:stone")));
     }
 
+    /**
+     * A NEGATIVE fixture: the current low-level ledger API can ACK a receipt
+     * after an uncoordinated writer removes the coin *after* the file proof.
+     * The startup receipt audit checks the sequence but not a previously
+     * issued coin's original physical position; legitimate coins can move
+     * after delivery, so simply scanning that slot on reboot is not a fix.
+     *
+     * This deliberately records an existing unsafe interleaving; a Green
+     * regression run does NOT certify that production grant delivery is safe.
+     */
+    @Test void verifiedGrantCanBeAcknowledgedAgainstStaleReceiptWhenWriterRemovesSavedCoin()
+            throws Exception {
+        UUID player = UUID.randomUUID();
+        Path journal = temp.resolve("ledger-writer-gap");
+        GrantLedger ledger = new GrantLedger(journal);
+        GrantLedger.Grant grant = ledger.reserve(player, 5000, "console");
+        var staged = plan(ledger, player, grant);
+
+        Path file = write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+        Map<String, Object> before = PlayerDataReader.read(file, 65536, 65536);
+        write(player, staged.nextReceipt(), true, "minecraft:stone");
+        var proof = SavedGrantDeliveryFileReadback.verify(
+                discovery(), ledger, player, staged, before, 65536, 65536);
+        assertEquals(5000, proof.matchedMonetaryValue().longValueExact());
+        assertEquals(staged.nextReceipt(), proof.receipt());
+
+        // A separate filesystem writer runs after the witness and preserves
+        // the completed PDC receipt while dropping the actual monetary item.
+        // This is not an authorized Bukkit/Paper item transfer.
+        write(player, staged.nextReceipt(), false, "minecraft:stone");
+        Map<String, Object> overwritten = PlayerDataReader.read(file, 65536, 65536);
+        assertTrue(co.surumene.simplecoins.domain.SavedPlayerAssets
+                .extract(overwritten).isEmpty(), "The real saved coin is gone");
+        assertThrows(IOException.class, () -> SavedGrantDeliveryFileReadback.verify(
+                discovery(), ledger, player, staged, before, 65536, 65536));
+
+        // The old positive proof has no lifetime/lease: a raw ACK only
+        // validates the reservation handle and caller-supplied sequence.
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        GrantLedger recovered = new GrantLedger(journal);
+        assertTrue(recovered.pending(player).isEmpty());
+        assertTrue(recovered.historySnapshot().getFirst().delivered());
+
+        // A receipt-only audit cannot distinguish an omitted pre-ACK coin
+        // from a valid post-ACK coin move; it currently passes this fixture.
+        var audit = SavedGrantReceiptUniverseAudit.scan(
+                discovery(), recovered, 65536, 65536);
+        assertEquals(1, audit.playersRead());
+        assertEquals(1, audit.acknowledgedGrants());
+        assertEquals(0, audit.pendingGrants());
+        assertTrue(co.surumene.simplecoins.domain.SavedPlayerAssets
+                .extract(PlayerDataReader.read(file, 65536, 65536)).isEmpty());
+    }
+
+    /** Contrast: a rolled-back receipt is still rejected at startup. */
+    @Test void rollbackAfterProofStillFailsStartupAudit() throws Exception {
+        UUID player = UUID.randomUUID();
+        Path journal = temp.resolve("ledger-receipt-rollback");
+        GrantLedger ledger = new GrantLedger(journal);
+        GrantLedger.Grant grant = ledger.reserve(player, 5000, "console");
+        var staged = plan(ledger, player, grant);
+
+        Path file = write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+        Map<String, Object> before = PlayerDataReader.read(file, 65536, 65536);
+        write(player, staged.nextReceipt(), true, "minecraft:stone");
+        var proof = SavedGrantDeliveryFileReadback.verify(
+                discovery(), ledger, player, staged, before, 65536, 65536);
+
+        // Revert both inventory AND receipt before the low-level ACK.
+        write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        GrantLedger recovered = new GrantLedger(journal);
+        assertTrue(recovered.historySnapshot().getFirst().delivered());
+        assertThrows(IOException.class, () -> SavedGrantReceiptUniverseAudit.scan(
+                discovery(), recovered, 65536, 65536));
+    }
+
     @Test void forgedManifestAndUnknownPlayerAreNeverTrusted() throws Exception {
         UUID player = UUID.randomUUID();
         var ledger = new GrantLedger(temp.resolve("ledger5"));
