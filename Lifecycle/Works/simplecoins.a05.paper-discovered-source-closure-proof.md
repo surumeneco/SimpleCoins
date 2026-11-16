@@ -64,10 +64,18 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43823225949 (real Paper source-set closure, CAT normative Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Observed official Paper 26.2 source closure
+
+- Tested branch source HEAD `d383872514126a4856a0c3f294b679f21a2482fa` on isolated official Paper build 134, with all pinned distributed WGL/WCL/WWC/WWW and default-deny admission. Exact-head [real Paper CI #43823225949](https://github.com/surumeneco/SimpleCoins/actions/runs/43823225949), Domain foundation #43823225953 and Phase6 static #43823225923 all succeeded. Work contract structure was valid; `semantic_approval_verified:false` and formal CAT Gates not-run.
+- The **real Paper `world.getWorldFolder()`** rooted the existing `WorldStorageDiscovery.discover` with a true `DiscoveryOrigin`, actual region/entity files and an explicit WorldScope. The second JVM discovered **9** genuine saved `.mca` source files and visited **1,601** chunks through `WorldSnapshotTraversal.traverseVerified`. It visited **0** saved playerdata files in this specific empty-player isolation. Unlike the former one-file Manifest, real bounded source-set re-enumeration and source identity stamps were exercised.
+- Both expected WWC Chicken and WWW Wolf were present exactly once in far Chunk(40,40); file-scoped Entity global UUID duplicate screening and content stamps were exercised. The registered pinned `WonderfulStorageReader.readStored` APIs still decoded authentic WWC nested 5000×2, WWW 10000 weapon+1000×5 cargo and owner/commander. Both `ContentWitness.requireUnchanged()` and `Manifest.requireUnchangedDiscovery()` succeeded after readback. No far Chunk load occurred.
+- Exact log `PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED world=world regionFiles=9 chunks=1601 playerFiles=0 provenance=true farChunkUnloaded=true`. Previous total 25000 and unique Entity identities also passed.
+- **Boundaries:** This real discovered manifest includes one test world and no playerdata. It is *not* proof of shared Paper `players/data` discovery with existing user data (#429 remains Draft/unmerged), all Multiverse worlds, global LIVE/saved coherence, provider-managed genome lifecycle, user wallet global deduplication or release readiness.
 
 ## Bounded actual-Paper verification
 
