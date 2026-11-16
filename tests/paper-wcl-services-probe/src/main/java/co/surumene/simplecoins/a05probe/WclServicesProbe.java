@@ -105,7 +105,35 @@ public final class WclServicesProbe extends JavaPlugin {
                 String phase = System.getProperty("a05.probe.phase", "baseline");
                 switch (phase) {
                     case "baseline" -> { }
-                    case "persist" -> persistChickenEntity(world, selected);
+                    case "persist" -> {
+                        // Generating far terrain plus multiple plugin-backed
+                        // entities and saving all worlds in ONE server tick
+                        // tripped Paper's watchdog on the constrained CI host.
+                        // Pre-generate the disposable far chunk asynchronously,
+                        // then persist on a later main-thread callback. Do not
+                        // relax watchdog limits or mutate any production world.
+                        world.getChunkAtAsync(FAR_CHUNK, FAR_CHUNK, true)
+                                .whenComplete((preparedChunk, asyncFailure) ->
+                                        Bukkit.getScheduler().runTask(this, () -> {
+                                            try {
+                                                if (asyncFailure != null) {
+                                                    throw new IllegalStateException(
+                                                            "Async far fixture chunk generation failed",
+                                                            asyncFailure);
+                                                }
+                                                if (preparedChunk == null || !preparedChunk.isLoaded())
+                                                    throw new IllegalStateException(
+                                                            "Async far fixture chunk not ready");
+                                                persistChickenEntity(world, selected);
+                                            } catch (Throwable failure) {
+                                                getLogger().log(Level.SEVERE,
+                                                        "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                                            } finally {
+                                                Bukkit.shutdown();
+                                            }
+                                        }));
+                        return;
+                    }
                     case "reload" -> {
                         verifyFarUnloadedStoredItems(world, selected);
                         reloadChickenEntity(world, selected);
@@ -362,6 +390,13 @@ public final class WclServicesProbe extends JavaPlugin {
         chicken.addScoreboardTag(PERSISTENCE_TAG);
         byte[] shulker = createMoneyShulker();
         seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        // The fixture has no genome/phenotype payload. Unlike the detached
+        // Reader v3 checks, a real spawned Chicken is observed by WWC's
+        // lifecycle listener; v3 would falsely claim a complete genome.
+        // Use the reader-supported legacy v2 storage shape for this entity.
+        chicken.getPersistentDataContainer().set(
+                new NamespacedKey("whatawonderfulchicken", "data_version"),
+                PersistentDataType.INTEGER, 2);
         if (!chicken.isValid() || Bukkit.getEntity(chicken.getUniqueId()) == null)
             throw new IllegalStateException("Fixture was not registered with Paper Entity tracking");
         assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
@@ -532,6 +567,9 @@ public final class WclServicesProbe extends JavaPlugin {
         chicken.addScoreboardTag(FAR_WWC_TAG);
         byte[] shulker = createMoneyShulker();
         seedChickenStorage(chicken.getPersistentDataContainer(), PERSISTENCE_FOLLOW, shulker);
+        chicken.getPersistentDataContainer().set(
+                new NamespacedKey("whatawonderfulchicken", "data_version"),
+                PersistentDataType.INTEGER, 2);
         assertChickenStorage(success(providers.get("wwc").readLoaded(chicken.getUniqueId()),
                 "WWC far loaded pre-save"), chicken.getUniqueId(), world.getUID(),
                 PERSISTENCE_FOLLOW, shulker, coins);
@@ -678,7 +716,7 @@ public final class WclServicesProbe extends JavaPlugin {
                             || !"wonderful_chicken".equals(
                                     stored.get("whatawonderfulchicken:type"))
                             || !(stored.get("whatawonderfulchicken:data_version")
-                                    instanceof Integer version) || version != 3
+                                    instanceof Integer version) || version != 2
                             || !PERSISTENCE_FOLLOW.toString().equals(
                                     stored.get("whatawonderfulchicken:follow_target"))
                             || !(stored.get("whatawonderfulchicken:equipment_shulker_box")
@@ -688,7 +726,7 @@ public final class WclServicesProbe extends JavaPlugin {
                     detached.set(new NamespacedKey("whatawonderfulchicken", "type"),
                             PersistentDataType.STRING, "wonderful_chicken");
                     detached.set(new NamespacedKey("whatawonderfulchicken", "data_version"),
-                            PersistentDataType.INTEGER, 3);
+                            PersistentDataType.INTEGER, 2);
                     detached.set(new NamespacedKey("whatawonderfulchicken", "follow_target"),
                             PersistentDataType.STRING, PERSISTENCE_FOLLOW.toString());
                     detached.set(new NamespacedKey("whatawonderfulchicken", "equipment_shulker_box"),
