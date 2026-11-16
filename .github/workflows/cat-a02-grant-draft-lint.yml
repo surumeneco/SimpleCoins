@@ -7,6 +7,8 @@ on:
       - 'docs/cat/drafts/a02-grant-delivery-pi.md'
       - 'docs/cat/drafts/a02-grant-delivery-tce.md'
       - 'Lifecycle/Works/simplecoins.a02.cat-partial-vs-complete-ack.md'
+      - 'Lifecycle/Works/simplecoins.a02.grant-save-commit-cat-draft.md'
+      - 'tests/a02_grant_draft_partition.py'
       - '.github/workflows/cat-a02-grant-draft-lint.yml'
 
 jobs:
@@ -57,7 +59,9 @@ jobs:
                   assert identifier not in rows, identifier
                   rows[identifier] = (trigger.strip(), condition, effects)
           expected = {"v0", "v1", "v1p", "v2", "r0", "r1", "r1p", "r2"}
-          assert set(rows) == expected, rows.keys()
+          # The original eight partial/full-ACK proof branches remain mandatory.
+          # Additional fail-closed replay/orphan cases must not invalidate them.
+          assert expected.issubset(rows.keys()), rows.keys()
 
           names = ["予約あり", "未ack", "保存済み現物受領対", "予約全額受領済",
                    "保存世代証拠有効", "他収納保全", "矛盾あり"]
