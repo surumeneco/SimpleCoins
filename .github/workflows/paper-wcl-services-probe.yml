@@ -6,6 +6,11 @@ on:
       - 'tests/paper-wcl-services-probe/**'
       - '.github/workflows/paper-wcl-services-probe.yml'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
+      - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
+      - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
+      - 'Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md'
+      - 'Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md'
+      - 'Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md'
 permissions:
   contents: read
 
@@ -32,6 +37,16 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -111,8 +126,74 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_SERVICES_REGISTERED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
+      - name: Verify world saved real WWC entity persists across a second Paper process
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          for phase in persist reload; do
+            set +e
+            timeout --signal=TERM --kill-after=5s 180s \
+              java -Da05.probe.phase="$phase" -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > "paper-a05-$phase.log" 2>&1
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "Paper A05 persisted entity phase=$phase exit=$status" >&2
+              tail -180 "paper-a05-$phase.log"
+              exit 1
+            fi
+            grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
+            if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a05-$phase.log"; then
+              tail -180 "paper-a05-$phase.log"
+              exit 1
+            fi
+            case "$phase" in
+              persist)
+                grep -F 'PAPER_A05_WWC_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_FAR_TWO_STORED_PROVIDER_FIXTURES_SAVED_PASSED' "paper-a05-$phase.log"
+                if ! find world -type f -path '*/entities/r.0.0.mca' -size +0c | grep -q .; then
+                  echo 'Actual Paper Entity Anvil region file was not created' >&2
+                  find world -name '*.mca' -print
+                  exit 1
+                fi
+                if ! find world -type f -path '*/entities/r.1.1.mca' -size +0c | grep -q .; then
+                  echo 'Far unloaded saved Entity Anvil source missing' >&2
+                  find world -name '*.mca' -print
+                  exit 1
+                fi
+                # The first Paper JVM is fully stopped. Inspect its actual
+                # Entity Anvil file with our EXISTING production read-only
+                # Anvil parser in a standalone non-Bukkit Java process.
+                # This must not load chunks or reconstruct an Entity via Paper.
+                java -cp "../tests/paper-wcl-services-probe/build/libs/SimpleCoinsWclServicesProbe.jar:../build/libs/SimpleCoins-1.0.0.jar" \
+                  co.surumene.simplecoins.a05probe.OfflineEntityRegionProbe \
+                  "world/dimensions/minecraft/overworld/entities/r.0.0.mca" \
+                  "plugins/SimpleCoinsWclServicesProbe/wwc-physical-entity-uuid.txt" \
+                  "plugins/SimpleCoinsWclServicesProbe/wwc-shulker-coins.b64" \
+                  "plugins/SimpleCoinsWclServicesProbe/www-physical-entity-uuid.txt" \
+                  "plugins/SimpleCoinsWclServicesProbe/www-runtime-state.b64" \
+                  | tee paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_WWC_MONEY_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_WWW_MONEY_OWNER_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_TWO_PROVIDERS_DISTINCT_SOURCES_PASSED' paper-a05-offline-mca.log
+                grep -F 'PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED' paper-a05-offline-mca.log ;;
+              reload)
+                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log" ;;
+            esac
+          done
+          echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
