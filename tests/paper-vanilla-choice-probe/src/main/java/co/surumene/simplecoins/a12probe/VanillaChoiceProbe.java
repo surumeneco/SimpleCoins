@@ -4,7 +4,10 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.CoinExchangeFormula;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
@@ -18,6 +21,10 @@ import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.event.block.CrafterCraftEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.RecipeChoice;
@@ -92,7 +99,7 @@ public final class VanillaChoiceProbe extends JavaPlugin {
      * CraftItemEvent listener. No product recipe or wallet changes survive
      * this bounded disposable server test.
      */
-    private void verifyRecipeIdentityBoundary() {
+    private void verifyRecipeIdentityBoundary() throws Exception {
         Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
         if (product == null || !product.isEnabled())
             throw new IllegalStateException("Product plugin not active in Paper registry");
@@ -168,6 +175,7 @@ public final class VanillaChoiceProbe extends JavaPlugin {
             } else {
                 getLogger().info("PAPER_A12_SUBSTITUTED_OUTPUT_REJECTED_BY_GUARD");
             }
+            verifyPaperPrepareEvent(replaceKey, adversarialMatrix);
         } finally {
             Bukkit.removeRecipe(replaceKey);
             if (!Bukkit.addRecipe(replaceTarget))
@@ -180,6 +188,80 @@ public final class VanillaChoiceProbe extends JavaPlugin {
             getLogger().info("PAPER_A12_DISPOSABLE_RECIPE_RESTORED_PASSED");
         }
         getLogger().info("PAPER_A12_RECIPE_REGISTRY_OUTPUT_INTEGRITY_OBSERVED");
+    }
+
+
+    /**
+     * Exercises the actual Paper Bukkit craftItemResult path. It creates a
+     * DETACHED, non-network NMS player solely because Paper requires a Player
+     * witness for PrepareItemCraftEvent. It does not install a crafted output
+     * in any inventory or cause a client/transaction to happen.
+     */
+    private void verifyPaperPrepareEvent(NamespacedKey substituted,
+                                         ItemStack[] originalMoney) throws Exception {
+        AtomicInteger prepareCount = new AtomicInteger();
+        ItemStack[] resultObservedAtMonitor = {null};
+        Listener monitor = new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observePrepare(PrepareItemCraftEvent event) {
+                if (event.getRecipe() instanceof Keyed keyed
+                        && substituted.equals(keyed.getKey())) {
+                    prepareCount.incrementAndGet();
+                    ItemStack item = event.getInventory().getResult();
+                    resultObservedAtMonitor[0] = item == null ? null : item.clone();
+                }
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(monitor, this);
+        try {
+            Player synthetic = detachedPlayer();
+            if (synthetic.isOnline())
+                throw new IllegalStateException("Synthetic crafting witness became online");
+            var produced = Bukkit.craftItemResult(
+                    originalMoney.clone(), Bukkit.getWorlds().getFirst(), synthetic);
+            if (prepareCount.get() < 1)
+                throw new IllegalStateException(
+                        "Paper craftItemResult did not dispatch our targeted Prepare event");
+            ItemStack finalOutput = produced.getResult();
+            Material actual = finalOutput == null ? Material.AIR : finalOutput.getType();
+            Material observed = resultObservedAtMonitor[0] == null
+                    ? Material.AIR : resultObservedAtMonitor[0].getType();
+            if (observed == Material.STONE && actual == Material.STONE) {
+                getLogger().warning("PAPER_A12_REAL_PREPARE_EVENT_STONE_RESULT_NOT_BLOCKED"
+                        + " recipe=" + substituted + " prepareEvents=" + prepareCount.get());
+            } else {
+                getLogger().info("PAPER_A12_REAL_PREPARE_EVENT_ALTERED_OR_REJECTED"
+                        + " recipe=" + substituted + " observed=" + observed + " returned=" + actual);
+            }
+            getLogger().info("PAPER_A12_ACTUAL_PREPARE_RESULT_OBSERVED"
+                    + " prepareEventCount=" + prepareCount.get()
+                    + " postMonitor=" + observed + " result=" + actual
+                    + " disconnectedSyntheticPlayer=true");
+        } finally {
+            HandlerList.unregisterAll(monitor);
+        }
+    }
+
+    private Player detachedPlayer() throws ReflectiveOperationException {
+        Object craftServer = Bukkit.getServer();
+        Object minecraft = craftServer.getClass().getMethod("getServer").invoke(craftServer);
+        Class<?> mcType = Class.forName("net.minecraft.server.MinecraftServer");
+        Object world = mcType.getMethod("overworld").invoke(minecraft);
+        Class<?> levelType = Class.forName("net.minecraft.server.level.ServerLevel");
+        Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
+        Object profile = profileType.getConstructor(UUID.class, String.class)
+                .newInstance(UUID.fromString("00000000-0000-0000-0000-00000000a012"),
+                        "ProbeCrafting");
+        Class<?> infoType = Class.forName("net.minecraft.server.level.ClientInformation");
+        Object info = infoType.getMethod("createDefault").invoke(null);
+        Class<?> playerType = Class.forName("net.minecraft.server.level.ServerPlayer");
+        Constructor<?> ctor = playerType.getConstructor(
+                mcType, levelType, profileType, infoType);
+        Object serverPlayer = ctor.newInstance(minecraft, world, profile, info);
+        Object bukkitPlayer = playerType.getMethod("getBukkitEntity").invoke(serverPlayer);
+        if (!(bukkitPlayer instanceof Player paper))
+            throw new IllegalStateException("Detached synthetic player unavailable");
+        return paper;
     }
 
     private static void requireListener(String name, HandlerList list) {
