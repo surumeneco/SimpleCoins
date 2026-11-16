@@ -53,7 +53,7 @@ spec_status: unknown
 ## Checks
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | 
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 
 ## Gates
 
