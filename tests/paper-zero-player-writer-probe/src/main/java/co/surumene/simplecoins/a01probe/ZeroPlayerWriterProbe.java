@@ -5,6 +5,11 @@ import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperCapturedHybridSettlement;
 import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
+import co.surumene.simplecoins.domain.SettlementAccumulator;
+import co.surumene.simplecoins.domain.WorldScope;
+import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import java.util.Map;
+import java.util.Set;
 import java.math.BigInteger;
 import java.util.List;
 import java.nio.file.Files;
@@ -126,6 +131,48 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                     if (!Arrays.equals(priorSha, afterSha) || !priorMtime.equals(afterMtime))
                         throw new IllegalStateException("Disk witness changed in same tick; "
                                 + "cannot isolate an unchanged-saved versus LIVE currency state");
+
+                    // Exercise real product hybrid staging, NOT a manually
+                    // constructed empty manifest. The old 10000 LIVE capture
+                    // is now stale (real Chest = 15000) but both Paper saved
+                    // MCA content and the discovered source set are unchanged.
+                    Path dimension = world.getWorldPath().toAbsolutePath().normalize();
+                    Path levelRoot = dimension.getParent().getParent().getParent();
+                    var scope = new WorldScope(true, Set.of(), Set.of());
+                    var realManifest = WorldStorageDiscovery.discover(
+                            Map.of(world.getName(), dimension), scope, 100000,
+                            Set.of(levelRoot));
+                    if (realManifest.worldFiles().isEmpty())
+                        throw new IllegalStateException("Hybrid test lacked a real Paper region");
+                    var staged = beforeCapture.stageCandidate(
+                            realManifest, scope, Set.of(),
+                            (worldId, position) -> null,
+                            (worldId, chunk) -> Map.of(),
+                            16 * 1024 * 1024, 64 * 1024 * 1024,
+                            (source, value) -> new SettlementAccumulator.Asset(
+                                    source.id(), value.physicalKey(), value.world(),
+                                    null, false, false, false, value.amount(),
+                                    "isolated-chest/" + value.physicalKey()));
+                    // Commit only the disposable memory-only test accumulator;
+                    // the plugin's publication/admission caches are untouched.
+                    var candidate = staged.pending().commit();
+                    if (!BigInteger.valueOf(10_000).equals(candidate.statistics().worldTotal())
+                            || !BigInteger.valueOf(15_000).equals(
+                                    afterCapture.observed().report().total()))
+                        throw new IllegalStateException(
+                                "Actual hybrid candidate did not retain obsolete LIVE value");
+                    if (staged.savedContentWitness() == null)
+                        throw new IllegalStateException("Real saved file witness missing");
+                    staged.savedContentWitness().requireUnchanged();
+                    if (!Arrays.equals(priorSha, MessageDigest.getInstance("SHA-256")
+                            .digest(Files.readAllBytes(saved)))
+                            || !priorMtime.equals(Files.getLastModifiedTime(saved)))
+                        throw new IllegalStateException("Saved file changed during hybrid stage");
+                    getLogger().info("PAPER_A01_REAL_HYBRID_STALE_LIVE_CANDIDATE_OBSERVED"
+                            + " candidate=10000 actualLive=15000"
+                            + " realSavedManifest=true savedWitnessUnchanged=true"
+                            + " admissionBlocked=true");
+
                     getLogger().info("PAPER_A01_PRODUCT_LIVE_CAPTURE_VALUE_DRIFT_OBSERVED"
                             + " originalCapture=10000 freshCapture=15000"
                             + " immutableSourceKey=true diskShaUnchanged=true"
