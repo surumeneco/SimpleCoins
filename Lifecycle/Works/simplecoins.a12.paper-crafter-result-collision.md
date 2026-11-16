@@ -65,10 +65,18 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43821667989 (actual Bukkit Crafter event dispatch, not CAT formal Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Observed official Paper 26.2 result
+
+- At exact source HEAD `b0365f0c5a9a570fe67b8fed5487e00b587e02b0`, [real Paper CI #43821667989](https://github.com/surumeneco/SimpleCoins/actions/runs/43821667989), Domain foundation and Phase6 static checks all passed, while new Work CAT structural result was `contract_valid:true`, `semantic_approval_verified:false`.
+- With real `Material.CRAFTER` block and a true SimpleCoins marked coin in its physical Crafter inventory, temporary `ShapelessRecipe` under the legitimate exchange key returned STONE instead of the authorized denomination. `PluginManager.callEvent(new CrafterCraftEvent(...))` dispatched through Paper's event registry and actual `CoinExchangeRecipes.onCrafter` at HIGHEST. The independent MONITOR listener saw exactly one matching event.
+- Exact Paper log: `PAPER_A12_ACTUAL_CRAFTER_EVENT_RESULT_OBSERVED count=1 result=STONE cancelled=false redstoneFired=false`. The guard **did not cancel** the event with a nonmonetary result. The separate Prepare observation still passed: `postMonitor=STONE result=STONE`.
+- The test restored the original recipe and disposed the Crafter block. No redstone power was applied and no actual item output/consumption or network player interaction occurred. This is a bounded **event permission failure** consistent with the already established key-only input validation defect, not an economic transaction.
+- A12 output/consumption safety remains a release blocker. The actual registered result must be validated against approved exchange formula and physically returned item, with separate checks for late event mutation and Shift/multi-craft. CAT Process/PI/TCE Drafts remain unapproved and formal Gates not-run.
 
 ## Bounded test contract
 
