@@ -731,7 +731,8 @@ public final class WclServicesProbe extends JavaPlugin {
                 + " playerFiles=" + visitedPlayers[0]
                 + " provenance=true farChunkUnloaded=true");
         getLogger().info("PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED"
-                + " uniqueEntityIds=2 knownRegionFiles=1 chunkNeverLoaded=true");
+                + " uniqueEntityIds=2 discoveredRegionFiles="
+                + boundedManifest.worldFiles().size() + " chunkNeverLoaded=true");
         if (recognized[0] != 1 || recognized[1] != 1)
             throw new IOException("Unloaded WWC/WWW saved source count incomplete WWC="
                     + recognized[0] + " WWW=" + recognized[1]);
