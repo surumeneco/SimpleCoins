@@ -327,6 +327,27 @@ public final class PaperSaveProbe extends JavaPlugin {
         else
             getLogger().info("PAPER_A01_SHARED_PLAYERDATA_INCLUDED_IN_MANIFEST");
 
+        // Actual Paper 26.2 physical playerdata lives above the dimension
+        // folder. Feed that observed root independently from WorldScope and
+        // prove the new manifest uses the *real* already-persisted UUID.dat.
+        Path sharedLevelRoot = realPlayerData.getParent().getParent().getParent();
+        if (!paperDimension.startsWith(sharedLevelRoot)
+                || !Files.isRegularFile(realPlayerData))
+            throw new IllegalStateException("Invalid real Paper shared-playerdata witness");
+        var sharedManifest = WorldStorageDiscovery.discover(
+                Map.of(paperWorld.getName(), paperDimension),
+                new WorldScope(true, Set.of(), Set.of(paperWorld.getName())),
+                100000, Set.of(sharedLevelRoot));
+        if (!realPlayerData.equals(sharedManifest.playerDataFiles().get(ID))
+                || sharedManifest.playerDataFiles().size() != 1
+                || !sharedManifest.worldFiles().isEmpty())
+            throw new IllegalStateException("Shared playerdata was not independently "
+                    + "included by real-root source discovery under excluded WorldScope");
+        sharedManifest.requireUnchangedDiscovery();
+        getLogger().info("PAPER_A01_REAL_SHARED_PLAYERDATA_INCLUDED_IN_MANIFEST"
+                + " actualSavedCurrency=5000 playerIndexed=true"
+                + " scopedWorldExcluded=true playerSources=1");
+
         player.loadData();
         ItemStack coin = player.getInventory().getItem(0);
         if (coin == null || coin.getType() != Material.PAPER || coin.getAmount() != PAPER_COUNT

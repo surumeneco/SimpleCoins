@@ -204,6 +204,7 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_DURABLE_ACK_NO_PENDING_PASSED' paper-a02-acked-reload.log
           grep -F 'PAPER_A02_THIRD_BOOT_COIN_RECEIPT_STORAGE_PASSED' paper-a02-acked-reload.log
           grep -F 'PAPER_A01_REAL_PLAYERDATA_DISCOVERY_BOUNDARY_OBSERVED' paper-a02-acked-reload.log
+          grep -F 'PAPER_A01_REAL_SHARED_PLAYERDATA_INCLUDED_IN_MANIFEST' paper-a02-acked-reload.log
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'

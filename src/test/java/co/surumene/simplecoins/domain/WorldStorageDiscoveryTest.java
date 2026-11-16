@@ -346,4 +346,73 @@ class WorldStorageDiscoveryTest {
                 Map.of("world", world), new WorldScope(true, Set.of(), Set.of()), 100));
     }
 
+
+    @Test void paper26DimensionFoldersMustIncludeSharedPlayerdataOutsideWorldPaths() throws Exception {
+        // Paper 26.2 exposes dimensions/minecraft/<dimension> as World#getWorldPath().
+        // The authoritative UUID.dat is in the sibling level-wide players/data folder.
+        Path levelRoot = directory.resolve("paper26");
+        Path overworld = levelRoot.resolve("dimensions/minecraft/overworld");
+        Path nether = levelRoot.resolve("dimensions/minecraft/the_nether");
+        Path region = overworld.resolve("region/r.0.0.mca");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-00000000beef");
+        Path playerData = levelRoot.resolve("players/data/" + player + ".dat");
+        Files.createDirectories(region.getParent());
+        Files.createDirectories(nether);
+        Files.createDirectories(playerData.getParent());
+        Files.writeString(region, "region");
+        Files.writeString(playerData, "playerdata");
+
+        var result = WorldStorageDiscovery.discover(
+                Map.of("world", overworld, "world_nether", nether),
+                new WorldScope(true, Set.of(), Set.of("world")), 200,
+                Set.of(levelRoot));
+        assertTrue(result.worldFiles().isEmpty(), "Excluded WorldScope applies to regions");
+        assertEquals(Map.of(player, playerData.toAbsolutePath()), result.playerDataFiles(),
+                "Excluded worlds cannot omit globally scoped playerdata");
+        assertTrue(result.requiredSourceIds().contains(playerData.toAbsolutePath().toString()));
+        result.requireUnchangedDiscovery();
+
+        Files.delete(playerData);
+        assertThrows(IOException.class, result::requireUnchangedDiscovery,
+                "Saved-source closure must detect loss of the shared primary");
+    }
+
+    @Test void paper26SharedOrphanBackupMustFailClosed() throws Exception {
+        Path levelRoot = directory.resolve("paper26-orphan");
+        Path dimension = levelRoot.resolve("dimensions/minecraft/overworld");
+        Path backup = levelRoot.resolve(
+                "players/data/00000000-0000-0000-0000-00000000beef.dat_old");
+        Files.createDirectories(dimension);
+        Files.createDirectories(backup.getParent());
+        Files.writeString(backup, "orphan");
+
+        var error = assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", dimension),
+                new WorldScope(true, Set.of(), Set.of()), 100, Set.of(levelRoot)));
+        assertTrue(error.getMessage().contains("Orphan Paper playerdata backup"),
+                "A missing shared playerdata primary cannot count as zero");
+    }
+
+    @Test void paper26SharedPlayerdataMustRejectAliasesAndSymlinks() throws Exception {
+        Path levelRoot = directory.resolve("paper26-alias");
+        Path dimension = levelRoot.resolve("dimensions/minecraft/overworld");
+        Path players = levelRoot.resolve("players/data");
+        Files.createDirectories(dimension);
+        Files.createDirectories(players);
+        UUID player = UUID.fromString("00000000-0000-0000-0000-00000000feed");
+        Path primary = players.resolve(player + ".dat");
+        Files.writeString(primary, "primary");
+        Path alias = levelRoot.resolve("playerdata/" + player + ".dat");
+        Files.createDirectories(alias.getParent());
+        Files.writeString(alias, "duplicate");
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", dimension),
+                new WorldScope(true, Set.of(), Set.of()), 100, Set.of(levelRoot)));
+        Files.delete(alias);
+        Files.createSymbolicLink(alias, primary);
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.discover(
+                Map.of("world", dimension),
+                new WorldScope(true, Set.of(), Set.of()), 100, Set.of(levelRoot)));
+    }
+
 }
