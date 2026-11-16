@@ -66,10 +66,17 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43798718772 (real Paper restart and provider readback; CAT normative Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Verified saved-world restart result
+
+- [Official Paper 26.2 build 134 + SHA-256-pinned BlockLocker 1.15 CI #43798718772](https://github.com/surumeneco/SimpleCoins/actions/runs/43798718772) successfully executed initial-world creation, standalone offline Anvil sign-source verification and a **second independent Paper JVM** reading the same World UUID (`5c0399c7-0742-4ede-9c71-441224881bd0`) and persisted fixture height Y=118.
+- No fixture chest or sign was rebuilt in the second JVM. The actual loaded BlockLocker API via `BlockLockerLiveEvidence.observe` returned the original UUID `11111111-1111-4111-8111-111111111111` for the personal chest and both 54-slot double-chest halves across the Chunk boundary. Front and back `[Everyone]` still overrode unknown profile, unprotected chest remained Free, and a non-UUID primary remained a fail-closed error. Real sign back text and original World UUID matched. Source log: `PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED` and `PAPER_BLOCKLOCKER_115_RELOADED_PROTECTION_PASSED`.
+- The separate offline scanner still found the five saved sign records, whose PDC owner-hints were absent in this fixture; raw front/back text remained present. This does **not** make display names authoritative saved ownership or prove unloaded-source topology without loading.
+- CAT Work validation reported `contract_valid:true`, `semantic_approval_verified:false`. Process/Model/Implementation Gates and live VPS acceptance remain not-run.
 
 ## Bounded Paper acceptance
 
