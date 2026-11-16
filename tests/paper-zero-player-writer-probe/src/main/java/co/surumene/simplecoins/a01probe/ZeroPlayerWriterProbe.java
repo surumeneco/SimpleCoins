@@ -6,6 +6,7 @@ import co.surumene.simplecoins.paper.PaperCapturedHybridSettlement;
 import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
+import co.surumene.simplecoins.domain.BlockEntitySettlementImport;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import java.util.Map;
@@ -144,9 +145,24 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                             Set.of(levelRoot));
                     if (realManifest.worldFiles().isEmpty())
                         throw new IllegalStateException("Hybrid test lacked a real Paper region");
+                    // The CI environment deliberately installs ONLY
+                    // SimpleCoins, its all-player admission guard, and this
+                    // probe. Verify that no external ownership/protection
+                    // plugin exists before assigning all fixture containers
+                    // to the free world owner (not unresolved/null evidence).
+                    Set<String> installed = Arrays.stream(
+                            Bukkit.getPluginManager().getPlugins())
+                            .map(plugin -> plugin.getName()).collect(
+                                    java.util.stream.Collectors.toSet());
+                    if (!installed.equals(Set.of("SimpleCoins",
+                            "SimpleCoinsAdmissionGuard", "SimpleCoinsZeroPlayerWriterProbe")))
+                        throw new IllegalStateException(
+                                "Unexpected protection/owner plugin in isolated Paper: " + installed);
                     var staged = beforeCapture.stageCandidate(
                             realManifest, scope, Set.of(),
-                            (worldId, position) -> null,
+                            (worldId, position) ->
+                                    new BlockEntitySettlementImport.Ownership(
+                                            null, false, false, false),
                             (worldId, chunk) -> Map.of(),
                             16 * 1024 * 1024, 64 * 1024 * 1024,
                             (source, value) -> new SettlementAccumulator.Asset(
