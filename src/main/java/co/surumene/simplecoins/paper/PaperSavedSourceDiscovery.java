@@ -1,5 +1,6 @@
 package co.surumene.simplecoins.paper;
 
+import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import java.io.IOException;
@@ -26,11 +27,14 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class PaperSavedSourceDiscovery implements AutoCloseable {
     private static final long DISCOVERY_TIMEOUT_TICKS = 20L * 180L;
+    private static final int MAX_PLAYERDATA_COMPRESSED_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_PLAYERDATA_INFLATED_BYTES = 64 * 1024 * 1024;
 
     private final JavaPlugin plugin;
     private final WorldScope scope;
     private final int maxSourceEntries;
     private final Runnable safeStop;
+    private final GrantLedger issuanceLedger;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -40,12 +44,20 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
 
     public PaperSavedSourceDiscovery(JavaPlugin plugin, WorldScope scope,
                                      int maxSourceEntries, Runnable safeStop) {
+        this(plugin, scope, maxSourceEntries, safeStop, null);
+    }
+
+    /** A non-null verified journal requires a same-source saved receipt audit. */
+    public PaperSavedSourceDiscovery(JavaPlugin plugin, WorldScope scope,
+                                     int maxSourceEntries, Runnable safeStop,
+                                     GrantLedger issuanceLedger) {
         this.plugin = Objects.requireNonNull(plugin, "Paper plugin");
         this.scope = Objects.requireNonNull(scope, "world inclusion");
         if (maxSourceEntries < 1)
             throw new IllegalArgumentException("Invalid discovery maximum");
         this.maxSourceEntries = maxSourceEntries;
         this.safeStop = Objects.requireNonNull(safeStop, "safe stop on failure");
+        this.issuanceLedger = issuanceLedger;
     }
 
     public void start() {
@@ -87,6 +99,23 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                 // A directory that gains a NEW saved file while being walked
                 // must not be reported as an unchanged discovered generation.
                 manifest.requireUnchangedDiscovery();
+                if (issuanceLedger != null) {
+                    // This existing read-only audit compares the *discovered*
+                    // full saved playerdata universe with all authentic grants.
+                    // In particular a journal ACK without playerdata is fatal.
+                    // It cannot deliver currency or make admission eligible.
+                    var report = SavedGrantReceiptUniverseAudit.scan(
+                            manifest, issuanceLedger,
+                            MAX_PLAYERDATA_COMPRESSED_BYTES, MAX_PLAYERDATA_INFLATED_BYTES);
+                    manifest.requireUnchangedDiscovery();
+                    if (closed.get()) return;
+                    plugin.getLogger().info("SIMPLECOINS_SAVED_GRANT_UNIVERSE_AUDITED"
+                            + " players=" + report.playersRead()
+                            + " acknowledged=" + report.acknowledgedGrants()
+                            + " pending=" + report.pendingGrants()
+                            + " awaitingAcknowledgement=" + report.awaitingAcknowledgement()
+                            + " (OBSERVATION ONLY; admission remains blocked)");
+                }
                 if (closed.get() || !finished.compareAndSet(false, true)) return;
                 observed.set(manifest);
                 plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_OBSERVED"
