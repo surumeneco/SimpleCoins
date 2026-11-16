@@ -13,6 +13,9 @@ import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.Crafter;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.Keyed;
@@ -26,6 +29,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.CraftingRecipe;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
@@ -176,6 +180,7 @@ public final class VanillaChoiceProbe extends JavaPlugin {
                 getLogger().info("PAPER_A12_SUBSTITUTED_OUTPUT_REJECTED_BY_GUARD");
             }
             verifyPaperPrepareEvent(replaceKey, adversarialMatrix);
+            verifyPaperCrafterEvent(replaceKey, adversarialMatrix);
         } finally {
             Bukkit.removeRecipe(replaceKey);
             if (!Bukkit.addRecipe(replaceTarget))
@@ -239,6 +244,73 @@ public final class VanillaChoiceProbe extends JavaPlugin {
                     + " disconnectedSyntheticPlayer=true");
         } finally {
             HandlerList.unregisterAll(monitor);
+        }
+    }
+
+
+    /**
+     * Real Block/Crafter inventory and Bukkit event-bus dispatch; no
+     * powered redstone craft, real inventory consumption or physical money.
+     */
+    private void verifyPaperCrafterEvent(NamespacedKey key, ItemStack[] money) {
+        World world = Bukkit.getWorlds().getFirst();
+        int x = 40, z = 40;
+        int y = Math.max(world.getMinHeight() + 20,
+                Math.min(world.getMaxHeight() - 4,
+                        world.getHighestBlockYAt(x, z) + 4));
+        Block block = world.getBlockAt(x, y, z);
+        if (!block.getType().isAir())
+            throw new IllegalStateException("Disposable Crafter probe location not vacant");
+        AtomicInteger observed = new AtomicInteger();
+        Listener monitor = new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observedCrafter(CrafterCraftEvent event) {
+                if (event.getRecipe() instanceof Keyed keyed
+                        && key.equals(keyed.getKey()))
+                    observed.incrementAndGet();
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(monitor, this);
+        try {
+            block.setType(Material.CRAFTER);
+            if (!(block.getState() instanceof Crafter crafter))
+                throw new IllegalStateException("Real Paper Crafter block state unavailable");
+            int idx = 0;
+            for (ItemStack item : money) {
+                if (item == null || item.getType().isAir()) continue;
+                crafter.getInventory().setItem(idx++, item.clone());
+            }
+            if (idx < 1)
+                throw new IllegalStateException("No genuine monetary item placed in Crafter");
+            ItemStack physical = ((Crafter) block.getState()).getInventory().getItem(0);
+            if (physical == null
+                    || new CoinItemCodec(CoinItemCodec.defaultNames())
+                            .identify(physical).isEmpty())
+                throw new IllegalStateException("Crafter lost the genuine money before event");
+            Recipe current = Bukkit.getRecipe(key);
+            if (!(current instanceof CraftingRecipe crafting))
+                throw new IllegalStateException("Substituted recipe is not a crafting recipe");
+            CrafterCraftEvent event = new CrafterCraftEvent(
+                    block, crafting, new ItemStack(Material.STONE, 1));
+            Bukkit.getPluginManager().callEvent(event);
+            if (observed.get() != 1)
+                throw new IllegalStateException("Actual target CrafterCraftEvent not dispatched");
+            Material after = event.getResult() == null
+                    ? Material.AIR : event.getResult().getType();
+            if (!event.isCancelled() && after == Material.STONE)
+                getLogger().warning("PAPER_A12_REAL_CRAFTER_EVENT_STONE_NOT_CANCELLED"
+                        + " recipe=" + key);
+            else
+                getLogger().info("PAPER_A12_REAL_CRAFTER_EVENT_REJECTED_OR_ALTERED"
+                        + " recipe=" + key + " cancelled=" + event.isCancelled()
+                        + " result=" + after);
+            getLogger().info("PAPER_A12_ACTUAL_CRAFTER_EVENT_RESULT_OBSERVED"
+                    + " count=" + observed.get() + " result=" + after
+                    + " cancelled=" + event.isCancelled()
+                    + " redstoneFired=false");
+        } finally {
+            HandlerList.unregisterAll(monitor);
+            block.setType(Material.AIR);
         }
     }
 
