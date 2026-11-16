@@ -6,6 +6,7 @@ on:
       - 'tests/paper-grant-save-probe/**'
       - '.github/workflows/paper-grant-save-commit-probe.yml'
       - 'Lifecycle/Works/simplecoins.a02.paper-save-commit-verification.md'
+      - 'Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md'
 
 jobs:
   real-paper-playerdata:
@@ -20,6 +21,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate the new verification-only Work contract
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md
       - name: Build production guard and isolated probe
         shell: bash
         run: |
@@ -115,19 +126,39 @@ jobs:
             exit 1
           fi
           echo 'PAPER_A02_SAVE_BEFORE_ACK_SIGKILL_INJECTED'
-      - name: Restart Paper and verify real data reload
+      - name: Restart Paper, recover pending grant, then SIGKILL immediately after durable ACK
         shell: bash
         run: |
           set -euo pipefail
           cd smoke
-          set +e
-          timeout --signal=TERM --kill-after=10s 200s \
-            java -Da02.probe.phase=reload -Xms256M -Xmx1024M -jar paper.jar nogui \
-              </dev/null > paper-a02-reload.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Paper reload phase failed (exit=$status)" >&2
+          java -Da02.probe.phase=reload -Da02.probe.awaitSigkill=true \
+            -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-a02-reload.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -KILL "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-reload.log; then
+              tail -160 paper-a02-reload.log
+              exit 1
+            fi
+            if grep -Fq 'PAPER_A02_ACKED_CRASH_POINT_READY' paper-a02-reload.log; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper process B exited before post-ACK SIGKILL injection' >&2
+              tail -160 paper-a02-reload.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo 'Timed out waiting for durable ACK crash point' >&2
             tail -160 paper-a02-reload.log
             exit 1
           fi
@@ -135,7 +166,43 @@ jobs:
           grep -F 'PAPER_A02_RESTART_REAL_LOAD_PAIR_PASSED' paper-a02-reload.log
           grep -F 'PAPER_A02_EXISTING_STORAGE_RESTART_PRESERVED_PASSED' paper-a02-reload.log
           grep -F 'PAPER_A02_RESTART_RECOVER_ACK_PASSED' paper-a02-reload.log
-          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-reload.log; then exit 1; fi
+          if grep -Fq 'Saving worlds' paper-a02-reload.log; then
+            echo 'Paper B entered normal shutdown before forced crash' >&2
+            exit 1
+          fi
+          kill -KILL "$server_pid"
+          set +e
+          wait "$server_pid"
+          status=$?
+          set -e
+          trap - EXIT
+          if [ "$status" -ne 137 ]; then
+            echo "Expected process B signal-9 exit 137, got $status" >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_ACK_BEFORE_SECOND_SIGKILL_INJECTED'
+      - name: Third independent Paper boot proves completed ACK never reissues physical currency
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=acked-reload -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-acked-reload.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Third Paper process failed (exit=$status)" >&2
+            tail -160 paper-a02-acked-reload.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-acked-reload.log
+          grep -F 'PAPER_A02_THIRD_BOOT_DURABLE_ACK_NO_PENDING_PASSED' paper-a02-acked-reload.log
+          grep -F 'PAPER_A02_THIRD_BOOT_COIN_RECEIPT_STORAGE_PASSED' paper-a02-acked-reload.log
+          grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
+          echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
       - name: Upload scoped diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
