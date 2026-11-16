@@ -6,6 +6,9 @@ on:
       - 'admission-guard/**'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'Lifecycle/Works/simplecoins.grants.startup-persistent-verification.md'
+      - 'Lifecycle/Works/simplecoins.a02.guarded-startup-saved-receipt-audit.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperSavedSourceDiscovery.java'
+      - 'tests/paper-guarded-bootstrap/**'
       - 'src/main/resources/plugin.yml'
       - '.github/workflows/paper-guarded-bootstrap-smoke.yml'
 
@@ -131,11 +134,46 @@ jobs:
           grep -F 'Failed to initialize guarded accounting' paper-corrupt-grants.log
           grep -F 'SimpleCoins admission protection disabled: stopping Paper.' paper-corrupt-grants.log
           echo 'PAPER_GRANT_JOURNAL_CORRUPTION_FAILSTOP_PASSED'
+      - name: Valid ACK without saved playerdata must force guarded shutdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-ack-gap/plugins tests/paper-guarded-bootstrap/classes
+          cp smoke/paper.jar smoke-ack-gap/paper.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke-ack-gap/plugins/SimpleCoins.jar
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke-ack-gap/plugins/SimpleCoinsGuard.jar
+          printf 'eula=true\n' > smoke-ack-gap/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25569\n' > smoke-ack-gap/server.properties
+          javac -cp build/libs/SimpleCoins-1.0.0.jar \
+            -d tests/paper-guarded-bootstrap/classes \
+            tests/paper-guarded-bootstrap/SeedAcknowledgedWithoutPlayerdata.java
+          java -cp "build/libs/SimpleCoins-1.0.0.jar:tests/paper-guarded-bootstrap/classes" \
+            SeedAcknowledgedWithoutPlayerdata smoke-ack-gap/plugins/SimpleCoins/grants | \
+            grep -F 'A02_VALID_ACK_WITHOUT_PLAYERDATA_SEEDED'
+          test ! -e smoke-ack-gap/world/players/data/00000000-0000-0000-0000-00000000a002.dat
+          cd smoke-ack-gap
+          set +e
+          timeout --signal=TERM --kill-after=5s 80s \
+            java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-missing-ack.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo 'ACKed journal with missing playerdata did not fail-stop Paper' >&2
+            tail -150 paper-missing-ack.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-missing-ack.log
+          grep -F 'SIMPLECOINS_SAVED_DISCOVERY_FAILED' paper-missing-ack.log
+          grep -F 'Acknowledged grant has missing or rolled-back playerdata' paper-missing-ack.log
+          grep -F 'Saved-source discovery failed; stopping Paper.' paper-missing-ack.log
+          echo 'PAPER_A02_ACK_NO_PLAYERDATA_FAILSTOP_PASSED'
       - name: Upload Paper diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-guarded-bootstrap-log
-          path: smoke/*.log
+          path: |
+            smoke/*.log
+            smoke-ack-gap/*.log
           if-no-files-found: ignore
           retention-days: 7
