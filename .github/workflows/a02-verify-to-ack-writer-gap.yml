@@ -37,5 +37,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon test --tests co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest
+          gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest
           echo A02_VERIFIED_FILE_AND_JOURNAL_WRITER_GAP_COUNTEREXAMPLE_REPRODUCED
