@@ -67,10 +67,18 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43796948573 (real Paper three-process crash injection, not CAT normative Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Observed Paper 26.2 evidence
+
+- Exact PR HEAD `4f6da7bb7d49e654d83c24a2ac46a28b0eaf1830`: official Paper build 134, zero connected players, real `world/players/data/00000000-0000-0000-0000-00000000a002.dat`, independent on-disk `GrantLedger`. [Real Paper CI #43796948573](https://github.com/surumeneco/SimpleCoins/actions/runs/43796948573) succeeded, together with Domain foundation and static Phase6 CI.
+- **JVM A**: refused delivery when all 36 storage slots were full; preserved unrelated item; saved one authentic 5000-unit money coin and its receipt PDC together; refused to infer write success from disabled `saveData()` and a swallowed IOException; with journal still pending, ended by actual `SIGKILL` (exit 137) without clean shutdown.
+- **JVM B**: restored original physical coin, receipt and unrelated item from saved Paper playerdata; re-opened authentic durable reservation, ACKed once, persisted no pending grants; ended by a second real `SIGKILL` (exit 137) immediately **after** ACK and before clean Paper shutdown.
+- **JVM C**: independently re-opened playerdata and journal. Exactly one original reservation remained `delivered=true`, with no pending grants. Original coin denomination/quantity, unrelated item and PDC receipt survived unchanged. Repeating ACK for the same authenticated reservation did not rewrite the journal or playerdata; a fresh `GrantLedger` still showed one delivered and none pending. Source log: `PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED`.
+- This is an isolated fixture-level boundary proof (not real player network login, source-wide atomic snapshot, OS power loss, multi-reservation partial cursor, or production give/service connection). The CAT Work structural validator returned `contract_valid:true`, `semantic_approval_verified:false`; all formal CAT Gates remain `not-run`.
 
 ## Narrow technical acceptance
 
