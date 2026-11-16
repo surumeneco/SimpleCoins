@@ -5,6 +5,8 @@ on:
     paths:
       - 'tests/paper-wcl-services-probe/**'
       - '.github/workflows/paper-wcl-services-probe.yml'
+      - 'src/main/resources/plugin.yml'
+      - 'Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-paper-entity-save-reload.md'
@@ -53,6 +55,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wcl-verified-traversal-paper.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -91,6 +95,25 @@ jobs:
             exit 1
           fi
           echo 'A05_REAL_PAPER_DEPENDENCY_BLOBS_VERIFIED'
+      - name: Require real packaged provider IDs in optional softdepend list
+        shell: bash
+        run: |
+          set -euo pipefail
+          for jar in WonderfulCoreLibrary-0.1.0.jar WhatAWonderfulChicken-2.1.0.jar WhatAWonderfulWolf-1.1.1.jar; do
+            path="server-snapshot/plugins/$jar"
+            actual=$(unzip -p "$path" plugin.yml | awk '$1 == "name:" {print $2; exit}' | tr -d "'\"\r")
+            if [[ ! "$actual" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+              echo "Unrecognized actual packaged Paper plugin name: $jar -> $actual" >&2
+              exit 1
+            fi
+            if ! grep -Fxq "  - $actual" src/main/resources/plugin.yml; then
+              echo "A05_RED_SOFTDEPEND_NAME_MISMATCH packaged=$jar pluginName=$actual" >&2
+              exit 1
+            fi
+            unzip -p build/libs/SimpleCoins-1.0.0.jar plugin.yml |
+              grep -Fx "  - $actual"
+            echo "PAPER_A05_REAL_SOFTDEPEND_NAME_PASSED name=$actual"
+          done
       - name: Download hash-verified official Paper 26.2 build 134
         shell: bash
         run: |
