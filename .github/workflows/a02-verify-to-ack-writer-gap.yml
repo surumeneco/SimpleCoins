@@ -1,0 +1,41 @@
+name: A02 verify-to-ACK saved-writer counterexample
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java'
+      - 'Lifecycle/Works/simplecoins.a02.verify-to-ack-writer-gap.md'
+      - '.github/workflows/a02-verify-to-ack-writer-gap.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-writer-gap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate verification Work contract only (not CAT normative Gates)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.verify-to-ack-writer-gap.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Reproduce actual compressed NBT post-proof journal-ACK gap
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest
+          echo A02_VERIFIED_FILE_AND_JOURNAL_WRITER_GAP_COUNTEREXAMPLE_REPRODUCED
