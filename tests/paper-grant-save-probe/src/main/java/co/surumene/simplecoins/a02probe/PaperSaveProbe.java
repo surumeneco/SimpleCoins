@@ -53,6 +53,8 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("reload".equals(phase)) reloadPhase(player);
                 else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
                 else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
+                else if ("partial-save".equals(phase)) partialSavePhase(player);
+                else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else throw new IllegalArgumentException("Unknown probe phase " + phase);
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -510,4 +512,184 @@ public final class PaperSaveProbe extends JavaPlugin {
                 + " durableGrants=2 pending=0");
     }
 
+
+    /**
+     * Fifth REAL Paper JVM: leave exactly two physical storage slots free
+     * and save a grant whose canonical physical distribution needs three.
+     * Neither partial progress nor a full inventory may ACK that grant.
+     */
+    private void partialSavePhase(Player player) throws Exception {
+        Path file = dataFile();
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Partial grant probe requires disconnected CraftPlayer");
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 2 || !ledger.pending(ID).isEmpty()
+                || history.stream().anyMatch(g -> !g.delivered()))
+            throw new IllegalStateException("Previous grants not fully ACKed");
+        GrantReceiptState receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (receipt.completedSequence() != 2 || receipt.active())
+            throw new IllegalStateException("Unexpected initial completed grant receipt");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack[] storage = player.getInventory().getStorageContents();
+        for (int i = 0; i < storage.length; i++) {
+            if (i == 3 || i == 4) {
+                if (storage[i] != null && !storage[i].getType().isAir())
+                    throw new IllegalStateException("Test must preserve two free slots");
+                continue;
+            }
+            if (storage[i] == null || storage[i].getType().isAir())
+                storage[i] = new ItemStack(Material.STONE, 1);
+        }
+        player.getInventory().setStorageContents(storage);
+        player.saveData(); // The fixture's inventory-full precondition is saved first.
+        Map<String, Object> before = readDisk(file);
+
+        GrantLedger.Grant grant = ledger.reserveCoins(ID, CoinDenomination.FIVE_THOUSAND,
+                130, "a02-partial-canonical");
+        if (grant.sequence() != 3 || grant.amount() != 650_000)
+            throw new IllegalStateException("Unexpected large coin grant");
+        var stage = PaperGrantInventorySlotPlan.stage(ledger, ID, grant, receipt,
+                player.getInventory().getStorageContents()).orElseThrow();
+        if (stage.placements().size() != 2
+                || stage.placements().get(0).index() != 3
+                || stage.placements().get(1).index() != 4
+                || stage.placements().stream().anyMatch(slot -> slot.count() != 64
+                        || slot.denomination() != CoinDenomination.FIVE_THOUSAND)
+                || stage.nextReceipt().completedSequence() != 2
+                || stage.nextReceipt().activeSequence() != 3
+                || !grant.id().equals(stage.nextReceipt().activeId())
+                || stage.nextReceipt().partialValue() != 640_000)
+            throw new IllegalStateException("Incorrect first-batch two-stack plan");
+
+        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(stage,
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
+                player.getInventory().getStorageContents(), codec);
+        player.getInventory().setStorageContents(candidate);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
+        player.saveData();
+
+        var proof = SavedGrantDeliveryFileReadback.verify(actualPlayerManifest(), ledger, ID,
+                stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        if (!proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
+                || proof.matchedStacks() != 2
+                || !proof.matchedMonetaryValue()
+                        .equals(java.math.BigInteger.valueOf(640_000)))
+            throw new IllegalStateException("Partial physical saved receipt did not match");
+        if (PaperGrantInventorySlotPlan.stage(ledger, ID, grant,
+                stage.nextReceipt(), player.getInventory().getStorageContents()).isPresent())
+            throw new IllegalStateException("Full storage permitted a duplicate extra batch");
+
+        boolean deniedAck = false;
+        try {
+            ledger.acknowledge(grant, proof.receipt().completedSequence());
+        } catch (IllegalStateException uncompleted) {
+            deniedAck = true;
+        }
+        if (!deniedAck || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getLast().delivered())
+            throw new IllegalStateException("Partially delivered grant was acknowledged");
+        getLogger().info("PAPER_A02_PARTIAL_640000_SAVED_NO_ACK_PASSED"
+                + " activeSequence=" + proof.receipt().activeSequence()
+                + " completed=" + proof.receipt().completedSequence()
+                + " slots=" + proof.matchedStacks());
+    }
+
+    /** Sixth independent JVM: resume only the two missing coins after freeing one slot. */
+    private void partialResumePhase(Player player) throws Exception {
+        Path file = dataFile();
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Partial replay must not have connected players");
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 3 || history.getLast().delivered()
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Pending partial grant lost across JVM restart");
+        GrantLedger.Grant grant = history.getLast();
+        GrantReceiptState savedReceipt =
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (savedReceipt.completedSequence() != 2
+                || savedReceipt.activeSequence() != 3
+                || !grant.id().equals(savedReceipt.activeId())
+                || savedReceipt.partialValue() != 640_000)
+            throw new IllegalStateException("Partial saved cursor did not survive Paper reload");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        for (int index : new int[]{3, 4}) {
+            ItemStack issued = player.getInventory().getItem(index);
+            if (issued == null || issued.getAmount() != 64
+                    || codec.identify(issued).orElse(null) != CoinDenomination.FIVE_THOUSAND)
+                throw new IllegalStateException("Saved partial currency stack missing at " + index);
+        }
+        if (PaperGrantInventorySlotPlan.stage(ledger, ID, grant, savedReceipt,
+                player.getInventory().getStorageContents()).isPresent())
+            throw new IllegalStateException("Full inventory should block continued delivery");
+        if (ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Full inventory consumed pending partial grant");
+        getLogger().info("PAPER_A02_PARTIAL_RESTART_FULL_STORAGE_NO_DUPLICATE_PASSED");
+
+        ItemStack filler = player.getInventory().getItem(2);
+        if (filler == null || filler.getType() != Material.STONE || filler.getAmount() != 1)
+            throw new IllegalStateException("Missing disposable nonmonetary filler");
+        player.getInventory().setItem(2, null);
+        player.saveData(); // Simulated pre-delivery disposal; saved and independently read.
+        Map<String, Object> before = readDisk(file);
+
+        var stage = PaperGrantInventorySlotPlan.stage(ledger, ID, grant, savedReceipt,
+                player.getInventory().getStorageContents()).orElseThrow();
+        if (stage.placements().size() != 1
+                || stage.placements().getFirst().index() != 2
+                || stage.placements().getFirst().count() != 2
+                || stage.placements().getFirst().denomination()
+                        != CoinDenomination.FIVE_THOUSAND
+                || stage.nextReceipt().active()
+                || stage.nextReceipt().completedSequence() != 3)
+            throw new IllegalStateException("Incorrect remaining two-coin delivery plan");
+
+        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(stage,
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
+                player.getInventory().getStorageContents(), codec);
+        player.getInventory().setStorageContents(candidate);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
+        player.saveData();
+
+        var proof = SavedGrantDeliveryFileReadback.verify(actualPlayerManifest(), ledger, ID,
+                stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        if (!proof.receipt().equals(stage.nextReceipt()) || proof.receipt().active()
+                || proof.matchedStacks() != 1
+                || !proof.matchedMonetaryValue()
+                        .equals(java.math.BigInteger.valueOf(10_000))
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Final physical stack and receipt not verified");
+        getLogger().info("PAPER_A02_PARTIAL_RESTART_FINAL_SAVED_PROOF_PASSED"
+                + " newValue=" + proof.matchedMonetaryValue()
+                + " completed=" + proof.receipt().completedSequence());
+
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        GrantLedger reopened = new GrantLedger(grantDirectory());
+        if (reopened.historySnapshot().size() != 3
+                || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                || !reopened.pending(ID).isEmpty())
+            throw new IllegalStateException("Final durable ACK was lost or re-opened");
+        getLogger().info("PAPER_A02_PARTIAL_TWO_JVM_EXACT_STACK_PREFIX_ACK_PASSED"
+                + " delivered=3 pending=0");
+    }
+
+    /** Only Paper's genuine shared level saved UUID file can supply the proof. */
+    private WorldStorageDiscovery.Manifest actualPlayerManifest() throws Exception {
+        World world = getServer().getWorld("world");
+        if (world == null) throw new IllegalStateException("Real Paper world missing");
+        Path file = dataFile().toAbsolutePath().normalize();
+        Path dimension = world.getWorldFolder().toPath().toAbsolutePath().normalize();
+        Path levelRoot = file.getParent().getParent().getParent();
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of(world.getName(), dimension),
+                new WorldScope(true, Set.of(), Set.of(world.getName())),
+                100000, Set.of(levelRoot));
+        if (!file.equals(manifest.playerDataFiles().get(ID))
+                || manifest.playerDataFiles().size() != 1)
+            throw new IllegalStateException("Real shared Paper playerdata not discovered");
+        return manifest;
+    }
 }
