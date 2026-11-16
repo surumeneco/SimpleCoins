@@ -207,7 +207,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         admission.fatalFailure();
                         getLogger().severe("Saved-source discovery failed; stopping Paper.");
                         Bukkit.shutdown();
-                    });
+                    }, issuanceGrants);
             sourceDiscovery.start();
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
