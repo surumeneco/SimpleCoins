@@ -99,7 +99,7 @@ public final class VanillaChoiceProbe extends JavaPlugin {
      * CraftItemEvent listener. No product recipe or wallet changes survive
      * this bounded disposable server test.
      */
-    private void verifyRecipeIdentityBoundary() {
+    private void verifyRecipeIdentityBoundary() throws Exception {
         Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
         if (product == null || !product.isEnabled())
             throw new IllegalStateException("Product plugin not active in Paper registry");
