@@ -28,6 +28,8 @@ spec_status: unknown
 | --- |
 | https://github.com/surumeneco/SimpleCoins/pull/434 |
 | https://github.com/surumeneco/SimpleCoins/pull/437 |
+| https://github.com/surumeneco/SimpleCoins/pull/468 |
+| https://github.com/surumeneco/SimpleCoins/pull/473 |
 | https://github.com/surumeneco/SimpleCoins/issues/423 |
 | https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view |
 
@@ -75,5 +77,7 @@ spec_status: unknown
 - Approved product 03/02B requires UUID+reservation identity and restart-stable pending delivery until the exact physical coins and PDC receipt are persisted as one playerdata generation; receipt-only or ledger-only is never an actual issue.
 - [#434](https://github.com/surumeneco/SimpleCoins/pull/434) demonstrated genuine Paper 26.2 `CraftPlayer.saveData()/loadData` and silent non-durable `saveData()` return under disabled writing/IO fault; verified persisted item and PDC before ACK and post-SIGKILL acknowledgment recovery on another JVM. [#437](https://github.com/surumeneco/SimpleCoins/pull/437) added full-inventory refusal and preservation of unrelated existing stored items.
 - `GrantLedger.acknowledge(grant,seq)` is a lower-level API trusting a caller-supplied sequence; a standalone Java filesystem probe succeeded at ACK without any real playerdata. This is a caller proof obligation; **no live issuance service connected in SimpleCoinsPlugin has been shown to exploit it**.
-- Draft Process/PI/TCE in `docs/cat/drafts/a02-grant-delivery-*` specify candidate proof-before-ACK, no delivery on failed save, owner of recovery, and explicit uncertainty. They **cannot self-promote to Confirmed**. Full inventory, logout, race, OS power-loss and external Plugin mutation may need refined state abstraction; TCE deliberately `網羅要求: open`.
+- Draft Process/PI/TCE in `docs/cat/drafts/a02-grant-delivery-*` specify candidate proof-before-ACK, no delivery on failed save, owner of recovery, and explicit uncertainty. They **cannot self-promote to Confirmed**. Full inventory, logout, race, OS power-loss and external Plugin mutation may need refined state abstraction; TCE remains `網羅要求: 部分`.
+- [#467](https://github.com/surumeneco/SimpleCoins/pull/467)/[#468](https://github.com/surumeneco/SimpleCoins/pull/468) cover partial-save/final-save-before-ACK crash boundaries; [#473](https://github.com/surumeneco/SimpleCoins/pull/473) adds **real Paper pre-save SIGKILL** and the ninth/tenth independent JVM recovery. Existing durable ACK replay must not cause a new physical delivery; however an acknowledged coin can legitimately leave its original slot later.
+- New Draft cases isolate **no-reservation yet contradictory receipt**, **already-ACKed reservation** (idempotent no-op, not new issuance), and **post-proof writer gap** (a finite after-save hash witness is not an atomic verify-to-ACK barrier). Inapplicable/incomplete observation must not be guessed as a safe false contradiction flag.
 - Legitimate normative decision must select the guarantee boundary: Paper JVM crash (SIGKILL) vs filesystem/OS power loss, stable physical source evidence, concurrent login/logout and recovery ownership. After that, run upstream process closure/model-conformance/TDD/conformance before any product connection; remain default-deny until exact evidence.
