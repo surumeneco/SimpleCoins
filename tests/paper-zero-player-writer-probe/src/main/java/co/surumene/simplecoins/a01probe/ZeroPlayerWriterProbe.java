@@ -2,6 +2,11 @@ package co.surumene.simplecoins.a01probe;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.PaperCapturedHybridSettlement;
+import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
+import co.surumene.simplecoins.domain.HybridLiveSourceStage;
+import java.math.BigInteger;
+import java.util.List;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -78,15 +83,53 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                     byte[] priorSha = MessageDigest.getInstance("SHA-256")
                             .digest(Files.readAllBytes(saved));
                     FileTime priorMtime = Files.getLastModifiedTime(saved);
+
+                    // Acquire the actual product live monetary source capture,
+                    // not a hand-made report. Paper's main thread still owns
+                    // all Block/Inventory calls and no player can connect.
+                    var budget = new PaperLiveUniverseAssets.Budget(
+                            2, 1024, 16384, 32768, 300000, 16,
+                            16 * 1024 * 1024, 64 * 1024 * 1024);
+                    var beforeCapture = PaperCapturedHybridSettlement.capture(
+                            List.of(world), budget);
+                    if (!BigInteger.valueOf(10_000).equals(
+                            beforeCapture.observed().report().total()))
+                        throw new IllegalStateException(
+                                "Actual Paper live source did not observe 10000 before mutation");
+                    String physical = "world/" + world.getName() + "/"
+                            + X + "," + Y + "," + Z + ":0";
+                    if (!containsCurrencySlot(beforeCapture, physical,
+                            BigInteger.valueOf(10_000)))
+                        throw new IllegalStateException(
+                                "First Paper capture omitted the real monetary Chest slot");
+
                     Chest chest = (Chest) block.getState();
                     chest.getBlockInventory().setItem(0, coins.create(DENOMINATION, 3));
                     assertCurrency(block, coins, 3);
                     byte[] afterSha = MessageDigest.getInstance("SHA-256")
                             .digest(Files.readAllBytes(saved));
                     FileTime afterMtime = Files.getLastModifiedTime(saved);
+                    var afterCapture = PaperCapturedHybridSettlement.capture(
+                            List.of(world), budget);
+                    if (!BigInteger.valueOf(15_000).equals(
+                            afterCapture.observed().report().total())
+                            || !containsCurrencySlot(afterCapture, physical,
+                                    BigInteger.valueOf(15_000)))
+                        throw new IllegalStateException(
+                                "Fresh Paper live source capture failed to detect 15000");
+                    if (!BigInteger.valueOf(10_000).equals(
+                            beforeCapture.observed().report().total())
+                            || !containsCurrencySlot(beforeCapture, physical,
+                                    BigInteger.valueOf(10_000)))
+                        throw new IllegalStateException(
+                                "Earlier captured LIVE source unexpectedly changed with physical Chest");
                     if (!Arrays.equals(priorSha, afterSha) || !priorMtime.equals(afterMtime))
                         throw new IllegalStateException("Disk witness changed in same tick; "
                                 + "cannot isolate an unchanged-saved versus LIVE currency state");
+                    getLogger().info("PAPER_A01_PRODUCT_LIVE_CAPTURE_VALUE_DRIFT_OBSERVED"
+                            + " originalCapture=10000 freshCapture=15000"
+                            + " immutableSourceKey=true diskShaUnchanged=true"
+                            + " onlinePlayers=" + Bukkit.getOnlinePlayers().size());
                     getLogger().info("PAPER_A01_LIVE_VS_SAVED_MONETARY_DIVERGENCE_PASSED"
                             + " savedCoinsAtLoad=2 liveCoinsNow=3"
                             + " diskShaUnchanged=true diskMtimeUnchanged=true"
@@ -102,6 +145,15 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                 Bukkit.shutdown();
             }
         }, 50L);
+    }
+
+    /** Compare the actual production LIVE physical slot, not merely a total. */
+    private static boolean containsCurrencySlot(PaperCapturedHybridSettlement capture,
+                                                String key, BigInteger value) {
+        return capture.observed().sources().stream()
+                .filter(source -> source instanceof HybridLiveSourceStage.ChunkSource)
+                .flatMap(source -> source.values().stream())
+                .anyMatch(v -> key.equals(v.physicalKey()) && value.equals(v.amount()));
     }
 
     private static void assertCurrency(Block block, CoinItemCodec codec, int expected) {
