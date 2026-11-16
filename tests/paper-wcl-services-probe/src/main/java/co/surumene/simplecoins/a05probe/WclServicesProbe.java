@@ -105,7 +105,35 @@ public final class WclServicesProbe extends JavaPlugin {
                 String phase = System.getProperty("a05.probe.phase", "baseline");
                 switch (phase) {
                     case "baseline" -> { }
-                    case "persist" -> persistChickenEntity(world, selected);
+                    case "persist" -> {
+                        // Generating far terrain plus multiple plugin-backed
+                        // entities and saving all worlds in ONE server tick
+                        // tripped Paper's watchdog on the constrained CI host.
+                        // Pre-generate the disposable far chunk asynchronously,
+                        // then persist on a later main-thread callback. Do not
+                        // relax watchdog limits or mutate any production world.
+                        world.getChunkAtAsync(FAR_CHUNK, FAR_CHUNK, true)
+                                .whenComplete((preparedChunk, asyncFailure) ->
+                                        Bukkit.getScheduler().runTask(this, () -> {
+                                            try {
+                                                if (asyncFailure != null) {
+                                                    throw new IllegalStateException(
+                                                            "Async far fixture chunk generation failed",
+                                                            asyncFailure);
+                                                }
+                                                if (preparedChunk == null || !preparedChunk.isLoaded())
+                                                    throw new IllegalStateException(
+                                                            "Async far fixture chunk not ready");
+                                                persistChickenEntity(world, selected);
+                                            } catch (Throwable failure) {
+                                                getLogger().log(Level.SEVERE,
+                                                        "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                                            } finally {
+                                                Bukkit.shutdown();
+                                            }
+                                        }));
+                        return;
+                    }
                     case "reload" -> {
                         verifyFarUnloadedStoredItems(world, selected);
                         reloadChickenEntity(world, selected);
