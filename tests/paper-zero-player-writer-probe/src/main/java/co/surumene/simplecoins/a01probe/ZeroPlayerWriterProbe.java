@@ -155,7 +155,7 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                             .map(plugin -> plugin.getName()).collect(
                                     java.util.stream.Collectors.toSet());
                     if (!installed.equals(Set.of("SimpleCoins",
-                            "SimpleCoinsAdmissionGuard", "SimpleCoinsZeroPlayerWriterProbe")))
+                            "SimpleCoinsGuard", "SimpleCoinsZeroPlayerWriterProbe")))
                         throw new IllegalStateException(
                                 "Unexpected protection/owner plugin in isolated Paper: " + installed);
                     var staged = beforeCapture.stageCandidate(
