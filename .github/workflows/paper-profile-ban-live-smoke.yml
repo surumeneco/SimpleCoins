@@ -126,7 +126,7 @@ jobs:
           exec 3>&-
           wait "$server_pid"
           trap - EXIT
-          echo 'PAPER_PROFILE_BAN_ISOLATED_SUCCESS (no IP/external claims)'
+          echo 'PAPER_A06_PROFILE_AND_IP_SEPARATE_SOURCES_OBSERVED (no authenticated IP-to-UUID mapping or external-provider claim)'
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
