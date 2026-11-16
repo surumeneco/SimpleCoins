@@ -10,6 +10,8 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
+import co.surumene.simplecoins.paper.PaperGrantInventoryMaterializer;
+import co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadback;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +25,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -49,6 +52,7 @@ public final class PaperSaveProbe extends JavaPlugin {
                 if ("save".equals(phase)) savePhase(player);
                 else if ("reload".equals(phase)) reloadPhase(player);
                 else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
+                else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
                 else throw new IllegalArgumentException("Unknown probe phase " + phase);
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -69,7 +73,9 @@ public final class PaperSaveProbe extends JavaPlugin {
                 throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
             }
             Bukkit.shutdown();
-        }, 30L);
+        // The product's asynchronous saved-source/receipt audit must have
+        // finished before this disposable test begins issuing and saving.
+        }, 120L);
     }
 
     private Path dataFile() {
@@ -78,8 +84,26 @@ public final class PaperSaveProbe extends JavaPlugin {
     }
 
     private Path grantDirectory() {
-        return getServer().getWorldContainer().toPath().toAbsolutePath().normalize()
-                .resolve("a02-test-grant-ledger");
+        // The product's guarded startup audits THIS journal against Paper's
+        // real playerdata. An unrelated test journal creates a spurious
+        // unknown receipt and makes the second JVM correctly fail closed.
+        var product = getServer().getPluginManager().getPlugin("SimpleCoins");
+        if (product == null || !product.isEnabled())
+            throw new IllegalStateException("Product grant journal is not available");
+        return product.getDataFolder().toPath().resolve("grants");
+    }
+
+    /** Exercise the actual active issuance ledger, not a competing writer. */
+    private GrantLedger activeProductLedger() throws ReflectiveOperationException {
+        var product = getServer().getPluginManager().getPlugin("SimpleCoins");
+        if (product == null || !product.isEnabled())
+            throw new IllegalStateException("Product grant ledger unavailable");
+        Field field = product.getClass().getDeclaredField("issuanceGrants");
+        field.setAccessible(true);
+        Object value = field.get(product);
+        if (!(value instanceof GrantLedger ledger))
+            throw new IllegalStateException("Product did not initialize authentic GrantLedger");
+        return ledger;
     }
 
     private static GrantReceiptState completedReceipt(GrantLedger.Grant grant) {
@@ -154,7 +178,7 @@ public final class PaperSaveProbe extends JavaPlugin {
         Path file = dataFile();
         if (Files.exists(file))
             throw new IllegalStateException("Probe requires fresh UUID playerdata");
-        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger ledger = activeProductLedger();
         GrantLedger.Grant grant = ledger.reserve(ID, ISSUED_VALUE, "a02-ci");
         if (grant.sequence() != 1)
             throw new IllegalStateException("Expected first reserved grant");
@@ -243,7 +267,7 @@ public final class PaperSaveProbe extends JavaPlugin {
 
     private void reloadPhase(Player player) throws Exception {
         Path file = dataFile();
-        GrantLedger ledger = new GrantLedger(grantDirectory());
+        GrantLedger ledger = activeProductLedger();
         List<GrantLedger.Grant> pending = ledger.pending(ID);
         if (pending.size() != 1)
             throw new IllegalStateException("Expected one saved-but-unacknowledged grant");
@@ -377,4 +401,113 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Repeated ACK altered durable issuance");
         getLogger().info("PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED");
     }
+    /**
+     * An additional, fourth Paper JVM proves existing production components
+     * can be composed on a REAL detached CraftPlayer and an existing saved
+     * UUID.dat: stage -> physical ItemStack -> receipt -> saveData -> saved
+     * file transition proof -> journal ACK, with no connected network player.
+     *
+     * This is a CI-only caller, NOT an enabled production delivery path.
+     */
+    private void verifiedDeliveryPhase(Player player) throws Exception {
+        Path file = dataFile();
+        if (!Files.isRegularFile(file))
+            throw new IllegalStateException("Missing authoritative previous Paper playerdata");
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Real grant verification requires detached player");
+
+        GrantLedger ledger = activeProductLedger();
+        var previous = ledger.historySnapshot();
+        if (previous.size() != 1 || !previous.getFirst().delivered()
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Earlier saved+acknowledged grant not stable");
+        GrantReceiptState originalReceipt =
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (originalReceipt.completedSequence() != previous.getFirst().sequence()
+                || originalReceipt.active())
+            throw new IllegalStateException("Reloaded receipt does not match first durable grant");
+        var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack initialCoin = player.getInventory().getItem(0);
+        ItemStack unrelated = player.getInventory().getItem(9);
+        if (initialCoin == null || initialCoin.getAmount() != 1
+                || coins.identify(initialCoin).orElse(null) != CoinDenomination.FIVE_THOUSAND
+                || unrelated == null || unrelated.getType() != Material.STONE
+                || unrelated.getAmount() != 2)
+            throw new IllegalStateException("First money and unrelated item did not survive prior JVM");
+
+        Map<String, Object> before = PlayerDataReader.read(file, 16 * 1024 * 1024,
+                64 * 1024 * 1024);
+        GrantLedger.Grant nextGrant = ledger.reserveCoins(ID, CoinDenomination.FIVE_THOUSAND,
+                1, "a02-verified-plan");
+        if (nextGrant.sequence() != 2)
+            throw new IllegalStateException("Second durable grant sequence is not 2");
+        var stage = PaperGrantInventorySlotPlan.stage(ledger, ID, nextGrant,
+                originalReceipt, player.getInventory().getStorageContents()).orElseThrow(
+                        () -> new IllegalStateException("Second coin had no vacant storage slot"));
+        if (stage.placements().size() != 1 || stage.placements().getFirst().index() != 1
+                || stage.nextReceipt().completedSequence() != nextGrant.sequence())
+            throw new IllegalStateException("Unexpected second saved physical grant plan");
+
+        World world = getServer().getWorld("world");
+        if (world == null) throw new IllegalStateException("Actual Paper overworld missing");
+        Path dimension = world.getWorldFolder().toPath().toAbsolutePath().normalize();
+        Path levelRoot = file.getParent().getParent().getParent().toAbsolutePath().normalize();
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of(world.getName(), dimension),
+                new WorldScope(true, Set.of(), Set.of(world.getName())),
+                100000, Set.of(levelRoot));
+        if (!file.toAbsolutePath().normalize().equals(manifest.playerDataFiles().get(ID))
+                || manifest.playerDataFiles().size() != 1)
+            throw new IllegalStateException("Actual shared level playerdata not discovered");
+
+        // Negative control BEFORE writing money+receipt: a valid reservation
+        // alone can NEVER constitute an ACK-eligible physical saved grant.
+        boolean denied = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(manifest, ledger, ID, stage, before,
+                    16 * 1024 * 1024, 64 * 1024 * 1024);
+        } catch (java.io.IOException notSaved) {
+            denied = true;
+        }
+        if (!denied || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Unsaved grant was eligible for acknowledgement");
+        getLogger().info("PAPER_A02_UNSAVED_PLAN_FILE_READBACK_REJECTED_PASSED");
+
+        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(stage,
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
+                player.getInventory().getStorageContents(), coins);
+        stage.requireUnchanged(PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
+                player.getInventory().getStorageContents());
+        player.getInventory().setStorageContents(candidate);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
+        player.saveData(); // real Paper PlayerDataStorage, not an in-memory mock
+
+        // Re-discover AFTER the physical save so the proof and witness bind to
+        // the latest on-disk generation. Void saveData return is not evidence.
+        var afterManifest = WorldStorageDiscovery.discover(
+                Map.of(world.getName(), dimension),
+                new WorldScope(true, Set.of(), Set.of(world.getName())),
+                100000, Set.of(levelRoot));
+        var proof = SavedGrantDeliveryFileReadback.verify(afterManifest, ledger, ID,
+                stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        if (!proof.receipt().equals(stage.nextReceipt()) || proof.matchedStacks() != 1
+                || !proof.matchedMonetaryValue().equals(java.math.BigInteger.valueOf(5000)))
+            throw new IllegalStateException("Physical saved proof did not match planned 5000 coin");
+        if (ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Second grant ACK happened before verified readback");
+        getLogger().info("PAPER_A02_REAL_PLAN_MATERIALIZER_SAVE_FILE_PROOF_PASSED"
+                + " amount=" + proof.matchedMonetaryValue()
+                + " retainedPriorCoin=true retainedOtherStorage=true"
+                + " savedReceipt=" + proof.receipt().completedSequence());
+
+        ledger.acknowledge(nextGrant, proof.receipt().completedSequence());
+        GrantLedger fresh = new GrantLedger(grantDirectory());
+        if (fresh.historySnapshot().size() != 2 || !fresh.pending(ID).isEmpty()
+                || fresh.historySnapshot().stream().anyMatch(g -> !g.delivered()))
+            throw new IllegalStateException("Verified readback ACK not durable or duplicated");
+        getLogger().info("PAPER_A02_VERIFIED_FILE_PROOF_BEFORE_ACK_PASSED"
+                + " durableGrants=2 pending=0");
+    }
+
 }
