@@ -7,6 +7,7 @@ on:
       - 'src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveEvidenceTest.java'
       - 'src/test/java/co/surumene/simplecoins/paper/BlockLockerLiveProbe.java'
       - 'tests/paper-blocklocker-smoke/**'
+      - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md'
       - 'build.gradle.kts'
       - '.github/workflows/paper-blocklocker-115-live-smoke.yml'
 jobs:
@@ -22,6 +23,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate independent saved-sign verification Work structure
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
@@ -96,6 +107,23 @@ jobs:
           wait "$pid"
           trap - EXIT
           echo 'PAPER_BLOCKLOCKER_115_READ_ONLY_SUCCESS (saved ownership not yet proved)'
+      - name: Inspect saved Paper BlockLocker sign NBT without a Bukkit server
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/offline-classes
+          javac -cp build/libs/SimpleCoins-1.0.0.jar -d smoke/offline-classes \
+            tests/paper-blocklocker-smoke/OfflineBlockLockerSignProbe.java
+          cd smoke
+          test -s world/dimensions/minecraft/overworld/region/r.0.0.mca
+          java -cp offline-classes:../build/libs/SimpleCoins-1.0.0.jar \
+            co.surumene.simplecoins.a04probe.OfflineBlockLockerSignProbe \
+            world/dimensions/minecraft/overworld/region/r.0.0.mca \
+            | tee paper-blocklocker-115-saved-signs.log
+          grep -F 'PAPER_A04_FIVE_REAL_SAVED_BLOCKLOCKER_SIGNS_ACROSS_CHUNKS_PASSED' \
+            paper-blocklocker-115-saved-signs.log
+          test "$(grep -c '^PAPER_A04_SAVED_SIGN_RAW_SOURCE_VALIDATED' \
+            paper-blocklocker-115-saved-signs.log)" -eq 5
       - name: Upload isolated provider diagnostics
         if: always()
         uses: actions/upload-artifact@v4
