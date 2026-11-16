@@ -65,7 +65,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43826682294 (tested HEAD `10cc71b`; bounded real Paper, formal CAT Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -76,3 +76,10 @@ spec_status: unknown
 - Keep all original registered recipes intact. On a disconnected synthetic NMS player in isolated official Paper, supply legitimate authentic coin inputs to an existing verified exchange. Register a **separate test-only HIGHEST PrepareItemCraftEvent listener after the product listener**, scope to that exact currency recipe, and replace only the prepared result with STONE. Register a MONITOR observer for the same event. Call the real Bukkit `craftItemResult` API once, capture event count, MONITOR result and API result.
 - Require that the late test listener actually ran exactly once, that the observation ran, that the still-registered recipe output remained correct, and that no online player/inventory mutation occurred. Classify either STONE surviving or a safe rejection by the final observed result; **do not invent a mandatory STONE result**. Remove both test listeners in `finally` and keep all Product source and inventory unchanged.
 - This is a verification-only `issue-work` Draft with no normative authority. It does not perform real user crafting, Shift crafting, physical money consumption, journal settlement or G0/G3 and cannot show CAT formal Gate success. A later mutation may require a fundamentally different atomic decision/commit mechanism; do not silently choose a design.
+
+## Measured result on official Paper 26.2 (isolated)
+
+- The source at tested feature HEAD `10cc71b1917bd1c2654a02c19a76d0f0a6cc0b88` passed Domain foundation [#43826682477](https://github.com/surumeneco/SimpleCoins/actions/runs/43826682477), Phase6 static [#43826682372](https://github.com/surumeneco/SimpleCoins/actions/runs/43826682372) and actual Paper 26.2 [#43826682294](https://github.com/surumeneco/SimpleCoins/actions/runs/43826682294). The Work was structurally validated by the canonical CAT `cat_flow validate`, not normatively confirmed; Process Closure/Model/Implementation formal Gates remain not-run.
+- With the genuine `simplecoins:exchange_n1_f1` recipe **restored** and Paper's `Recipe.getResult` still identifying a genuine SimpleCoins coin, the test-only independent `PrepareItemCraftEvent` HIGHEST listener executed **once after** the existing SimpleCoins registration and observed a genuine monetary result before replacing it with STONE. Its test-only MONITOR listener also executed once and saw STONE; `Bukkit.craftItemResult` returned **STONE**.
+- Exact log: `PAPER_A12_LATE_PREPARE_MUTATION_OBSERVED lateEvents=1 monitorEvents=1 originallyMoney=true observed=STONE apiResult=STONE onlinePlayers=0`. All disposable observers were unregistered in `finally`. The registered exchange recipe was not modified by this late mutation.
+- **Consequence:** a one-time check by SimpleCoins' earlier Prepare listener cannot alone preserve final output value against a subsequently registered same-priority mutator. This is evidence that Paper event priority/registration order is an observable safety boundary; it does **not** demonstrate a real online player's completed craft, coin consumption, a Crafter redstone pulse, or actual economic loss. The existing default-deny admission remains required. A final-result/consumption atomicity mechanism and legitimate CAT specification decision remain unresolved.
