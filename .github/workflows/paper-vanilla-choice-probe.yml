@@ -4,12 +4,14 @@ on:
     branches: [develop]
     paths:
       - 'tests/paper-vanilla-choice-probe/**'
+      - 'src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java'
       - '.github/workflows/paper-vanilla-choice-probe.yml'
       - 'Lifecycle/Works/simplecoins.a12.vanilla-paper-choice-boundary.md'
       - 'Lifecycle/Works/simplecoins.a12.exchange-recipe-result-integrity.md'
       - 'Lifecycle/Works/simplecoins.a12.paper-prepare-result-collision.md'
       - 'Lifecycle/Works/simplecoins.a12.paper-crafter-result-collision.md'
       - 'Lifecycle/Works/simplecoins.a12.paper-late-prepare-output-mutation.md'
+      - 'Lifecycle/Works/simplecoins.a12.actual-exchange-result-guard.md'
 
 jobs:
   currency-crafting-observation:
@@ -42,7 +44,9 @@ jobs:
             --work Lifecycle/Works/simplecoins.a12.paper-crafter-result-collision.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a12.paper-late-prepare-output-mutation.md
-      - name: Build separate observer plugin with no production code changes
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a12.actual-exchange-result-guard.md
+      - name: Build currency product and independently isolated Paper observer
         shell: bash
         run: |
           set -euo pipefail
@@ -93,6 +97,9 @@ jobs:
           grep -F 'PAPER_A12_VANILLA_MATERIAL_CHOICE_MATCHES_CURRENCY_PASSED' paper-a12.log
           grep -F 'PAPER_A12_THREE_EXISTING_CRAFT_GUARDS_REGISTERED_PASSED' paper-a12.log
           grep -F 'PAPER_A12_ALL_TWENTY_REAL_EXCHANGE_INPUT_OUTPUT_APPROVALS_PASSED' paper-a12.log
+          grep -F 'PAPER_A12_SUBSTITUTED_OUTPUT_REJECTED_BY_GUARD' paper-a12.log
+          grep -F 'PAPER_A12_REAL_PREPARE_EVENT_SUBSTITUTION_BLOCKED' paper-a12.log
+          grep -F 'PAPER_A12_REAL_CRAFTER_SUBSTITUTED_OUTPUT_CANCELLED' paper-a12.log
           grep -F 'PAPER_A12_DISPOSABLE_RECIPE_RESTORED_PASSED' paper-a12.log
           grep -F 'PAPER_A12_RECIPE_REGISTRY_OUTPUT_INTEGRITY_OBSERVED' paper-a12.log
           grep -F 'PAPER_A12_ACTUAL_PREPARE_RESULT_OBSERVED' paper-a12.log
