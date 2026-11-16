@@ -64,10 +64,16 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43799018718 (real Paper profile/IP source distinction, not normative CAT Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Real Paper evidence and limitation
+
+- [Official Paper 26.2 build 134 CI #43799018718](https://github.com/surumeneco/SimpleCoins/actions/runs/43799018718) used exact upstream Paper with zero connected players, admission default-deny and a synthetic TEST-NET-3 address. The main-thread `PaperProfileBanSource.observe` returned `BANNED` for the explicit UUID `7bf1ac01-4b51-4d68-8c6e-982fae4c0001` and `CLEAR` for the different UUID `...0002`, while the separate actual `BanList.Type.IP` contained exactly one IP-string entry `203.0.113.42`. Source marker: `PAPER_A06_IP_BAN_DISTINCT_FROM_PROFILE_UUID_PASSED`.
+- The CLEAR UUID remains profile-CLEAR even in the presence of a separate banned IP. This does **not** establish that the account has or had the banned IP, or that an IP-ban source may be ignored in settlement owner classification. An authenticated mapping and declared complete source set are separate A06 obligations.
+- Original null UUID and off-main-thread profile observations still fail closed. Pinned Work structure `contract_valid:true`, `semantic_approval_verified:false`; no formal CAT normative Gate passed.
 
 ## Test obligations and boundaries
 
