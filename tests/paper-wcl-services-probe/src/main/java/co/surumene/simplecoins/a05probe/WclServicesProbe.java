@@ -2,6 +2,8 @@ package co.surumene.simplecoins.a05probe;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.AnvilRegionReader;
+import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
@@ -576,6 +578,55 @@ public final class WclServicesProbe extends JavaPlugin {
                 Files.readString(farWitness("www-runtime.b64")).strip());
         Path region = world.getWorldPath()
                 .resolve("entities/r.1.1.mca").toAbsolutePath().normalize();
+
+        // Verify the exact real saved Entity file through the production
+        // settlement traversal, including preflight physical source identity,
+        // duplicate Entity UUID rejection and post-traversal drift stamps.
+        // This one-file Manual Manifest has NO global source-set provenance.
+        WorldStorageDiscovery.Manifest boundedManifest = new WorldStorageDiscovery.Manifest(
+                List.of(new WorldStorageDiscovery.SourceFile(world.getName(),
+                        region, WorldStorageDiscovery.Kind.ENTITY)), Map.of());
+        int[] traversed = {0, 0};
+        var verifiedTraversal = WorldSnapshotTraversal.traverseVerified(
+                boundedManifest, 2 * 1024 * 1024, 16 * 1024 * 1024,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override public void chunk(WorldStorageDiscovery.SourceFile source,
+                                                AnvilRegionReader.Chunk saved) throws IOException {
+                        if (!source.path().toAbsolutePath().normalize().equals(region))
+                            throw new IOException("Traversal escaped the known saved Entity source");
+                        if (!(saved.nbt().get("Entities") instanceof List<?> entities))
+                            throw new IOException("Traversed saved Chunk missing Entity list");
+                        for (Object raw : entities) {
+                            if (!(raw instanceof Map<?, ?> entity)) continue;
+                            if (!(entity.get("Tags") instanceof List<?> tags)) continue;
+                            boolean isWwc = tags.contains(FAR_WWC_TAG);
+                            boolean isWww = tags.contains(FAR_WWW_TAG);
+                            if (!isWwc && !isWww) continue;
+                            if (isWwc && isWww
+                                    || saved.x() != FAR_CHUNK || saved.z() != FAR_CHUNK)
+                                throw new IOException("Tagged provider Entity not in its unique chunk");
+                            UUID identity = readSavedUuid(entity.get("UUID"));
+                            if (isWwc) {
+                                if (++traversed[0] != 1 || !wwcUuid.equals(identity)
+                                        || !"minecraft:chicken".equals(entity.get("id")))
+                                    throw new IOException("Traversal WWC UUID/type mismatch");
+                            } else {
+                                if (++traversed[1] != 1 || !wwwUuid.equals(identity)
+                                        || !"minecraft:wolf".equals(entity.get("id")))
+                                    throw new IOException("Traversal WWW UUID/type mismatch");
+                            }
+                        }
+                    }
+                    @Override public void player(UUID player, Map<String, Object> data)
+                            throws IOException {
+                        throw new IOException("No playerdata authorized in this bounded Entity scan");
+                    }
+                }, null);
+        if (verifiedTraversal.report().regionFiles() != 1
+                || traversed[0] != 1 || traversed[1] != 1)
+            throw new IOException("Saved Entity traversal did not locate both unique providers");
+        if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
+            throw new IOException("WorldSnapshotTraversal loaded the far world chunk");
         int[] recognized = {0, 0};
         CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         AnvilRegionReader.scan(region, 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
@@ -654,6 +705,11 @@ public final class WclServicesProbe extends JavaPlugin {
                 }
             }
         });
+        // The *same* source stamp must survive the second, provider-owned
+        // readStored pass: new bytes, ctime or physical identity are rejected.
+        verifiedTraversal.witness().requireUnchanged();
+        getLogger().info("PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED"
+                + " uniqueEntityIds=2 knownRegionFiles=1 chunkNeverLoaded=true");
         if (recognized[0] != 1 || recognized[1] != 1)
             throw new IOException("Unloaded WWC/WWW saved source count incomplete WWC="
                     + recognized[0] + " WWW=" + recognized[1]);
