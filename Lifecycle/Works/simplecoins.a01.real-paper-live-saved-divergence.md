@@ -64,7 +64,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43829044370 (bounded observed Paper test HEAD `d156723`; formal CAT Gates not-run) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -81,3 +81,10 @@ spec_status: unknown
 
 - A stable file SHA/mtime, even when paired with source-discovery consistency, is evidence about **disk files**, not about currently loaded inventories or external plugin writers. Mixing those values without one established transition/commit epoch cannot prove G0.
 - Whether to use a writer barrier, coordinated generation protocol, guarded startup/reconciliation, or a different mode remains a design decision with unapproved CAT Process/PI/TCE. This isolated verification does not choose it.
+
+## Observed official Paper 26.2 result
+
+- Source/CI head `d1567233be007e0eabac9ebf8960f90c1e89a870`: the actual third JVM reloaded an authentic 5000-unit paper coin stack with count 2 from the previously saved physical Paper region. The loopback server kept admission default-deny and had zero players. The independent Java 25 / official Paper build 134 trial [#43829044370](https://github.com/surumeneco/SimpleCoins/actions/runs/43829044370) succeeded; Domain [#43829044742](https://github.com/surumeneco/SimpleCoins/actions/runs/43829044742) and Phase6 [#43829044575](https://github.com/surumeneco/SimpleCoins/actions/runs/43829044575) also succeeded at that HEAD.
+- Inside a single scheduled main-thread callback before any explicit save/shutdown, the test-only plugin changed that LIVE chest to three authentic coins. The LIVE check returned count=3, while the actual MCA file SHA-256 and last-modified time were identical before and after the LIVE change.
+- Exact witnessed line: `PAPER_A01_LIVE_VS_SAVED_MONETARY_DIVERGENCE_PASSED savedCoinsAtLoad=2 liveCoinsNow=3 diskShaUnchanged=true diskMtimeUnchanged=true onlinePlayers=0`.
+- This demonstrates **loaded-memory asset drift not represented by stable disk-side metadata/content witness** even with zero logged-in players. No assumption is made about how Paper's subsequent normal shutdown wrote that transient state. The trial does not show all-world consistency or guarantee general freeze/quiescence. It does not choose an A01 G0 architecture or establish CAT semantic approval.
