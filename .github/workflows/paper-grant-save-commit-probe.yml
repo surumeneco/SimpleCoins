@@ -8,12 +8,13 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-save-commit-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md'
 
 jobs:
   real-paper-playerdata:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -35,6 +36,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md
       - name: Build production guard and isolated probe
@@ -233,6 +236,48 @@ jobs:
           grep -F 'PAPER_A02_VERIFIED_FILE_PROOF_BEFORE_ACK_PASSED durableGrants=2 pending=0' paper-a02-verified-delivery.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-verified-delivery.log; then exit 1; fi
           echo 'PAPER_A02_REAL_PLAN_SAVE_PROOF_ACK_REAL_PAPER_PASSED'
+      - name: Fifth Paper JVM persists incomplete physical grant without ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.probe.phase=partial-save -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-partial-save.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Partial-save Paper process failed (exit=$status)" >&2
+            tail -180 paper-a02-partial-save.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-partial-save.log
+          grep -F 'PAPER_A02_PARTIAL_640000_SAVED_NO_ACK_PASSED activeSequence=3 completed=2 slots=2' paper-a02-partial-save.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-partial-save.log; then exit 1; fi
+
+      - name: Sixth Paper JVM loads partial receipt, finishes saved grant, then ACKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.probe.phase=partial-resume -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-partial-resume.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Partial-resume Paper process failed (exit=$status)" >&2
+            tail -180 paper-a02-partial-resume.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-partial-resume.log
+          grep -F 'PAPER_A02_PARTIAL_RESTART_FULL_STORAGE_NO_DUPLICATE_PASSED' paper-a02-partial-resume.log
+          grep -F 'PAPER_A02_PARTIAL_RESTART_FINAL_SAVED_PROOF_PASSED newValue=10000 completed=3' paper-a02-partial-resume.log
+          grep -F 'PAPER_A02_PARTIAL_TWO_JVM_EXACT_STACK_PREFIX_ACK_PASSED delivered=3 pending=0' paper-a02-partial-resume.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-partial-resume.log; then exit 1; fi
+          echo 'PAPER_A02_PARTIAL_TWO_PAPER_RESTARTS_PASSED'
       - name: Upload scoped diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
