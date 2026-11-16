@@ -58,6 +58,9 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
+                else if ("before-save-crash".equals(phase)) beforeSaveCrashPhase(player);
+                else if ("recover-unsaved".equals(phase)) recoverUnsavedPhase(player);
+                else if ("unsaved-acked-reload".equals(phase)) unsavedAckedReloadPhase(player);
                 else throw new IllegalArgumentException("Unknown probe phase " + phase);
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -87,6 +90,10 @@ public final class PaperSaveProbe extends JavaPlugin {
                     // Full final receipt + item proof is saved, but the journal
                     // still says pending; SIGKILL the JVM before any ACK.
                     getLogger().info("PAPER_A02_FINAL_RECEIPT_SAVED_PRE_ACK_CRASH_POINT_READY");
+                    return;
+                }
+                if ("before-save-crash".equals(phase)) {
+                    getLogger().info("PAPER_A02_PRE_SAVE_SIGKILL_POINT_READY");
                     return;
                 }
                 throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
@@ -776,6 +783,190 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Repeated ACK rewrote physical money or journal");
         getLogger().info("PAPER_A02_FINAL_SAVED_PRE_ACK_SIGKILL_SEVENTH_BOOT_ACK_ONLY_PASSED"
                 + " durableGrants=3 pending=0 originalMoneyPreserved=true");
+    }
+
+
+    /**
+     * Eighth actual Paper JVM: reserve the fourth grant and mutate a detached
+     * player's memory, but intentionally DO NOT save the new coin or receipt.
+     * A separate CI process then sends SIGKILL before normal shutdown.
+     */
+    private void beforeSaveCrashPhase(Player player) throws Exception {
+        Path file = dataFile();
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Pre-save SIGKILL requires a detached player");
+
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 3 || history.stream().anyMatch(g -> !g.delivered())
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Previous three grants must be durable and ACKed");
+        GrantReceiptState previousReceipt =
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (previousReceipt.completedSequence() != 3 || previousReceipt.active())
+            throw new IllegalStateException("Previous receipt is not fully completed");
+
+        // Previous partial-batch test left all 36 storage slots occupied. Make
+        // an authentic, persisted vacancy BEFORE the new reservation/crash window.
+        ItemStack filler = player.getInventory().getItem(5);
+        if (filler == null || filler.getType() != Material.STONE || filler.getAmount() != 1)
+            throw new IllegalStateException("Expected existing nonmonetary filler in slot 5");
+        player.getInventory().setItem(5, null);
+        player.saveData();
+        byte[] savedBeforeStage = Files.readAllBytes(file);
+        Map<String, Object> before = readDisk(file);
+        if (!SavedGrantReceiptNbt.readAndVerify(before, ledger, ID).equals(previousReceipt)
+                || SavedPlayerAssets.extract(before).containsKey("inventory:5"))
+            throw new IllegalStateException("Persisted vacancy setup is not authoritative");
+
+        GrantLedger.Grant pending = ledger.reserveCoins(ID,
+                CoinDenomination.FIVE_THOUSAND, 1, "a02-presave-sigkill");
+        if (pending.sequence() != 4 || pending.amount() != 5000
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Wrong fourth durable reservation");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        var staged = PaperGrantInventorySlotPlan.stage(ledger, ID, pending,
+                previousReceipt, player.getInventory().getStorageContents()).orElseThrow();
+        if (staged.placements().size() != 1
+                || staged.placements().getFirst().index() != 5
+                || staged.nextReceipt().active()
+                || staged.nextReceipt().completedSequence() != 4)
+            throw new IllegalStateException("Unexpected fourth grant pre-save plan");
+
+        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(staged,
+                previousReceipt, player.getInventory().getStorageContents(), codec);
+        player.getInventory().setStorageContents(candidate);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), staged.nextReceipt());
+        if (player.getInventory().getItem(5) == null
+                || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
+                        .completedSequence() != 4)
+            throw new IllegalStateException("Detached in-memory candidate was not applied");
+        // No saveData() is allowed after the preceding memory mutation.
+        if (!Arrays.equals(savedBeforeStage, Files.readAllBytes(file))
+                || !SavedGrantReceiptNbt.readAndVerify(readDisk(file), ledger, ID)
+                        .equals(previousReceipt)
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Unsaved memory became durable or ACKed");
+
+        boolean denied = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(actualPlayerManifest(), ledger, ID,
+                    staged, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        } catch (java.io.IOException expectedUnsaved) {
+            denied = true;
+        }
+        if (!denied || !Arrays.equals(savedBeforeStage, Files.readAllBytes(file)))
+            throw new IllegalStateException("Unsaved candidate passed authoritative proof");
+        getLogger().info("PAPER_A02_PRE_SAVE_ABORT_UNPERSISTED_COIN_RECEIPT_PASSED"
+                + " pending=1 savedReceipt=3 stagedReceipt=4");
+    }
+
+    /** Ninth Paper JVM: aborted in-memory money must not survive the crash. */
+    private void recoverUnsavedPhase(Player player) throws Exception {
+        Path file = dataFile();
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Uncommitted grant recovery requires a detached player");
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 4 || history.subList(0, 3).stream().anyMatch(g -> !g.delivered())
+                || history.getLast().delivered() || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Crash lost reservation or acknowledged it prematurely");
+        GrantLedger.Grant grant = history.getLast();
+        if (grant.sequence() != 4 || grant.denomination() != CoinDenomination.FIVE_THOUSAND
+                || grant.coinCount() != 1)
+            throw new IllegalStateException("Pending reservation identity changed");
+        GrantReceiptState priorReceipt =
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        Map<String, Object> before = readDisk(file);
+        if (priorReceipt.completedSequence() != 3 || priorReceipt.active()
+                || !SavedGrantReceiptNbt.readAndVerify(before, ledger, ID).equals(priorReceipt)
+                || player.getInventory().getItem(5) != null
+                || SavedPlayerAssets.extract(before).containsKey("inventory:5"))
+            throw new IllegalStateException("Aborted in-memory grant survived as a phantom coin");
+
+        java.math.BigInteger physicalBefore = SavedPlayerAssets.extract(before).values()
+                .stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add);
+        if (!physicalBefore.equals(java.math.BigInteger.valueOf(660_000)))
+            throw new IllegalStateException("Previously saved 660000 C disappeared or duplicated");
+        ItemStack unrelated = player.getInventory().getItem(9);
+        if (unrelated == null || unrelated.getType() != Material.STONE
+                || unrelated.getAmount() != 2)
+            throw new IllegalStateException("Unrelated saved storage changed after crash");
+        getLogger().info("PAPER_A02_PRESAVE_CRASH_NO_PHANTOM_MONEY_PASSED"
+                + " oldValue=660000 savedReceipt=3 pending=1");
+
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        var staged = PaperGrantInventorySlotPlan.stage(ledger, ID, grant, priorReceipt,
+                player.getInventory().getStorageContents()).orElseThrow();
+        if (staged.placements().size() != 1 || staged.placements().getFirst().index() != 5
+                || staged.nextReceipt().active()
+                || staged.nextReceipt().completedSequence() != 4)
+            throw new IllegalStateException("Recovered plan tried to issue an incorrect batch");
+        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(staged,
+                priorReceipt, player.getInventory().getStorageContents(), codec);
+        player.getInventory().setStorageContents(candidate);
+        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), staged.nextReceipt());
+        player.saveData();
+        var proof = SavedGrantDeliveryFileReadback.verify(actualPlayerManifest(), ledger, ID,
+                staged, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        if (proof.matchedStacks() != 1
+                || !proof.matchedMonetaryValue().equals(java.math.BigInteger.valueOf(5000))
+                || proof.receipt().active() || proof.receipt().completedSequence() != 4
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("New physical coin + receipt were not saved together");
+        java.math.BigInteger physicalAfter = SavedPlayerAssets.extract(readDisk(file)).values()
+                .stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add);
+        if (!physicalAfter.equals(java.math.BigInteger.valueOf(665_000)))
+            throw new IllegalStateException("Saved recovery gained/lost unplanned money");
+
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        GrantLedger reopened = new GrantLedger(grantDirectory());
+        if (reopened.historySnapshot().size() != 4
+                || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                || !reopened.pending(ID).isEmpty())
+            throw new IllegalStateException("Recovered grant ACK is not durable");
+        getLogger().info("PAPER_A02_PRESAVE_RECOVERY_SAVED_PROOF_ACK_PASSED"
+                + " total=665000 pending=0");
+    }
+
+    /** Tenth independent Paper boot: verify ACK idempotency and physical stability. */
+    private void unsavedAckedReloadPhase(Player player) throws Exception {
+        Path file = dataFile();
+        byte[] savedBefore = Files.readAllBytes(file);
+        byte[] journalBefore = Files.readAllBytes(grantDirectory().resolve("4.grant"));
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 4 || history.stream().anyMatch(g -> !g.delivered())
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Tenth boot journal re-opened a delivered grant");
+        GrantReceiptState receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (receipt.active() || receipt.completedSequence() != 4
+                || !SavedGrantReceiptNbt.readAndVerify(readDisk(file), ledger, ID).equals(receipt))
+            throw new IllegalStateException("Tenth boot physical receipt lost");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack fourth = player.getInventory().getItem(5);
+        if (fourth == null || fourth.getAmount() != 1
+                || codec.identify(fourth).orElse(null) != CoinDenomination.FIVE_THOUSAND)
+            throw new IllegalStateException("Fourth saved physical coin absent after reboot");
+        ItemStack unrelated = player.getInventory().getItem(9);
+        if (unrelated == null || unrelated.getType() != Material.STONE
+                || unrelated.getAmount() != 2)
+            throw new IllegalStateException("Tenth boot lost unrelated storage");
+        java.math.BigInteger total = SavedPlayerAssets.extract(readDisk(file)).values()
+                .stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add);
+        if (!total.equals(java.math.BigInteger.valueOf(665_000)))
+            throw new IllegalStateException("Tenth boot gained or lost currency");
+        ledger.acknowledge(history.getLast(), receipt.completedSequence());
+        if (!Arrays.equals(savedBefore, Files.readAllBytes(file))
+                || !Arrays.equals(journalBefore, Files.readAllBytes(
+                        grantDirectory().resolve("4.grant")))
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Idempotent ACK rewrote playerdata or grant journal");
+        getLogger().info("PAPER_A02_PRESAVE_TENTH_BOOT_ACK_IDEMPOTENT_PASSED"
+                + " total=665000 durableGrants=4 pending=0");
     }
 
     /** Only Paper's genuine shared level saved UUID file can supply the proof. */
