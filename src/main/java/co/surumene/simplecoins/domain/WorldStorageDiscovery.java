@@ -3,6 +3,7 @@ package co.surumene.simplecoins.domain;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.DirectoryStream;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
@@ -50,12 +51,18 @@ public final class WorldStorageDiscovery {
      * evidence that all filesystem sources were discovered.
      */
     public record DiscoveryOrigin(Map<String, Path> worldFolders, WorldScope scope,
-                                  int maximumEntries) {
+                                  int maximumEntries, Set<Path> sharedPlayerRoots) {
+        public DiscoveryOrigin(Map<String, Path> worldFolders, WorldScope scope,
+                               int maximumEntries) {
+            this(worldFolders, scope, maximumEntries, Set.of());
+        }
+
         public DiscoveryOrigin {
             worldFolders = Map.copyOf(worldFolders);
             if (worldFolders.isEmpty() || maximumEntries < 1)
                 throw new IllegalArgumentException("Invalid discovery provenance");
             Objects.requireNonNull(scope, "World inclusion scope");
+            sharedPlayerRoots = Set.copyOf(sharedPlayerRoots);
         }
     }
 
@@ -81,7 +88,7 @@ public final class WorldStorageDiscovery {
         public void requireUnchangedDiscovery() throws IOException {
             if (origin == null) return;
             Manifest after = discover(origin.worldFolders(), origin.scope(),
-                    origin.maximumEntries());
+                    origin.maximumEntries(), origin.sharedPlayerRoots());
             if (!worldFiles.equals(after.worldFiles()) ||
                     !playerDataFiles.equals(after.playerDataFiles()))
                 throw new IOException("Authoritative saved source set changed during traversal");
@@ -111,8 +118,21 @@ public final class WorldStorageDiscovery {
      */
     public static Manifest discover(Map<String, Path> worldFolders,
                                     WorldScope scope, int maximumEntries) throws IOException {
+        return discover(worldFolders, scope, maximumEntries, Set.of());
+    }
+
+    /**
+     * Paper 26.2 worlds expose per-dimension folders, but playerdata lives
+     * outside them in the shared level root. The caller must capture those
+     * roots from authoritative live World paths on Paper's primary thread.
+     * Shared folders are scanned only for playerdata, never for regions.
+     */
+    public static Manifest discover(Map<String, Path> worldFolders,
+                                    WorldScope scope, int maximumEntries,
+                                    Set<Path> sharedPlayerRoots) throws IOException {
         Objects.requireNonNull(worldFolders);
         Objects.requireNonNull(scope);
+        Objects.requireNonNull(sharedPlayerRoots);
         if (worldFolders.isEmpty() || maximumEntries < 1)
             throw new IllegalArgumentException("World folders and a positive visit budget are required");
 
@@ -224,6 +244,63 @@ public final class WorldStorageDiscovery {
             });
         }
 
+        // Paper 26.2 stores playerdata above the per-dimension World#getWorldPath().
+        // Scan only the two recognized playerdata directories; rewalking the
+        // shared level root would double-count dimensions and defeat WorldScope.
+        for (Path rawSharedRoot : sharedPlayerRoots) {
+            if (rawSharedRoot == null)
+                throw new IllegalArgumentException("Null shared playerdata root");
+            Path levelRoot = rawSharedRoot.toAbsolutePath().normalize();
+            for (Path component = levelRoot; component != null; component = component.getParent()) {
+                if (Files.isSymbolicLink(component))
+                    throw new IOException("Symbolic ancestor in shared playerdata root: " + component);
+            }
+            if (!Files.isDirectory(levelRoot, LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Shared playerdata root missing or symbolic: " + levelRoot);
+            // Do not follow an aliased players/ parent even if players/data
+            // appears to be an ordinary directory through that alias.
+            Path playersParent = levelRoot.resolve("players");
+            if (Files.isSymbolicLink(playersParent))
+                throw new IOException("Symbolic players parent: " + playersParent);
+            for (Path playerDirectory : List.of(
+                    levelRoot.resolve("players/data"), levelRoot.resolve("playerdata"))) {
+                if (!Files.exists(playerDirectory, LinkOption.NOFOLLOW_LINKS)) continue;
+                if (!Files.isDirectory(playerDirectory, LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Invalid shared playerdata directory: " + playerDirectory);
+                if (++visited[0] > maximumEntries)
+                    throw new IOException("Storage discovery visit budget exhausted at " + playerDirectory);
+                try (DirectoryStream<Path> entries = Files.newDirectoryStream(playerDirectory)) {
+                    for (Path file : entries) {
+                        if (++visited[0] > maximumEntries)
+                            throw new IOException("Storage discovery visit budget exhausted at " + file);
+                        BasicFileAttributes attrs = Files.readAttributes(file,
+                                BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                        if (attrs.isSymbolicLink())
+                            throw new IOException("Symbolic shared playerdata file: " + file);
+                        String filename = file.getFileName().toString();
+                        boolean primary = filename.endsWith(".dat");
+                        boolean backup = filename.endsWith(".dat_old");
+                        if (!primary && !backup) continue;
+                        if (!attrs.isRegularFile())
+                            throw new IOException("Non-regular shared playerdata source: " + file);
+                        if (backup) {
+                            UUID uuid = canonicalPlayerUuid(file, ".dat_old");
+                            candidateBackups.put(file, uuid);
+                        } else {
+                            UUID uuid = canonicalPlayerUuid(file, ".dat");
+                            Path previous = players.putIfAbsent(uuid, file);
+                            if (previous != null)
+                                throw new IOException("Ambiguous playerdata authority for " + uuid + ": "
+                                        + previous + " and " + file);
+                        }
+                        requireUniquePhysicalFile(file, attrs.fileKey(),
+                                sourceIdentityByKey, unkeyedSourcePaths,
+                                backup ? "playerdata backup" : "authoritative source");
+                    }
+                }
+            }
+        }
+
         // Process after the entire walk: the filesystem enumeration order
         // cannot decide whether a matching primary exists. A backup in
         // another World/parent is not an authority for this UUID.
@@ -240,7 +317,9 @@ public final class WorldStorageDiscovery {
                 .thenComparing(a -> a.path().toString())
                 .thenComparing(SourceFile::kind));
         return new Manifest(worldFiles, players,
-                new DiscoveryOrigin(provenanceRoots, scope, maximumEntries));
+                new DiscoveryOrigin(provenanceRoots, scope, maximumEntries,
+                    sharedPlayerRoots.stream().map(path -> path.toAbsolutePath().normalize())
+                            .collect(java.util.stream.Collectors.toUnmodifiableSet())));
     }
 
     /**
