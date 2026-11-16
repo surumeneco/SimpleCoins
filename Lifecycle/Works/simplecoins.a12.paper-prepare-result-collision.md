@@ -64,10 +64,18 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | https://github.com/surumeneco/SimpleCoins/actions/runs/43820540144 (actual Paper Prepare event, not CAT formal Gate) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
+
+## Measured official Paper result
+
+- At exact tested head `85365b03f9a889bbbde945ac7b3180995b3e70df`, isolated official Paper 26.2 build 134 plus independent default-deny guard and current SimpleCoins JAR ran the registered production `CoinExchangeRecipes` listener. Real Paper CI [#43820540144](https://github.com/surumeneco/SimpleCoins/actions/runs/43820540144), Domain foundation and static Phase6 CI all succeeded on that head. New Work CAT structure: `contract_valid:true`, `semantic_approval_verified:false`.
+- After the legitimate `simplecoins:exchange_n1_f1` registry entry had been temporarily replaced with a ShapelessRecipe whose output is `STONE` and whose ingredient is ordinary `PAPER`, real genuine coin input still yielded `isApproved=true`.
+- A test-only **detached, offline NMS Player** was supplied to the real `Bukkit.craftItemResult(moneyMatrix, world, player)` path. A separate `MONITOR` listener observed exactly **one** registered `PrepareItemCraftEvent` for the target key after the product `HIGHEST` listener. The observed prepared result was `STONE`, and the official Paper API returned `STONE` as the computed craft result. Exact log: `PAPER_A12_ACTUAL_PREPARE_RESULT_OBSERVED prepareEventCount=1 postMonitor=STONE result=STONE disconnectedSyntheticPlayer=true`.
+- The original recipe was restored in `finally`, and the observer unregistered. No player entered the server, no inventory grant or actual end-to-end finished CraftItemEvent occurred, and no economic loss was produced or asserted.
+- This **upgrades the previously observed key-only approval gap to a real Prepare-event-path result-integrity failure**, bounded to Paper's programmatic crafting API. It is a release-blocking technical observation under the accepted value-preservation requirement, not authorization to self-Confirm the unapproved A12 Process/PI/TCE or change production before legitimate CAT gates.
 
 ## Verification boundary
 
