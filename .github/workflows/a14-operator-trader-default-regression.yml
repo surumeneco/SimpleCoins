@@ -1,0 +1,45 @@
+name: A14 operator trader drop-rate override regression
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/paper/WanderingTraderDropConfigReaderTest.java'
+      - 'src/main/resources/config.yml'
+      - 'Lifecycle/Works/simplecoins.a14.trader-default-operator-override.md'
+      - 'Lifecycle/CAT/Candidates/simplecoins.trader-default-drop-rate-10percent.md'
+      - '.github/workflows/a14-operator-trader-default-regression.yml'
+permissions:
+  contents: read
+jobs:
+  trader-override:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate issue-work structure and observational Candidate syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a14.trader-default-operator-override.md
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py \
+            --files Lifecycle/CAT/Candidates/simplecoins.trader-default-drop-rate-10percent.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Test shipped default and operator override without product source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :test --tests co.surumene.simplecoins.paper.WanderingTraderDropConfigReaderTest
+          echo A14_OPERATOR_EXPLICIT_CHANCE_50_PERCENT_PRESERVED_AND_DEFAULT_10_PERCENT_PASSED
