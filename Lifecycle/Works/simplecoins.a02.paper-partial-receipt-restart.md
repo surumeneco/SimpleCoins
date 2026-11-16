@@ -66,7 +66,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | The earlier all-success run at feature HEAD `26e49f75142df67547e923a548b9ab0e0bb921a4` covered **clean** shutdown between fifth and sixth Paper JVM. It is stale for the newly required partial-state SIGKILL; exact new HEAD CI must pass first. |
+| ci | passed | [real Paper SIGKILL #43859884378](https://github.com/surumeneco/SimpleCoins/actions/runs/43859884378); [Domain #43859884403](https://github.com/surumeneco/SimpleCoins/actions/runs/43859884403); [Phase6 #43859884470](https://github.com/surumeneco/SimpleCoins/actions/runs/43859884470), tested feature HEAD `aece73ccd18d9df5bf31910242c4f0ce4739fa56`. Ordinary CI only, not normative CAT gates. |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -91,4 +91,4 @@ This is an independent `issue-work` verification only. All CAT Process/PI/TCE Dr
 
 ## Crash boundary strengthened after initial clean-restart Green
 
-The first 6-JVM success on #43854639964 proved correct partial cursor recovery across a clean Paper restart, not from an abruptly terminated partial-write session. The fifth JVM is now required to log its verified partial on-disk 640000 receipt and *still-pending* journal, remain running, signal `PAPER_A02_PARTIAL_SAVED_BEFORE_ACK_CRASH_POINT_READY`, then receive OS SIGKILL with observed process status 137 **before** any Paper shutdown hooks. The sixth JVM's existing assertions must still succeed using the same files. The new HEAD CI is not complete at the time of this Work revision; previous run must not be substituted for the crash-specific proof.
+The first 6-JVM success on #43854639964 proved correct partial cursor recovery across a clean Paper restart, not from an abruptly terminated partial-write session. The fifth JVM is now required to log its verified partial on-disk 640000 receipt and *still-pending* journal, remain running, signal `PAPER_A02_PARTIAL_SAVED_BEFORE_ACK_CRASH_POINT_READY`, then receive OS SIGKILL with observed process status 137 **before** any Paper shutdown hooks. The sixth JVM's existing assertions must still succeed using the same files. The exact crash-specific run #43859884378 completed success: the fifth process waited for the verified on-disk partial receipt and emitted `PAPER_A02_PARTIAL_SAVED_BEFORE_ACK_CRASH_POINT_READY`, received SIGKILL (observed process exit 137 and `PAPER_A02_PARTIAL_BEFORE_ACK_SIGKILL_INJECTED`), and a sixth independent process logged `PAPER_A02_PARTIAL_RESTART_FULL_STORAGE_NO_DUPLICATE_PASSED`, `PAPER_A02_PARTIAL_RESTART_FINAL_SAVED_PROOF_PASSED newValue=10000 completed=3`, and `PAPER_A02_PARTIAL_TWO_JVM_EXACT_STACK_PREFIX_ACK_PASSED delivered=3 pending=0`. The original clean-stop #43854639964 and strengthened SIGKILL versions are distinct evidence.
