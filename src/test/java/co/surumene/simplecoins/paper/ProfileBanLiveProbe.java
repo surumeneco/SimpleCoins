@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
+import org.bukkit.BanList;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Isolated Paper-only observation: NEVER ship this test plugin with SimpleCoins. */
@@ -23,6 +24,20 @@ public final class ProfileBanLiveProbe extends JavaPlugin {
             var clear = PaperProfileBanSource.observe(CLEAR);
             requireProfile(banned, BanEvidence.Status.BANNED);
             requireProfile(clear, BanEvidence.Status.CLEAR);
+
+            // Paper exposes IP bans as a separate IP-string keyed list.
+            // An IP entry does not establish which offline UUID used that IP.
+            final String isolatedTestIp = "203.0.113.42";
+            @SuppressWarnings("deprecation")
+            var ipEntries = Bukkit.getBanList(BanList.Type.IP).getEntries();
+            long matchingIpEntries = ipEntries.stream()
+                    .filter(entry -> isolatedTestIp.equals(String.valueOf(entry.getTarget())))
+                    .count();
+            if (matchingIpEntries != 1 || ipEntries.size() != 1)
+                throw new IOException("Expected one exact Paper IP-ban entry, got " + ipEntries);
+            requireProfile(PaperProfileBanSource.observe(CLEAR), BanEvidence.Status.CLEAR);
+            getLogger().info("PAPER_A06_IP_BAN_DISTINCT_FROM_PROFILE_UUID_PASSED"
+                    + " bannedIp=" + isolatedTestIp + " clearUuid=" + CLEAR);
 
             // Null and non-primary-thread calls MUST fail; they must not become CLEAR.
             try {
