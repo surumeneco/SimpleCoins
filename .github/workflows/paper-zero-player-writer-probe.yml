@@ -8,6 +8,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.zero-player-external-writer-probe.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-live-saved-divergence.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-live-captured-value-drift.md'
+      - 'Lifecycle/Works/simplecoins.a01.paper-hybrid-staged-stale-live.md'
 
 jobs:
   zero-player-external-writer:
@@ -38,6 +39,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a01.real-paper-live-saved-divergence.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.paper-live-captured-value-drift.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.paper-hybrid-staged-stale-live.md
       - name: Build production and isolated probe without packaging it in product
         shell: bash
         run: |
@@ -105,7 +108,8 @@ jobs:
               verify)
                 grep -F 'PAPER_A01_ZERO_PLAYER_RELOAD_NEW_VALUE_PASSED' "paper-a01-$phase.log"
                 grep -F 'PAPER_A01_LIVE_VS_SAVED_MONETARY_DIVERGENCE_PASSED' "paper-a01-$phase.log"
-                grep -F 'PAPER_A01_PRODUCT_LIVE_CAPTURE_VALUE_DRIFT_OBSERVED originalCapture=10000 freshCapture=15000 immutableSourceKey=true diskShaUnchanged=true onlinePlayers=0' "paper-a01-$phase.log" ;;
+                grep -F 'PAPER_A01_PRODUCT_LIVE_CAPTURE_VALUE_DRIFT_OBSERVED originalCapture=10000 freshCapture=15000 immutableSourceKey=true diskShaUnchanged=true onlinePlayers=0' "paper-a01-$phase.log"
+                grep -F 'PAPER_A01_REAL_HYBRID_STALE_LIVE_CANDIDATE_OBSERVED candidate=10000 actualLive=15000 realSavedManifest=true savedWitnessUnchanged=true admissionBlocked=true' "paper-a01-$phase.log" ;;
             esac
             if [ ! -f "$region" ]; then
               echo "Expected current Paper 26.2 region file missing: $region" >&2
