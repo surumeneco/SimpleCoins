@@ -9,12 +9,13 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md'
 
 jobs:
   real-paper-playerdata:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -38,6 +39,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md
       - name: Build production guard and isolated probe
@@ -290,28 +293,81 @@ jobs:
             exit 1
           fi
           echo 'PAPER_A02_PARTIAL_BEFORE_ACK_SIGKILL_INJECTED'
-      - name: Sixth Paper JVM loads partial receipt, finishes saved grant, then ACKs
+      - name: Sixth Paper JVM saves final completed receipt then SIGKILL before journal ACK
         shell: bash
         run: |
           set -euo pipefail
           cd smoke
-          set +e
-          timeout --signal=TERM --kill-after=10s 190s \
-            java -Da02.probe.phase=partial-resume -Xms256M -Xmx1024M \
-              -jar paper.jar nogui </dev/null > paper-a02-partial-resume.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Partial-resume Paper process failed (exit=$status)" >&2
+          java -Da02.probe.phase=partial-resume -Da02.probe.awaitSigkill=true \
+            -Xms256M -Xmx1024M -jar paper.jar nogui \
+            </dev/null > paper-a02-partial-resume.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -KILL "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-partial-resume.log; then
+              tail -180 paper-a02-partial-resume.log
+              exit 1
+            fi
+            if grep -Fq 'PAPER_A02_FINAL_RECEIPT_SAVED_PRE_ACK_CRASH_POINT_READY' paper-a02-partial-resume.log; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Paper exited before final-receipt pre-ACK crash' >&2
+              tail -180 paper-a02-partial-resume.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo 'Final receipt before ACK boundary was not observed' >&2
             tail -180 paper-a02-partial-resume.log
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-partial-resume.log
           grep -F 'PAPER_A02_PARTIAL_RESTART_FULL_STORAGE_NO_DUPLICATE_PASSED' paper-a02-partial-resume.log
           grep -F 'PAPER_A02_PARTIAL_RESTART_FINAL_SAVED_PROOF_PASSED newValue=10000 completed=3' paper-a02-partial-resume.log
-          grep -F 'PAPER_A02_PARTIAL_TWO_JVM_EXACT_STACK_PREFIX_ACK_PASSED delivered=3 pending=0' paper-a02-partial-resume.log
-          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-partial-resume.log; then exit 1; fi
-          echo 'PAPER_A02_PARTIAL_TWO_PAPER_RESTARTS_PASSED'
+          if grep -Fq 'Saving worlds' paper-a02-partial-resume.log; then
+            echo 'Paper began normal shutdown before final saved-receipt SIGKILL' >&2
+            exit 1
+          fi
+          kill -KILL "$server_pid"
+          set +e
+          wait "$server_pid"
+          status=$?
+          set -e
+          trap - EXIT
+          if [ "$status" -ne 137 ]; then
+            echo "Expected final saved receipt SIGKILL status 137, got $status" >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_FINAL_SAVED_RECEIPT_BEFORE_ACK_SIGKILL_INJECTED'
+      - name: Seventh Paper JVM recovers pending journal ACK without duplicating saved coins
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.probe.phase=final-ack-recovery -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-final-ack-recovery.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Seventh Paper ACK recovery process failed (exit=$status)" >&2
+            tail -180 paper-a02-final-ack-recovery.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-final-ack-recovery.log
+          grep -F 'PAPER_A02_FINAL_SAVED_RECEIPT_CRASH_RECOVERED_WITHOUT_ISSUE_PASSED physicalValue=660000 receipt=3 pendingBeforeAck=1' paper-a02-final-ack-recovery.log
+          grep -F 'PAPER_A02_FINAL_SAVED_PRE_ACK_SIGKILL_SEVENTH_BOOT_ACK_ONLY_PASSED durableGrants=3 pending=0 originalMoneyPreserved=true' paper-a02-final-ack-recovery.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-final-ack-recovery.log; then exit 1; fi
+          echo 'PAPER_A02_FINAL_RECEIPT_PRE_ACK_SIGKILL_ACK_ONLY_RECOVERY_PASSED'
       - name: Upload scoped diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4

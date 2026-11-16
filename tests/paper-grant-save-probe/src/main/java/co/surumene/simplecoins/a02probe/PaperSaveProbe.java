@@ -6,12 +6,14 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
 import co.surumene.simplecoins.domain.PlayerDataReader;
+import co.surumene.simplecoins.domain.SavedPlayerAssets;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
 import co.surumene.simplecoins.paper.PaperGrantInventoryMaterializer;
 import co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadback;
+import co.surumene.simplecoins.paper.SavedGrantReceiptNbt;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,6 +57,7 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
+                else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
                 else throw new IllegalArgumentException("Unknown probe phase " + phase);
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -78,6 +81,12 @@ public final class PaperSaveProbe extends JavaPlugin {
                     // Force-kill this actual Paper JVM instead of relying on
                     // a clean server shutdown to flush playerdata.
                     getLogger().info("PAPER_A02_PARTIAL_SAVED_BEFORE_ACK_CRASH_POINT_READY");
+                    return;
+                }
+                if ("partial-resume".equals(phase)) {
+                    // Full final receipt + item proof is saved, but the journal
+                    // still says pending; SIGKILL the JVM before any ACK.
+                    getLogger().info("PAPER_A02_FINAL_RECEIPT_SAVED_PRE_ACK_CRASH_POINT_READY");
                     return;
                 }
                 throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
@@ -674,6 +683,11 @@ public final class PaperSaveProbe extends JavaPlugin {
                 + " newValue=" + proof.matchedMonetaryValue()
                 + " completed=" + proof.receipt().completedSequence());
 
+        if (Boolean.getBoolean("a02.probe.awaitSigkill")) {
+            // The harness will force-stop this JVM after the verified final
+            // physical inventory + completed receipt reached disk. No ACK.
+            return;
+        }
         ledger.acknowledge(grant, proof.receipt().completedSequence());
         GrantLedger reopened = new GrantLedger(grantDirectory());
         if (reopened.historySnapshot().size() != 3
@@ -682,6 +696,86 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Final durable ACK was lost or re-opened");
         getLogger().info("PAPER_A02_PARTIAL_TWO_JVM_EXACT_STACK_PREFIX_ACK_PASSED"
                 + " delivered=3 pending=0");
+    }
+
+
+    /**
+     * Seventh independent real Paper JVM: the final completed playerdata
+     * survived SIGKILL, but the authentic issuance journal is still pending.
+     * Confirm all 130 coins and existing unrelated possessions BEFORE
+     * recovering only the ACK; never grant additional ItemStacks in this phase.
+     */
+    private void finalAckRecoveryPhase(Player player) throws Exception {
+        Path file = dataFile();
+        if (!Files.isRegularFile(file))
+            throw new IllegalStateException("Completed saved playerdata is missing");
+        byte[] playerBeforeAck = Files.readAllBytes(file);
+        player.loadData();
+        if (player.isOnline() || !getServer().getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Final ACK recovery requires detached player");
+
+        GrantLedger ledger = activeProductLedger();
+        var grants = ledger.historySnapshot();
+        if (grants.size() != 3 || !grants.get(0).delivered()
+                || !grants.get(1).delivered() || grants.get(2).delivered()
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Final saved receipt did not leave grant3 pending");
+        GrantLedger.Grant third = grants.get(2);
+        if (third.sequence() != 3 || third.coinCount() != 130
+                || third.denomination() != CoinDenomination.FIVE_THOUSAND)
+            throw new IllegalStateException("Wrong authentic partial reservation");
+
+        Map<String, Object> savedRoot = readDisk(file);
+        GrantReceiptState diskReceipt = SavedGrantReceiptNbt.readAndVerify(
+                savedRoot, ledger, ID);
+        GrantReceiptState loadedReceipt =
+                PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (!diskReceipt.equals(loadedReceipt) || diskReceipt.active()
+                || diskReceipt.completedSequence() != 3)
+            throw new IllegalStateException("Completed receipt not saved coherently");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        int[] moneySlots = {0, 1, 2, 3, 4};
+        int[] amounts = {1, 1, 2, 64, 64};
+        var savedAssets = SavedPlayerAssets.extract(savedRoot);
+        long totalPhysicalValue = 0;
+        for (int i = 0; i < moneySlots.length; i++) {
+            int slot = moneySlots[i], count = amounts[i];
+            ItemStack physical = player.getInventory().getItem(slot);
+            if (physical == null || physical.getAmount() != count
+                    || codec.identify(physical).orElse(null)
+                            != CoinDenomination.FIVE_THOUSAND
+                    || !java.math.BigInteger.valueOf(5000L * count).equals(
+                            savedAssets.get("inventory:" + slot)))
+                throw new IllegalStateException("Missing/different real saved coin in slot " + slot);
+            totalPhysicalValue += 5000L * count;
+        }
+        ItemStack originalStone = player.getInventory().getItem(9);
+        if (originalStone == null || originalStone.getType() != Material.STONE
+                || originalStone.getAmount() != 2 || totalPhysicalValue != 660_000)
+            throw new IllegalStateException("Nonmonetary storage or total money was lost");
+        if (!ledger.wasApplied(third, diskReceipt.completedSequence())
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Completed receipt not ACK-recoverable");
+        getLogger().info("PAPER_A02_FINAL_SAVED_RECEIPT_CRASH_RECOVERED_WITHOUT_ISSUE_PASSED"
+                + " physicalValue=" + totalPhysicalValue
+                + " receipt=" + diskReceipt.completedSequence()
+                + " pendingBeforeAck=" + ledger.pending(ID).size());
+
+        ledger.acknowledge(third, diskReceipt.completedSequence());
+        GrantLedger reopened = new GrantLedger(grantDirectory());
+        if (reopened.historySnapshot().size() != 3
+                || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                || !reopened.pending(ID).isEmpty()
+                || !Arrays.equals(playerBeforeAck, Files.readAllBytes(file)))
+            throw new IllegalStateException("ACK-only recovery changed saved inventory or journal state");
+        byte[] durableAck = Files.readAllBytes(grantDirectory().resolve("3.grant"));
+        ledger.acknowledge(third, diskReceipt.completedSequence());
+        if (!Arrays.equals(durableAck, Files.readAllBytes(
+                grantDirectory().resolve("3.grant")))
+                || !Arrays.equals(playerBeforeAck, Files.readAllBytes(file)))
+            throw new IllegalStateException("Repeated ACK rewrote physical money or journal");
+        getLogger().info("PAPER_A02_FINAL_SAVED_PRE_ACK_SIGKILL_SEVENTH_BOOT_ACK_ONLY_PASSED"
+                + " durableGrants=3 pending=0 originalMoneyPreserved=true");
     }
 
     /** Only Paper's genuine shared level saved UUID file can supply the proof. */
