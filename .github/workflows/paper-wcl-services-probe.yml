@@ -11,6 +11,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.wwc-offline-entity-anvil-proof.md'
       - 'Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md'
       - 'Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md'
+      - 'Lifecycle/Works/simplecoins.a05.wcl-verified-traversal-paper.md'
 permissions:
   contents: read
 
@@ -47,6 +48,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.www-offline-entity-anvil-proof.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wcl-verified-traversal-paper.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -190,7 +193,8 @@ jobs:
               reload)
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
-                grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log" ;;
+                grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED' "paper-a05-$phase.log" ;;
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
