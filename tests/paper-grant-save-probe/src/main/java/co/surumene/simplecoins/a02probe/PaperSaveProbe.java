@@ -6,6 +6,8 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
 import co.surumene.simplecoins.domain.PlayerDataReader;
+import co.surumene.simplecoins.domain.WorldScope;
+import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
@@ -296,6 +298,35 @@ public final class PaperSaveProbe extends JavaPlugin {
         byte[] playerBefore = Files.readAllBytes(file);
         byte[] grantBefore = Files.readAllBytes(ledgerPath.resolve("1.grant"));
         assertSavedPair(file, expectedReceipt(delivered));
+
+        // The third Paper JVM owns a real playerdata file with a real coin
+        // and persistent receipt, written under the shared level root.
+        // Inspect the *existing production* world-root-only discovery
+        // independently, without fabricating a Manifest.
+        var paperWorld = getServer().getWorld("world");
+        if (paperWorld == null) throw new IllegalStateException("Missing actual Paper test world");
+        Path paperDimension = paperWorld.getWorldFolder().toPath().toAbsolutePath().normalize();
+        Path realPlayerData = file.toAbsolutePath().normalize();
+        if (realPlayerData.startsWith(paperDimension))
+            throw new IllegalStateException("Test world did not use shared Paper playerdata root");
+        var observedSourceSet = WorldStorageDiscovery.discover(
+                Map.of(paperWorld.getName(), paperDimension),
+                new WorldScope(true, Set.of(), Set.of()), 100000);
+        if (observedSourceSet.origin() == null)
+            throw new IllegalStateException("Production saved discovery omitted provenance");
+        boolean indexed = realPlayerData.equals(observedSourceSet.playerDataFiles().get(ID));
+        getLogger().info("PAPER_A01_REAL_PLAYERDATA_DISCOVERY_BOUNDARY_OBSERVED"
+                + " existingMoneySaved=true"
+                + " playerDataOutsideWorldFolder=true"
+                + " playerIndexed=" + indexed
+                + " observedPlayerSources=" + observedSourceSet.playerDataFiles().size());
+        if (!indexed)
+            getLogger().warning("PAPER_A01_SHARED_PLAYERDATA_OMISSION_OBSERVED"
+                    + " authenticSavedMoney=5000"
+                    + " manifestPlayerSources=" + observedSourceSet.playerDataFiles().size());
+        else
+            getLogger().info("PAPER_A01_SHARED_PLAYERDATA_INCLUDED_IN_MANIFEST");
+
         player.loadData();
         ItemStack coin = player.getInventory().getItem(0);
         if (coin == null || coin.getType() != Material.PAPER || coin.getAmount() != PAPER_COUNT
