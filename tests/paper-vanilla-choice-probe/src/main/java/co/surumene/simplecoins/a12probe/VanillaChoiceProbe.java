@@ -192,6 +192,9 @@ public final class VanillaChoiceProbe extends JavaPlugin {
                 throw new IllegalStateException("Monetary recipe not restored after bounded probe");
             getLogger().info("PAPER_A12_DISPOSABLE_RECIPE_RESTORED_PASSED");
         }
+        // A separate late mutation test operates on the genuine restored recipe.
+        // Keep the same-key substitution experiment above isolated in its finally.
+        verifyLatePrepareOutputMutation(replaceKey, adversarialMatrix);
         getLogger().info("PAPER_A12_RECIPE_REGISTRY_OUTPUT_INTEGRITY_OBSERVED");
     }
 
@@ -311,6 +314,72 @@ public final class VanillaChoiceProbe extends JavaPlugin {
         } finally {
             HandlerList.unregisterAll(monitor);
             block.setType(Material.AIR);
+        }
+    }
+
+    /**
+     * Verify a distinct plugin can or cannot mutate a *legitimate* prepared
+     * monetary result after the product's already-registered HIGHEST guard.
+     * This does not perform a CraftItemEvent or consume any item.
+     */
+    private void verifyLatePrepareOutputMutation(NamespacedKey key,
+                                                 ItemStack[] money) throws Exception {
+        Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
+        Recipe original = Bukkit.getRecipe(key);
+        CoinItemCodec coinCodec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        if (product == null || !product.isEnabled() || original == null
+                || coinCodec.identify(original.getResult()).isEmpty())
+            throw new IllegalStateException("Expected intact genuine exchange before late mutation");
+        AtomicInteger lateCount = new AtomicInteger();
+        AtomicInteger monitorCount = new AtomicInteger();
+        boolean[] originalWasMoney = {false};
+        Material[] observedAtMonitor = {Material.AIR};
+        Listener lateReplacement = new Listener() {
+            @EventHandler(priority = EventPriority.HIGHEST)
+            public void replacePreparedResult(PrepareItemCraftEvent event) {
+                if (!(event.getRecipe() instanceof Keyed keyed)
+                        || !key.equals(keyed.getKey())) return;
+                lateCount.incrementAndGet();
+                ItemStack current = event.getInventory().getResult();
+                originalWasMoney[0] = current != null
+                        && coinCodec.identify(current).isPresent();
+                event.getInventory().setResult(new ItemStack(Material.STONE, 1));
+            }
+        };
+        Listener monitor = new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeLateResult(PrepareItemCraftEvent event) {
+                if (!(event.getRecipe() instanceof Keyed keyed)
+                        || !key.equals(keyed.getKey())) return;
+                monitorCount.incrementAndGet();
+                ItemStack current = event.getInventory().getResult();
+                observedAtMonitor[0] = current == null ? Material.AIR : current.getType();
+            }
+        };
+        // Both handlers are deliberately registered *after* the product.
+        Bukkit.getPluginManager().registerEvents(lateReplacement, this);
+        Bukkit.getPluginManager().registerEvents(monitor, this);
+        try {
+            Player player = detachedPlayer();
+            if (player.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+                throw new IllegalStateException("Late Prepare probe is not offline");
+            var crafted = Bukkit.craftItemResult(
+                    money.clone(), Bukkit.getWorlds().getFirst(), player);
+            ItemStack result = crafted.getResult();
+            Material returned = result == null ? Material.AIR : result.getType();
+            if (lateCount.get() != 1 || monitorCount.get() != 1 || !originalWasMoney[0])
+                throw new IllegalStateException("Late Prepare observer did not see exactly one genuine monetary result");
+            Recipe current = Bukkit.getRecipe(key);
+            if (current == null || coinCodec.identify(current.getResult()).isEmpty())
+                throw new IllegalStateException("Late Prepare probe mutated genuine recipe registry");
+            getLogger().info("PAPER_A12_LATE_PREPARE_MUTATION_OBSERVED"
+                    + " lateEvents=" + lateCount.get()
+                    + " monitorEvents=" + monitorCount.get()
+                    + " originallyMoney=true observed=" + observedAtMonitor[0]
+                    + " apiResult=" + returned + " onlinePlayers=0");
+        } finally {
+            HandlerList.unregisterAll(lateReplacement);
+            HandlerList.unregisterAll(monitor);
         }
     }
 
