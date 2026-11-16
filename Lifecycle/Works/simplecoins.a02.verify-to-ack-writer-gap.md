@@ -49,7 +49,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.verify-to-ack-writer-gap.md;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java | — | src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.verify-to-ack-writer-gap.md;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java;.github/workflows/a02-verify-to-ack-writer-gap.yml | — | src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java;.github/workflows/a02-verify-to-ack-writer-gap.yml |
 
 ## Checks
 
