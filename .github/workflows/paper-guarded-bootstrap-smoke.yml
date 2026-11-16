@@ -25,6 +25,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate G3 bounded CAT Work structure (not normative Gates)
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.guarded-startup-saved-receipt-audit.md
       - name: Build and verify both plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
