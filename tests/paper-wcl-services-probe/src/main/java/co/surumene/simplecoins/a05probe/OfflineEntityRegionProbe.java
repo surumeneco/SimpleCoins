@@ -103,9 +103,11 @@ public final class OfflineEntityRegionProbe {
                     throw new IOException("Saved WWC Entity lacks BukkitValues PDC: " + entity.keySet());
                 if (!"wonderful_chicken".equals(pdc.get("whatawonderfulchicken:type")))
                     throw new IOException("Wrong saved WWC PDC marker");
+                // The genuine Paper entity is a deliberately storage-only
+                // legacy v2 fixture. Reader-only v3 coverage is separate.
                 if (!(pdc.get("whatawonderfulchicken:data_version") instanceof Integer version)
-                        || version != 3)
-                    throw new IOException("Wrong saved WWC PDC schema");
+                        || version != 2)
+                    throw new IOException("Wrong saved WWC legacy storage PDC schema");
                 if (!FOLLOW.toString().equals(pdc.get("whatawonderfulchicken:follow_target")))
                     throw new IOException("Lost saved WWC follow-target UUID");
                 if (!(pdc.get("whatawonderfulchicken:equipment_shulker_box") instanceof byte[] stored)
