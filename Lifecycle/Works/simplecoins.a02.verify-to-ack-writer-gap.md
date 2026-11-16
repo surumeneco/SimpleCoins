@@ -55,7 +55,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a02.writer-gap.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon test --tests co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest | verifiedGrantCanBeAcknowledgedAgainstStaleReceiptWhenWriterRemovesSavedCoin;rollbackAfterProofStillFailsStartupAudit | src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest.xml | 300 |
+| a02.writer-gap.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest | verifiedGrantCanBeAcknowledgedAgainstStaleReceiptWhenWriterRemovesSavedCoin;rollbackAfterProofStillFailsStartupAudit | src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryFileReadbackTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadbackTest.xml | 300 |
 
 ## Gates
 
