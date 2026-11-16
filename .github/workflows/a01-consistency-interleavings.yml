@@ -1,0 +1,29 @@
+name: A01 G0 LIVE writer coherence necessary-conditions model
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tests/a01_consistency_interleavings.py'
+      - 'Lifecycle/Works/simplecoins.a01.live-writer-coherence-model.md'
+      - '.github/workflows/a01-consistency-interleavings.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate independent CAT issue-work contract (not a formal CAT Gate)
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.live-writer-coherence-model.md
+      - name: Run bounded interleaving model assertions
+        run: |
+          python tests/a01_consistency_interleavings.py
