@@ -76,6 +76,24 @@ class WanderingTraderDropConfigReaderTest {
         assertEquals(java.util.EnumSet.allOf(CoinDenomination.class), observed);
     }
 
+    @Test void explicitlyConfiguredLegacyFiftyPercentIsNotSilentlyOverridden() {
+        YamlConfiguration operator = valid();
+        operator.set("trader-drops.probability", null);
+        operator.set("trader-drops.chance", 0.5);
+        operator.set("trader-drops.min-count", null);
+        operator.set("trader-drops.max-count", null);
+        operator.set("trader-drops.minimum-count", 65);
+        operator.set("trader-drops.maximum-count", 65);
+        var loaded = WanderingTraderDropConfigReader.read(operator);
+        int delivered = 0;
+        var rng = new Random(20261112L);
+        for (int i = 0; i < 10_000; i++) {
+            if (loaded.policy().draw(rng).isPresent()) delivered++;
+        }
+        assertTrue(delivered > 4_500 && delivered < 5_500,
+                "An operator's explicitly configured 50% chance must be preserved: " + delivered);
+    }
+
     @Test void absentSectionOrExplicitDisableNeverDraws() {
         assertTrue(WanderingTraderDropConfigReader.read(new YamlConfiguration())
                 .policy().draw(new Random(1)).isEmpty());
