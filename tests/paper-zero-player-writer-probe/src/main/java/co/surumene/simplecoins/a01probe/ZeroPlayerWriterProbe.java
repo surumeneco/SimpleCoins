@@ -2,6 +2,11 @@ package co.surumene.simplecoins.a01probe;
 
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Arrays;
+import java.nio.file.attribute.FileTime;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -61,6 +66,31 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                     assertCurrency(block, coins, 2);
                     getLogger().info("PAPER_A01_ZERO_PLAYER_RELOAD_NEW_VALUE_PASSED"
                             + " worldPath=" + world.getWorldPath());
+
+                    // This already-loaded genuine 2-coin Chest was recovered
+                    // from the earlier JVM's persisted World. Mutate LIVE only
+                    // and compare the disk witness *within this main-thread
+                    // tick*, before calling shutdown or any explicit save.
+                    // The subsequent normal shutdown is free to persist count 3.
+                    Path saved = world.getWorldPath().resolve("region/r.0.0.mca");
+                    if (!Files.isRegularFile(saved))
+                        throw new IllegalStateException("Actual saved Anvil region missing: " + saved);
+                    byte[] priorSha = MessageDigest.getInstance("SHA-256")
+                            .digest(Files.readAllBytes(saved));
+                    FileTime priorMtime = Files.getLastModifiedTime(saved);
+                    Chest chest = (Chest) block.getState();
+                    chest.getBlockInventory().setItem(0, coins.create(DENOMINATION, 3));
+                    assertCurrency(block, coins, 3);
+                    byte[] afterSha = MessageDigest.getInstance("SHA-256")
+                            .digest(Files.readAllBytes(saved));
+                    FileTime afterMtime = Files.getLastModifiedTime(saved);
+                    if (!Arrays.equals(priorSha, afterSha) || !priorMtime.equals(afterMtime))
+                        throw new IllegalStateException("Disk witness changed in same tick; "
+                                + "cannot isolate an unchanged-saved versus LIVE currency state");
+                    getLogger().info("PAPER_A01_LIVE_VS_SAVED_MONETARY_DIVERGENCE_PASSED"
+                            + " savedCoinsAtLoad=2 liveCoinsNow=3"
+                            + " diskShaUnchanged=true diskMtimeUnchanged=true"
+                            + " onlinePlayers=" + Bukkit.getOnlinePlayers().size());
                 } else {
                     throw new IllegalArgumentException("Unknown phase " + phase);
                 }
