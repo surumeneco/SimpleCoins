@@ -66,7 +66,7 @@ spec_status: unknown
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [actual Paper #43862051940](https://github.com/surumeneco/SimpleCoins/actions/runs/43862051940); [Domain #43862051908](https://github.com/surumeneco/SimpleCoins/actions/runs/43862051908); [Phase6 #43862051942](https://github.com/surumeneco/SimpleCoins/actions/runs/43862051942) (ordinary CI only, tested feature HEAD `0dd252dc8d6a33389b76d74c31a0aac82718b2c7`) |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -80,3 +80,12 @@ The existing #467 six-JVM test validates a crash **after** the first 128 of 130 
 In JVM 7, ensure the product's own startup source/receipt audit completes without fail-open or fail-stop. Load exactly the same detached player UUID and saved data. The original unrelated stone, prior two single-coin grants, the two 64-coin stacks and remaining 2 coins must all be present and recognized with original real PDC denomination, not just display PAPER. Verify the saved complete receipt=3 against the pending actual journal via production NBT decoder, and require that 3 is still pending before recovery. Call ACK **without delivering any inventory**; independently reload the durable journal (3 delivered, 0 pending), then repeat ACK and check journal bytes and playerdata bytes unchanged. Assert no connected user and default-deny admission.
 
 This is verification-only `issue-work`. No product coordinator, command, inventory mutation on a live human player, online admission release, G0 simultaneous world closure, OS power-loss durability or fully deployed G3. CAT Process/PI/TCE Drafts and normative Gates are not being silently Confirmed.
+
+## Verified real Paper fault-injection evidence
+
+- The initial exact-head [Paper CI #43861854349](https://github.com/surumeneco/SimpleCoins/actions/runs/43861854349) failed at **Work structural validation only**, reporting `## Checks/検査: invalid Markdown table separator`: a 9-column header had 10 separator columns. This was corrected in the Work itself and is not counted as any Java Red or game-behavior failure.
+- On corrected HEAD `0dd252dc8d6a33389b76d74c31a0aac82718b2c7`, [actual Paper #43862051940](https://github.com/surumeneco/SimpleCoins/actions/runs/43862051940), Domain #43862051908 and Phase6 #43862051942 all completed success. All five earlier independent Paper phases passed, including the previous partial receipt 640000 and SIGKILL.
+- At the sixth real Paper JVM, the pre-existing first two 5000 coins and original STONE survived, the two 64-coin stacks and final two-coin stack were saved with completed receipt=3; `SavedGrantDeliveryFileReadback.verify` succeeded while reservation3 was still pending. Without calling `GrantLedger.acknowledge`, the process was SIGKILLed with observed exit137; runner logged `PAPER_A02_FINAL_SAVED_RECEIPT_BEFORE_ACK_SIGKILL_INJECTED`.
+- Seventh independent JVM booted the genuine SimpleCoins journal, passed its actual startup saved-source/receipt audit, read full compressed shared Paper playerdata, and verified the 5 money slots' denomination PDC, saved monetary values, counts 1+1+2+64+64=132 coins (660000 total) and retained STONE. Receipt=3 was fully complete although ledger reservation3 was still pending. Log `PAPER_A02_FINAL_SAVED_RECEIPT_CRASH_RECOVERED_WITHOUT_ISSUE_PASSED physicalValue=660000 receipt=3 pendingBeforeAck=1`.
+- Without changing player inventory, the seventh JVM ACKed grant3, reopened the independent persistent journal with three delivered and zero pending, then reACKed idempotently while byte-comparing journal record3 and playerdata to the before-ACK values. Log `PAPER_A02_FINAL_SAVED_PRE_ACK_SIGKILL_SEVENTH_BOOT_ACK_ONLY_PASSED durableGrants=3 pending=0 originalMoneyPreserved=true`.
+- This is a **disposable, disconnected CraftPlayer probe**, not a production network delivery path; no connected player funds were changed. Real external writer races, full G0 settlement, power loss/fsync, global mutation lock, and normative CAT Confirmed/Gates remain unresolved. Admission stayed default-deny. Final feature SHA will be tested separately after this documentation evidence update.
