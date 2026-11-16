@@ -49,7 +49,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md;src/main/resources/plugin.yml;.github/workflows/paper-wcl-services-probe.yml | src/main/resources/plugin.yml | .github/workflows/paper-wcl-services-probe.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md;src/main/resources/plugin.yml;.github/workflows/paper-wcl-services-probe.yml;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java | src/main/resources/plugin.yml | .github/workflows/paper-wcl-services-probe.yml;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java |
 
 ## Checks
 
@@ -79,3 +79,7 @@ spec_status: unknown
 - Existing product `plugin.yml` lists short aliases WWC, WWW, WCL, while the actual WWC/WWW plugin descriptors and WWC/WWW `depend` already name WhatAWonderfulChicken, WhatAWonderfulWolf and WonderfulCoreLibrary. Manifest names are plugin-loader identities, not Maven/Java package aliases.
 - Test first: on the isolated Paper provider integration workflow that pins four real released JAR blobs by Git hash, unzip each actual `plugin.yml`, require the exact descriptor `name:` to appear in SimpleCoins' `softdepend` lines. The present aliases must fail the new check. Then correct only the three names in the production manifest, preserving Geyser/Nexo/BlockLocker and `depend: SimpleCoinsGuard`.
 - Verify final-JAR descriptor, all three name checks, guarded Paper boot, actual WWC/WWW provider registration/reading, and no admission opening. No hard dependency, version bump, API semantics change, player data mutation, full G0 or CAT normative gate completion.
+
+## Real Paper synthetic-fixture schema boundary
+
+The official Paper green attempt initially passed all three packaged plugin descriptor names and the first boot's two registered WCL providers, then failed the subsequent entity-persistence phase with a WWC listener exception `WWC Genome model payload is incomplete` and a Paper watchdog termination. The test-created Chicken has **only WCL-readable storage PDC** but had advertised WWC `data_version=3`; genuine WWC `WonderfulChickenStore.loadPersisted` explicitly requires nonempty genome, phenotype and adult biological time for v3. This is an invalid claim by the *test fixture*, not proof that changing `softdepend` identities is unsafe. The same published `WonderfulChickenStorageReader` accepts v2, v3 and v4 and reads shulker/follow PDC in all three. For actual spawned synthetic Chicken entities only, retain the documented reader-side test of detached v3 storage but set `data_version=2` when registering the synthetic legacy storage entity with Paper, so the real WWC listener does not decode an absent v3 genome. Still require the actual test to pass; do not assume v2 migration or a complete game-managed Chicken is covered. The test never claims valid full genome lifecycle.
