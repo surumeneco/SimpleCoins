@@ -46,6 +46,7 @@ public final class PaperSaveProbe extends JavaPlugin {
                 Player player = createDetachedPlayer();
                 if ("save".equals(phase)) savePhase(player);
                 else if ("reload".equals(phase)) reloadPhase(player);
+                else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
                 else throw new IllegalArgumentException("Unknown probe phase " + phase);
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -54,9 +55,16 @@ public final class PaperSaveProbe extends JavaPlugin {
             }
             // The CI harness owns SIGKILL after this marker. Do not run
             // Paper's shutdown hooks before the save-before-ack crash check.
-            if ("save".equals(phase) && Boolean.getBoolean("a02.probe.awaitSigkill")) {
-                getLogger().info("PAPER_A02_UNACKED_CRASH_POINT_READY");
-                return;
+            if (Boolean.getBoolean("a02.probe.awaitSigkill")) {
+                if ("save".equals(phase)) {
+                    getLogger().info("PAPER_A02_UNACKED_CRASH_POINT_READY");
+                    return;
+                }
+                if ("reload".equals(phase)) {
+                    getLogger().info("PAPER_A02_ACKED_CRASH_POINT_READY");
+                    return;
+                }
+                throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
             }
             Bukkit.shutdown();
         }, 30L);
@@ -265,5 +273,56 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (!new GrantLedger(grantDirectory()).pending(ID).isEmpty())
             throw new IllegalStateException("Recovered acknowledgement did not persist");
         getLogger().info("PAPER_A02_RESTART_RECOVER_ACK_PASSED");
+    }
+
+    /**
+     * Third independent Paper process. The second process was SIGKILLed
+     * immediately after durable ACK; neither coin nor journal may duplicate.
+     * This probe never calls reserve(), stages or saves a new physical item.
+     */
+    private void ackedReloadPhase(Player player) throws Exception {
+        Path file = dataFile();
+        Path ledgerPath = grantDirectory();
+        GrantLedger ledger = new GrantLedger(ledgerPath);
+        List<GrantLedger.Grant> history = ledger.historySnapshot();
+        if (history.size() != 1)
+            throw new IllegalStateException("Expected one and only one issuance reservation");
+        GrantLedger.Grant delivered = history.getFirst();
+        if (!delivered.player().equals(ID) || delivered.sequence() != 1
+                || !delivered.delivered() || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Crash after ACK rolled back journal or reopened pending grant");
+        getLogger().info("PAPER_A02_THIRD_BOOT_DURABLE_ACK_NO_PENDING_PASSED");
+
+        byte[] playerBefore = Files.readAllBytes(file);
+        byte[] grantBefore = Files.readAllBytes(ledgerPath.resolve("1.grant"));
+        assertSavedPair(file, expectedReceipt(delivered));
+        player.loadData();
+        ItemStack coin = player.getInventory().getItem(0);
+        if (coin == null || coin.getType() != Material.PAPER || coin.getAmount() != PAPER_COUNT
+                || new CoinItemCodec(CoinItemCodec.defaultNames())
+                        .identify(coin).filter(d -> d.value() == ISSUED_VALUE).isEmpty())
+            throw new IllegalStateException("Third process lost or duplicated real coin value");
+        ItemStack unrelated = player.getInventory().getItem(9);
+        if (unrelated == null || unrelated.getType() != Material.STONE
+                || unrelated.getAmount() != 2)
+            throw new IllegalStateException("Third process modified existing item in other slot");
+        GrantReceiptState receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (!receipt.equals(completedReceipt(delivered))
+                || !ledger.wasApplied(delivered, receipt.completedSequence()))
+            throw new IllegalStateException("Third process receipt differs from delivered record");
+        getLogger().info("PAPER_A02_THIRD_BOOT_COIN_RECEIPT_STORAGE_PASSED");
+
+        // Calling with an authentic already-completed reservation must not
+        // reissue physical money or rewrite the durable grant record.
+        ledger.acknowledge(delivered, receipt.completedSequence());
+        if (!Arrays.equals(grantBefore, Files.readAllBytes(ledgerPath.resolve("1.grant")))
+                || !Arrays.equals(playerBefore, Files.readAllBytes(file)))
+            throw new IllegalStateException("Idempotent acknowledgement rewrote disk evidence");
+        GrantLedger check = new GrantLedger(ledgerPath);
+        if (check.historySnapshot().size() != 1
+                || !check.historySnapshot().getFirst().delivered()
+                || !check.pending(ID).isEmpty())
+            throw new IllegalStateException("Repeated ACK altered durable issuance");
+        getLogger().info("PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED");
     }
 }
