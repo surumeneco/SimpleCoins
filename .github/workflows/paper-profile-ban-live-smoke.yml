@@ -7,6 +7,7 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperProfileBanSource.java'
       - 'src/test/java/co/surumene/simplecoins/paper/ProfileBanLiveProbe.java'
       - 'tests/paper-profile-ban-smoke/**'
+      - 'Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md'
       - '.github/workflows/paper-profile-ban-live-smoke.yml'
 
 jobs:
@@ -22,6 +23,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate independent BAN source separation verification Work
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md
       - name: Build main, guard and isolated probe JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperProfileBanProbeJar
@@ -66,6 +77,17 @@ jobs:
             }
           ]
           BANNED
+          cat > smoke/banned-ips.json <<'BANNED_IP'
+          [
+            {
+              "ip": "203.0.113.42",
+              "created": "2026-11-14 00:00:00 +0000",
+              "source": "SimpleCoins isolated Paper A06 source test",
+              "expires": "forever",
+              "reason": "Fixture: IP ban has no authenticated UUID correspondence"
+            }
+          ]
+          BANNED_IP
           cd smoke
           mkfifo console.in
           java -Xms256M -Xmx1024M -jar paper.jar nogui < console.in > paper.log 2>&1 &
@@ -99,11 +121,12 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
           grep -F 'PAPER_PROFILE_BAN_LIVE_PASSED' paper.log
+          grep -F 'PAPER_A06_IP_BAN_DISTINCT_FROM_PROFILE_UUID_PASSED' paper.log
           printf 'stop\n' >&3
           exec 3>&-
           wait "$server_pid"
           trap - EXIT
-          echo 'PAPER_PROFILE_BAN_ISOLATED_SUCCESS (no IP/external claims)'
+          echo 'PAPER_A06_PROFILE_AND_IP_SEPARATE_SOURCES_OBSERVED (no authenticated IP-to-UUID mapping or external-provider claim)'
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
