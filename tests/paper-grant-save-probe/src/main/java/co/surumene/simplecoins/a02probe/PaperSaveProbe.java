@@ -72,6 +72,14 @@ public final class PaperSaveProbe extends JavaPlugin {
                     getLogger().info("PAPER_A02_ACKED_CRASH_POINT_READY");
                     return;
                 }
+                if ("partial-save".equals(phase)) {
+                    // The preceding phase read back both physical money and
+                    // the partial receipt while the journal was still pending.
+                    // Force-kill this actual Paper JVM instead of relying on
+                    // a clean server shutdown to flush playerdata.
+                    getLogger().info("PAPER_A02_PARTIAL_SAVED_BEFORE_ACK_CRASH_POINT_READY");
+                    return;
+                }
                 throw new IllegalArgumentException("Unexpected SIGKILL phase " + phase);
             }
             Bukkit.shutdown();
