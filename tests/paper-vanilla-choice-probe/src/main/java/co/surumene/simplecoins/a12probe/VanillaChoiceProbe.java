@@ -172,13 +172,10 @@ public final class VanillaChoiceProbe extends JavaPlugin {
             if (observed == null || observed.getResult().getType() != Material.STONE)
                 throw new IllegalStateException("Paper recipe registry did not expose substituted result");
             boolean approved = guard.isApproved(observed, adversarialMatrix);
-            if (approved) {
-                getLogger().warning("PAPER_A12_KEY_ONLY_APPROVAL_VALUE_LOSS_COUNTEREXAMPLE"
-                        + " key=" + replaceKey + " result=" + observed.getResult().getType()
-                        + " guardedInputCoins=" + adversarialMatrix[0].getType());
-            } else {
-                getLogger().info("PAPER_A12_SUBSTITUTED_OUTPUT_REJECTED_BY_GUARD");
-            }
+            if (approved)
+                throw new IllegalStateException("A12_RED: same-key STONE output was approved"
+                        + " key=" + replaceKey);
+            getLogger().info("PAPER_A12_SUBSTITUTED_OUTPUT_REJECTED_BY_GUARD");
             verifyPaperPrepareEvent(replaceKey, adversarialMatrix);
             verifyPaperCrafterEvent(replaceKey, adversarialMatrix);
         } finally {
@@ -234,13 +231,13 @@ public final class VanillaChoiceProbe extends JavaPlugin {
             Material actual = finalOutput == null ? Material.AIR : finalOutput.getType();
             Material observed = resultObservedAtMonitor[0] == null
                     ? Material.AIR : resultObservedAtMonitor[0].getType();
-            if (observed == Material.STONE && actual == Material.STONE) {
-                getLogger().warning("PAPER_A12_REAL_PREPARE_EVENT_STONE_RESULT_NOT_BLOCKED"
-                        + " recipe=" + substituted + " prepareEvents=" + prepareCount.get());
-            } else {
-                getLogger().info("PAPER_A12_REAL_PREPARE_EVENT_ALTERED_OR_REJECTED"
-                        + " recipe=" + substituted + " observed=" + observed + " returned=" + actual);
-            }
+            if (observed == Material.STONE || actual == Material.STONE)
+                throw new IllegalStateException("A12_RED: Paper Prepare produced nonmonetary STONE"
+                        + " recipe=" + substituted + " observed=" + observed
+                        + " result=" + actual);
+            getLogger().info("PAPER_A12_REAL_PREPARE_EVENT_SUBSTITUTION_BLOCKED"
+                    + " recipe=" + substituted + " observed=" + observed
+                    + " result=" + actual);
             getLogger().info("PAPER_A12_ACTUAL_PREPARE_RESULT_OBSERVED"
                     + " prepareEventCount=" + prepareCount.get()
                     + " postMonitor=" + observed + " result=" + actual
@@ -300,13 +297,12 @@ public final class VanillaChoiceProbe extends JavaPlugin {
                 throw new IllegalStateException("Actual target CrafterCraftEvent not dispatched");
             Material after = event.getResult() == null
                     ? Material.AIR : event.getResult().getType();
-            if (!event.isCancelled() && after == Material.STONE)
-                getLogger().warning("PAPER_A12_REAL_CRAFTER_EVENT_STONE_NOT_CANCELLED"
-                        + " recipe=" + key);
-            else
-                getLogger().info("PAPER_A12_REAL_CRAFTER_EVENT_REJECTED_OR_ALTERED"
-                        + " recipe=" + key + " cancelled=" + event.isCancelled()
-                        + " result=" + after);
+            if (!event.isCancelled())
+                throw new IllegalStateException("A12_RED: modified-result Crafter event not cancelled"
+                        + " recipe=" + key + " result=" + after);
+            getLogger().info("PAPER_A12_REAL_CRAFTER_SUBSTITUTED_OUTPUT_CANCELLED"
+                    + " recipe=" + key + " cancelled=" + event.isCancelled()
+                    + " result=" + after);
             getLogger().info("PAPER_A12_ACTUAL_CRAFTER_EVENT_RESULT_OBSERVED"
                     + " count=" + observed.get() + " result=" + after
                     + " cancelled=" + event.isCancelled()

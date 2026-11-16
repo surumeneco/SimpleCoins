@@ -97,7 +97,9 @@ public final class CoinExchangeRecipes implements Listener {
     public void onPrepare(PrepareItemCraftEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !hasAuthorizedResult(recipe, event.getInventory().getResult()))) {
             event.getInventory().setResult(null);
         }
     }
@@ -106,7 +108,10 @@ public final class CoinExchangeRecipes implements Listener {
     public void onCraft(CraftItemEvent event) {
         ItemStack[] matrix = event.getInventory().getMatrix();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !hasAuthorizedResult(recipe, event.getInventory().getResult())
+                    || !hasAuthorizedResult(recipe, event.getCurrentItem()))) {
             event.setCancelled(true);
         }
     }
@@ -119,7 +124,9 @@ public final class CoinExchangeRecipes implements Listener {
         }
         ItemStack[] matrix = crafter.getInventory().getContents();
         Recipe recipe = event.getRecipe();
-        if (needsGuard(matrix, recipe) && !isApproved(recipe, matrix)) {
+        if (needsGuard(matrix, recipe)
+                && (!isApproved(recipe, matrix)
+                    || !hasAuthorizedResult(recipe, event.getResult()))) {
             event.setCancelled(true);
         }
     }
@@ -145,11 +152,32 @@ public final class CoinExchangeRecipes implements Listener {
         return recipe instanceof Keyed keyed && formulas.containsKey(keyed.getKey());
     }
 
+    /** Verify the actual event output as well as the registered recipe output. */
+    private boolean hasAuthorizedResult(Recipe recipe, ItemStack output) {
+        if (!(recipe instanceof Keyed keyed)) return false;
+        CoinExchangeFormula formula = formulas.get(keyed.getKey());
+        return formula != null && matchesFormulaOutput(formula, output);
+    }
+
+    /** Display names are mutable, but face value, model and stack count are not. */
+    private boolean matchesFormulaOutput(CoinExchangeFormula formula, ItemStack output) {
+        if (output == null || output.getType().isAir()
+                || output.getAmount() != formula.outputCount()) return false;
+        try {
+            return codec.identify(output).orElse(null) == formula.output();
+        } catch (RuntimeException malformedCoin) {
+            return false;
+        }
+    }
+
     /** Validate every *occupied slot*, not its stack count; Bukkit consumes one/slot. */
     public boolean isApproved(Recipe recipe, ItemStack[] matrix) {
         if (!(recipe instanceof Keyed keyed)) return false;
         CoinExchangeFormula formula = formulas.get(keyed.getKey());
-        if (formula == null) return false;
+        // The recipe key does not authenticate the current registered result:
+        // another plugin can legally replace its output under the same ID.
+        if (formula == null || !matchesFormulaOutput(formula, recipe.getResult()))
+            return false;
         int found = 0;
         for (ItemStack item : matrix) {
             if (item == null || item.getType().isAir()) continue;
