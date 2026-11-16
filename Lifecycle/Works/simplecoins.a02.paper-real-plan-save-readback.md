@@ -3,7 +3,7 @@ cat_version: '0.2'
 kind: work
 id: simplecoins.a02.paper-real-plan-save-readback
 status: draft
-process: simplecoins.grants.delivery
+process: simplecoins.grants.paper-save-commit
 source_refs:
   - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
@@ -37,7 +37,7 @@ spec_status: unknown
 
 | Process IDs | Changed IDs | Preserved IDs |
 | --- | --- | --- |
-| simplecoins.grants.delivery | simplecoins.a02.paper-real-plan-save-readback | simplecoins.a02.after-ack-crash-replay-verification;simplecoins.a02.paper-save-commit-verification |
+| simplecoins.grants.paper-save-commit | simplecoins.a02.paper-real-plan-save-readback | simplecoins.a02.after-ack-crash-replay-verification;simplecoins.a02.paper-save-commit-verification |
 
 ## Technologies
 
