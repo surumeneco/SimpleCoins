@@ -5,6 +5,7 @@ on:
     paths:
       - 'docs/cat/drafts/a02-grant-delivery-*.md'
       - 'Lifecycle/Works/simplecoins.a02.grant-save-commit-cat-draft.md'
+      - 'tests/a02_grant_draft_partition.py'
       - '.github/workflows/a02-grant-delivery-cat-draft.yml'
 permissions:
   contents: read
@@ -32,3 +33,8 @@ jobs:
                     docs/cat/drafts/a02-grant-delivery-pi.md \
                     docs/cat/drafts/a02-grant-delivery-tce.md
           echo 'A02_CAT_DRAFT_STRUCTURAL_LINT_ONLY_PASSED'
+      - name: Enumerate all Draft Boolean guards and ACK preconditions (not a formal CAT Gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/a02_grant_draft_partition.py
