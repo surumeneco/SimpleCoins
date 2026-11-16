@@ -38,7 +38,7 @@ spec_status: draft
 
 | Process IDs | Changed IDs | Preserved IDs |
 | --- | --- | --- |
-| simplecoins.grants.paper-save-commit | simplecoins.grants.pi.delivery;simplecoins.grants.tce.delivery;simplecoins.a02.cat-partial-vs-complete-ack | simplecoins.a02.paper-partial-receipt-restart;simplecoins.a02.paper-final-save-pre-ack-crash |
+| simplecoins.grants.paper-save-commit | simplecoins.grants.paper-save-commit;simplecoins.grants.pi.delivery;simplecoins.grants.tce.delivery;simplecoins.a02.cat-partial-vs-complete-ack | simplecoins.a02.paper-partial-receipt-restart;simplecoins.a02.paper-final-save-pre-ack-crash |
 
 ## Technologies
 
@@ -55,7 +55,7 @@ spec_status: draft
 ## Checks
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 
 ## Gates
 
