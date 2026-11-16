@@ -9,6 +9,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a12.exchange-recipe-result-integrity.md'
       - 'Lifecycle/Works/simplecoins.a12.paper-prepare-result-collision.md'
       - 'Lifecycle/Works/simplecoins.a12.paper-crafter-result-collision.md'
+      - 'Lifecycle/Works/simplecoins.a12.paper-late-prepare-output-mutation.md'
 
 jobs:
   currency-crafting-observation:
@@ -39,6 +40,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a12.paper-prepare-result-collision.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a12.paper-crafter-result-collision.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a12.paper-late-prepare-output-mutation.md
       - name: Build separate observer plugin with no production code changes
         shell: bash
         run: |
@@ -94,6 +97,7 @@ jobs:
           grep -F 'PAPER_A12_RECIPE_REGISTRY_OUTPUT_INTEGRITY_OBSERVED' paper-a12.log
           grep -F 'PAPER_A12_ACTUAL_PREPARE_RESULT_OBSERVED' paper-a12.log
           grep -F 'PAPER_A12_ACTUAL_CRAFTER_EVENT_RESULT_OBSERVED' paper-a12.log
+          grep -F 'PAPER_A12_LATE_PREPARE_MUTATION_OBSERVED' paper-a12.log
           if grep -Fq 'PAPER_A12_PROBE_FAILED' paper-a12.log; then exit 1; fi
           echo 'PAPER_A12_BOUNDED_CRAFT_REGISTRY_OBSERVATION_PASSED'
       - name: Upload diagnostic log
