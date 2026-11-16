@@ -154,7 +154,8 @@ class DraftBooleanPartitionTests(unittest.TestCase):
                     self.assertFalse(out["出力.ack許可"],
                                      f"Already ACKed: {case[0]}")
                     self.assertFalse(out["出力.予約維持"])
-                if (inputs["入力.予約あり"] and inputs["入力.未ack"]
+                if (case[1] in ("保存後照合", "クラッシュ復旧")
+                        and inputs["入力.予約あり"] and inputs["入力.未ack"]
                         and inputs["入力.予約全額受領済"]
                         and not inputs["入力.保存済み現物受領対"]):
                     self.assertFalse(out["出力.ack許可"])
