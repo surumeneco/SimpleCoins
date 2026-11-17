@@ -36,12 +36,12 @@ spec_status: confirmed
 ## Technologies
 | Technology |
 | --- |
-| Java 25; JUnit 5; Paper 26.2; pinned CAT 896cae83; JE/BE pack archives |
+| Java 25; JUnit 5; Paper 26.2; CAT-TDD JUnit renderer (`develop` fd3f5c7); JUnit 5; JE/BE pack archives |
 
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a16.image-fallback.md;docs/cat/confirmed/a16-image-fallback-*.md;.github/workflows/a16-image-fallback-confirmed.yml;src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java;src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java | src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java | src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a16.image-fallback.md;docs/cat/confirmed/a16-image-fallback-*.md;.github/workflows/a16-image-fallback-confirmed.yml;src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java;src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java;src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;.github/workflows/a16-cat-junit-proof.yml | src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java | src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java;src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;.github/workflows/a16-cat-junit-proof.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
@@ -73,4 +73,6 @@ spec_status: confirmed
 - Display name alone changes without matching PNG: use denomination-specific built-in standard image and generate JE/BE candidate archives successfully; do not create an unwanted `New Name.png` file.
 - Exactly one matching valid PNG: use it. Multiple normalized matches or malformed candidate: reject without replacing the archives with an unknown candidate or altering existing images.
 - Existing denomination-fixed PDC/item_model and the independent default-deny admission remain unaffected.
-- Deterministic CAT model/vectors and independently observed Red/Green evidence; code edits only when the selected canonical Work Gate grants permission. Java renderer availability/limitation must be represented honestly rather than faking normative `passed`.
+- CAT-TDD upstream PR #101/#102 implemented a genuine bounded JUnit renderer. Four independently selected source-derived model cases have been emitted into the `generated/` test namespace, with a separate fixture driver that inspects actual JE+BE bytes rather than guessing the expected outcome. The generated tests are external verification artifacts, **not** evidence that `queue-state` has advanced or that all normative Red/Green and implementation-conformance Gates passed.
+- Real JUnit CI must observe `case.s3` expected Red on unchanged pre-PR product code, then Green with the proposed source, and all four cases with `gradle test`. Preserve the exact generated test source and all historical model/vectors and decision provenance. Do not modify generated oracles to satisfy implementation.
+- Run formal CAT Queue state transitions and script-owned Gates separately; pre-existing cases s0–s2 already pass pre-change, so do not fake expected Red failures or improperly mark them done. Deployment/admission remain denied.

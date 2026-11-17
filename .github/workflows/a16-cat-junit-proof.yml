@@ -1,0 +1,78 @@
+name: A16 CAT JUnit generated regression evidence
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/generated/**'
+      - 'Lifecycle/Works/simplecoins.a16.image-fallback.md'
+      - '.github/workflows/a16-cat-junit-proof.yml'
+permissions:
+  contents: read
+jobs:
+  generated-junit-real-red-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Require real JUnit Red for changed A16 behavior on base source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source='src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java'
+          cp "$source" "$RUNNER_TEMP/a16-green.java"
+          git show '${{ github.event.pull_request.base.sha }}:'"$source" > "$source"
+          set +e
+          gradle --no-daemon test --tests 'co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test' > "$RUNNER_TEMP/a16-red.log" 2>&1
+          result=$?
+          set -e
+          cp "$RUNNER_TEMP/a16-green.java" "$source"
+          cat "$RUNNER_TEMP/a16-red.log"
+          if [ "$result" -eq 0 ]; then
+            echo 'Expected genuine JUnit Red was not observed' >&2
+            exit 1
+          fi
+          python3 - <<'PYRED'
+          import pathlib,xml.etree.ElementTree as ET
+          target=pathlib.Path('build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test.xml')
+          if not target.is_file():
+              raise SystemExit('Missing JUnit XML: Gradle failure might be unrelated')
+          root=ET.parse(target).getroot()
+          failures=[x for x in root.iter('failure')]
+          if len(failures)!=1 or 'CAT allowed outcome set: case.s3' not in '\n'.join(x.attrib.get('message','')+'\n'+(x.text or '') for x in failures):
+              raise SystemExit('JUnit failure not the expected CAT case.s3 oracle')
+          print('A16_CATALOG_JUNIT_EXPECTED_RED case.s3 failure verified')
+          PYRED
+      - name: Require generated JUnit Green for all four approved cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon clean test
+          python3 - <<'PYGREEN'
+          import pathlib,xml.etree.ElementTree as ET
+          folder=pathlib.Path('build/test-results/test')
+          expected={
+              'GeneratedA16ImageSelectionCase123a32c34595Test',
+              'GeneratedA16ImageSelectionCase270ea3584cb1Test',
+              'GeneratedA16ImageSelectionCase34c89fbe779cTest',
+              'GeneratedA16ImageSelectionCasee292a6c220f2Test',
+          }
+          for cls in sorted(expected):
+              path=folder/f'TEST-co.surumene.simplecoins.domain.{cls}.xml'
+              if not path.exists(): raise SystemExit(f'Expected JUnit XML absent: {cls}')
+              tree=ET.parse(path).getroot()
+              tests=list(tree.iter('testcase'))
+              if len(tests)!=1 or any(x.tag in ('failure','error','skipped') for x in tree.iter()):
+                  raise SystemExit(f'Generated JUnit test did not Green: {cls}')
+          print('A16_CAT_JUNIT_FOUR_GREEN_REAL_JUNIT_XML_PASSED')
+          PYGREEN
