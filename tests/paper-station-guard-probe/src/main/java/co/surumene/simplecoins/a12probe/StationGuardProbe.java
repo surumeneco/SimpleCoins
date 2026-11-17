@@ -226,8 +226,15 @@ public final class StationGuardProbe extends JavaPlugin {
                 Math.min(world.getMaxHeight() - 4,
                         world.getHighestBlockYAt(x, z) + 4));
         Block block = world.getBlockAt(x, y, z);
+        // Terrain/foliage can exceed the HeightMap position by four blocks.
+        // This fixture owns a disposable world: find a true air position
+        // instead of assuming a fixed offset is unoccupied.
+        while (!block.getType().isAir() && y + 1 < world.getMaxHeight() - 1) {
+            block = world.getBlockAt(x, ++y, z);
+        }
         if (!block.getType().isAir())
-            throw new IllegalStateException("Disposable NMS cartography location not empty");
+            throw new IllegalStateException("No free disposable NMS cartography location");
+        getLogger().info("A12_NMS_CARTOGRAPHY_STATION_AIR_POSITION y=" + y);
 
         // Access needs an actual world/position to resolve the real map data.
         Class<?> nmsInventory = Class.forName("net.minecraft.world.entity.player.Inventory");
