@@ -84,6 +84,12 @@ public final class InvseeWriterProbe extends JavaPlugin {
     // not a real Paper/all-plugin writer coordinator.
     private final boolean testAdmittedWriterDrainThenAck =
             Boolean.getBoolean("a02.invsee.drainAdmittedThenAck");
+    // Negative counterpart to the ONE known InvSee Future drain: a native
+    // Paper save is deliberately inserted AFTER a valid proof, BEFORE ACK.
+    private final boolean testNativePostDrainFalseAck =
+            Boolean.getBoolean("a02.invsee.nativePostDrainFalseAck");
+    private final boolean replayNativePostDrainFalseAck =
+            Boolean.getBoolean("a02.invsee.checkNativePostDrainFalseAck");
     // A separate genuinely executed Paper.saveData path that never calls
     // InvSee's SpectatorInventorySaveEvent. No production writer fence.
     private final boolean testPaperDirectAfterInvseeVeto =
@@ -134,6 +140,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
             else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
             else if (recoverPaperDirectAfterHalt) verifyPaperDirectAfterHalt();
+            else if (replayNativePostDrainFalseAck) verifyNativePostDrainFalseAckOnColdRestart();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
             fail(failure);
@@ -338,7 +345,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Probe requires a fresh player UUID.dat");
         ledger = actualProductLedger();
         Player player = detachedPlayer();
-        if (testPaperDirectAfterInvseeVeto)
+        if (testPaperDirectAfterInvseeVeto || testNativePostDrainFalseAck)
             originalDetachedPaperWriter = player;
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
 
@@ -457,7 +464,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
         if (!(plugin instanceof InvseePlusPlus installed)
                 || !plugin.isEnabled())
             throw new IllegalStateException("Actual InvSee++ plugin/API unavailable");
-        if (testPastEventCheckpoint || testAdmittedWriterDrainThenAck) {
+        if (testPastEventCheckpoint || testAdmittedWriterDrainThenAck
+                || testNativePostDrainFalseAck) {
             // A deliberately TOO-LATE fence: the FIRST actual save event is
             // admitted at LOWEST. MONITOR closes new admission only after
             // that first writer crossed its event veto checkpoint. The real
@@ -522,7 +530,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                         || storage[0].getType() != Material.STONE)
                                     throw new IllegalStateException(
                                             "InvSee++ read failed to capture real coin and other item");
-                                if (!testAdmittedWriterDrainThenAck) {
+                                if (!testAdmittedWriterDrainThenAck
+                                        && !testNativePostDrainFalseAck) {
                                     // The existing NEGATIVE control destroys money
                                     // after the original positive grant readback.
                                     storage[1] = null;
@@ -538,7 +547,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                 return;
                                             }
                                             try {
-                                                if (testAdmittedWriterDrainThenAck) {
+                                                if (testAdmittedWriterDrainThenAck
+                                                        || testNativePostDrainFalseAck) {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "Admitted preserving InvSee writer never completed");
@@ -655,7 +665,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private void verifyDrainedAdmittedWriterBeforeAck(
             InvseeAPI api, MainSpectatorInventory inventory) throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
-                || !testAdmittedWriterDrainThenAck || !lateFenceClosed.get()
+                || !(testAdmittedWriterDrainThenAck || testNativePostDrainFalseAck)
+                || !lateFenceClosed.get()
                 || alreadyAdmittedSaveEvents.get() != 1
                 || vetoedSaveEvents.get() != 0
                 || ledger.pending(ID).size() != 1)
@@ -713,6 +724,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                             throw new IllegalStateException(
                                     "Drained known-writer source readback is invalid");
                         getLogger().info("PAPER_A02_INVSEE_DRAIN_FILE_DIR_FSYNC_FRESH_PROOF");
+                        if (testNativePostDrainFalseAck) {
+                            verifyNativeSaveAfterKnownDrainBeforeAck(proof);
+                            return;
+                        }
 
                         ledger.acknowledge(grant, proof.receipt().completedSequence());
                         var reopened = new GrantLedger(Bukkit.getPluginManager()
@@ -742,6 +757,114 @@ public final class InvseeWriterProbe extends JavaPlugin {
                         fail(error);
                     }
                 }, 2L));
+    }
+
+    /**
+     * NEGATIVE: the one InvSee++ future has already completed, second InvSee++
+     * save was vetoed and a genuine full-price/receipt readback succeeded.
+     * Before committing its old sequence, insert an unrelated NATIVE Paper
+     * writer, which never asks InvSee++ for permission. This is an intentionally
+     * UNSAFE low-level ACK proof, not an authorized issuance implementation.
+     */
+    private void verifyNativeSaveAfterKnownDrainBeforeAck(
+            SavedGrantDeliveryReadback.Proof oldProof) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testNativePostDrainFalseAck
+                || originalDetachedPaperWriter == null
+                || alreadyAdmittedSaveEvents.get() != 1
+                || vetoedSaveEvents.get() != 1
+                || !lateFenceClosed.get()
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Known InvSee drain did not precede native writer");
+        if (!BigInteger.valueOf(5000).equals(oldProof.matchedMonetaryValue())
+                || oldProof.receipt().completedSequence() != grant.sequence())
+            throw new IllegalStateException("Old receipt/physical source was not valid");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_OLD_SAVED_PROOF_WAS_VALID");
+        Player nativeWriter = originalDetachedPaperWriter;
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack[] original = nativeWriter.getInventory().getStorageContents();
+        if (original.length != PaperGrantInventorySlotPlan.STORAGE_SLOTS
+                || codec.identify(original[1]).orElse(null)
+                    != CoinDenomination.FIVE_THOUSAND
+                || original[0] == null
+                || original[0].getType() != Material.STONE)
+            throw new IllegalStateException("Native Paper writer original items changed");
+        nativeWriter.getInventory().setItem(1, null);
+        nativeWriter.saveData();
+        forceActualPlayerdataAndContainingDirectory();
+        Map<String, Object> after = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(after, ledger, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after))
+                || receipt.active()
+                || receipt.completedSequence() != grant.sequence()
+                || vetoedSaveEvents.get() != 1
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered()
+                || !(after.get("Inventory") instanceof java.util.List<?> items)
+                || items.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number index
+                    && index.intValue() == 0))
+            throw new IllegalStateException(
+                    "Native save did not preserve signed receipt/STONE or did trigger InvSee");
+        boolean rejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            rejected = true;
+        }
+        if (!rejected)
+            throw new IllegalStateException("Fresh readback accepted absent 5000C");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_WRITER_BYPASSED_INVSEE_EVENT");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_FRESH_PROOF_REJECTED_STALE_COIN");
+
+        // Deliberately expose the insufficient LOW-LEVEL GrantLedger API.
+        // The validated value at oldProof's observation no longer exists.
+        byte[] coinlessBytes = Files.readAllBytes(dataFile());
+        ledger.acknowledge(grant, oldProof.receipt().completedSequence());
+        GrantLedger reread = new GrantLedger(Bukkit.getPluginManager()
+                .getPlugin("SimpleCoins").getDataFolder().toPath().resolve("grants"));
+        if (reread.historySnapshot().size() != 1
+                || !reread.historySnapshot().getFirst().delivered()
+                || !reread.pending(ID).isEmpty()
+                || !BigInteger.ZERO.equals(totalSavedMoney(saved()))
+                || !Arrays.equals(coinlessBytes, Files.readAllBytes(dataFile()))
+                || vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("Expected old-proof false ACK not durable");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_STALE_PROOF_FALSE_ACK_DURABLE");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_GUARD_STILL_DEFAULT_DENY");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_ABRUPT_HALT_AFTER_FALSE_ACK");
+        Runtime.getRuntime().halt(142);
+        throw new AssertionError("False-ACK negative probe halt returned");
+    }
+
+    /** Real second JVM replays a falsely acknowledged original grant. */
+    private void verifyNativePostDrainFalseAckOnColdRestart() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !replayNativePostDrainFalseAck
+                || !Files.isRegularFile(dataFile(), LinkOption.NOFOLLOW_LINKS))
+            throw new IllegalStateException("Invalid native post-drain restart");
+        GrantLedger reread = actualProductLedger();
+        Map<String, Object> after = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(after, reread, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after))
+                || receipt.active() || receipt.completedSequence() != 1
+                || reread.historySnapshot().size() != 1
+                || !reread.historySnapshot().getFirst().delivered()
+                || !reread.pending(ID).isEmpty()
+                || !(after.get("Inventory") instanceof java.util.List<?> items)
+                || items.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))))
+            throw new IllegalStateException(
+                    "False ACK, lost currency or signed receipt not reproduced");
+        getLogger().info(
+                "PAPER_A02_NATIVE_POST_DRAIN_FALSE_ACK_COLD_RESTART_COINLESS_DELIVERED_ONE");
+        getLogger().info("PAPER_A02_NATIVE_POST_DRAIN_RESTART_GUARD_STILL_DEFAULT_DENY");
+        Bukkit.shutdown();
     }
 
     /**
