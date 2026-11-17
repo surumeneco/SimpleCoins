@@ -112,11 +112,76 @@ jobs:
           grep -F 'PAPER_A02_INVSEE_FRESH_PROOF_REJECTS_LOST_MONEY_NO_ACK' paper-a02-invsee-past-gate.log
           grep -F 'PAPER_A02_INVSEE_POST_EVENT_VETO_NEEDS_IN_FLIGHT_DRAIN' paper-a02-invsee-past-gate.log
           echo 'A02_REAL_INVSEE_ACCEPTED_WRITER_CROSSES_LATE_VETO_NOT_A_G3_SAFETY_PROOF'
+      - name: Prepare independent positive known-InvSee-Future drain world
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-positive/plugins
+          cp smoke/paper.jar smoke-positive/paper.jar
+          cp smoke/plugins/*.jar smoke-positive/plugins/
+          printf 'eula=true\n' > smoke-positive/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25595\n' > smoke-positive/server.properties
+          test ! -d smoke-positive/world
+      - name: Real admitted preserving InvSee writer drains before receipt/coin readback and ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-positive
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.drainAdmittedThenAck=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-drained-ack.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 140 ]; then
+            echo "Unexpected first Paper exit $code (expected Runtime.halt(140))" >&2
+            tail -180 paper-a02-drained-ack.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' paper-a02-drained-ack.log; then
+            tail -180 paper-a02-drained-ack.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_LATE_VETO_CLOSED_AFTER_FIRST_EVENT_ADMITTED' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_ADMITTED_PRESERVING_WRITER_DRAINED_BEFORE_ACK' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_SECOND_SAVE_VETOED_BEFORE_ACK' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_DRAIN_FILE_DIR_FSYNC_FRESH_PROOF' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_ONE_DURABLE_ACK_AFTER_KNOWN_WRITER_DRAIN' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_DRAIN_GUARD_STILL_DEFAULT_DENY' paper-a02-drained-ack.log
+          grep -F 'PAPER_A02_INVSEE_DRAIN_ABRUPT_HALT_AFTER_ACK' paper-a02-drained-ack.log
+      - name: New real Paper JVM cold-replays the same completed saved grant and ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-positive
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.checkAfterHalt=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-drained-ack-restart.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "Unexpected second Paper exit $code" >&2
+            tail -180 paper-a02-drained-ack-restart.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' paper-a02-drained-ack-restart.log; then
+            tail -180 paper-a02-drained-ack-restart.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-drained-ack-restart.log
+          grep -F 'PAPER_A02_FORCED_SYNC_ABRUPT_RESTART_PRESERVED_5000C_RECEIPT_ACK' paper-a02-drained-ack-restart.log
+          grep -F 'PAPER_A02_FORCED_SYNC_GUARD_REMAINS_CLOSED' paper-a02-drained-ack-restart.log
+          echo 'A02_REAL_INVSEE_KNOWN_WRITER_FUTURE_DRAIN_THEN_SAVED_COIN_ACK_COLD_REPLAY_ONLY'
       - name: Preserve actual Paper technical evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: a02-invsee-real-past-event-veto
-          path: smoke/*.log
+          path: |
+            smoke/*.log
+            smoke-positive/*.log
           retention-days: 14
           if-no-files-found: ignore
