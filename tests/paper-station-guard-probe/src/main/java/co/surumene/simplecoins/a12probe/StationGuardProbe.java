@@ -5,12 +5,17 @@ import co.surumene.simplecoins.paper.CoinItemCodec;
 import io.papermc.paper.event.player.CartographyItemEvent;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.map.MapView;
+import org.bukkit.inventory.meta.MapMeta;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -127,6 +132,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " taggedCoinAccepted=unverified"
                 + " physicalConsumption=false");
         verifyNativeMerchantOffer(registered.getFirst(), codec, money);
+        verifyNativeCartographyResult(codec, money, detached);
     }
 
     /**
@@ -192,6 +198,110 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " accepted=" + taggedAccepted
                 + " consumed=" + taggedTaken
                 + " detachedOnly=true tradePerformed=false");
+    }
+
+    /**
+     * Real NMS CartographyTableMenu's actual result calculation, with genuine
+     * MapView saved data. No click, onTake, packet or inventory delivery.
+     * Each case owns a fresh isolated menu to avoid stale output.
+     */
+    private void verifyNativeCartographyResult(CoinItemCodec codec,
+                                              ItemStack sourceCoin, Player detached)
+            throws ReflectiveOperationException {
+        World world = Bukkit.getWorlds().getFirst();
+        MapView view = Bukkit.createMap(world);
+        view.setScale(MapView.Scale.CLOSE);
+        ItemStack filledMap = new ItemStack(Material.FILLED_MAP, 1);
+        MapMeta mapMeta = (MapMeta) filledMap.getItemMeta();
+        if (mapMeta == null) throw new IllegalStateException("MapMeta unavailable");
+        mapMeta.setMapView(view);
+        filledMap.setItemMeta(mapMeta);
+        if (filledMap.getType() != Material.FILLED_MAP || !mapMeta.hasMapView())
+            throw new IllegalStateException("Paper did not create a real filled map");
+
+        int x = 46, z = 46;
+        int y = Math.max(world.getMinHeight() + 20,
+                Math.min(world.getMaxHeight() - 4,
+                        world.getHighestBlockYAt(x, z) + 4));
+        Block block = world.getBlockAt(x, y, z);
+        if (!block.getType().isAir())
+            throw new IllegalStateException("Disposable NMS cartography location not empty");
+
+        // Access needs an actual world/position to resolve the real map data.
+        Class<?> nmsInventory = Class.forName("net.minecraft.world.entity.player.Inventory");
+        Class<?> nmsLevel = Class.forName("net.minecraft.world.level.Level");
+        Class<?> blockPos = Class.forName("net.minecraft.core.BlockPos");
+        Class<?> accessType = Class.forName("net.minecraft.world.inventory.ContainerLevelAccess");
+        Class<?> menuType = Class.forName("net.minecraft.world.inventory.CartographyTableMenu");
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> craftStackType = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack");
+        Object playerHandle = detached.getClass().getMethod("getHandle").invoke(detached);
+        Object playerInventory = playerHandle.getClass().getMethod("getInventory")
+                .invoke(playerHandle);
+        Object levelHandle = world.getClass().getMethod("getHandle").invoke(world);
+        Object pos = blockPos.getConstructor(int.class, int.class, int.class)
+                .newInstance(x, y, z);
+        Object access = accessType.getMethod("create", nmsLevel, blockPos)
+                .invoke(null, levelHandle, pos);
+        var ctor = menuType.getConstructor(int.class, nmsInventory, accessType);
+        Method nmsConvert = craftStackType.getMethod("asNMSCopy", ItemStack.class);
+        Method bukkitConvert = craftStackType.getMethod("asBukkitCopy", nmsStackType);
+        Method getSlot = menuType.getMethod("getSlot", int.class);
+
+        try {
+            block.setType(Material.CARTOGRAPHY_TABLE);
+            ItemStack resultPlain = nativeCartographyResult(ctor, getSlot, nmsConvert,
+                    bukkitConvert, playerInventory, access, 101,
+                    filledMap, new ItemStack(Material.PAPER, 1));
+            ItemStack resultCoinSecond = nativeCartographyResult(ctor, getSlot, nmsConvert,
+                    bukkitConvert, playerInventory, access, 102,
+                    filledMap, sourceCoin.clone());
+            ItemStack resultCoinFirst = nativeCartographyResult(ctor, getSlot, nmsConvert,
+                    bukkitConvert, playerInventory, access, 103,
+                    sourceCoin.clone(), new ItemStack(Material.PAPER, 1));
+            ItemStack resultMissingMap = nativeCartographyResult(ctor, getSlot, nmsConvert,
+                    bukkitConvert, playerInventory, access, 104,
+                    null, sourceCoin.clone());
+
+            Material plain = resultPlain == null ? Material.AIR : resultPlain.getType();
+            Material coinSecond = resultCoinSecond == null
+                    ? Material.AIR : resultCoinSecond.getType();
+            Material coinFirst = resultCoinFirst == null
+                    ? Material.AIR : resultCoinFirst.getType();
+            Material noMap = resultMissingMap == null
+                    ? Material.AIR : resultMissingMap.getType();
+            if (plain != Material.FILLED_MAP
+                    || coinFirst != Material.AIR || noMap != Material.AIR)
+                throw new IllegalStateException(
+                        "NMS cartography control mismatch plain=" + plain
+                                + " coinFirst=" + coinFirst + " noMap=" + noMap);
+            if (codec.identify(sourceCoin).orElseThrow()
+                    != CoinDenomination.FIVE_THOUSAND || sourceCoin.getAmount() != 1)
+                throw new IllegalStateException("Native cartography changed source money");
+            getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_CONTROLS"
+                    + " plain=FILLED_MAP coinFirst=AIR noMap=AIR");
+            getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
+                    + " output=" + coinSecond
+                    + " detachedOnly=true actualClick=false physicalConsumption=false");
+        } finally {
+            block.setType(Material.AIR);
+        }
+    }
+
+    private static ItemStack nativeCartographyResult(
+            Constructor<?> ctor, Method getSlot, Method toNms, Method toBukkit,
+            Object playerInventory, Object access, int id, ItemStack map, ItemStack addition)
+            throws ReflectiveOperationException {
+        Object menu = ctor.newInstance(id, playerInventory, access);
+        Object mapSlot = getSlot.invoke(menu, 0);
+        Object additionalSlot = getSlot.invoke(menu, 1);
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Method slotSet = mapSlot.getClass().getMethod("set", nmsStackType);
+        if (map != null) slotSet.invoke(mapSlot, toNms.invoke(null, map));
+        if (addition != null) slotSet.invoke(additionalSlot, toNms.invoke(null, addition));
+        Object resultSlot = getSlot.invoke(menu, 2);
+        Object result = resultSlot.getClass().getMethod("getItem").invoke(resultSlot);
+        return (ItemStack) toBukkit.invoke(null, result);
     }
 
     /** A proxy view is sufficient for a deliberately synthetic event. */
