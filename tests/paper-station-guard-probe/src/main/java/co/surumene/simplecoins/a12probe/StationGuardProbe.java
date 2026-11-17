@@ -286,6 +286,8 @@ public final class StationGuardProbe extends JavaPlugin {
                     playerInventory, access, playerHandle, filledMap, sourceCoin, codec);
             verifyNativeCartographyDirectClick(ctor, getSlot, nmsConvert,
                     bukkitConvert, access, filledMap, sourceCoin, codec);
+            verifyServerHandlerPacketClick(ctor, getSlot, nmsConvert,
+                    bukkitConvert, access, filledMap, sourceCoin, codec);
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
                     + " output=" + coinSecond
                     + " detachedOnly=true actualClick=false physicalConsumption=false");
@@ -468,6 +470,167 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " totalInventoryClicks=" + clickEvents.get()
                 + " totalCartographyEvents=" + cartographyEvents.get()
                 + " sourceCoinIntact=true networkPacket=false");
+    }
+
+    /**
+     * Exercise the real Paper server packet-handler method, but without a
+     * socket or admitted user. This is NOT a network client test and must
+     * not be mistaken for a fully connected player transaction.
+     */
+    private void verifyServerHandlerPacketClick(
+            Constructor<?> cartographyCtor, Method getSlot, Method toNms,
+            Method toBukkit, Object access, ItemStack filledMap,
+            ItemStack sourceCoin, CoinItemCodec codec)
+            throws ReflectiveOperationException {
+        Class<?> mcType = Class.forName("net.minecraft.server.MinecraftServer");
+        Object mc = Bukkit.getServer().getClass().getMethod("getServer")
+                .invoke(Bukkit.getServer());
+        Class<?> serverPlayerType = Class.forName(
+                "net.minecraft.server.level.ServerPlayer");
+        Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
+        Class<?> packetFlowType = Class.forName(
+                "net.minecraft.network.protocol.PacketFlow");
+        Class<?> connectionType = Class.forName("net.minecraft.network.Connection");
+        Class<?> handlerType = Class.forName(
+                "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        Class<?> cookieType = Class.forName(
+                "net.minecraft.server.network.CommonListenerCookie");
+        Class<?> inputType = Class.forName(
+                "net.minecraft.world.inventory.ContainerInput");
+        Class<?> packetType = Class.forName(
+                "net.minecraft.network.protocol.game.ServerboundContainerClickPacket");
+        Class<?> hashedType = Class.forName("net.minecraft.network.HashedStack");
+        Class<?> fastMapType = Class.forName(
+                "it.unimi.dsi.fastutil.ints.Int2ObjectMap");
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> menuType = Class.forName(
+                "net.minecraft.world.inventory.AbstractContainerMenu");
+        Class<?> nmsPlayerType = Class.forName(
+                "net.minecraft.world.entity.player.Player");
+        Class<?> slotType = Class.forName("net.minecraft.world.inventory.Slot");
+        Method slotSet = slotType.getMethod("set", nmsStackType);
+        Method slotGet = slotType.getMethod("getItem");
+        Method count = nmsStackType.getMethod("getCount");
+        Method handle = handlerType.getMethod("handleContainerClick", packetType);
+        Constructor<?> packetCtor = packetType.getConstructor(int.class,
+                int.class, short.class, byte.class, inputType, fastMapType, hashedType);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object pickup = Enum.valueOf((Class<? extends Enum>) inputType, "PICKUP");
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object serverbound = Enum.valueOf((Class<? extends Enum>) packetFlowType, "SERVERBOUND");
+        Object emptyHash = hashedType.getField("EMPTY").get(null);
+        java.lang.reflect.Field activeMenu = nmsPlayerType.getField("containerMenu");
+        java.lang.reflect.Field playerConnection = serverPlayerType.getField("connection");
+        AtomicInteger observedClicks = new AtomicInteger();
+        AtomicInteger observedCartography = new AtomicInteger();
+        AtomicInteger rejectedMoney = new AtomicInteger();
+
+        Listener temporaryGuard = new Listener() {
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            public void protect(InventoryClickEvent event) {
+                if (event.getRawSlot() != 2
+                        || event.getView().getType() != InventoryType.CARTOGRAPHY)
+                    return;
+                ItemStack input = event.getView().getTopInventory().getItem(1);
+                if (codec.hasCoinMarker(input)) {
+                    event.setCancelled(true);
+                    rejectedMoney.incrementAndGet();
+                }
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeClick(InventoryClickEvent event) {
+                if (event.getRawSlot() == 2
+                        && event.getView().getType() == InventoryType.CARTOGRAPHY)
+                    observedClicks.incrementAndGet();
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeCartography(CartographyItemEvent event) {
+                if (event.getRawSlot() == 2)
+                    observedCartography.incrementAndGet();
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(temporaryGuard, this);
+        try {
+            for (int i = 0; i < 2; i++) {
+                boolean coinCase = i == 1;
+                Player detached = detachedPlayer();
+                if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+                    throw new IllegalStateException("A12 handler test player connected");
+                Object handlePlayer = detached.getClass().getMethod("getHandle")
+                        .invoke(detached);
+                Object profile = handlePlayer.getClass().getMethod("getGameProfile")
+                        .invoke(handlePlayer);
+                Object cookie = cookieType
+                        .getMethod("createInitial", profileType, boolean.class)
+                        .invoke(null, profile, false);
+                Object connection = connectionType.getConstructor(packetFlowType)
+                        .newInstance(serverbound);
+                Object networkHandler = handlerType.getConstructor(
+                        mcType, connectionType, serverPlayerType, cookieType)
+                        .newInstance(mc, connection, handlePlayer, cookie);
+                playerConnection.set(handlePlayer, networkHandler);
+
+                Object inventory = handlePlayer.getClass().getMethod("getInventory")
+                        .invoke(handlePlayer);
+                Object menu = cartographyCtor.newInstance(150 + i, inventory, access);
+                activeMenu.set(handlePlayer, menu);
+                Object first = getSlot.invoke(menu, 0);
+                Object second = getSlot.invoke(menu, 1);
+                Object result = getSlot.invoke(menu, 2);
+                slotSet.invoke(first, toNms.invoke(null, filledMap));
+                slotSet.invoke(second, toNms.invoke(null, coinCase
+                        ? sourceCoin.clone() : new ItemStack(Material.PAPER, 1)));
+                ItemStack resultStack = (ItemStack) toBukkit.invoke(null,
+                        slotGet.invoke(result));
+                if (resultStack.getType() != Material.FILLED_MAP)
+                    throw new IllegalStateException("Packet handler test has no result");
+                int before = ((Number) count.invoke(slotGet.invoke(second))).intValue();
+                int clickBefore = observedClicks.get();
+                int cartoBefore = observedCartography.get();
+                int blockBefore = rejectedMoney.get();
+                int id = ((Number) menuType.getField("containerId").get(menu)).intValue();
+                int state = ((Number) menuType.getMethod("getStateId")
+                        .invoke(menu)).intValue();
+                Object changed = Class.forName(
+                        "it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap")
+                        .getConstructor().newInstance();
+                Object packet = packetCtor.newInstance(id, state, (short) 2,
+                        (byte) 0, pickup, changed, emptyHash);
+                getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " container=" + id + " state=" + state
+                        + " realServerHandler=true socket=false");
+                try {
+                    handle.invoke(networkHandler, packet);
+                } catch (java.lang.reflect.InvocationTargetException thrown) {
+                    throw new IllegalStateException("NMS packet handler rejected "
+                            + (coinCase ? "coin" : "paper") + " test invocation",
+                            thrown.getCause());
+                }
+                int after = ((Number) count.invoke(slotGet.invoke(second))).intValue();
+                getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " before=" + before + " after=" + after
+                        + " inventoryEvents=" + (observedClicks.get() - clickBefore)
+                        + " cartographyEvents=" + (observedCartography.get() - cartoBefore)
+                        + " blocked=" + (rejectedMoney.get() - blockBefore)
+                        + " socket=false");
+                if (before != 1 || observedClicks.get() == clickBefore)
+                    throw new IllegalStateException(
+                            "Actual server handler did not dispatch an inventory click");
+                if (coinCase && (after != 1 || rejectedMoney.get() != blockBefore + 1))
+                    throw new IllegalStateException(
+                            "Test-only packet click guard did not preserve tagged PAPER");
+                if (!coinCase && (after != 0 || rejectedMoney.get() != blockBefore))
+                    throw new IllegalStateException(
+                            "Plain PAPER was not accepted by packet click handler");
+            }
+            getLogger().info("A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED"
+                    + " socket=false onlinePlayers=0"
+                    + " realHandler=true actualNetworkClient=false");
+        } finally {
+            HandlerList.unregisterAll(temporaryGuard);
+        }
     }
 
     /**
