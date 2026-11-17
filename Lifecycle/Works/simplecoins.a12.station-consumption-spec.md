@@ -12,6 +12,9 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/492
   - https://github.com/surumeneco/SimpleCoins/pull/493
   - https://github.com/surumeneco/SimpleCoins/pull/494
+  - https://github.com/surumeneco/SimpleCoins/pull/518
+  - https://github.com/surumeneco/SimpleCoins/pull/519
+  - https://github.com/surumeneco/SimpleCoins/pull/520
 decision_ref: ''
 refs: []
 entry: issue
@@ -33,6 +36,9 @@ spec_status: unknown
 | --- |
 | https://github.com/surumeneco/SimpleCoins/pull/489 |
 | https://github.com/surumeneco/SimpleCoins/pull/316 |
+| https://github.com/surumeneco/SimpleCoins/pull/518 |
+| https://github.com/surumeneco/SimpleCoins/pull/519 |
+| https://github.com/surumeneco/SimpleCoins/pull/520 |
 | https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view |
 | https://drive.google.com/file/d/1fSsHEn1tFX_DvnzxDK3t5FjDrIuvMrnt/view |
 
@@ -79,9 +85,11 @@ spec_status: unknown
 
 The Drive 01 and 05 product requirements already prohibit consuming any authentic PDC/model PAPER coin in ordinary crafting or stations except the 20 value-equivalent SimpleCoins exchanges, while ordinary PAPER remains usable. This Work does **not** seek approval to change that gameplay rule.
 
-Official Paper 26.2 evidence has now advanced beyond the initial **synthetic** CartographyItemEvent test in PR #489. PR #491 proves Minecraft's actual MerchantOffer accepts and decrements one authentic 5000C PDC/model PAPER **on a detached NMS copy**; PR #492 proves actual CartographyTableMenu generates FILLED_MAP from map slot0 plus authentic 5000C PAPER slot1 (the map input slot0 does not accept money as a map); PR #493 proves real result Slot.onTake decrements the coin copy; PR #494 proves direct NMS CartographyTableMenu.clicked also decrements it and transfers FILLED_MAP to cursor. In the *direct NMS invocation only*, InventoryClickEvent and CartographyItemEvent observers both received 0 callbacks, because the network packet listener was not invoked. **This does not prove real player packets bypass Bukkit events, nor that real player assets were consumed.**
+Official Paper 26.2 evidence has now advanced beyond the initial **synthetic** CartographyItemEvent test in PR #489. PR #491 proves Minecraft's actual MerchantOffer accepts and decrements one authentic 5000C PDC/model PAPER **on a detached NMS copy**; PR #492 proves actual CartographyTableMenu generates FILLED_MAP from map slot0 plus authentic 5000C PAPER slot1 (the map input slot0 does not accept money as a map); PR #493 proves real result Slot.onTake decrements the coin copy; PR #494 proves direct NMS CartographyTableMenu.clicked also decrements it and transfers FILLED_MAP to cursor. In the *direct NMS invocation only*, InventoryClickEvent and CartographyItemEvent observers both received 0 callbacks, because the network packet listener was not invoked. **This does not prove real player packets bypass Bukkit events, nor that real player assets were consumed.** The later server-handler observations in #518–#520 cover a distinct path; neither supersedes the other's boundary.
 
-Current production CoinExchangeRecipes listens to Prepare/Craft/Crafter, not merchant/cartography result operations. The sole unintegrated old PR #316 PaperCurrencyConsumption pure predicate and JUnit do not install a listener. Material protection at the network result operation, other-plugin direct NMS modifications and normal accounting all remain unimplemented/unverified.
+Official Paper 26.2 tests have since invoked the real server-side packet handler directly with a detached test player. In #518 Cartography raw result slot2 dispatched InventoryClickEvent and CartographyItemEvent (one each): ordinary PAPER 1→0, genuine 5000C 1→1 only under a disposable guard. In #519 Merchant raw result slot2 dispatched InventoryClickEvent: ordinary PAPER 1→0 and guarded 5000C 1→1. In #520 the otherwise identical Merchant coin click **without the disposable guard** consumed genuine 5000C 1→0. These are bounded direct packet-handler tests with no live network socket, authenticated player, real JE/BE client or persisted assets, so they do not prove real-client coverage. Direct NMS `clicked` bypasses the handler and is not covered by those observed events.
+
+Current production CoinExchangeRecipes listens only to Prepare/Craft/Crafter, not Merchant/Cartography result operations. The unintegrated old PR #316 PaperCurrencyConsumption pure predicate and JUnit do not install a listener. Genuine unguarded Merchant coin loss is now observed in the test fixture; the actual production adapter, nonstandard click modes, other-plugin direct NMS modifications and accounting are still unimplemented/unverified.
 
 ## New Drafts and remaining normative decisions
 
@@ -90,7 +98,7 @@ The new source-bound Drafts are:
 - `docs/cat/drafts/a12-station-consumption-pi.md` — source inputs and allow/cancel outputs.
 - `docs/cat/drafts/a12-station-consumption-tce.md` — partial four-way decision partition for result/not-result and monetary marker/readability.
 
-Remaining technical choices: the network packet→Paper InventoryClickEvent/CartographyItemEvent→NMS result onTake ordering; all acquisition actions including Shift/number-key/drag; cancellation efficacy before physical reduction; direct noncooperating NMS writers; callback priority/after-callback mutation; JE/BE and G0/G3 journal/saved generation. Result slot 2 is verified in the detached NMS cartography menu, but network-to-Paper mapping and real user consumption are not. Do not convert the **synthetic** event result from #489 into network-event proof; likewise, direct NMS reduction in #491–#494 is not a full native client transaction.
+Remaining technical choices: actual authenticated network packet→Paper event→native onTake ordering; Shift/number-key/drag/double-click and other result acquisition paths; production listener wiring and callback priority/late mutation; direct noncooperating NMS writers; actual JE/BE clients; G0/G3 journal/saved generation. Raw result slot2 with normal pickup has bounded **server-handler** observation for Merchant and Cartography (#518/#519/#520), not real socket/user consumption. The Draft's four-way classification is unchanged; failure to read input still requires fail-closed, not a guessed value. Do not convert the **synthetic** event result from #489 into network-event proof; likewise, direct NMS reduction in #491–#494 is not a full native client transaction.
 
 This Work preserves the already approved restriction but does not itself authorize a particular Paper adapter, promote CAT normative Confirmed, or bypass Process Closure/Model/TDD/implementation conformance. The next `spec-implementation` Work requires legitimate decision provenance, confirmed Process/PI/TCE and formal compiler-owned Gates.
 
