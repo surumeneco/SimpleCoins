@@ -55,7 +55,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a00.phase5.classfile | tests | python | @repo:SimpleCoins | python3 -m unittest discover -s tests -p test_verify_phase5_saved_wiring.py -v | class-forward-reference;invalid-class-index;truncated-class-index;terminal-long-double;valid-reserved-slot | tests/test_verify_phase5_saved_wiring.py;tools/verify_phase5_saved_wiring.py | unittest exit/status | 60 |
+| a00.phase5.classfile | tests | exit-zero | @repo:SimpleCoins | python3 -m unittest discover -s tests -p test_verify_phase5_saved_wiring.py -v | class-forward-reference;invalid-class-index;truncated-class-index;terminal-long-double;valid-reserved-slot | tests/test_verify_phase5_saved_wiring.py;tools/verify_phase5_saved_wiring.py | unittest exit/status | 60 |
 
 ## Gates
 
