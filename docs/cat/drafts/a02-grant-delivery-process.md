@@ -11,6 +11,7 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/467
   - https://github.com/surumeneco/SimpleCoins/pull/468
   - https://github.com/surumeneco/SimpleCoins/pull/473
+  - https://github.com/surumeneco/SimpleCoins/pull/480
 decision_ref: ''
 refs:
   - simplecoins.grants.pi.delivery
@@ -61,6 +62,8 @@ language: ja
 予約が存在しない通常の無操作は、**全証拠が整合している場合**だけ異常なしと判定する。履歴にないreceiptやACK済み履歴に対するreceiptロールバックは、予約の有無だけで正常扱いせず異常遮断する。既ACK履歴は再発行・再ACKの対象ではなく、後続の合法的な貨幣移動を理由に発行時と同じ収納スロットの保持まで要求しない。ACK後の資産所在変化は通常仕訳/G0の責務と分離する。
 
 [#473](https://github.com/surumeneco/SimpleCoins/pull/473)では、実Paperの隔離された第8 JVMで予約4の永続記録後・メモリ上の現物/receipt変更後に**playerdata保存前SIGKILL**し、第9 JVMで未保存の第4貨幣不在とpending維持を確認して、実保存・読戻し・ACKを一度だけ実行した。第10 JVMでは実ファイルと台帳の再読取で貨幣合計665,000 C、配布済み履歴4件、未配布0件、ACK冪等性を確認した。これは合成オフラインプレイヤーのJVM停止境界の実測であり、実クライアント操作・OS電源断・全外部writerには適用しない。
+
+**Paper保存表現の等価性（未承認の正規化候補）**：実Paper 26.2 [#480](https://github.com/surumeneco/SimpleCoins/pull/480) の対象プレイヤー保存で、変更前は`equipment`フィールド欠損（null）、変更後は空のCompound（`{}`）だった。装備アイテムの増減は確認されず、正規5000C貨幣・受領PDCが同一playerdataに保存され単一root証明は成功したが、現行`verifyTransition`のNBT構造一致判定はこの空/欠損差を「他収納の改変」と誤判定し、G3正常配布を妨げた。**mainhandアイテム自体の鏡像変化は、このログからは立証されない。** `他収納保全`の実装候補として、*空の`equipment` Compoundと未出現だけ*を同等と扱い、非空の装備変化、誤型、異常なnested貨幣、EnderItems/Inventory/receiptの変更は従来どおり拒否する。これはDraftの意味検討であり、正式CAT Confirmed・修正済み実装ではない。
 
 **技術上の重要な不足**：保存済playerdataの一度の読戻し・内容SHA/ctime証明が成功しても、その直後から永続ACKまで無通知の外部writerが変更できれば、古い受領/貨幣を根拠にACKしてしまう競合を排除できない。従ってTCEの`入力.保存世代証拠有効`を、検査瞬間だけの整合として真とみなさない。保護範囲と永続化の保証を別途選定・実証する必要がある。現行の読取専用ブリッジだけではG3の製品配布サービスを安全に有効化できない。
 
