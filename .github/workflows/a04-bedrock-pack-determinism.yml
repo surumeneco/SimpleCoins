@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon test --tests \
+          gradle --no-daemon :test --tests \
             'co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest'
           python - <<'PY'
           from pathlib import Path
