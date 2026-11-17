@@ -134,6 +134,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " physicalConsumption=false");
         verifyNativeMerchantOffer(registered.getFirst(), codec, money);
         verifyNativeCartographyResult(codec, money, detached);
+        characterizePacketClickEntryPoints();
     }
 
     /**
@@ -467,6 +468,44 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " totalInventoryClicks=" + clickEvents.get()
                 + " totalCartographyEvents=" + cartographyEvents.get()
                 + " sourceCoinIntact=true networkPacket=false");
+    }
+
+    /**
+     * Inspect the actual Paper build's packet-handler ABI before attempting a
+     * network-path experiment. This never constructs a packet, admits a player
+     * or claims that an InventoryClickEvent is dispatched.
+     */
+    private void characterizePacketClickEntryPoints() throws ReflectiveOperationException {
+        Class<?> handler = Class.forName(
+                "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        Class<?> packet = Class.forName(
+                "net.minecraft.network.protocol.game.ServerboundContainerClickPacket");
+        Class<?> nmsConnection = Class.forName("net.minecraft.network.Connection");
+        Class<?> serverPlayer = Class.forName(
+                "net.minecraft.server.level.ServerPlayer");
+        java.util.List<Method> targets = java.util.Arrays.stream(handler.getMethods())
+                .filter(method -> method.getName().equals("handleContainerClick")
+                        && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0] == packet)
+                .toList();
+        if (targets.size() != 1)
+            throw new IllegalStateException(
+                    "NMS packet handler entrypoint is not unique: " + targets);
+        getLogger().info("A12_PACKET_PATH_HANDLER " + targets.getFirst().toGenericString());
+        for (Constructor<?> ctor : handler.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_HANDLER_CONSTRUCTOR " + ctor.toGenericString());
+        for (Constructor<?> ctor : packet.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_PACKET_CONSTRUCTOR " + ctor.toGenericString());
+        for (Constructor<?> ctor : nmsConnection.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_CONNECTION_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : serverPlayer.getFields()) {
+            if (field.getType() == handler || field.getType() == nmsConnection
+                    || field.getName().toLowerCase(java.util.Locale.ROOT).contains("containermenu"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_FIELD " + field.toGenericString());
+        }
+        getLogger().info("A12_PACKET_PATH_ABI_INSPECTED entrypoints=1"
+                + " eventDispatch=unverified networkPacketSent=false"
+                + " detachedOnly=true");
     }
 
     /** A proxy view is sufficient for a deliberately synthetic event. */
