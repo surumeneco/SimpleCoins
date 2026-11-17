@@ -147,9 +147,9 @@ jobs:
           grep -F 'A12_PACKET_PATH_CONNECTION_CONSTRUCTOR ' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_DETACHED_ENTITY_VALIDITY initiallyValid=false syntheticValid=true playerOnline=false' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_MENU_VALIDITY valid=true' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE initiallyJoining=false joining=true immobile=false channelConnected=false actualClient=false' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPER before=1 after=0' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000C before=1 after=1' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE initiallyJoining=true joining=true immobile=false channelConnected=false actualClient=false' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPER before=1 after=0 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=1' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED socket=false onlinePlayers=0' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_ABI_INSPECTED entrypoints=1 eventDispatch=unverified networkPacketSent=false' paper-a12-station.log
           grep -F 'A12_STATION_DISPOSABLE_PROBE_COMPLETE' paper-a12-station.log
