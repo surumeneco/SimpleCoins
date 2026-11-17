@@ -162,12 +162,12 @@ jobs:
           statuses = []
           for name, plugin_id, expected_sha, expected_size in rows:
               expr = (r'A01_RUNTIME_WRITER_PLUGIN_ENABLED name=' + re.escape(plugin_id)
-                      + r' version=\S+ source=(\S+) sha256=([0-9a-f]{64}) bytes=(\d+)')
+                      + r' version=.*? source=(\S+) sha256=([0-9a-f]{64}) bytes=(\d+)')
               enabled = re.findall(expr, raw)
               missing = re.findall(r'A01_RUNTIME_PACKAGED_PLUGIN_MISSING name='
                                    + re.escape(plugin_id) + r'(?![A-Za-z0-9_+.-])',raw)
               disabled = re.findall(r'A01_RUNTIME_PACKAGED_PLUGIN_DISABLED name='
-                                    + re.escape(plugin_id) + r' version=\S+',raw)
+                                    + re.escape(plugin_id) + r' version=[^\n]+',raw)
               assert len(enabled)+len(missing)+len(disabled) == 1, plugin_id
               if enabled:
                   source, real_sha, real_bytes = enabled[0]
