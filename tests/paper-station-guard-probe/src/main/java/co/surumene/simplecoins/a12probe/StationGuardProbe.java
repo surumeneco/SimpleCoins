@@ -825,10 +825,13 @@ public final class StationGuardProbe extends JavaPlugin {
         AtomicInteger observedClicks = new AtomicInteger();
         AtomicInteger observedCartography = new AtomicInteger();
         AtomicInteger rejectedMoney = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean probeProtectionEnabled =
+                new java.util.concurrent.atomic.AtomicBoolean(true);
 
         Listener temporaryGuard = new Listener() {
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             public void protect(InventoryClickEvent event) {
+                if (!probeProtectionEnabled.get()) return;
                 if (event.getRawSlot() != 2
                         || event.getView().getType() != InventoryType.CARTOGRAPHY)
                     return;
@@ -852,8 +855,10 @@ public final class StationGuardProbe extends JavaPlugin {
         };
         Bukkit.getPluginManager().registerEvents(temporaryGuard, this);
         try {
-            for (int i = 0; i < 2; i++) {
-                boolean coinCase = i == 1;
+            for (int i = 0; i < 3; i++) {
+                boolean coinCase = i >= 1;
+                boolean withoutProbeGuard = i == 2;
+                probeProtectionEnabled.set(!withoutProbeGuard);
                 Player detached = detachedPlayer();
                 if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
                     throw new IllegalStateException("A12 handler test player connected");
@@ -964,7 +969,8 @@ public final class StationGuardProbe extends JavaPlugin {
                 if (!valid) throw new IllegalStateException(
                         "Detached player's native menu is not usable by server handler");
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
-                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
                         + " container=" + id + " state=" + state
                         + " realServerHandler=true socket=false");
                 try {
@@ -976,7 +982,8 @@ public final class StationGuardProbe extends JavaPlugin {
                 }
                 int after = ((Number) count.invoke(slotGet.invoke(second))).intValue();
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT"
-                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
                         + " before=" + before + " after=" + after
                         + " inventoryEvents=" + (observedClicks.get() - clickBefore)
                         + " cartographyEvents=" + (observedCartography.get() - cartoBefore)
@@ -985,13 +992,30 @@ public final class StationGuardProbe extends JavaPlugin {
                 if (before != 1 || observedClicks.get() == clickBefore)
                     throw new IllegalStateException(
                             "Actual server handler did not dispatch an inventory click");
-                if (coinCase && (after != 1 || rejectedMoney.get() != blockBefore + 1))
+                if (coinCase && !withoutProbeGuard
+                        && (after != 1 || rejectedMoney.get() != blockBefore + 1))
                     throw new IllegalStateException(
                             "Test-only packet click guard did not preserve tagged PAPER");
-                if (!coinCase && (after != 0 || rejectedMoney.get() != blockBefore))
-                    throw new IllegalStateException(
-                            "Plain PAPER was not accepted by packet click handler");
+                if ((!coinCase || withoutProbeGuard)
+                        && (after != 0 || rejectedMoney.get() != blockBefore))
+                    throw new IllegalStateException(withoutProbeGuard
+                            ? "Unguarded real product cartography coin unexpectedly survived"
+                            : "Plain PAPER was not accepted by packet click handler");
+                if (withoutProbeGuard) {
+                    if (observedClicks.get() - clickBefore != 1
+                            || observedCartography.get() - cartoBefore != 1
+                            || codec.identify(sourceCoin).orElseThrow()
+                                    != CoinDenomination.FIVE_THOUSAND
+                            || sourceCoin.getAmount() != 1)
+                        throw new IllegalStateException(
+                                "Unguarded cartography counterexample had invalid source/events");
+                    getLogger().info("A12_CARTOGRAPHY_UNGUARDED_PRODUCT_COIN_CONSUMPTION"
+                            + " before=1 after=0 inventoryEvents=1"
+                            + " cartographyEvents=1 probeDenied=0"
+                            + " productionListener=false originalCoinUnchanged=true");
+                }
             }
+            probeProtectionEnabled.set(true);
             getLogger().info("A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED"
                     + " socket=false onlinePlayers=0"
                     + " realHandler=true actualNetworkClient=false");
