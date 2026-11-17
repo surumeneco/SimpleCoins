@@ -1,0 +1,34 @@
+name: A05 WCL consumer CAT Draft structural validation
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/drafts/a05-wcl-consumer-*.md'
+      - 'Lifecycle/Works/simplecoins.a05.wcl-consumer-cat-draft.md'
+      - '.github/workflows/a05-wcl-consumer-cat-draft.yml'
+permissions:
+  contents: read
+
+jobs:
+  lint-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate A05 Work and Draft syntax only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wcl-consumer-cat-draft.md
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py \
+            --files docs/cat/drafts/a05-wcl-consumer-process.md \
+                    docs/cat/drafts/a05-wcl-consumer-pi.md \
+                    docs/cat/drafts/a05-wcl-consumer-tce.md
+          echo 'A05_WCL_CONSUMER_DRAFT_STRUCTURAL_ONLY_PASSED'
