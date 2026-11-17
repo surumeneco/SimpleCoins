@@ -134,6 +134,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " physicalConsumption=false");
         verifyNativeMerchantOffer(registered.getFirst(), codec, money);
         characterizeMerchantMenuAbi();
+        verifyNativeMerchantPacketClick(merchant, codec, money);
         verifyNativeCartographyResult(codec, money, detached);
         characterizePacketClickEntryPoints();
     }
@@ -233,6 +234,208 @@ public final class StationGuardProbe extends JavaPlugin {
         }
         getLogger().info("A12_MERCHANT_MENU_ABI_CAPTURED actualTrade=false"
                 + " networkPacket=false playerOnline=false");
+    }
+
+    /**
+     * The same actual server packet-handler entrypoint used by the Cartography
+     * probe, with a MerchantMenu backed by a real Bukkit custom Merchant offer.
+     * Uses an in-memory detached player and no socket/login. Currency denial
+     * exists ONLY in this disposable observer, never in SimpleCoins production.
+     */
+    private void verifyNativeMerchantPacketClick(
+            Merchant shop, CoinItemCodec codec, ItemStack originalCoin)
+            throws ReflectiveOperationException {
+        Class<?> mcType = Class.forName("net.minecraft.server.MinecraftServer");
+        Object mc = Bukkit.getServer().getClass().getMethod("getServer")
+                .invoke(Bukkit.getServer());
+        Class<?> playerType = Class.forName(
+                "net.minecraft.server.level.ServerPlayer");
+        Class<?> nmsPlayerType = Class.forName(
+                "net.minecraft.world.entity.player.Player");
+        Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
+        Class<?> packetFlowType = Class.forName(
+                "net.minecraft.network.protocol.PacketFlow");
+        Class<?> connectionType = Class.forName("net.minecraft.network.Connection");
+        Class<?> handlerType = Class.forName(
+                "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        Class<?> cookieType = Class.forName(
+                "net.minecraft.server.network.CommonListenerCookie");
+        Class<?> inputType = Class.forName(
+                "net.minecraft.world.inventory.ContainerInput");
+        Class<?> packetType = Class.forName(
+                "net.minecraft.network.protocol.game.ServerboundContainerClickPacket");
+        Class<?> hashedType = Class.forName("net.minecraft.network.HashedStack");
+        Class<?> fastMapType = Class.forName(
+                "it.unimi.dsi.fastutil.ints.Int2ObjectMap");
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> menuType = Class.forName(
+                "net.minecraft.world.inventory.MerchantMenu");
+        Class<?> baseMenu = Class.forName(
+                "net.minecraft.world.inventory.AbstractContainerMenu");
+        Class<?> inventoryType = Class.forName(
+                "net.minecraft.world.entity.player.Inventory");
+        Class<?> traderType = Class.forName(
+                "net.minecraft.world.item.trading.Merchant");
+        Class<?> craftMerchantType = Class.forName(
+                "org.bukkit.craftbukkit.inventory.CraftMerchant");
+        Class<?> craftStackType = Class.forName(
+                "org.bukkit.craftbukkit.inventory.CraftItemStack");
+        Class<?> slotType = Class.forName("net.minecraft.world.inventory.Slot");
+
+        Object nmsMerchant = craftMerchantType.getMethod("getMerchant")
+                .invoke(shop);
+        Method setTradingPlayer = traderType.getMethod(
+                "setTradingPlayer", nmsPlayerType);
+        Constructor<?> menuCtor = menuType.getConstructor(
+                int.class, inventoryType, traderType);
+        Constructor<?> packetCtor = packetType.getConstructor(
+                int.class, int.class, short.class, byte.class,
+                inputType, fastMapType, hashedType);
+        Method packetHandle = handlerType.getMethod(
+                "handleContainerClick", packetType);
+        Method slotSet = slotType.getMethod("set", nmsStackType);
+        Method slotGet = slotType.getMethod("getItem");
+        Method getSlot = menuType.getMethod("getSlot", int.class);
+        Method toNms = craftStackType.getMethod("asNMSCopy", ItemStack.class);
+        Method toBukkit = craftStackType.getMethod("asBukkitCopy", nmsStackType);
+        Method stackCount = nmsStackType.getMethod("getCount");
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object pickup = Enum.valueOf((Class<? extends Enum>) inputType, "PICKUP");
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object serverbound = Enum.valueOf(
+                (Class<? extends Enum>) packetFlowType, "SERVERBOUND");
+        Object emptyHash = hashedType.getField("EMPTY").get(null);
+        java.lang.reflect.Field playerConnection = playerType.getField("connection");
+        java.lang.reflect.Field activeMenu = nmsPlayerType.getField("containerMenu");
+        AtomicInteger clicks = new AtomicInteger();
+        AtomicInteger stopped = new AtomicInteger();
+
+        Listener guard = new Listener() {
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            public void protect(InventoryClickEvent event) {
+                if (event.getView().getType() != InventoryType.MERCHANT
+                        || event.getRawSlot() != 2) return;
+                Inventory top = event.getView().getTopInventory();
+                if (codec.hasCoinMarker(top.getItem(0))
+                        || codec.hasCoinMarker(top.getItem(1))) {
+                    stopped.incrementAndGet();
+                    event.setCancelled(true);
+                }
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observed(InventoryClickEvent event) {
+                if (event.getRawSlot() == 2
+                        && event.getView().getType() == InventoryType.MERCHANT)
+                    clicks.incrementAndGet();
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(guard, this);
+        try {
+            for (int i = 0; i < 2; i++) {
+                boolean coinCase = i == 1;
+                Player detached = detachedPlayer();
+                if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+                    throw new IllegalStateException("Merchant test player online");
+                Object playerHandle = detached.getClass().getMethod("getHandle")
+                        .invoke(detached);
+                java.lang.reflect.Field valid = null;
+                Class<?> owner = playerHandle.getClass();
+                while (owner != null && valid == null) {
+                    try { valid = owner.getDeclaredField("valid"); }
+                    catch (NoSuchFieldException ignored) {
+                        owner = owner.getSuperclass();
+                    }
+                }
+                if (valid == null) throw new IllegalStateException(
+                        "Merchant test detached Entity.valid flag absent");
+                valid.setAccessible(true);
+                valid.setBoolean(playerHandle, true);
+
+                Object profile = playerHandle.getClass().getMethod("getGameProfile")
+                        .invoke(playerHandle);
+                Object cookie = cookieType.getMethod(
+                        "createInitial", profileType, boolean.class)
+                        .invoke(null, profile, false);
+                Object connection = connectionType.getConstructor(packetFlowType)
+                        .newInstance(serverbound);
+                Object handler = handlerType.getConstructor(
+                        mcType, connectionType, playerType, cookieType)
+                        .newInstance(mc, connection, playerHandle, cookie);
+                playerConnection.set(playerHandle, handler);
+                setTradingPlayer.invoke(nmsMerchant, playerHandle);
+                if ((boolean) playerType.getMethod("isImmobile").invoke(playerHandle))
+                    throw new IllegalStateException(
+                            "Merchant test player remains immobile");
+
+                Object inventory = playerHandle.getClass().getMethod("getInventory")
+                        .invoke(playerHandle);
+                Object menu = menuCtor.newInstance(180 + i, inventory, nmsMerchant);
+                activeMenu.set(playerHandle, menu);
+                if (!(boolean) menuType.getMethod("stillValid", nmsPlayerType)
+                        .invoke(menu, playerHandle))
+                    throw new IllegalStateException("Merchant menu is not valid");
+                Object firstSlot = getSlot.invoke(menu, 0);
+                Object secondSlot = getSlot.invoke(menu, 1);
+                Object resultSlot = getSlot.invoke(menu, 2);
+                ItemStack input = coinCase
+                        ? originalCoin.clone() : new ItemStack(Material.PAPER, 1);
+                slotSet.invoke(firstSlot, toNms.invoke(null, input));
+                ItemStack output = (ItemStack) toBukkit.invoke(null,
+                        slotGet.invoke(resultSlot));
+                if (output == null || output.getType() != Material.EMERALD)
+                    throw new IllegalStateException(
+                            "Real merchant menu did not produce PAPER trade result: " + output);
+                int before = ((Number) stackCount.invoke(
+                        slotGet.invoke(firstSlot))).intValue();
+                int clickBefore = clicks.get();
+                int denyBefore = stopped.get();
+                int id = ((Number) baseMenu.getField("containerId")
+                        .get(menu)).intValue();
+                int state = ((Number) baseMenu.getMethod("getStateId")
+                        .invoke(menu)).intValue();
+                Object changed = Class.forName(
+                        "it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap")
+                        .getConstructor().newInstance();
+                Object packet = packetCtor.newInstance(id, state, (short) 2,
+                        (byte) 0, pickup, changed, emptyHash);
+                getLogger().info("A12_MERCHANT_PACKET_HANDLER_BEGIN"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " menuValid=true socket=false onlinePlayers=0");
+                try {
+                    packetHandle.invoke(handler, packet);
+                } catch (java.lang.reflect.InvocationTargetException target) {
+                    throw new IllegalStateException("Merchant server packet click failed",
+                            target.getCause());
+                }
+                int after = ((Number) stackCount.invoke(
+                        slotGet.invoke(firstSlot))).intValue();
+                int eventDelta = clicks.get() - clickBefore;
+                int blockedDelta = stopped.get() - denyBefore;
+                getLogger().info("A12_MERCHANT_PACKET_HANDLER_RESULT"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " before=" + before + " after=" + after
+                        + " inventoryEvents=" + eventDelta
+                        + " blocked=" + blockedDelta
+                        + " actualTradePacket=false socket=false");
+                if (before != 1 || eventDelta != 1)
+                    throw new IllegalStateException(
+                            "Real merchant packet handler did not notify InventoryClickEvent");
+                if (coinCase && (after != 1 || blockedDelta != 1))
+                    throw new IllegalStateException(
+                            "Merchant test-only currency cancel did not protect input");
+                if (!coinCase && (after != 0 || blockedDelta != 0))
+                    throw new IllegalStateException(
+                            "Ordinary PAPER merchant input was not consumed");
+                if (codec.identify(originalCoin).orElseThrow()
+                        != CoinDenomination.FIVE_THOUSAND || originalCoin.getAmount() != 1)
+                    throw new IllegalStateException("Merchant probe modified original coin");
+            }
+            getLogger().info("A12_MERCHANT_PACKET_HANDLER_TEST_ONLY_DENIAL_PASSED"
+                    + " onlinePlayers=0 socket=false realClient=false"
+                    + " productionListener=false");
+        } finally {
+            HandlerList.unregisterAll(guard);
+        }
     }
 
     /**
