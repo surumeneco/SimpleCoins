@@ -112,12 +112,18 @@ def classify(owner: str, name: str) -> set[str]:
     if (owner == "java/nio/file/Files"
             and name.startswith(("write", "move", "copy", "delete", "create",
                                  "newOutputStream", "newByteChannel",
-                                 "setAttribute"))):
+                                 "newBufferedWriter", "setAttribute"))):
         result.add("STORED_FILE_WRITE")
-    if owner in ("java/io/FileOutputStream", "java/io/RandomAccessFile") \
-            and name == "<init>":
+    if owner in ("java/io/FileOutputStream", "java/io/RandomAccessFile",
+                  "java/io/FileWriter") and name == "<init>":
         result.add("STORED_FILE_WRITE")
-    if owner == "java/nio/channels/FileChannel" and name in ("open", "write", "truncate"):
+    if owner == "java/nio/channels/FileChannel" and name in (
+            "open", "write", "truncate", "map", "transferFrom"):
+        # map() can be READ_ONLY; this classification is a CANDIDATE,
+        # not proof of a writable mapping or actual invocation.
+        result.add("STORED_FILE_WRITE")
+    if owner == "java/nio/channels/AsynchronousFileChannel" and name == "open":
+        # open() can be for READ; include for conservative investigation.
         result.add("STORED_FILE_WRITE")
     if owner == "java/io/File" and name in ("renameTo", "delete", "createNewFile"):
         result.add("STORED_FILE_WRITE")
