@@ -623,6 +623,11 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Repeated ACK altered saved grant state");
         getLogger().info("PAPER_A02_COOPERATIVE_VETO_ONE_DURABLE_ACK_NO_ITEM_CHANGE");
         getLogger().info("PAPER_A02_COOPERATIVE_VETO_GUARD_REMAINS_CLOSED");
+        getLogger().info("PAPER_A02_COOPERATIVE_VETO_ABRUPT_HALT_AFTER_DURABLE_ACK");
+        // A separate Paper JVM must find the exact original physical grant
+        // and one durable ACK despite this process losing shutdown hooks.
+        Runtime.getRuntime().halt(139);
+        throw new AssertionError("Protected ACK halt returned");
     }
 
     private void verifyCompetingWriterAfterProof() throws Exception {
