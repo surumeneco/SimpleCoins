@@ -84,14 +84,18 @@ jobs:
           set -e
           # JVM-owned runtime class bytes, dumped by the disposable probe:
           # disassemble with the SAME Java25 SDK before any failing grep exits.
-          if test -f plugins/A12Probe/diagnostic-classes/net/minecraft/server/network/ServerGamePacketListenerImpl.class; then
-            if javap -c -p -classpath plugins/A12Probe/diagnostic-classes \
+          dump=$(find plugins -type f -path '*/diagnostic-classes/net/minecraft/server/network/ServerGamePacketListenerImpl.class' -print -quit)
+          if [ -n "$dump" ]; then
+            cp_root="${dump%/net/minecraft/server/network/ServerGamePacketListenerImpl.class}"
+            if javap -c -p -classpath "$cp_root" \
               net.minecraft.server.network.ServerGamePacketListenerImpl \
               > packet-handler.javap.txt 2> packet-handler.javap-error.txt; then
               echo A12_REAL_PAPER_PACKET_HANDLER_DISASSEMBLED
             else
               echo A12_REAL_PAPER_PACKET_HANDLER_DISASSEMBLY_UNAVAILABLE
             fi
+          else
+            echo A12_REAL_PAPER_PACKET_HANDLER_CLASS_NOT_DUMPED
           fi
           if [ "$result" -ne 0 ]; then
             echo "Paper station probe exit status $result" >&2
