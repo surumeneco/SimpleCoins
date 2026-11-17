@@ -1,0 +1,175 @@
+name: A01 official Paper actual enabled plugin writer roster
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a01.actual-loaded-writer-roster.md'
+      - 'tests/paper-runtime-writer-roster-probe/**'
+      - '.github/workflows/paper-runtime-writer-roster-probe.yml'
+permissions:
+  contents: read
+jobs:
+  loaded-plugin-code-source-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate A01 verification Work structure only
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.actual-loaded-writer-roster.md
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: pinned-server
+          sparse-checkout: |
+            plugins/InvSee++.jar
+            plugins/WonderfulGenomeLib-1.0.1.jar
+            plugins/WonderfulCoreLibrary-0.1.0.jar
+            plugins/WhatAWonderfulChicken-2.1.0.jar
+            plugins/WhatAWonderfulWolf-1.1.1.jar
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify exact packaged five JAR bytes and parse actual plugin descriptor IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = \
+            '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          printf '%s\n' \
+            '09acaf08b42cad7343de92de262518da2edec3f1  pinned-server/plugins/WonderfulGenomeLib-1.0.1.jar' \
+            '64ab60fc7f8b2ef07c4712d410c3f4d10f022698  pinned-server/plugins/WonderfulCoreLibrary-0.1.0.jar' \
+            'f4e4c26565d105d75d6865042909a29b13a82757  pinned-server/plugins/WhatAWonderfulChicken-2.1.0.jar' \
+            'e94e7430ed97b28ba0b19035238e1b00e83b0077  pinned-server/plugins/WhatAWonderfulWolf-1.1.1.jar' \
+            | while read -r expected file; do
+                test "$(git hash-object "$file")" = "$expected"
+              done
+          printf '%s  %s\n' \
+            '01f3e053a814f76d46513ebf65a38747df11df81c577d12bed108b353d7775f9' \
+            'pinned-server/plugins/InvSee++.jar' | sha256sum -c -
+          python - <<'PY'
+          import re, zipfile
+          from pathlib import Path
+          root = Path('pinned-server/plugins')
+          names = [
+            'InvSee++.jar',
+            'WonderfulGenomeLib-1.0.1.jar',
+            'WonderfulCoreLibrary-0.1.0.jar',
+            'WhatAWonderfulChicken-2.1.0.jar',
+            'WhatAWonderfulWolf-1.1.1.jar',
+          ]
+          ids = []
+          for jar in names:
+              with zipfile.ZipFile(root / jar) as archive:
+                  source = archive.read('plugin.yml').decode('utf-8')
+              values = []
+              for line in source.splitlines():
+                  m = re.fullmatch(
+                      r"""\s*name:\s*['"]?([A-Za-z][A-Za-z0-9_+.-]*)['"]?\s*(?:#.*)?""",
+                      line,
+                  )
+                  if m: values.append(m.group(1))
+              if len(values) != 1:
+                  raise ValueError(f'Plugin ID not unique in real {jar}: {values}')
+              ids.append(values[0])
+              print('A01_PINNED_DESCRIPTOR_ID', jar, values[0])
+          if len(set(ids)) != 5:
+              raise ValueError('Duplicate effective plugin ID in five packaged JARs')
+          Path('expected-plugin-ids.txt').write_text('\n'.join(ids)+'\n')
+          print('A01_FIVE_PINNED_PLUGIN_DESCRIPTORS_VERIFIED')
+          PY
+      - name: Build product, guard and disposable runtime roster observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-runtime-writer-roster-probe jar
+          python3 tools/simplecoins_preflight.py \
+            admission-guard/build/libs/admission-guard-1.0.0.jar \
+            build/libs/SimpleCoins-1.0.0.jar
+          unzip -p tests/paper-runtime-writer-roster-probe/build/libs/SimpleCoinsRuntimeRosterProbe.jar plugin.yml | \
+            grep -F 'name: SimpleCoinsRuntimeRosterProbe'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq 'RuntimeWriterRosterProbe.class'; then
+            echo 'Disposable runtime roster probe leaked into production JAR' >&2
+            exit 1
+          fi
+      - name: Download official SHA256-verified Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A01-RuntimeRoster/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' \
+            -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Start real distributed writers under independent default-deny guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp tests/paper-runtime-writer-roster-probe/build/libs/SimpleCoinsRuntimeRosterProbe.jar smoke/plugins/RuntimeRosterProbe.jar
+          cp pinned-server/plugins/InvSee++.jar smoke/plugins/
+          cp pinned-server/plugins/WonderfulGenomeLib-1.0.1.jar smoke/plugins/
+          cp pinned-server/plugins/WonderfulCoreLibrary-0.1.0.jar smoke/plugins/
+          cp pinned-server/plugins/WhatAWonderfulChicken-2.1.0.jar smoke/plugins/
+          cp pinned-server/plugins/WhatAWonderfulWolf-1.1.1.jar smoke/plugins/
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25593\n' > smoke/server.properties
+          required=$(paste -sd, expected-plugin-ids.txt)
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s \
+            java -Da01.requiredPluginIds="$required" -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a01-runtime-roster.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Paper runtime writer roster exit $status" >&2
+            tail -160 paper-a01-runtime-roster.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a01-runtime-roster.log
+          while read -r name; do
+            grep -F "A01_RUNTIME_WRITER_PLUGIN_ENABLED name=$name " paper-a01-runtime-roster.log || {
+              tail -160 paper-a01-runtime-roster.log
+              exit 1
+            }
+          done < ../expected-plugin-ids.txt
+          grep -F 'A01_ALL_FIVE_PINNED_WRITERS_ENABLED expected=5' paper-a01-runtime-roster.log
+          grep -F 'A01_RUNTIME_ROSTER_POINT_IN_TIME_OBSERVED' paper-a01-runtime-roster.log
+          if grep -Eq 'A01_RUNTIME_ROSTER_PROBE_FAILED|A01_RUNTIME_ROSTER_INVALID_ISOLATION' paper-a01-runtime-roster.log; then
+            tail -160 paper-a01-runtime-roster.log
+            exit 1
+          fi
+          echo 'A01_REAL_PAPER_PINNED_FIVE_ENABLED_CODESOURCE_OBSERVED_NOT_ALL_WRITERS'
+      - name: Archive actual Paper plugin identity observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-a01-runtime-writer-roster
+          path: |
+            smoke/*.log
+            expected-plugin-ids.txt
+          retention-days: 14
+          if-no-files-found: ignore
