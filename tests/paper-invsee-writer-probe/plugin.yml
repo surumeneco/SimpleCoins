@@ -1,0 +1,7 @@
+name: SimpleCoinsInvseeWriterProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a02invsee.InvseeWriterProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins, InvSeePlusPlus]
+description: Disposable CI-only actual InvSee++ offline grant writer-gap probe
