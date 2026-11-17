@@ -1,0 +1,35 @@
+name: A00 Phase5 saved-wiring JVM constant-pool verifier structure
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a00.phase5-static-bytecode-structural-regression.md'
+      - 'tools/verify_phase5_saved_wiring.py'
+      - 'tests/test_verify_phase5_saved_wiring.py'
+      - '.github/workflows/a00-phase5-constant-pool-structure.yml'
+permissions:
+  contents: read
+jobs:
+  constant-pool-structure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate actual CAT issue-work structure, no formal Gate assertion
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a00.phase5-static-bytecode-structural-regression.md
+      - name: Verify 19 actual Python constant-pool and descriptor regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_verify_phase5_saved_wiring.py' -v
+          echo A00_PHASE5_JVM_CONSTANT_POOL_DESCRIPTOR_19_CASES_GREEN

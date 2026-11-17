@@ -49,6 +49,9 @@ def utf8_pool(payload: bytes) -> frozenset[str]:
             take(4)
         elif tag in (5, 6):
             take(8)
+            # JVMS §4.4.5: long/double also occupies the following CP slot.
+            if index + 1 >= count:
+                raise InvalidClassFile('Wide constant exceeds constant-pool range')
             index += 1
         elif tag in (7, 8, 16, 19, 20):
             take(2)
@@ -99,6 +102,9 @@ def class_references(payload: bytes) -> frozenset[str]:
             take(4)
         elif tag in (5, 6):
             take(8)
+            # JVMS §4.4.5: long/double also occupies the following CP slot.
+            if index + 1 >= count:
+                raise InvalidClassFile('Wide constant exceeds constant-pool range')
             index += 1
         elif tag in (8, 16, 19, 20):
             take(2)
@@ -145,6 +151,10 @@ def inspect_jar(path: Path) -> dict:
         if 'plugin.yml' not in names:
             raise ValueError('Missing plugin.yml')
         descriptor = jar.read('plugin.yml').decode('utf-8')
+        # Duplicate YAML keys can override the class actually loaded by Paper.
+        main_keys = re.findall(r'(?m)^main\s*:', descriptor)
+        if len(main_keys) != 1:
+            raise ValueError('Missing or ambiguous main plugin class')
         main = re.search(r'(?m)^main:\s*([a-zA-Z0-9_.]+)\s*$', descriptor)
         if main is None:
             raise ValueError('Missing or invalid main plugin class')

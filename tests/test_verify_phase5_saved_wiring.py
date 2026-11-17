@@ -157,10 +157,65 @@ class SavedWiringTest(unittest.TestCase):
         with self.assertRaises(app.InvalidClassFile):
             self.inspect(corrupted='WorldSnapshotTraversal')
 
+    def test_conflicting_duplicate_main_descriptor_keys_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jarfile = Path(directory) / 'plugin.jar'
+            with ZipFile(jarfile, 'w') as jar:
+                jar.writestr('plugin.yml',
+                             'name: SimpleCoins\n'
+                             'main: co.surumene.simplecoins.SimpleCoinsPlugin\n'
+                             'main: attacker.other.EntryPoint\n')
+                jar.writestr(MAIN + '.class',
+                             synthetic_class([DOMAIN + 'SettlementScanRunner']))
+            with self.assertRaisesRegex(ValueError, 'main'):
+                app.inspect_jar(jarfile)
+
     def test_duplicate_class_name_fails_closed(self):
         with self.assertRaises(ValueError):
             self.inspect(duplicate=True)
 
+
+    def test_forward_constant_class_name_index_is_resolved(self):
+        """A tagged JVM class may refer to a later constant-pool UTF8 entry."""
+        name = DOMAIN + 'SettlementScanRunner'
+        encoded = name.encode('ascii')
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 3) + b'\x07\x00\x02'
+                   + b'\x01' + struct.pack('>H', len(encoded)) + encoded)
+        self.assertEqual(frozenset({name}), app.class_references(payload))
+
+    def test_invalid_class_name_pool_index_fails_closed(self):
+        """A dangling CONSTANT_Class must never count as scanner wiring."""
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 2) + b'\x07\x00\x02')
+        with self.assertRaises(app.InvalidClassFile):
+            app.class_references(payload)
+
+    def test_truncated_class_name_index_fails_closed(self):
+        """A partial CONSTANT_Class index is not a valid reference."""
+        payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                   + struct.pack('>H', 2) + b'\x07\x00')
+        with self.assertRaises(app.InvalidClassFile):
+            app.class_references(payload)
+
+    def test_terminal_wide_constant_slot_fails_closed(self):
+        # JVMS §4.4.5: CONSTANT_Long/Double reserves the next CP index.
+        # A last-index wide constant cannot be a structurally valid pool.
+        for tag in (5, 6):
+            payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                       + struct.pack('>H', 2) + bytes([tag]) + bytes(8))
+            for parser in (app.utf8_pool, app.class_references):
+                with self.subTest(tag=tag, parser=parser.__name__):
+                    with self.assertRaises(app.InvalidClassFile):
+                        parser(payload)
+
+    def test_wide_constant_with_reserved_slot_remains_parseable(self):
+        for tag in (5, 6):
+            payload = (b'\xca\xfe\xba\xbe' + b'\0\0\0\x41'
+                       + struct.pack('>H', 3) + bytes([tag]) + bytes(8))
+            with self.subTest(tag=tag):
+                self.assertEqual(frozenset(), app.utf8_pool(payload))
+                self.assertEqual(frozenset(), app.class_references(payload))
 
 if __name__ == '__main__':
     unittest.main()
