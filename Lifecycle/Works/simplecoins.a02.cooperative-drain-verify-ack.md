@@ -57,7 +57,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a02.cooperative-drain.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon test --tests co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest | pendingWriterMustDrainBeforeAuthoritativeReadbackAck;reopeningAllowsPostAckWriterButDoesNotMakeGrantProofPermanent | src/test/java/co/surumene/simplecoins/paper/CooperativeWriterDrainReadbackTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest.xml | 300 |
+| a02.cooperative-drain.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon test --tests co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest | pendingWriterMustDrainBeforeAuthoritativeReadbackAck;multipleInFlightMustDrainAndReopenOnlyAfterBarrierRelease | src/test/java/co/surumene/simplecoins/paper/CooperativeWriterDrainReadbackTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest.xml | 300 |
 
 ## Gates
 
