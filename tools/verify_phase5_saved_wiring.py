@@ -49,6 +49,9 @@ def utf8_pool(payload: bytes) -> frozenset[str]:
             take(4)
         elif tag in (5, 6):
             take(8)
+            # JVMS §4.4.5: long/double also occupies the following CP slot.
+            if index + 1 >= count:
+                raise InvalidClassFile('Wide constant exceeds constant-pool range')
             index += 1
         elif tag in (7, 8, 16, 19, 20):
             take(2)
@@ -99,6 +102,9 @@ def class_references(payload: bytes) -> frozenset[str]:
             take(4)
         elif tag in (5, 6):
             take(8)
+            # JVMS §4.4.5: long/double also occupies the following CP slot.
+            if index + 1 >= count:
+                raise InvalidClassFile('Wide constant exceeds constant-pool range')
             index += 1
         elif tag in (8, 16, 19, 20):
             take(2)
