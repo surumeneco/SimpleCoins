@@ -133,6 +133,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " taggedCoinAccepted=unverified"
                 + " physicalConsumption=false");
         verifyNativeMerchantOffer(registered.getFirst(), codec, money);
+        characterizeMerchantMenuAbi();
         verifyNativeCartographyResult(codec, money, detached);
         characterizePacketClickEntryPoints();
     }
@@ -200,6 +201,38 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " accepted=" + taggedAccepted
                 + " consumed=" + taggedTaken
                 + " detachedOnly=true tradePerformed=false");
+    }
+
+    /** Inspect the exact Paper build's merchant GUI and offer state APIs. */
+    private void characterizeMerchantMenuAbi() throws ReflectiveOperationException {
+        String[] types = {
+                "net.minecraft.world.inventory.MerchantMenu",
+                "net.minecraft.world.inventory.MerchantContainer",
+                "net.minecraft.world.item.trading.Merchant",
+                "net.minecraft.world.entity.npc.ClientSideMerchant",
+                "org.bukkit.craftbukkit.inventory.CraftMerchant"
+        };
+        for (String name : types) {
+            Class<?> kind;
+            try { kind = Class.forName(name); }
+            catch (ClassNotFoundException missing) {
+                getLogger().info("A12_MERCHANT_MENU_ABI_CLASS_ABSENT " + name);
+                continue;
+            }
+            getLogger().info("A12_MERCHANT_MENU_ABI_CLASS " + kind.getName()
+                    + " isInterface=" + kind.isInterface());
+            for (Constructor<?> ctor : kind.getDeclaredConstructors())
+                getLogger().info("A12_MERCHANT_MENU_ABI_CTOR " + ctor.toGenericString());
+            for (Method method : kind.getDeclaredMethods()) {
+                String n = method.getName().toLowerCase(java.util.Locale.ROOT);
+                if (n.contains("offer") || n.contains("trade") || n.contains("recipe")
+                        || n.contains("merchant") || n.contains("selection")
+                        || n.contains("container") || n.contains("bukkitview"))
+                    getLogger().info("A12_MERCHANT_MENU_ABI_METHOD " + method.toGenericString());
+            }
+        }
+        getLogger().info("A12_MERCHANT_MENU_ABI_CAPTURED actualTrade=false"
+                + " networkPacket=false playerOnline=false");
     }
 
     /**
