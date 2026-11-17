@@ -1,0 +1,97 @@
+name: A00 preserve legacy coin and wallet CAT Drafts
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/drafts/coin-identity-*.md'
+      - 'docs/cat/drafts/coin-exchange-formula-*.md'
+      - 'docs/cat/drafts/wallet-paper-gui-domain.md'
+      - 'Lifecycle/Works/simplecoins.a00.legacy-cat-draft-reconciliation.md'
+      - '.github/workflows/a00-legacy-cat-drafts.yml'
+permissions:
+  contents: read
+jobs:
+  cat-draft-reconciliation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate issue-work structure using upstream fixed CAT runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a00.legacy-cat-draft-reconciliation.md
+      - name: Lint seven source-bound Drafts without promoting to Confirmed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/drafts/coin-identity-process.md \
+            docs/cat/drafts/coin-identity-pi.md \
+            docs/cat/drafts/coin-identity-tce.md \
+            docs/cat/drafts/coin-exchange-formula-process.md \
+            docs/cat/drafts/coin-exchange-formula-pi.md \
+            docs/cat/drafts/coin-exchange-formula-tce.md \
+            docs/cat/drafts/wallet-paper-gui-domain.md
+      - name: Verify precise identity, no stale source claims, and no product rewind
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          paths = [
+              Path("docs/cat/drafts/coin-identity-process.md"),
+              Path("docs/cat/drafts/coin-identity-pi.md"),
+              Path("docs/cat/drafts/coin-identity-tce.md"),
+              Path("docs/cat/drafts/coin-exchange-formula-process.md"),
+              Path("docs/cat/drafts/coin-exchange-formula-pi.md"),
+              Path("docs/cat/drafts/coin-exchange-formula-tce.md"),
+              Path("docs/cat/drafts/wallet-paper-gui-domain.md"),
+          ]
+          for p in paths:
+              s = p.read_text(encoding="utf-8")
+              assert s.startswith("---\n"), p
+              assert "\nstatus: draft\n" in s, p
+              assert "status: confirmed" not in s, p
+              assert "decision_ref: ''" in s or p.name == "wallet-paper-gui-domain.md", p
+          exchange_pi = paths[4].read_text(encoding="utf-8")
+          assert "process: simplecoins.paper.coin-exchange" in exchange_pi
+          assert "refs: []" in exchange_pi
+          assert "  - simplecoins.paper.tce.exchange" not in exchange_pi
+          wallet = paths[6].read_text(encoding="utf-8")
+          for marker in ("WalletItemCodec", "WalletCrafting", "WalletMenu",
+                         "WalletTransferTransaction", "入室ガード"):
+              assert marker.lower() in wallet.lower(), marker
+          assert "still-missing Paper wallet adapter" not in wallet
+          print("A00_SEVEN_CAT_DRAFTS_RECONCILED_WITHOUT_NORMATIVE_PROMOTION")
+          PY
+          printf '%s\n' \
+            'c1722c0229ad57a540c820875826d0de5933a6cb  src/main/java/co/surumene/simplecoins/paper/CoinItemCodec.java' \
+            '3f17dd74e72e21de1d9f232f0b0af3a1d40180d6  src/main/java/co/surumene/simplecoins/domain/CoinExchangeFormula.java' \
+            'edc58f96e373ac1742682ec2eb431fb12e7fd17e  src/test/java/co/surumene/simplecoins/domain/CoinExchangeFormulaTest.java' \
+            '4110ffaaee57691379b70930ae67e20d62d1ffe1  src/test/java/co/surumene/simplecoins/paper/CoinItemCodecSchemaTest.java' \
+            'eae36a78ae7ead3e7e3033851099c55a997a5f26  src/main/java/co/surumene/simplecoins/domain/WalletTransferTransaction.java' \
+            '2954fbd17ad8924b232cb1f522534cdd01b621f3  src/main/java/co/surumene/simplecoins/paper/WalletCrafting.java' \
+            'c68772ca844f451011184c46d929524e53d26045  src/main/java/co/surumene/simplecoins/paper/WalletItemCodec.java' \
+            '72edb02241d0c068f313fc96c380d041d6a56bf0  src/main/java/co/surumene/simplecoins/paper/WalletMenu.java' \
+            '519d90375403e13cc2724451415af867ffb3b181  src/test/java/co/surumene/simplecoins/domain/WalletTransferTransactionTest.java' \
+            | while read -r expected file; do
+                actual=$(git hash-object "$file")
+                test "$actual" = "$expected" || {
+                  echo "Unexpected source blob: $file got $actual expected $expected" >&2
+                  exit 1
+                }
+              done
+          grep -Fq 'hasAuthorizedResult' src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java
+          grep -Fq 'An unplanned Ender Chest or equipment asset changed' src/main/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadback.java
+          echo 'A00_LEGACY_SOURCE_SHA_MATCH_WITHOUT_PRODUCT_ROLLBACK'
