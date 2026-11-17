@@ -110,6 +110,17 @@ jobs:
           else
             echo A12_REAL_PAPER_SERVER_PLAYER_CLASS_NOT_DUMPED
           fi
+          base_player_dump=$(find plugins -type f -path '*/diagnostic-classes/net/minecraft/world/entity/player/Player.class' -print -quit)
+          if [ -n "$base_player_dump" ]; then
+            base_player_root="${base_player_dump%/net/minecraft/world/entity/player/Player.class}"
+            if javap -c -p -classpath "$base_player_root" \
+              net.minecraft.world.entity.player.Player \
+              > base-player.javap.txt 2> base-player.javap-error.txt; then
+              echo A12_REAL_PAPER_BASE_PLAYER_DISASSEMBLED
+            else
+              echo A12_REAL_PAPER_BASE_PLAYER_DISASSEMBLY_UNAVAILABLE
+            fi
+          fi
           if [ "$result" -ne 0 ]; then
             echo "Paper station probe exit status $result" >&2
             tail -160 paper-a12-station.log
@@ -158,5 +169,7 @@ jobs:
             smoke/packet-handler.javap-error.txt
             smoke/server-player.javap.txt
             smoke/server-player.javap-error.txt
+            smoke/base-player.javap.txt
+            smoke/base-player.javap-error.txt
           retention-days: 7
           if-no-files-found: ignore
