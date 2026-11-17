@@ -5,6 +5,7 @@ on:
     paths:
       - 'Lifecycle/Works/simplecoins.a04.bedrock-pack-byte-stability.md'
       - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/BedrockPackTest.java'
       - '.github/workflows/a04-bedrock-pack-determinism.yml'
 permissions:
   contents: read
@@ -37,8 +38,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon :test --tests \
-            'co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest'
+          gradle --no-daemon :test \
+            --tests 'co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest' \
+            --tests 'co.surumene.simplecoins.domain.BedrockPackTest'
           python - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree as ET
@@ -49,7 +51,16 @@ jobs:
           assert suite.get("tests")=="1",suite.attrib
           assert suite.get("failures")=="0" and suite.get("errors")=="0",suite.attrib
           assert suite.get("skipped")=="0",suite.attrib
+          name_xml=root/"TEST-co.surumene.simplecoins.domain.BedrockPackTest.xml"
+          assert name_xml.is_file(),name_xml
+          name_suite=ET.parse(name_xml).getroot()
+          assert name_suite.get("tests")=="7",name_suite.attrib
+          assert name_suite.get("failures")=="0" and name_suite.get("errors")=="0",name_suite.attrib
+          assert name_suite.get("skipped")=="0",name_suite.attrib
+          cases={entry.get("name") for entry in name_suite.findall("testcase")}
+          assert "nameOnlyChangeInvalidatesBedrockManifestIdentity()" in cases,cases
           print("A04_CURRENT_DEVELOP_BE_PACK_16_UTF8_PNG_VARIANTS_REPEATED_IDENTICAL_AND_CHANGED_DISTINCT")
+          print("A17_BEDROCK_DISPLAY_NAME_ONLY_CHANGE_INVALIDATES_CLIENT_CACHE_MANIFEST")
           PY
       - name: Archive exact JUnit evidence
         if: always()

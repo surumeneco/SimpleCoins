@@ -8,6 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
   - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
   - https://github.com/surumeneco/SimpleCoins/pull/305
+  - https://github.com/surumeneco/SimpleCoins/pull/272
   - https://github.com/surumeneco/SimpleCoins/issues/6
 decision_ref: ''
 refs: []
@@ -29,6 +30,7 @@ spec_status: unknown
 | URI |
 | --- |
 | https://github.com/surumeneco/SimpleCoins/pull/305 |
+| https://github.com/surumeneco/SimpleCoins/pull/272 |
 | https://github.com/surumeneco/SimpleCoins/blob/develop/src/main/java/co/surumene/simplecoins/domain/BedrockPack.java |
 | https://github.com/surumeneco/SimpleCoins/issues/6 |
 
@@ -48,13 +50,13 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.bedrock-pack-byte-stability.md;src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java;.github/workflows/a04-bedrock-pack-determinism.yml | — | src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java;.github/workflows/a04-bedrock-pack-determinism.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.bedrock-pack-byte-stability.md;src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java;src/test/java/co/surumene/simplecoins/domain/BedrockPackTest.java;.github/workflows/a04-bedrock-pack-determinism.yml | — | src/test/java/co/surumene/simplecoins/domain/BedrockPackDeterminismMatrixTest.java;src/test/java/co/surumene/simplecoins/domain/BedrockPackTest.java;.github/workflows/a04-bedrock-pack-determinism.yml |
 
 ## Checks
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| bedrock-matrix | regression | junit | @repo:SimpleCoins | gradle test --tests co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest | 16-variants;stable-repeat;content-change | BedrockPack;CoinDenomination | JUnit XML | 180 |
+| bedrock-matrix | regression | junit | @repo:SimpleCoins | gradle :test --tests co.surumene.simplecoins.domain.BedrockPackDeterminismMatrixTest --tests co.surumene.simplecoins.domain.BedrockPackTest | 16-variants;stable-repeat;content-change;name-only-cache-identity | BedrockPack;CoinDenomination | JUnit XML | 180 |
 
 ## Gates
 
@@ -80,9 +82,11 @@ spec_status: unknown
 
 `BedrockPack`が入力byte[]をPNGデコーダーで検証するか、Geyserが実JSONを受理するか、実Bedrockクライアントが画像を表示するかは本テストで検証できない。**テスト用画像byte[]は必ずしも有効なPNGではない。** 以前の`#305`はJDK25で成功したが、今回の受入は**現`develop`起点の新しいHEAD**でのJUnit XMLと既存Domain・Phase6 CIで判断する。手書きJUnitをCAT生成suiteや正式Red/Green Gateに読み替えない。
 
+旧[#272](https://github.com/surumeneco/SimpleCoins/pull/272)に存在し、現`develop`では未収録の`nameOnlyChangeInvalidatesBedrockManifestIdentity`も現行の`BedrockPackTest`へ**そのまま抽出**する。画像9額面を不変に保ちながら設定表示名だけ変更したとき、ZIP内`manifest.json`の識別子とGeyser mappingが実際に更新され、PNGバイトが全額面で保持されることを独立検証する。同一名前のままなら既存のバイト安定性を維持する。**これは現`BedrockPack.write`の挙動を検査するテスト移植であり、新たな製品の表示名契約を規範として決めない。** JE/BEクライアントの反映タイミングは別途実機検証を要する。
+
 ## Acceptance
 
 - 旧PRの2独立パスを現`develop`へ無差別マージしない。今の製品`BedrockPack`に対し16入力×再出力のZIP/JSON同一バイトと、異なる入力間の非同一バイトをJUnitで確認する。
 - パック出力先・モデル・PDC・配布/入室ガードは変更しない。実JE/BEクライアント、Nexo/外部サービス、実VPS受入は別検証。
-- 新規専用CIで固定CAT Work構造、JUnit XML、Domain/Phase6の同一HEAD成功を確認してから`develop`へ統合し、旧[#305](https://github.com/surumeneco/SimpleCoins/pull/305)には引継ぎ先と意図的未マージをコメント・closeする。
+- 既存専用CIで固定CAT Work構造、既存16-vectors回帰と`BedrockPackTest`全7件のJUnit XML、Domain/Phase6の同一HEAD成功を確認してから`develop`へ統合する。旧[#272]も唯一の差分テストをbyte同値で回収できた場合、旧ブランチ自体はmergeせずcloseする。旧[#305](https://github.com/surumeneco/SimpleCoins/pull/305)には引継ぎ先と意図的未マージをコメント・closeする。
 - CATの本来の仕様が`Confirmed`ではないため、このWorkは`Draft`のまま、正式Process Closure/Model/implementation Gatesはnot-run。CI GreenをCAT承認やJE/BE表示の保証にしない。
