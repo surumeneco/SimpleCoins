@@ -52,8 +52,11 @@ public final class RuntimeWriterRosterProbe extends JavaPlugin {
                     || !required.add(item))
                 throw new IllegalArgumentException("Missing/invalid/duplicate expected plugin ID");
         }
-        if (required.size() != 5)
-            throw new IllegalArgumentException("Expected five fixed runtime writer plugin IDs");
+        boolean fullDistribution = Boolean.getBoolean("a01.runtimeRoster.distributionObservation");
+        int expectedSize = fullDistribution ? 24 : 5;
+        if (required.size() != expectedSize)
+            throw new IllegalArgumentException(
+                    "Expected " + expectedSize + " fixed runtime writer plugin IDs");
 
         Map<String, Plugin> loaded = new TreeMap<>();
         for (Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
@@ -73,10 +76,26 @@ public final class RuntimeWriterRosterProbe extends JavaPlugin {
                 LinkOption.NOFOLLOW_LINKS))
             throw new IllegalStateException("Cannot determine actual plugins root");
 
+        int enabled = 0;
+        int missing = 0;
+        int disabled = 0;
         for (String name : required) {
             Plugin plugin = loaded.get(name);
-            if (plugin == null || !plugin.isEnabled())
-                throw new IllegalStateException("Pinned distributed plugin not enabled: " + name);
+            if (plugin == null || !plugin.isEnabled()) {
+                if (!fullDistribution)
+                    throw new IllegalStateException(
+                            "Pinned distributed plugin not enabled: " + name);
+                if (plugin == null) {
+                    missing++;
+                    getLogger().warning("A01_RUNTIME_PACKAGED_PLUGIN_MISSING name=" + name);
+                } else {
+                    disabled++;
+                    getLogger().warning("A01_RUNTIME_PACKAGED_PLUGIN_DISABLED name="
+                            + name + " version=" + plugin.getDescription().getVersion());
+                }
+                continue;
+            }
+            enabled++;
             CodeSource source = plugin.getClass().getProtectionDomain().getCodeSource();
             if (source == null || source.getLocation() == null)
                 throw new IllegalStateException("Loaded plugin lacks CodeSource: " + name);
@@ -109,11 +128,33 @@ public final class RuntimeWriterRosterProbe extends JavaPlugin {
         }
         if (!Bukkit.getOnlinePlayers().isEmpty())
             throw new IllegalStateException("Players entered during runtime roster capture");
-        getLogger().info("A01_ALL_FIVE_PINNED_WRITERS_ENABLED"
-                + " expected=" + required.size()
-                + " pluginManagerRegistered=" + loaded.size()
-                + " zeroPlayers=true"
-                + " admissionClosed=true"
-                + " writerEpochProven=false");
+        if (fullDistribution) {
+            Set<String> extra = new LinkedHashSet<>(loaded.keySet());
+            extra.removeAll(required);
+            extra.removeAll(Set.of("SimpleCoins", "SimpleCoinsGuard",
+                    "SimpleCoinsRuntimeRosterProbe"));
+            for (String name : extra)
+                getLogger().warning("A01_RUNTIME_UNEXPECTED_PLUGIN name=" + name);
+            getLogger().info("A01_FULL_DISTRIBUTION_PLUGIN_OBSERVATION"
+                    + " expected=24 enabled=" + enabled
+                    + " missing=" + missing + " disabled=" + disabled
+                    + " unexpected=" + extra.size()
+                    + " pluginManagerRegistered=" + loaded.size()
+                    + " zeroPlayers=true admissionClosed=true"
+                    + " allWriterCoverageProven=false");
+            if (missing != 0 || disabled != 0 || !extra.isEmpty())
+                getLogger().warning(
+                        "A01_FULL_DISTRIBUTION_NOT_ALL_ENABLED_OR_EXTRA_WRITERS");
+            else
+                getLogger().info("A01_FULL_DISTRIBUTION_ALL_24_ENABLED"
+                        + " (not a claim of writer or epoch closure)");
+        } else {
+            getLogger().info("A01_ALL_FIVE_PINNED_WRITERS_ENABLED"
+                    + " expected=" + required.size()
+                    + " pluginManagerRegistered=" + loaded.size()
+                    + " zeroPlayers=true"
+                    + " admissionClosed=true"
+                    + " writerEpochProven=false");
+        }
     }
 }
