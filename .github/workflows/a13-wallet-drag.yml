@@ -71,9 +71,9 @@ jobs:
               --tce docs/cat/confirmed/a13-wallet-drag-tce.md \
               -o "$output"
             grep -Fq "class GeneratedA13WalletDragCase${digest}Test" "$output"
-            python "$FLOW" run --work "$WORK" --id "green-$i" --execute
+            python "$FLOW" run --work "$WORK" --id "green-s$i" --execute
             python "$FLOW" queue-state --work "$WORK" \
-              --evidence "Lifecycle/Works/.cat-flow/evidence/green-$i.json"
+              --evidence "Lifecycle/Works/.cat-flow/evidence/green-s$i.json"
           done
           python - <<'PY'
           import json, pathlib
