@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon test \
+          gradle --no-daemon :test \
             --tests co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest
           report=build/test-results/test/TEST-co.surumene.simplecoins.paper.CooperativeWriterDrainReadbackTest.xml
           test -s "$report"
