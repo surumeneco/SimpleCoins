@@ -25,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
@@ -60,6 +62,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private WorldStorageDiscovery.Manifest manifest;
     private long verifiedSequence;
     private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
+    private final boolean testOldInodeFileLock = Boolean.getBoolean("a02.invsee.lockHeldDuringSave");
+    private FileChannel lockedPlayerdataChannel;
+    private FileLock heldPlayerdataLock;
+    private Object lockedPlayerdataFileKey;
     private final boolean selectedMainhandProbe = Boolean.getBoolean("a02.invsee.probeSelectedMainhand");
     private final boolean durableFsyncAndHalt = Boolean.getBoolean("a02.invsee.fsyncThenHalt");
     private final boolean syncBeforeAckHalt = Boolean.getBoolean("a02.invsee.fsyncThenHaltBeforeAck");
@@ -86,7 +92,15 @@ public final class InvseeWriterProbe extends JavaPlugin {
 
     private void fail(Throwable error) {
         getLogger().log(Level.SEVERE, "PAPER_A02_INVSEE_PROBE_FAILED", error);
+        try { releasePlayerdataLock(); }
+        catch (Exception cleanup) { getLogger().log(Level.SEVERE, "Probe lock cleanup failed", cleanup); }
         Bukkit.shutdown();
+    }
+
+    @Override
+    public void onDisable() {
+        try { releasePlayerdataLock(); }
+        catch (Exception failure) { getLogger().log(Level.SEVERE, "Probe lock disable cleanup failed", failure); }
     }
 
     private Path dataFile() {
@@ -353,6 +367,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Real persisted proof before InvSee writer is invalid");
         verifiedSequence = proof.receipt().completedSequence();
         getLogger().info("PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED");
+        if (testOldInodeFileLock) acquirePlayerdataLockOnVerifiedFile();
         if (durableFsyncAndHalt || syncBeforeAckHalt) {
             forceActualPlayerdataAndContainingDirectory();
             // The file is re-verified AFTER its explicit filesystem sync.
@@ -446,7 +461,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "InvSee++ offline save did not complete");
-                                                    verifyCompetingWriterAfterProof();
+                                                    if (testOldInodeFileLock) verifyAdvisoryLockIsNotWriterFence();
+                                                    else verifyCompetingWriterAfterProof();
                                                 }
                                             } catch (Throwable error) {
                                                 fail(error);
@@ -456,6 +472,81 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                 fail(error);
                             }
                         }));
+    }
+
+    /** Lock the OLD target inode, without changing playerdata. */
+    private void acquirePlayerdataLockOnVerifiedFile() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || heldPlayerdataLock != null)
+            throw new IllegalStateException("File lock probe must use one isolated main-thread UUID");
+        Path file = dataFile();
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(file))
+            throw new IllegalStateException("Invalid playerdata file for advisory lock probe");
+        lockedPlayerdataChannel = FileChannel.open(file, StandardOpenOption.READ,
+                StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+        heldPlayerdataLock = lockedPlayerdataChannel.tryLock();
+        if (heldPlayerdataLock == null || !heldPlayerdataLock.isValid())
+            throw new IllegalStateException("Exclusive advisory lock unavailable");
+        lockedPlayerdataFileKey = Files.readAttributes(
+                file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+        getLogger().info("PAPER_A02_ACTUAL_UUID_DAT_OS_ADVISORY_EXCLUSIVE_LOCK_HELD");
+    }
+
+    private void releasePlayerdataLock() throws Exception {
+        try {
+            if (heldPlayerdataLock != null && heldPlayerdataLock.isValid())
+                heldPlayerdataLock.release();
+        } finally {
+            if (lockedPlayerdataChannel != null) lockedPlayerdataChannel.close();
+            heldPlayerdataLock = null;
+            lockedPlayerdataChannel = null;
+        }
+    }
+
+    /** A genuine InvSee++ save on the SAME path must not be mistaken for an ACK. */
+    private void verifyAdvisoryLockIsNotWriterFence() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || heldPlayerdataLock == null || !heldPlayerdataLock.isValid()
+                || lockedPlayerdataChannel == null || !lockedPlayerdataChannel.isOpen())
+            throw new IllegalStateException("OS advisory lock did not remain held during InvSee save");
+        Map<String, Object> current = saved();
+        if (!BigInteger.ZERO.equals(totalSavedMoney(current)))
+            throw new IllegalStateException("Real InvSee++ could not replace physical saved coin");
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(current,
+                ledger, ID);
+        if (receipt.active() || receipt.completedSequence() != verifiedSequence)
+            throw new IllegalStateException("Unrelated InvSee write damaged original signed receipt");
+        var items = current.get("Inventory");
+        if (!(items instanceof java.util.List<?> list)
+                || list.stream().noneMatch(raw -> raw instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number slot && slot.intValue() == 0))
+            throw new IllegalStateException("Unrelated STONE was lost");
+        if (ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Lock test unexpectedly acknowledged an undelivered grant");
+        boolean refused = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    manifest, ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            refused = true;
+        }
+        if (!refused)
+            throw new IllegalStateException("Fresh readback approved invalidated old proof");
+        Object newKey = Files.readAttributes(
+                dataFile(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+        getLogger().info("PAPER_A02_OS_LOCK_REMAINED_VALID_AFTER_INVSEE_SAVE"
+                + " originalFileKey=" + lockedPlayerdataFileKey
+                + " newFileKey=" + newKey
+                + " replacedPath=" + !java.util.Objects.equals(lockedPlayerdataFileKey, newKey));
+        getLogger().info("PAPER_A02_INVSEE_WRITER_OVERWROTE_SAVED_COIN_DESPITE_OLD_FILE_LOCK");
+        getLogger().info("PAPER_A02_ADVISORY_UUID_DAT_LOCK_NOT_SUFFICIENT_WRITER_FENCE");
+        getLogger().info("PAPER_A02_ADVISORY_LOCK_TEST_LEDGER_STILL_PENDING_NO_ACK");
+        releasePlayerdataLock();
+        Bukkit.shutdown();
     }
 
     /**
