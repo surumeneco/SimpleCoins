@@ -14,6 +14,8 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/480
   - https://github.com/surumeneco/SimpleCoins/pull/499
   - https://github.com/surumeneco/SimpleCoins/pull/500
+  - https://github.com/surumeneco/SimpleCoins/pull/502
+  - https://github.com/surumeneco/SimpleCoins/pull/505
 decision_ref: ''
 refs: []
 semantic_contract: markdown-v2
@@ -68,5 +70,7 @@ language: ja
 
 - [#499](https://github.com/surumeneco/SimpleCoins/pull/499)のテスト専用`closeAndDrain()`は、**既入場permitがゼロになってから**保存を始め、ACKまで新規permitを拒否する必要条件を示した。これを実Paper製品のwriter fenceとして採用した証拠ではない。
 - [#500](https://github.com/surumeneco/SimpleCoins/pull/500)の実InvSee++は、保存イベントを同期通知してから実`saveData`を後続処理として実行する。初回イベントを通した後に新規受付を閉じても、初回writerは実保存を完了する。2回目だけをキャンセルできても`入力.保存世代証拠有効`は真にならない。
+- [#502](https://github.com/surumeneco/SimpleCoins/pull/502)では実InvSee++の**特定1件の既入場保存Future**を待ち、保存完了/後続拒否→ファイル・親ディレクトリ同期→fresh読戻し→ACK→強制終了後の別Paper JVM復元を観測した。これは**そのFutureの完了証拠**であって、Paperや他プラグインを含むwriter集合の排他証拠ではない。
+- [#505](https://github.com/surumeneco/SimpleCoins/pull/505)で、実InvSee++イベント拒否の回数が変わらないまま、Paper本来の`Player.saveData()`が正規5000Cだけを消すUUID.dat再保存を実行できた。完了receiptと元予約pending1は残り、fresh実保存検査は欠損を検出し、再起動後も継続した。従って**InvSee++だけの拒否・排出結果を`入力.保存世代証拠有効=真`に流用できない**。これは試験時点の明示的反例で、全Bukkit保存APIやOS書込み経路の網羅ではない。
 - `入力.保存世代証拠有効`は、少なくとも対象playerdataの全writerが判明し、**(i)** gate開始後の新規入場拒否、**(ii)** 既入場writer全員の排出、**(iii)** その後の真正保存・fsync・fresh同世代現物+receipt読戻し、**(iv)** 永続ACKまでの排他保持を実施できる場合のみに限る技術候補。非協調ファイルwriterの存在・列挙漏れ・排出待ち失敗は、不明を偽へ倒すのではなくACK不可/異常遮断条件にする。
 - これらのプロトコルはまだ**製品未実装**。完了した`GrantLedger.acknowledge`の冪等性だけではwriterの排他を提供しない。全writer対象の凍結方法・証拠取得方法は引続き別途技術選択/正式CAT Gateを要する。
