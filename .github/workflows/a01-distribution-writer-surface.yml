@@ -1,0 +1,84 @@
+name: A01 packaged plugin writer entrypoint inventory
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tools/audit_writer_surface.py'
+      - 'tests/test_writer_surface_audit.py'
+      - 'Lifecycle/Works/simplecoins.a01.packaged-writer-entrypoints.md'
+      - '.github/workflows/a01-distribution-writer-surface.yml'
+permissions:
+  contents: read
+jobs:
+  inspect-distribution-writers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate scoped verification Work only (not a CAT Gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.packaged-writer-entrypoints.md
+      - name: Run deterministic classfile parsing and fail-closed tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/test_writer_surface_audit.py
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: pinned-server
+          sparse-checkout: |
+            plugins
+          persist-credentials: false
+      - name: Audit every packaged plugin JAR at fixed server revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = \
+            "90aa2d0e0a5ea80c705fd67d717f463decaf2a32"
+          for item in \
+            'WonderfulCoreLibrary-0.1.0.jar' \
+            'WhatAWonderfulChicken-2.1.0.jar' \
+            'WhatAWonderfulWolf-1.1.1.jar' \
+            'blocklocker-1.15.jar'; do
+            test -s "pinned-server/plugins/$item"
+          done
+          python tools/audit_writer_surface.py \
+            --plugins pinned-server/plugins \
+            --output writer-surface-report.json \
+            --max-examples 8 \
+            --require WonderfulCoreLibrary-0.1.0.jar \
+            --require WhatAWonderfulChicken-2.1.0.jar \
+            --require WhatAWonderfulWolf-1.1.1.jar \
+            --require blocklocker-1.15.jar
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('writer-surface-report.json').read_text(encoding='utf-8'))
+          assert report['kind'] == 'STATIC_CANDIDATE_CALL_REFERENCES_ONLY'
+          assert len(report['jars']) >= 4
+          groups = ['INVENTORY_WRITE','PDC_WRITE','WORLD_WRITE','STORED_FILE_WRITE',
+                    'PLAYERDATA_SAVE','NMS_MUTATION','ASYNC_ENTRY','DYNAMIC_DISPATCH']
+          for group in groups:
+              print('SURFACE',group,'='.join(['',str(sum(j['categories'][group] for j in report['jars']))]))
+          assert sum(j['classes'] for j in report['jars']) > 0
+          print('PINNED_DISTRIBUTION_STATIC_WRITER_SURFACE_OBSERVED_NOT_CLOSED')
+          PY
+      - name: Save exact per-JAR SHA256 writer reference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-static-packaged-writer-entrypoints
+          path: writer-surface-report.json
+          retention-days: 14
+          if-no-files-found: ignore
