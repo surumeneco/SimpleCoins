@@ -8,6 +8,10 @@ source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
   - https://drive.google.com/file/d/1fSsHEn1tFX_DvnzxDK3t5FjDrIuvMrnt/view
   - https://github.com/surumeneco/SimpleCoins/pull/489
+  - https://github.com/surumeneco/SimpleCoins/pull/491
+  - https://github.com/surumeneco/SimpleCoins/pull/492
+  - https://github.com/surumeneco/SimpleCoins/pull/493
+  - https://github.com/surumeneco/SimpleCoins/pull/494
 decision_ref: ''
 refs:
   - simplecoins.currency.pi.station-result
@@ -27,9 +31,13 @@ language: ja
 | s2 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 真 かつ 入力.貨幣マーカーあり == 真` | 0 | `出力.許可 = 偽; 出力.取消 = 真` |
 | s3 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 偽` | 0 | `出力.許可 = 偽; 出力.取消 = 真` |
 
-## 代表的な検査ベクトル候補
-- Merchantの入力slot0／slot1／両方、Cartographyの入力slot0／slot1／両方それぞれに正規貨幣、改造PDC貨幣、正常PAPERを投入し、結果slot2の各操作で期待拒否・許可を照合。
-- 素材の通常PAPERだけ、結果枠以外の入れ替え、Shift・数字キー・ダブルクリック、出力生成後の他Plugin上書き、クリック中の入力変更を分ける。
-- 実Paperクライアントでの最終消費（貨幣残存と結果未発生）と、イベントキャンセルだけを別証拠にする。
+## 実測に基づく代表的な検査ベクトル候補
 
-本TCEは**手動イベント上の部分Draft**であり、実際のMerchantレシピ成立条件・CartographyItemEvent・Paperのすべての最終消費分岐に対する正式な閉包ではない。判定関数JUnit Greenは、イベント配線やネイティブ交易の受入を意味しない。
+- **Merchant native matcher**：実`MerchantOffer.satisfiedBy/take`は通常PAPERを受理／消費しSTONEを拒否、正規PDC/model 5000C貨幣も**受理・1→0へ減算**（PR #491）。これは実取引のネットワークイベントや報酬取得ではない。
+- **Cartography native result**：実MapView付FILLED_MAP（slot0）＋通常PAPER（slot1）→FILLED_MAP、同じ地図＋正規5000C貨幣（slot1）→FILLED_MAP。貨幣が**slot0**の場合や地図なしは結果なし（PR #492）。slot0に貨幣があれば常に実消費可能だとする旧対称ベクトルは誤りであり、入力監視を安全側に拡張する仮説と混同しない。
+- **Cartography native take**：結果`Slot.onTake`により普通紙・正規5000Cのコピーが両方1→0（PR #493）。さらに`CartographyTableMenu.clicked`直接呼出しでも両方1→0、結果FILLED_MAP取得、Bukkit InventoryClickEvent/CartographyItemEventは**0件**（PR #494）。直接NMS呼出しはネットワークイベント経路をテストしない。
+- **未検査で必須**：Merchant結果slot2、Cartography結果slot2の実ネットワーククリック／Shift・数字キー・ダブルクリック、通常PAPERでの許可、正規貨幣・不正マーカー・読取失敗での取消を各イベントから最終現物まで照合。結果枠以外の移動を誤ブロックせず、後段の他Plugin上書き・NMS直接変更・保存時の資産/仕訳矛盾を別々に検証。
+
+## 適用境界
+
+本TCEは四つの入力分岐の**部分Draft**で、事後の別Pluginによる変更、Paperネットワーク→イベント→NMS処理の順序、直接NMS呼出しへの完全排他、全クラッシュ・G0/G3を閉包しない。`s2/s3`での拒否・取消は**受入仕様候補**であって、実プロダクトに実装済み、実イベントでキャンセル成功、正式CAT Confirmed/Gate成立という意味ではない。
