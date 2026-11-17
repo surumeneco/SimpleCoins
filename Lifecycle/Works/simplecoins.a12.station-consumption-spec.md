@@ -15,7 +15,7 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/518
   - https://github.com/surumeneco/SimpleCoins/pull/519
   - https://github.com/surumeneco/SimpleCoins/pull/520
-decision_ref: ''
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
 refs: []
 entry: issue
 mode: shadow
@@ -25,7 +25,7 @@ parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
 project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4Df0dl/view
-spec_status: unknown
+spec_status: confirmed
 ---
 
 # A12 — Merchant/Cartographyの通常PAPER貨幣消費拒否を形式仕様に写像する
@@ -58,7 +58,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-consumption-spec.md;docs/cat/drafts/a12-station-consumption-process.md;docs/cat/drafts/a12-station-consumption-pi.md;docs/cat/drafts/a12-station-consumption-tce.md;.github/workflows/a12-station-consumption-draft.yml | — | .github/workflows/a12-station-consumption-draft.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-consumption-spec.md;docs/cat/confirmed/a12-station-consumption-process.md;docs/cat/confirmed/a12-station-consumption-pi.md;docs/cat/confirmed/a12-station-consumption-tce.md;.github/workflows/a12-station-consumption-draft.yml | — | .github/workflows/a12-station-consumption-draft.yml |
 
 ## Checks
 
@@ -91,20 +91,20 @@ Official Paper 26.2 tests have since invoked the real server-side packet handler
 
 Current production CoinExchangeRecipes listens only to Prepare/Craft/Crafter, not Merchant/Cartography result operations. The unintegrated old PR #316 PaperCurrencyConsumption pure predicate and JUnit do not install a listener. Genuine unguarded Merchant coin loss is now observed in the test fixture; the actual production adapter, nonstandard click modes, other-plugin direct NMS modifications and accounting are still unimplemented/unverified.
 
-## New Drafts and remaining normative decisions
+## Confirmed semantics and remaining technical verification
 
-The new source-bound Drafts are:
-- `docs/cat/drafts/a12-station-consumption-process.md` — merchant/cartography physical result operation guard scope.
-- `docs/cat/drafts/a12-station-consumption-pi.md` — source inputs and allow/cancel outputs.
-- `docs/cat/drafts/a12-station-consumption-tce.md` — partial four-way decision partition for result/not-result and monetary marker/readability.
+The source-bound user-approved CAT Artifacts are:
+- `docs/cat/confirmed/a12-station-consumption-process.md` — merchant/cartography physical result operation guard scope.
+- `docs/cat/confirmed/a12-station-consumption-pi.md` — source inputs and allow/cancel outputs.
+- `docs/cat/confirmed/a12-station-consumption-tce.md` — approved partial four-way decision partition for result/not-result and monetary marker/readability.
 
-Remaining technical choices: actual authenticated network packet→Paper event→native onTake ordering; Shift/number-key/drag/double-click and other result acquisition paths; production listener wiring and callback priority/late mutation; direct noncooperating NMS writers; actual JE/BE clients; G0/G3 journal/saved generation. Raw result slot2 with normal pickup has bounded **server-handler** observation for Merchant and Cartography (#518/#519/#520), not real socket/user consumption. The Draft's four-way classification is unchanged; failure to read input still requires fail-closed, not a guessed value. Do not convert the **synthetic** event result from #489 into network-event proof; likewise, direct NMS reduction in #491–#494 is not a full native client transaction.
+Remaining technical choices: actual authenticated network packet→Paper event→native onTake ordering; Shift/number-key/drag/double-click and other result acquisition paths; production listener wiring and callback priority/late mutation; direct noncooperating NMS writers; actual JE/BE clients; G0/G3 journal/saved generation. Raw result slot2 with normal pickup has bounded **server-handler** observation for Merchant and Cartography (#518/#519/#520), not real socket/user consumption. The approved four-way classification is unchanged; failure to read input still requires fail-closed, not a guessed value. Do not convert the **synthetic** event result from #489 into network-event proof; likewise, direct NMS reduction in #491–#494 is not a full native client transaction.
 
-This Work preserves the already approved restriction but does not itself authorize a particular Paper adapter, promote CAT normative Confirmed, or bypass Process Closure/Model/TDD/implementation conformance. The next `spec-implementation` Work requires legitimate decision provenance, confirmed Process/PI/TCE and formal compiler-owned Gates.
+This Work preserves the already approved restriction and records explicit user approval of the three Process/PI/TCE semantics on 2026-11-18, with Confirmed promotion via upstream `cat_promote.py`. This does not authorize an unverified Paper adapter or bypass Process Closure/Model/TDD/implementation conformance. The next `spec-implementation` Work requires the compiler-owned Gates and verified source/implementation evidence.
 
 ## Acceptance and integration
 
-1. All three source-bound CAT Drafts have correct Process→PI/TCE provenance and pass the actual pinned CAT artifact linter; the issue-work structure passes the canonical validator.
+1. All three user-approved CAT Artifacts have correct Process→PI/TCE provenance and pass the actual pinned CAT artifact linter; the issue-work structure passes the canonical validator.
 2. Distinguish accepted gameplay meaning, proposed event technology, real Paper synthetic evidence and unverified final coin-consumption paths.
-3. The PR modifies only three Draft files, one Work and its validation workflow. No monetary item/source, listener, config, guard, protected branch, or test-oracle edits.
-4. The independent Draft/spec documentation increment may merge into `develop` after exact-head CI, with all formal product CAT Gates still not-run. No implicit human normative confirmation is recorded.
+3. The PR moves three Draft files to Confirmed, updates one Work and its validation workflow. No monetary item/source, listener, config, guard, protected branch, or test-oracle edits.
+4. The independent Draft/spec documentation increment may merge into `develop` after exact-head CI, with all formal product CAT Gates still not-run. Human normative approval is explicit; no formal Gate passes merely by promotion.

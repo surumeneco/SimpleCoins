@@ -1,9 +1,9 @@
-name: A12 Merchant Cartography CAT Draft syntax and scope
+name: A12 Merchant Cartography Confirmed syntax and scope
 on:
   pull_request:
     branches: [develop]
     paths:
-      - 'docs/cat/drafts/a12-station-consumption-*.md'
+      - 'docs/cat/confirmed/a12-station-consumption-*.md'
       - 'Lifecycle/Works/simplecoins.a12.station-consumption-spec.md'
       - '.github/workflows/a12-station-consumption-draft.yml'
 permissions:
@@ -29,21 +29,21 @@ jobs:
           set -euo pipefail
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a12.station-consumption-spec.md
-      - name: Lint three new Draft artifacts with pinned upstream CAT linter
+      - name: Lint three Confirmed artifacts with pinned upstream CAT linter
         shell: bash
         run: |
           set -euo pipefail
           python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
-            docs/cat/drafts/a12-station-consumption-process.md \
-            docs/cat/drafts/a12-station-consumption-pi.md \
-            docs/cat/drafts/a12-station-consumption-tce.md
+            docs/cat/confirmed/a12-station-consumption-process.md \
+            docs/cat/confirmed/a12-station-consumption-pi.md \
+            docs/cat/confirmed/a12-station-consumption-tce.md
       - name: Verify source ownership and unapproved boundaries
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          root = Path("docs/cat/drafts")
+          root = Path("docs/cat/confirmed")
           process, pi, tce = (root / f"a12-station-consumption-{kind}.md"
                               for kind in ("process", "pi", "tce"))
           files = (process, pi, tce)
@@ -51,19 +51,19 @@ jobs:
               source = file.read_text(encoding="utf-8")
               assert source.startswith("---\n"), file
               assert f"kind: {kind}" in source, file
-              assert "status: draft" in source and "decision_ref: ''" in source, file
-              assert "status: confirmed" not in source, file
+              assert "status: confirmed" in source, file
+              assert "decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved" in source, file
               assert "https://github.com/surumeneco/SimpleCoins/pull/489" in source, file
               assert "simplecoins.currency.station-consumption-exclusion" in source, file
           assert "  - simplecoins.currency.pi.station-result" in process.read_text()
           assert "refs: []" in pi.read_text()
           assert "  - simplecoins.currency.pi.station-result" in tce.read_text()
-          assert "網羅要求: partial" in tce.read_text()
+          assert "網羅要求: 閉包" in tce.read_text()
           work = Path("Lifecycle/Works/simplecoins.a12.station-consumption-spec.md").read_text()
           assert "work_kind: specification" in work
           assert "process-closure | not-run" in work
           assert "synthetic" in work.lower() and "Merchant" in work
-          print("A12_STATION_TRIPLE_DRAFT_SYNTAX_AND_AUTHORITY_BOUNDARY_PRESERVED")
+          print("A12_STATION_TRIPLE_CONFIRMED_SYNTAX_AND_AUTHORITY_BOUNDARY_PRESERVED")
           PY
           # Ensure the exact product sources used for issue-work observation
           # have not been changed by this document-only PR.

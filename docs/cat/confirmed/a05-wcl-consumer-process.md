@@ -2,21 +2,21 @@
 cat_version: '0.3'
 kind: process
 id: simplecoins.external-storage-provider-integration
-status: draft
+status: confirmed
 process: simplecoins.external-storage-provider-integration
 source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/4
   - https://github.com/surumeneco/SimpleCoins/blob/develop/docs/verification/phase5-wcl-provider-contract.md
-decision_ref: ''
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
 refs:
   - simplecoins.external-storage-provider-integration.pi.capture
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# Process: WWC/WWW収納の根拠付き決算候補への取込み（Draft）
+# Process: WWC/WWW収納の根拠付き決算候補への取込み
 
 ## 契約
 閉世界: 真
@@ -55,4 +55,4 @@ language: ja
 
 現行WCL `WonderfulStorageReader` の `readLoaded/readStored` と WWC `follow_target`、WWW `commander/owner`、slot付き serialized ItemStack は既存の提供者機能として観測済み。WCL側のAPI再開発は対象外。提供者の登録全件、必要な配備構成、Entity UUID/world UUID/providerId、保存元の世代、既存収納との重複、独立した帰属根拠を検証してから候補とする。読取不能・NotFound・曖昧さを「資産0」へ変換しない。単一個体の空のSuccessはその読取先が空である根拠に限る。
 
-本Artifactは**Draft**。公開仕様の変更や機械的CAT Gate完了、実Paperの製品結線を宣言しない。下位サービスの呼出しはPaperのメインスレッド制約に従うが、実装クラスの構成、サービス取得方式、snapshot生成手法をこの規範候補で不必要に固定しない。
+本Artifactの候補採用・保留・対象外判定の意味は利用者が明示承認済み。正式CAT Gateの通過、実Paperの製品結線、未確認の全writer排他・グローバルな決算公開を宣言しない。下位サービスの呼出しはPaperのメインスレッド制約に従うが、実装クラスの構成、サービス取得方式、snapshot生成手法をこの規範候補で不必要に固定しない。
