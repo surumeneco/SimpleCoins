@@ -1,0 +1,54 @@
+name: A16 image fallback confirmed CAT gates
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/confirmed/a16-image-fallback-*.md'
+      - 'Lifecycle/Works/simplecoins.a16.image-fallback.md'
+      - '.github/workflows/a16-image-fallback-confirmed.yml'
+permissions:
+  contents: read
+jobs:
+  approved-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Verify explicit approval and CAT structural declarations
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/confirmed/a16-image-fallback-process.md \
+            docs/cat/confirmed/a16-image-fallback-pi.md \
+            docs/cat/confirmed/a16-image-fallback-tce.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a16.image-fallback.md
+          python - <<'PYINNER'
+          from pathlib import Path
+          import re
+          paths = [Path(f'docs/cat/confirmed/a16-image-fallback-{kind}.md')
+                   for kind in ('process','pi','tce')]
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              header = text.split('---',2)[1]
+              assert re.search(r'^status: confirmed$',header,re.M),path
+              assert re.search(r'^decision_ref: user-chat:2026-11-18:A16-image-fallback-approved$',header,re.M),path
+          assert not Path('docs/cat/drafts/a16-image-fallback-process.md').exists()
+          PYINNER
+      - name: Run canonical finite process closure model conformance and vectors
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a16.image-fallback.md
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+          echo 'A16_IMAGE_FALLBACK_NORMATIVE_GATES_AND_VECTOR_SELECTION_PASSED'
