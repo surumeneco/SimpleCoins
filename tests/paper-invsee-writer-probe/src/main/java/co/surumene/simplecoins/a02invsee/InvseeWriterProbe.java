@@ -62,6 +62,9 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private WorldStorageDiscovery.Manifest manifest;
     private long verifiedSequence;
     private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
+    // Test-only composition of cooperative writer veto with physical fsync + durable ACK.
+    private final boolean vetoAndDurableAck =
+            Boolean.getBoolean("a02.invsee.vetoFsyncAck");
     private final boolean testOldInodeFileLock = Boolean.getBoolean("a02.invsee.lockHeldDuringSave");
     private FileChannel lockedPlayerdataChannel;
     private FileLock heldPlayerdataLock;
@@ -405,7 +408,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
         if (!(plugin instanceof InvseePlusPlus installed)
                 || !plugin.isEnabled())
             throw new IllegalStateException("Actual InvSee++ plugin/API unavailable");
-        if (vetoInvsee) {
+        if (vetoInvsee || vetoAndDurableAck) {
             // Test-only cooperative barrier: InvSee++ notifies before the
             // fake CraftPlayer loads/commits another offline UUID.dat.
             Bukkit.getPluginManager().registerEvents(new Listener() {
@@ -452,7 +455,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                 return;
                                             }
                                             try {
-                                                if (vetoInvsee) {
+                                                if (vetoInvsee || vetoAndDurableAck) {
                                                     if (saved == null || saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "InvSee++ did not acknowledge cancelled save");
@@ -574,7 +577,57 @@ public final class InvseeWriterProbe extends JavaPlugin {
         getLogger().info("PAPER_A02_INVSEE_SAVE_EVENT_CANCELLED_BEFORE_FILE_WRITE");
         getLogger().info("PAPER_A02_INVSEE_CANCELLED_SAVE_PRESERVES_VALID_COIN_RECEIPT_PROOF");
         getLogger().info("PAPER_A02_INVSEE_CANCELLED_SAVE_LEAVES_LEDGER_PENDING");
+        if (vetoAndDurableAck) verifyProtectedFsyncAndAck();
         Bukkit.shutdown();
+    }
+
+
+    /**
+     * Bounded positive integration: the REAL InvSee++ writer was vetoed
+     * while this isolated observer held the logical recipient barrier.
+     * Only then force the actual saved file+directory, re-read from a genuine
+     * manifest and commit the original reservation. Other asynchronous or
+     * uncooperative writers are NOT fenced by this event handler.
+     */
+    private void verifyProtectedFsyncAndAck() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !vetoAndDurableAck || vetoedSaveEvents.get() != 1
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Cooperative ACK cannot proceed without veto");
+        byte[] beforeAck = Files.readAllBytes(dataFile());
+        forceActualPlayerdataAndContainingDirectory();
+        var proof = SavedGrantDeliveryFileReadback.verify(
+                discover(), ledger, ID, staged, priorRoot,
+                MAX_COMPRESSED, MAX_INFLATED);
+        if (proof.receipt().active()
+                || proof.receipt().completedSequence() != grant.sequence()
+                || !BigInteger.valueOf(5000).equals(proof.matchedMonetaryValue())
+                || !Arrays.equals(beforeAck, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("Forced saved grant changed before ACK");
+        getLogger().info("PAPER_A02_COOPERATIVE_VETO_FILE_DIR_FSYNC_AND_FRESH_PROOF");
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        GrantLedger reopened = new GrantLedger(Bukkit.getPluginManager()
+                .getPlugin("SimpleCoins").getDataFolder().toPath().resolve("grants"));
+        if (reopened.historySnapshot().size() != 1
+                || !reopened.historySnapshot().getFirst().delivered()
+                || !reopened.pending(ID).isEmpty()
+                || !ledger.pending(ID).isEmpty()
+                || !Arrays.equals(beforeAck, Files.readAllBytes(dataFile()))
+                || !BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+            throw new IllegalStateException("ACK was not durable or physical coin changed");
+        // A repeated acknowledgement must not materialize a second coin
+        // or rewrite the already committed playerdata.
+        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        if (!Arrays.equals(beforeAck, Files.readAllBytes(dataFile()))
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Repeated ACK altered saved grant state");
+        getLogger().info("PAPER_A02_COOPERATIVE_VETO_ONE_DURABLE_ACK_NO_ITEM_CHANGE");
+        getLogger().info("PAPER_A02_COOPERATIVE_VETO_GUARD_REMAINS_CLOSED");
+        getLogger().info("PAPER_A02_COOPERATIVE_VETO_ABRUPT_HALT_AFTER_DURABLE_ACK");
+        // A separate Paper JVM must find the exact original physical grant
+        // and one durable ACK despite this process losing shutdown hooks.
+        Runtime.getRuntime().halt(139);
+        throw new AssertionError("Protected ACK halt returned");
     }
 
     private void verifyCompetingWriterAfterProof() throws Exception {
