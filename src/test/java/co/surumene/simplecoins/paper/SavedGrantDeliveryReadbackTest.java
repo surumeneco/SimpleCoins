@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
+import co.surumene.simplecoins.domain.SavedPlayerAssets;
 import co.surumene.simplecoins.domain.PlayerDataReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -202,6 +203,89 @@ class SavedGrantDeliveryReadbackTest {
             assertThrows(IOException.class, () -> SavedGrantDeliveryReadback.verifyTransition(
                     before, saved(plan.nextReceipt(), after), ledger, player, plan));
         }
+    }
+
+    /**
+     * Characterization of a REAL Paper 26.2 false rejection (#480).
+     * The actual saved roots differ ONLY by an absent equipment tag becoming
+     * an EMPTY compound; no equipment item was added or modified. Calling
+     * this a 'selected-mainhand mirror item' is not supported by that trace.
+     *
+     * This negative test records the current implementation's rejection,
+     * NOT acceptance of the defect and not an authorized production fix.
+     */
+    @Test void paperEmptyEquipmentCompoundIsNotAnEquipmentAssetButCurrentlyRejects()
+            throws Exception {
+        var ledger = new GrantLedger(temp.resolve("empty-equipment-paper"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "paper-saved-grant");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var before = saved(GrantReceiptState.empty(), List.<Map<String, Object>>of());
+        var after = new HashMap<String, Object>(saved(plan.nextReceipt(),
+                List.of(coin(0, CoinDenomination.FIVE_THOUSAND, 1))));
+
+        // Actual Paper #480: before 'equipment' absent; after is {}.
+        assertFalse(before.containsKey("equipment"));
+        after.put("equipment", Map.of());
+        assertEquals(BigInteger.valueOf(5000),
+                SavedGrantDeliveryReadback.verify(after, ledger, player, plan)
+                        .matchedMonetaryValue());
+        assertEquals(BigInteger.valueOf(5000),
+                SavedPlayerAssets.extract(after).values().stream()
+                        .reduce(BigInteger.ZERO, BigInteger::add));
+
+        IOException falseRejection = assertThrows(IOException.class, () ->
+                SavedGrantDeliveryReadback.verifyTransition(
+                        before, after, ledger, player, plan));
+        assertEquals("An unplanned Ender Chest or equipment asset changed",
+                falseRejection.getMessage());
+
+        // Test-only normalization demonstrates the logical equivalence;
+        // production still needs formally approved implementation.
+        var absentEquipment = new HashMap<>(after);
+        absentEquipment.remove("equipment");
+        assertEquals(BigInteger.valueOf(5000),
+                SavedGrantDeliveryReadback.verifyTransition(
+                        before, absentEquipment, ledger, player, plan)
+                        .matchedMonetaryValue());
+        assertEquals(1, ledger.pending(player).size());
+    }
+
+    /**
+     * The empty/absent equivalence must not become an 'ignore equipment'
+     * bypass: a real head or offhand item change remains a hard refusal.
+     */
+    @Test void actualArmorAndOffhandChangesStillRejectAfterEmptyEquipmentObservation()
+            throws Exception {
+        var ledger = new GrantLedger(temp.resolve("equipment-protected"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserve(player, 5000, "paper-saved-grant");
+        var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(), freeSlots(1)).orElseThrow();
+        var before = saved(GrantReceiptState.empty(), List.<Map<String, Object>>of());
+        var base = new HashMap<String, Object>(saved(plan.nextReceipt(),
+                List.of(coin(0, CoinDenomination.FIVE_THOUSAND, 1))));
+
+        for (String equipmentSlot : List.of("head", "offhand")) {
+            var corrupt = new HashMap<>(base);
+            corrupt.put("equipment", Map.of(equipmentSlot,
+                    Map.of("id", "minecraft:diamond", "count", 1)));
+            assertEquals(BigInteger.valueOf(5000),
+                    SavedGrantDeliveryReadback.verify(corrupt, ledger, player, plan)
+                            .matchedMonetaryValue());
+            IOException refusal = assertThrows(IOException.class, () ->
+                    SavedGrantDeliveryReadback.verifyTransition(
+                            before, corrupt, ledger, player, plan));
+            assertEquals("An unplanned Ender Chest or equipment asset changed",
+                    refusal.getMessage(), equipmentSlot);
+        }
+        var malformed = new HashMap<>(base);
+        malformed.put("equipment", Map.of("head", "not-an-item"));
+        assertThrows(IOException.class, () ->
+                SavedGrantDeliveryReadback.verifyTransition(
+                        before, malformed, ledger, player, plan));
+        assertEquals(1, ledger.pending(player).size());
     }
 
     @Test void transitionRejectsOverwritePreexistingTargetAndForgedPriorReceipt()
