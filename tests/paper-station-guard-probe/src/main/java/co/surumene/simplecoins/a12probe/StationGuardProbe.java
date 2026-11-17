@@ -280,6 +280,8 @@ public final class StationGuardProbe extends JavaPlugin {
                 throw new IllegalStateException("Native cartography changed source money");
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_CONTROLS"
                     + " plain=FILLED_MAP coinFirst=AIR noMap=AIR");
+            verifyNativeCartographyOnTake(ctor, getSlot, nmsConvert, bukkitConvert,
+                    playerInventory, access, playerHandle, filledMap, sourceCoin, codec);
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
                     + " output=" + coinSecond
                     + " detachedOnly=true actualClick=false physicalConsumption=false");
@@ -302,6 +304,64 @@ public final class StationGuardProbe extends JavaPlugin {
         Object resultSlot = getSlot.invoke(menu, 2);
         Object result = resultSlot.getClass().getMethod("getItem").invoke(resultSlot);
         return (ItemStack) toBukkit.invoke(null, result);
+    }
+
+    /**
+     * Real CartographyTableMenu's RESULT Slot.onTake callback, with a detached
+     * NMS player and entirely private input stacks. It is not the server's
+     * network-click handler nor an InventoryClickEvent/Craft transaction.
+     */
+    private void verifyNativeCartographyOnTake(
+            Constructor<?> ctor, Method getSlot, Method toNms, Method toBukkit,
+            Object playerInventory, Object access, Object playerHandle,
+            ItemStack filledMap, ItemStack sourceCoin, CoinItemCodec codec)
+            throws ReflectiveOperationException {
+        Class<?> nmsStack = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> nmsPlayer = Class.forName("net.minecraft.world.entity.player.Player");
+        Class<?> baseSlot = Class.forName("net.minecraft.world.inventory.Slot");
+        Method set = baseSlot.getMethod("set", nmsStack);
+        Method getItem = baseSlot.getMethod("getItem");
+        Method count = nmsStack.getMethod("getCount");
+        Method onTake = baseSlot.getMethod("onTake", nmsPlayer, nmsStack);
+        int[] before = new int[2];
+        int[] after = new int[2];
+
+        for (int index = 0; index < 2; index++) {
+            boolean coinCase = index == 1;
+            ItemStack ingredient = coinCase
+                    ? sourceCoin.clone() : new ItemStack(Material.PAPER, 1);
+            Object menu = ctor.newInstance(111 + index, playerInventory, access);
+            Object slot0 = getSlot.invoke(menu, 0);
+            Object slot1 = getSlot.invoke(menu, 1);
+            Object slot2 = getSlot.invoke(menu, 2);
+            set.invoke(slot0, toNms.invoke(null, filledMap));
+            set.invoke(slot1, toNms.invoke(null, ingredient));
+            Object output = getItem.invoke(slot2);
+            ItemStack outputBukkit = (ItemStack) toBukkit.invoke(null, output);
+            if (outputBukkit.getType() != Material.FILLED_MAP)
+                throw new IllegalStateException("Actual Cartography NMS take setup did not yield map");
+
+            before[index] = ((Number) count.invoke(getItem.invoke(slot1))).intValue();
+            if (before[index] != 1)
+                throw new IllegalStateException("Unexpected NMS cost before callback");
+            onTake.invoke(slot2, playerHandle, output);
+            after[index] = ((Number) count.invoke(getItem.invoke(slot1))).intValue();
+            if (after[index] < 0 || after[index] > 1)
+                throw new IllegalStateException("Unexpected NMS cost count after callback");
+            getLogger().info("A12_NMS_CARTOGRAPHY_RESULT_SLOT_CALLBACK"
+                    + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                    + " before=" + before[index] + " after=" + after[index]
+                    + " detachedOnly=true actualClick=false");
+        }
+        if (after[0] != 0)
+            throw new IllegalStateException("Ordinary PAPER was not consumed by native onTake");
+        if (codec.identify(sourceCoin).orElseThrow()
+                != CoinDenomination.FIVE_THOUSAND || sourceCoin.getAmount() != 1)
+            throw new IllegalStateException("Native onTake modified original source money");
+        getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_ON_TAKE"
+                + " plainBefore=" + before[0] + " plainAfter=" + after[0]
+                + " coinBefore=" + before[1] + " coinAfter=" + after[1]
+                + " sourceCoinIntact=true actualClick=false");
     }
 
     /** A proxy view is sufficient for a deliberately synthetic event. */
