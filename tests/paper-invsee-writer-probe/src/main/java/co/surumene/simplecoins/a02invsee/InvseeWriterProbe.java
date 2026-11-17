@@ -16,6 +16,7 @@ import co.surumene.simplecoins.paper.SavedGrantReceiptNbt;
 import com.janboerman.invsee.spigot.api.InvseeAPI;
 import com.janboerman.invsee.spigot.api.InvseePlusPlus;
 import com.janboerman.invsee.spigot.api.MainSpectatorInventory;
+import com.janboerman.invsee.spigot.api.event.SpectatorInventorySaveEvent;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
@@ -25,11 +26,15 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -50,6 +55,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private Map<String, Object> priorRoot;
     private WorldStorageDiscovery.Manifest manifest;
     private long verifiedSequence;
+    private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
+    private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
 
     @Override
     public void onEnable() {
@@ -181,6 +188,19 @@ public final class InvseeWriterProbe extends JavaPlugin {
         if (!(plugin instanceof InvseePlusPlus installed)
                 || !plugin.isEnabled())
             throw new IllegalStateException("Actual InvSee++ plugin/API unavailable");
+        if (vetoInvsee) {
+            // Test-only cooperative barrier: InvSee++ notifies before the
+            // fake CraftPlayer loads/commits another offline UUID.dat.
+            Bukkit.getPluginManager().registerEvents(new Listener() {
+                @EventHandler(priority = EventPriority.LOWEST)
+                public void vetoThisOfflinePlayer(SpectatorInventorySaveEvent event) {
+                    if (ID.equals(event.getInventory().getSpectatedPlayerId())) {
+                        vetoedSaveEvents.incrementAndGet();
+                        event.setCancelled(true);
+                    }
+                }
+            }, this);
+        }
         InvseeAPI api = installed.getApi();
         if (api == null)
             throw new IllegalStateException("Actual InvSee++ has no API");
@@ -215,10 +235,17 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                 return;
                                             }
                                             try {
-                                                if (saved == null || !saved.isSaved())
-                                                    throw new IllegalStateException(
-                                                            "InvSee++ offline save did not complete");
-                                                verifyCompetingWriterAfterProof();
+                                                if (vetoInvsee) {
+                                                    if (saved == null || saved.isSaved())
+                                                        throw new IllegalStateException(
+                                                                "InvSee++ did not acknowledge cancelled save");
+                                                    verifyCancelledWriterLeavesProofIntact();
+                                                } else {
+                                                    if (saved == null || !saved.isSaved())
+                                                        throw new IllegalStateException(
+                                                                "InvSee++ offline save did not complete");
+                                                    verifyCompetingWriterAfterProof();
+                                                }
                                             } catch (Throwable error) {
                                                 fail(error);
                                             }
@@ -227,6 +254,34 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                 fail(error);
                             }
                         }));
+    }
+
+    /**
+     * Positive counterpart to the deliberately stale-proof negative test.
+     * The bounded InvSee++ event veto must return notSaved BEFORE it can
+     * write any playerdata. No admission/grant coordinator is installed.
+     */
+    private void verifyCancelledWriterLeavesProofIntact() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("InvSee++ cooperative veto missing or not isolated");
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(saved()))
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("Cancelled InvSee++ event still changed disk or journal");
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(
+                saved(), ledger, ID);
+        if (receipt.completedSequence() != verifiedSequence || receipt.active())
+            throw new IllegalStateException("Veto lost original persisted receipt");
+        var again = SavedGrantDeliveryFileReadback.verify(
+                discover(), ledger, ID, staged, priorRoot,
+                MAX_COMPRESSED, MAX_INFLATED);
+        if (!BigInteger.valueOf(5000).equals(again.matchedMonetaryValue())
+                || again.receipt().completedSequence() != verifiedSequence)
+            throw new IllegalStateException("Veto returned invalid saved proof");
+        getLogger().info("PAPER_A02_INVSEE_SAVE_EVENT_CANCELLED_BEFORE_FILE_WRITE");
+        getLogger().info("PAPER_A02_INVSEE_CANCELLED_SAVE_PRESERVES_VALID_COIN_RECEIPT_PROOF");
+        getLogger().info("PAPER_A02_INVSEE_CANCELLED_SAVE_LEAVES_LEDGER_PENDING");
+        Bukkit.shutdown();
     }
 
     private void verifyCompetingWriterAfterProof() throws Exception {
