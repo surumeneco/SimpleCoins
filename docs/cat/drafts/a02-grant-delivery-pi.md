@@ -12,6 +12,8 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/468
   - https://github.com/surumeneco/SimpleCoins/pull/473
   - https://github.com/surumeneco/SimpleCoins/pull/480
+  - https://github.com/surumeneco/SimpleCoins/pull/499
+  - https://github.com/surumeneco/SimpleCoins/pull/500
 decision_ref: ''
 refs: []
 semantic_contract: markdown-v2
@@ -61,3 +63,10 @@ language: ja
 - `矛盾あり`: 保存不能・PDCと現物不一致・永続済みACKよりも古いreceiptへの巻戻り・台帳に存在しないID/連番の受領・同一性不明・改変を含む。**無予約だから異常なしとは推定しない**。証拠源が未取得・評価不能なら`偽`と断定しない。未確定予約を黙って消さず、回復不能な異常は参加・集計を閉じる。
 - `既ACKの再起動`: 保存済み物理貨幣の現在の所在は、後続の合法なプレイヤー取引・移動により発行当初と異なり得る。既ACKを根拠に発行直後の貨幣を再配置しない。履歴・receiptのロールバックと世界資産の未計上は別途G0/通常仕訳で検証する。
 - `保存前クラッシュ`: 永続予約の後でメモリだけに適用した貨幣・PDC更新は未配布として扱う。再起動時に同じplayerdata世代を読取って現物が未保存であることを確かめ、予約を保持して一度だけ配布できることは[#473](https://github.com/surumeneco/SimpleCoins/pull/473)の隔離Paper試験で確認済み。実クライアントが操作中だった状態やOS電源断の正確な保証ではない。
+
+## 協調writerと非協調writerの意味境界（技術的補足）
+
+- [#499](https://github.com/surumeneco/SimpleCoins/pull/499)のテスト専用`closeAndDrain()`は、**既入場permitがゼロになってから**保存を始め、ACKまで新規permitを拒否する必要条件を示した。これを実Paper製品のwriter fenceとして採用した証拠ではない。
+- [#500](https://github.com/surumeneco/SimpleCoins/pull/500)の実InvSee++は、保存イベントを同期通知してから実`saveData`を後続処理として実行する。初回イベントを通した後に新規受付を閉じても、初回writerは実保存を完了する。2回目だけをキャンセルできても`入力.保存世代証拠有効`は真にならない。
+- `入力.保存世代証拠有効`は、少なくとも対象playerdataの全writerが判明し、**(i)** gate開始後の新規入場拒否、**(ii)** 既入場writer全員の排出、**(iii)** その後の真正保存・fsync・fresh同世代現物+receipt読戻し、**(iv)** 永続ACKまでの排他保持を実施できる場合のみに限る技術候補。非協調ファイルwriterの存在・列挙漏れ・排出待ち失敗は、不明を偽へ倒すのではなくACK不可/異常遮断条件にする。
+- これらのプロトコルはまだ**製品未実装**。完了した`GrantLedger.acknowledge`の冪等性だけではwriterの排他を提供しない。全writer対象の凍結方法・証拠取得方法は引続き別途技術選択/正式CAT Gateを要する。
