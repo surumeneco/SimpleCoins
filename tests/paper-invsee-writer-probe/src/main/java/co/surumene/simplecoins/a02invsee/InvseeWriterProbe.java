@@ -10,6 +10,7 @@ import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventoryMaterializer;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
+import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadback;
 import co.surumene.simplecoins.paper.SavedGrantDeliveryReadback;
@@ -76,6 +77,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private final boolean durableRecoveryCheck = Boolean.getBoolean("a02.invsee.checkAfterHalt");
     private final boolean recoverPendingAfterHalt = Boolean.getBoolean("a02.invsee.recoverPendingAfterHalt");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
+    private int startupDiscoveryWaitTicks;
     private final boolean testPastEventCheckpoint =
             Boolean.getBoolean("a02.invsee.probePastEventCheckpoint");
     // Strictly one KNOWN InvSee Future tracked after first event admission,
@@ -91,15 +93,43 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || !getServer().getOnlinePlayers().isEmpty()) {
             throw new IllegalStateException("Disposable loopback/no-online-players CI only");
         }
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            try {
-                if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
-                else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
-                else initializePhysicalProofThenInvokeActualPlugin();
-            } catch (Throwable failure) {
-                fail(failure);
+        // Do NOT create a fresh UUID.dat concurrently with the product's
+        // initial one-shot asynchronous saved-file discovery/receipt audit.
+        // A prior fixed 55-tick wait was nondeterministic under CI load and
+        // caused the product to (correctly) fail closed on directory drift.
+        Bukkit.getScheduler().runTaskLater(
+                this, this::startAfterObservedProductDiscovery, 55L);
+    }
+
+    private void startAfterObservedProductDiscovery() {
+        try {
+            if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+                throw new IllegalStateException("Discovery preflight must run on isolated main thread");
+            Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
+            if (product == null || !product.isEnabled())
+                throw new IllegalStateException("Product terminated during startup discovery");
+            Field field = product.getClass().getDeclaredField("sourceDiscovery");
+            field.setAccessible(true);
+            if (!(field.get(product) instanceof PaperSavedSourceDiscovery discovery))
+                throw new IllegalStateException("Product source discovery is not initialized");
+            if (discovery.failure().isPresent())
+                throw new IllegalStateException(
+                        "Product startup saved source audit failed", discovery.failure().get());
+            if (discovery.observed().isEmpty()) {
+                if (++startupDiscoveryWaitTicks > 20 * 170)
+                    throw new IllegalStateException(
+                            "Product startup audit has not observed a source manifest");
+                Bukkit.getScheduler().runTaskLater(
+                        this, this::startAfterObservedProductDiscovery, 1L);
+                return;
             }
-        }, 55L);
+            getLogger().info("PAPER_A02_SOURCE_DISCOVERY_OBSERVED_BEFORE_WRITER");
+            if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
+            else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
+            else initializePhysicalProofThenInvokeActualPlugin();
+        } catch (Throwable failure) {
+            fail(failure);
+        }
     }
 
     private void fail(Throwable error) {
