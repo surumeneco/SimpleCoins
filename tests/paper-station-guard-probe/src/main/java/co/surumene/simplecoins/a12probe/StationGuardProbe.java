@@ -309,10 +309,13 @@ public final class StationGuardProbe extends JavaPlugin {
         java.lang.reflect.Field activeMenu = nmsPlayerType.getField("containerMenu");
         AtomicInteger clicks = new AtomicInteger();
         AtomicInteger stopped = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean probeProtectionEnabled =
+                new java.util.concurrent.atomic.AtomicBoolean(true);
 
         Listener guard = new Listener() {
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             public void protect(InventoryClickEvent event) {
+                if (!probeProtectionEnabled.get()) return;
                 if (event.getView().getType() != InventoryType.MERCHANT
                         || event.getRawSlot() != 2) return;
                 Inventory top = event.getView().getTopInventory();
@@ -331,8 +334,10 @@ public final class StationGuardProbe extends JavaPlugin {
         };
         Bukkit.getPluginManager().registerEvents(guard, this);
         try {
-            for (int i = 0; i < 2; i++) {
-                boolean coinCase = i == 1;
+            for (int i = 0; i < 3; i++) {
+                boolean coinCase = i >= 1;
+                boolean withoutProbeGuard = i == 2;
+                probeProtectionEnabled.set(!withoutProbeGuard);
                 Player detached = detachedPlayer();
                 if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
                     throw new IllegalStateException("Merchant test player online");
@@ -399,7 +404,8 @@ public final class StationGuardProbe extends JavaPlugin {
                 Object packet = packetCtor.newInstance(id, state, (short) 2,
                         (byte) 0, pickup, changed, emptyHash);
                 getLogger().info("A12_MERCHANT_PACKET_HANDLER_BEGIN"
-                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
                         + " menuValid=true socket=false onlinePlayers=0");
                 try {
                     packetHandle.invoke(handler, packet);
@@ -412,7 +418,8 @@ public final class StationGuardProbe extends JavaPlugin {
                 int eventDelta = clicks.get() - clickBefore;
                 int blockedDelta = stopped.get() - denyBefore;
                 getLogger().info("A12_MERCHANT_PACKET_HANDLER_RESULT"
-                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
                         + " before=" + before + " after=" + after
                         + " inventoryEvents=" + eventDelta
                         + " blocked=" + blockedDelta
@@ -420,9 +427,16 @@ public final class StationGuardProbe extends JavaPlugin {
                 if (before != 1 || eventDelta != 1)
                     throw new IllegalStateException(
                             "Real merchant packet handler did not notify InventoryClickEvent");
-                if (coinCase && (after != 1 || blockedDelta != 1))
+                if (coinCase && !withoutProbeGuard && (after != 1 || blockedDelta != 1))
                     throw new IllegalStateException(
                             "Merchant test-only currency cancel did not protect input");
+                if (withoutProbeGuard && (after != 0 || blockedDelta != 0))
+                    throw new IllegalStateException(
+                            "Unexpected Merchant currency preservation without the test-only listener");
+                if (withoutProbeGuard)
+                    getLogger().info("A12_MERCHANT_UNGUARDED_PRODUCT_COIN_CONSUMPTION"
+                            + " before=1 after=0 inventoryEvents=1 probeDenied=0"
+                            + " productionListener=false playerOnline=false socket=false");
                 if (!coinCase && (after != 0 || blockedDelta != 0))
                     throw new IllegalStateException(
                             "Ordinary PAPER merchant input was not consumed");
