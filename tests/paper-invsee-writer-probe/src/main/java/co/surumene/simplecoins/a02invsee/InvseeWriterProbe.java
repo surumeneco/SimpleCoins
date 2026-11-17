@@ -12,6 +12,7 @@ import co.surumene.simplecoins.paper.PaperGrantInventoryMaterializer;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
 import co.surumene.simplecoins.paper.PaperGrantReceiptPdc;
 import co.surumene.simplecoins.paper.SavedGrantDeliveryFileReadback;
+import co.surumene.simplecoins.paper.SavedGrantDeliveryReadback;
 import co.surumene.simplecoins.paper.SavedGrantReceiptNbt;
 import com.janboerman.invsee.spigot.api.InvseeAPI;
 import com.janboerman.invsee.spigot.api.InvseePlusPlus;
@@ -56,6 +57,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private WorldStorageDiscovery.Manifest manifest;
     private long verifiedSequence;
     private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
+    private final boolean selectedMainhandProbe = Boolean.getBoolean("a02.invsee.probeSelectedMainhand");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
 
     @Override
@@ -150,7 +152,13 @@ public final class InvseeWriterProbe extends JavaPlugin {
         // Keep hotbar selected mainhand (slot 0) unchanged across the grant.
         // Paper also saves equipment.mainhand as a physical view of this slot;
         // granting there would incorrectly change independent equipment.
-        player.getInventory().setItem(0, new ItemStack(Material.STONE, 2));
+        if (selectedMainhandProbe) {
+            if (player.getInventory().getHeldItemSlot() != 0)
+                throw new IllegalStateException("Expected default Paper selected hotbar index 0");
+            player.getInventory().setItem(9, new ItemStack(Material.STONE, 2));
+        } else {
+            player.getInventory().setItem(0, new ItemStack(Material.STONE, 2));
+        }
         player.saveData();
         priorRoot = saved();
         if (!BigInteger.ZERO.equals(totalSavedMoney(priorRoot)))
@@ -162,7 +170,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 GrantReceiptState.empty(), player.getInventory().getStorageContents())
                 .orElseThrow(() -> new IllegalStateException("No free real storage slot"));
         if (staged.placements().size() != 1
-                || staged.placements().getFirst().index() != 1)
+                || staged.placements().getFirst().index() != (selectedMainhandProbe ? 0 : 1))
             throw new IllegalStateException("Unexpected candidate slot plan");
         ItemStack[] physical = PaperGrantInventoryMaterializer.buildCopy(
                 staged, GrantReceiptState.empty(),
@@ -172,6 +180,41 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 staged.nextReceipt());
         player.saveData();
         manifest = discover();
+
+        if (selectedMainhandProbe) {
+            // Independent negative test of a valid saved selected-hotbar
+            // destination (slot zero). The saved equipment/mainhand view can
+            // change even when no other physical equipment asset is mutated.
+            Map<String, Object> after = saved();
+            var oneRootProof = SavedGrantDeliveryReadback.verify(
+                    after, ledger, ID, staged);
+            if (!BigInteger.valueOf(5000).equals(totalSavedMoney(after))
+                    || !BigInteger.valueOf(5000).equals(
+                            oneRootProof.matchedMonetaryValue())
+                    || oneRootProof.receipt().completedSequence() != grant.sequence()
+                    || ledger.pending(ID).size() != 1)
+                throw new IllegalStateException("Selected-slot real save is physically incomplete");
+            String expectedProblem = "An unplanned Ender Chest or equipment asset changed";
+            try {
+                SavedGrantDeliveryFileReadback.verify(
+                        manifest, ledger, ID, staged, priorRoot,
+                        MAX_COMPRESSED, MAX_INFLATED);
+                throw new IllegalStateException(
+                        "Selected-slot transition unexpectedly accepted; review fixed behavior");
+            } catch (java.io.IOException rejection) {
+                if (!expectedProblem.equals(rejection.getMessage()))
+                    throw new IllegalStateException(
+                            "Saved selected-slot rejection has different cause", rejection);
+            }
+            getLogger().info("PAPER_A02_SELECTED_SLOT_SAVED_EQUIPMENT_VIEW_CHANGED"
+                    + " beforeEquipment=" + priorRoot.get("equipment")
+                    + " afterEquipment=" + after.get("equipment"));
+            getLogger().info("PAPER_A02_SELECTED_SLOT_SINGLE_ROOT_5000_COIN_AND_RECEIPT_VALID");
+            getLogger().info("PAPER_A02_SELECTED_SLOT_TRANSITION_REJECTS_VALID_SAVED_GRANT");
+            getLogger().info("PAPER_A02_SELECTED_SLOT_PENDING_NO_ACK_PRESERVED");
+            Bukkit.shutdown();
+            return;
+        }
 
         var proof = SavedGrantDeliveryFileReadback.verify(
                 manifest, ledger, ID, staged, priorRoot, MAX_COMPRESSED,
