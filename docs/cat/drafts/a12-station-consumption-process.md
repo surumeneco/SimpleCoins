@@ -12,6 +12,9 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/492
   - https://github.com/surumeneco/SimpleCoins/pull/493
   - https://github.com/surumeneco/SimpleCoins/pull/494
+  - https://github.com/surumeneco/SimpleCoins/pull/518
+  - https://github.com/surumeneco/SimpleCoins/pull/519
+  - https://github.com/surumeneco/SimpleCoins/pull/520
 decision_ref: ''
 refs:
   - simplecoins.currency.pi.station-result
@@ -62,8 +65,12 @@ Drive 01/05の確定要件は、正規貨幣PAPERを**20種類の等価両替以
 - [PR #493](https://github.com/surumeneco/SimpleCoins/pull/493)：実製図台の結果`Slot.onTake`は隔離NMS貨幣を1→0に減算。通常紙の対照も1→0。
 - [PR #494](https://github.com/surumeneco/SimpleCoins/pull/494)：`CartographyTableMenu.clicked`を**直接**呼ぶ場合も通常紙と貨幣が1→0、結果`FILLED_MAP`がcarriedへ移る。この直接NMS呼出しでは`InventoryClickEvent`も`CartographyItemEvent`も各0件。**ネットワーク側のクリック処理を呼んでいないためであり、通常のJE/BEクリックでイベントが回避されることは示していない。**
 
+- [PR #518](https://github.com/surumeneco/SimpleCoins/pull/518)：公式Paper 26.2 build134の実`ServerGamePacketListenerImpl.handleContainerClick`を、実ネットワークに接続しない隔離`ServerPlayer`から直接実行。製図台結果raw slot2のクリックでは`InventoryClickEvent`と`CartographyItemEvent`が各1件。通常PAPERは1→0、正規5000Cは**試験専用**`InventoryClickEvent`取消時だけ1→1。`CartographyTableMenu.clicked`直接呼出しのイベント0件という#494と矛盾しない。
+- [PR #519](https://github.com/surumeneco/SimpleCoins/pull/519)：実`MerchantMenu`結果raw slot2も同じPaperハンドラー経由で`InventoryClickEvent`が1件発火。通常PAPERは1→0、正規5000Cは**試験専用**取消で1→1。
+- [PR #520](https://github.com/surumeneco/SimpleCoins/pull/520)：同じMerchant結果クリックで試験専用取消を除くと、SimpleCoinsをロードしたままでも正規5000Cが**1→0**になり、`InventoryClickEvent`は1件・取消0件。従って製品にMerchant用の実効的な保護listenerが未結線であることを隔離実Paperの結果で確認した。製図台の無保護実消費をこのPRで再実証したとは主張しない。
+
 ### 未確定な実装境界
 
-Paperネットワーク操作での各クリック種別（通常・Shift・数字キー・ドラッグ）から結果の受領・入力減算に至るイベント通知順、キャンセルの有効性、監視後の他プラグイン変更、実プレイヤー資産、JE/BE、仕訳／同一世代保存は**未検証**。外部イベントでの保護だけでは、別プラグインがメニューのNMS APIを直接呼ぶ非協調経路を止められるとは限らない。現状の製品`CoinExchangeRecipes`はCraftItemEvent等のみを登録し、Merchant/Cartographyの専用listenerはない。旧PR #316の`PaperCurrencyConsumption.blocksResult`はイベント未配線の純粋関数であり、本Processの実装ではない。
+これらは**実Paperのサーバー側packet-handlerをテスト内から直接起動**した証拠であり、認証済みクライアント、ソケット通信、JE/BE端末の実操作ではない。確認した通常クリック以外のShift・数字キー・ドラッグ・ダブルクリック等について、イベント発火・取消の保証は**未検証**。外部イベントでの保護だけでは、別プラグインがメニューのNMS APIを直接呼ぶ非協調経路を止められるとは限らない。現状の製品`CoinExchangeRecipes`はCraftItemEvent等のみを登録し、Merchant/Cartographyの専用listenerはない。旧PR #316の`PaperCurrencyConsumption.blocksResult`はイベント未配線の純粋関数であり、本Processの実装ではない。テスト専用listenerの取消成功は製品の価値保護成立を意味しない。
 
 本書は既存の貨幣価値保存要件を精密化する`Draft`。ネットワークイベントの技術選択と防護境界は正当な設計確認・CAT Confirmed・正式Gateを経るまで未承認であり、**本番の貨幣保護完了・公開許可を主張しない**。
