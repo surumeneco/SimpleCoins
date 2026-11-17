@@ -1,0 +1,102 @@
+name: A14 reconcile trader CAT Drafts with current defaults
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/drafts/trader-*.md'
+      - 'Lifecycle/Works/simplecoins.a14.trader-draft-reconciliation.md'
+      - '.github/workflows/a14-trader-draft-reconciliation.yml'
+permissions:
+  contents: read
+jobs:
+  trader-candidate-documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate A14 issue-work with canonical upstream CAT script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a14.trader-draft-reconciliation.md
+      - name: Lint 12 Draft artifacts with canonical upstream lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/drafts/trader-config-process.md \
+            docs/cat/drafts/trader-config-pi.md \
+            docs/cat/drafts/trader-config-tce.md \
+            docs/cat/drafts/trader-selection-process.md \
+            docs/cat/drafts/trader-selection-pi.md \
+            docs/cat/drafts/trader-selection-tce.md \
+            docs/cat/drafts/trader-event-process.md \
+            docs/cat/drafts/trader-event-pi.md \
+            docs/cat/drafts/trader-event-tce.md \
+            docs/cat/drafts/trader-materialization-process.md \
+            docs/cat/drafts/trader-materialization-pi.md \
+            docs/cat/drafts/trader-materialization-tce.md
+      - name: Reject stale 50 percent default, invalid references or a product rewind
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          names = ("config", "selection", "event", "materialization")
+          all_files = []
+          for name in names:
+              triple = [Path("docs/cat/drafts/trader-"+name+"-"+kind+".md")
+                        for kind in ("process", "pi", "tce")]
+              for kind, file in zip(("process", "pi", "tce"), triple):
+                  s = file.read_text(encoding="utf-8")
+                  assert s.startswith("---\n"), file
+                  assert "status: draft" in s, file
+                  assert "status: confirmed" not in s, file
+                  assert f"kind: {kind}" in s, file
+                  assert "0.5（50%）" not in s, file
+                  assert "デフォルト50%" not in s, file
+                  assert "初期発生確率0.5" not in s, file
+                  all_files.append(file)
+          assert len(all_files) == 12 and len(set(all_files)) == 12
+          cfg = Path("src/main/resources/config.yml").read_text(encoding="utf-8")
+          assert "chance: 0.1" in cfg
+          for amount, weight in ((1,256), (5,128), (10,64), (50,32),
+                                 (100,16), (500,8), (1000,4), (5000,2), (10000,1)):
+              assert f"'{amount}': {weight}" in cfg
+          assert "0.1（10%）" in all_files[0].read_text(encoding="utf-8")
+          assert "0.1（10%）" in all_files[2].read_text(encoding="utf-8")
+          assert "網羅要求: partial" in Path(
+              "docs/cat/drafts/trader-selection-tce.md").read_text(encoding="utf-8")
+          assert "refs: []" in Path(
+              "docs/cat/drafts/trader-event-pi.md").read_text(encoding="utf-8")
+          assert "simplecoins.paper.pi.trader-event" in Path(
+              "docs/cat/drafts/trader-event-tce.md").read_text(encoding="utf-8")
+          print("A14_12_TRADER_DRAFTS_MATCH_10_PERCENT_DESIGN")
+          PY
+          printf '%s\n' \
+            '1a72bdd37d144787b13932c1b828fe583a4d3149  src/main/java/co/surumene/simplecoins/domain/TraderDropStackPlan.java' \
+            '788f5f4a7611483235be3e892c0b7799ac0dbf2c  src/main/java/co/surumene/simplecoins/domain/TraderIssuanceJournal.java' \
+            '7ada9a3a4d3942df2663def72823106518f2bc88  src/main/java/co/surumene/simplecoins/domain/WanderingTraderDropPolicy.java' \
+            'e7fc6850129463fd49a5002bdd56a07c60c5f700  src/main/java/co/surumene/simplecoins/paper/TraderCoinStackMaterializer.java' \
+            'baa8e112267228bef7e5ca5b82ad98a2b4c91dfe  src/main/java/co/surumene/simplecoins/paper/TraderDeathIssuanceListener.java' \
+            '475f461671947dce46e600d4139339b25b258d0c  src/main/java/co/surumene/simplecoins/paper/WanderingTraderDropConfigReader.java' \
+            | while read -r expected file; do
+                actual=$(git hash-object "$file")
+                test "$actual" = "$expected" || {
+                  echo "Unexpected source blob: $file got $actual expected $expected" >&2
+                  exit 1
+                }
+              done
+          grep -Fq 'The death listener is intentionally NOT registered' \
+            src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java
+          echo 'A14_TRADER_SOURCE_PRESERVED_AND_ISSUANCE_DISABLED'
