@@ -92,6 +92,8 @@ Drive 01 and 05 explicitly require genuine, PDC-identified PAPER money to be con
 - Require an actual InventoryClickEvent and result-slot consumption (1→0) in the no-probe-guard case, while the guarded case remains 1→1 and ordinary PAPER remains 1→0. No connected player, external socket, playerdata persistence, JE/BE client or monetary service is exercised; do not conflate this with a network-authenticated trade or final product release.
 - **This is an observation test, not a proposed production fix**: success should establish the current gap for the existing A12 Draft and enable a narrowly scoped product listener after legitimate specification confirmation. If production protection already exists, fail the characterization and investigate before recording a defect. No product code, Draft status, security guard or main is changed.
 
+- **Cartographyの独立した未保護対照（#520と混同しない）**：Merchantの非保護実消費は#520で確認済み。次は、#518と同じ本物の`ServerGamePacketListenerImpl.handleContainerClick`・製図台raw slot2に対して、通常PAPER（1→0）、正規5000C＋試験専用取消（1→1）、同じ正規5000C＋取消を無効化（**期待する観測値は1→0**）の三ケースを同じ隔離CIで比較する。最後の実現物減少、`InventoryClickEvent`/`CartographyItemEvent`各1件、試験取消0件、元Bukkit貨幣不変をすべて機械的にassertする。もし現物が減らなければ現在の製品Listener実装／別要因を調査し、ギャップを仮定して成功扱いしない。これは試験用NMSコピーの損失を立証する技術観測であり、実JE/BE接続や製品修正ではない。
+
 ## Acceptance / stop condition
 
 - CAT Work structure valid; isolated Paper plugin actually compiles and runs on official Paper build 134, produces both cartography input event markers plus merchant recipe marker; fails if either event becomes unexpectedly blocked or physical money changes.
