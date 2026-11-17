@@ -131,3 +131,20 @@ jobs:
           print('A16_CAT_IMPLEMENTATION_VERDICT',gate['verdict'])
           print('A16_CAT_OBLIGATIONS_OUTSTANDING',[(x['id'],x['status']) for x in items if x['status']!='passed'])
           PYOB
+
+      - name: Preserve script-owned CAT evidence and JUnit XML
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a16-cat-evidence-receipts
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a16-image-fallback-model.json
+            Lifecycle/Works/.cat-flow/cache/a16-image-fallback-vectors.json
+            Lifecycle/Works/.cat-flow/cache/a16-image-fallback-queue.json
+            Lifecycle/Works/.cat-flow/cache/a16-image-fallback-obligations.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+            Lifecycle/Works/.cat-flow/conformance/*.json
+            Lifecycle/Works/.cat-flow/evidence/green-*.json
+            Lifecycle/Works/.cat-flow/reports/green-*.xml
+          if-no-files-found: error
+          retention-days: 14
