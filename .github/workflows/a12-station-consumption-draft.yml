@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          root = Path("docs/cat/drafts")
+          root = Path("docs/cat/confirmed")
           process, pi, tce = (root / f"a12-station-consumption-{kind}.md"
                               for kind in ("process", "pi", "tce"))
           files = (process, pi, tce)
@@ -58,7 +58,7 @@ jobs:
           assert "  - simplecoins.currency.pi.station-result" in process.read_text()
           assert "refs: []" in pi.read_text()
           assert "  - simplecoins.currency.pi.station-result" in tce.read_text()
-          assert "網羅要求: partial" in tce.read_text()
+          assert "網羅要求: 閉包" in tce.read_text()
           work = Path("Lifecycle/Works/simplecoins.a12.station-consumption-spec.md").read_text()
           assert "work_kind: specification" in work
           assert "process-closure | not-run" in work
