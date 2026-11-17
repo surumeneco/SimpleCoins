@@ -1,0 +1,106 @@
+name: A01 actual packaged plugin JAR roster preflight
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tools/verify_writer_inventory.py'
+      - 'tests/test_verify_writer_inventory.py'
+      - 'Lifecycle/Works/simplecoins.a01.installed-writer-roster.md'
+      - '.github/workflows/a01-installed-writer-roster.yml'
+permissions:
+  contents: read
+jobs:
+  compare-real-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate independent issue Work only, never a normative CAT Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.installed-writer-roster.md
+      - name: Run fail-closed synthetic installed-writer roster tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/test_verify_writer_inventory.py
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: pinned-server
+          sparse-checkout: |
+            plugins
+          persist-credentials: false
+      - name: Compare all real distribution JARs to same-run audited exact bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = \
+            "90aa2d0e0a5ea80c705fd67d717f463decaf2a32"
+          python tools/audit_writer_surface.py \
+            --plugins pinned-server/plugins \
+            --output writer-reference.json \
+            --max-examples 2 \
+            --require WonderfulCoreLibrary-0.1.0.jar \
+            --require WhatAWonderfulChicken-2.1.0.jar \
+            --require WhatAWonderfulWolf-1.1.1.jar \
+            --require blocklocker-1.15.jar
+          python tools/verify_writer_inventory.py \
+            --reference-json writer-reference.json \
+            --installed-plugins pinned-server/plugins \
+            --report-json writer-installed-match.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('writer-installed-match.json').read_text())
+          assert report['kind'] == 'WRITER_JAR_ROSTER_POINT_IN_TIME_ONLY'
+          assert report['expected_jar_count'] == 24
+          assert report['status'] == 'match'
+          assert len(report['matching']) == 24
+          assert not report['missing'] and not report['unexpected']
+          assert not report['altered'] and not report['rejected']
+          print('A01_REAL_24_JAR_POINT_IN_TIME_SHA256_SET_MATCHED')
+          PY
+      - name: Must reject a changed byte in the actual InvSee++ distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a pinned-server/plugins altered-plugins
+          test -f 'altered-plugins/InvSee++.jar'
+          printf '\000' >> 'altered-plugins/InvSee++.jar'
+          if python tools/verify_writer_inventory.py \
+              --reference-json writer-reference.json \
+              --installed-plugins altered-plugins \
+              --report-json writer-installed-altered.json; then
+            echo 'Unsafe: modified actual installed JAR accepted' >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('writer-installed-altered.json').read_text())
+          assert report['status'] == 'mismatch'
+          assert report['altered'] == ['InvSee++.jar']
+          assert len(report['matching']) == 23
+          print('A01_REAL_INVSEE_MODIFIED_JAR_FAIL_CLOSED_PASSED')
+          PY
+      - name: Preserve exact reference and observed read-only reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a01-installed-writer-roster-evidence
+          path: |
+            writer-reference.json
+            writer-installed-match.json
+            writer-installed-altered.json
+          retention-days: 14
+          if-no-files-found: ignore
