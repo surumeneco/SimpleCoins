@@ -1,0 +1,7 @@
+name: SimpleCoinsRuntimeRosterProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a01probe.RuntimeWriterRosterProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins]
+description: Read-only CI-only runtime Paper PluginManager and CodeSource inventory
