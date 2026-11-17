@@ -1,0 +1,156 @@
+name: A01 Paper idle pause cannot fence independent file writers
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a01.paper-empty-pause-writer-epoch.md'
+      - 'tests/paper-empty-pause-probe/**'
+      - '.github/workflows/paper-empty-pause-writer-probe.yml'
+permissions:
+  contents: read
+jobs:
+  two-real-paper-idle-modes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate bounded issue-work only, not normative CAT Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.paper-empty-pause-writer-epoch.md
+      - name: Build original product and independently disposable pause observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-empty-pause-probe jar
+          python3 tools/simplecoins_preflight.py \
+            admission-guard/build/libs/admission-guard-1.0.0.jar \
+            build/libs/SimpleCoins-1.0.0.jar
+          unzip -p tests/paper-empty-pause-probe/build/libs/SimpleCoinsEmptyPauseProbe.jar plugin.yml |
+            grep -Fx 'name: SimpleCoinsEmptyPauseProbe'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq 'EmptyPauseProbe.class'; then
+            echo 'Disposable pause probe leaked into production JAR' >&2
+            exit 1
+          fi
+      - name: Download official SHA256-verified Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-control/plugins smoke-paused/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A01-EmptyPause/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' \
+            -o paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke-control/paper.jar
+          printf '%s  %s\n' "$sha" smoke-control/paper.jar | sha256sum -c -
+          cp smoke-control/paper.jar smoke-paused/paper.jar
+          printf '%s  %s\n' "$sha" smoke-paused/paper.jar | sha256sum -c -
+      - name: Test two independent no-player Paper JVMs; raw async writes still possible
+        shell: bash
+        run: |
+          set -euo pipefail
+          for mode in control paused; do
+            dir="smoke-$mode"
+            if [ "$mode" = control ]; then
+              value=-1; port=25591
+            else
+              value=1; port=25592
+            fi
+            cp admission-guard/build/libs/admission-guard-1.0.0.jar "$dir/plugins/SimpleCoinsGuard.jar"
+            cp build/libs/SimpleCoins-1.0.0.jar "$dir/plugins/SimpleCoins.jar"
+            cp tests/paper-empty-pause-probe/build/libs/SimpleCoinsEmptyPauseProbe.jar "$dir/plugins/EmptyPauseProbe.jar"
+            printf 'eula=true\n' > "$dir/eula.txt"
+            printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=%s\npause-when-empty-seconds=%s\n' \
+              "$port" "$value" > "$dir/server.properties"
+            (
+              cd "$dir"
+              set +e
+              timeout --signal=TERM --kill-after=5s 160s \
+                java -Da01.pause.expected="$value" -Xms256M -Xmx1024M \
+                  -jar paper.jar nogui </dev/null > paper-a01-pause.log 2>&1
+              code=$?
+              set -e
+              if [ "$code" -ne 0 ]; then
+                echo "Disposable Paper pause JVM mode=$mode exit=$code" >&2
+                tail -160 paper-a01-pause.log
+                exit 1
+              fi
+              grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a01-pause.log
+              grep -F "A01_EMPTY_PAUSE_ACTUAL_SETTING pauseWhenEmptySeconds=$value onlinePlayers=0" paper-a01-pause.log
+              grep -F "A01_EMPTY_PAUSE_BOUNDED_OBSERVATION pauseSetting=$value" paper-a01-pause.log
+              if grep -Eq 'A01_EMPTY_PAUSE_(PROBE_FAILED|INVALID_ISOLATION|UNEXPECTED_SERVER_PROPERTY|DIRECTORY_FAILED)' paper-a01-pause.log; then
+                echo 'Unsafe Paper empty-pause probe aborted' >&2
+                tail -140 paper-a01-pause.log
+                exit 1
+              fi
+            )
+            test -s "$dir/plugins/SimpleCoinsEmptyPauseProbe/pause-evidence.properties"
+          done
+      - name: Interpret real Paper world-tick and independent writer deltas
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          def read(name):
+              path = Path(f'smoke-{name}/plugins/SimpleCoinsEmptyPauseProbe/pause-evidence.properties')
+              lines = path.read_text(encoding='utf-8').splitlines()
+              pairs = [line.split('=', 1) for line in lines]
+              assert all(len(p) == 2 for p in pairs)
+              result = dict(pairs)
+              assert len(pairs) == len(result)
+              assert result['writerReadback'] == 'true'
+              assert result['physicalMinecraftAssetsTouched'] == 'false'
+              assert result['networkPlayers'] == '0'
+              assert result['formalCatGate'] == 'not-run'
+              for key in ('tickDelta', 'worldDelta', 'writerDelta'):
+                  assert int(result[key]) >= 0
+              print('A01_PAPER_PAUSE_MODE', name, result)
+              return result
+          control = read('control')
+          paused = read('paused')
+          assert control['pauseSetting'] == '-1'
+          assert paused['pauseSetting'] == '1'
+          control_world = int(control['worldDelta'])
+          paused_world = int(paused['worldDelta'])
+          assert control_world >= 30, ('Control world does not tick', control)
+          assert paused_world * 2 <= control_world, \
+              ('Configured 1-second pause did not reduce world clock', control, paused)
+          for state in (control, paused):
+              assert int(state['writerDelta']) >= 15, \
+                  ('Independent writer failed to run', state)
+          print('A01_PAPER_NO_PLAYER_PAUSE_REDUCED_WORLD_TICKS')
+          print('A01_PAUSED_PAPER_STILL_PERMITTED_INDEPENDENT_FORCED_FILE_WRITES')
+          print('A01_PAUSE_IS_NOT_GLOBAL_G0_OR_G3_WRITER_BARRIER')
+          PY
+      - name: Archive exact measured values and console logs (no product assets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-a01-empty-pause-writer-evidence
+          path: |
+            smoke-*/paper-a01-pause.log
+            smoke-*/plugins/SimpleCoinsEmptyPauseProbe/pause-evidence.properties
+            smoke-*/plugins/SimpleCoinsEmptyPauseProbe/independent-writer.txt
+          retention-days: 14
+          if-no-files-found: ignore
