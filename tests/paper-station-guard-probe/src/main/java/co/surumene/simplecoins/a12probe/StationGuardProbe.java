@@ -605,6 +605,22 @@ public final class StationGuardProbe extends JavaPlugin {
                         mcType, connectionType, serverPlayerType, cookieType)
                         .newInstance(mc, connection, handlePlayer, cookie);
                 playerConnection.set(handlePlayer, networkHandler);
+                // The isolated Connection has no channel, so isDisconnected()
+                // returns true except during ServerPlayer.joining. Use this
+                // exact NMS transient state for an in-process handler probe;
+                // do not misrepresent it as a connected network user.
+                boolean initiallyJoining = serverPlayerType.getField("joining")
+                        .getBoolean(handlePlayer);
+                serverPlayerType.getField("joining").setBoolean(handlePlayer, true);
+                boolean immobileAfter = (boolean) serverPlayerType.getMethod("isImmobile")
+                        .invoke(handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE"
+                        + " initiallyJoining=" + initiallyJoining
+                        + " joining=true immobile=" + immobileAfter
+                        + " channelConnected=false actualClient=false");
+                if (immobileAfter)
+                    throw new IllegalStateException(
+                            "Detached player remains immobile despite native joining state");
 
                 Object inventory = handlePlayer.getClass().getMethod("getInventory")
                         .invoke(handlePlayer);
