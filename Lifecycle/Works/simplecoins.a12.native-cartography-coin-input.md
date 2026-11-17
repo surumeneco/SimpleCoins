@@ -7,6 +7,7 @@ process: simplecoins.currency.station-consumption-exclusion
 source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
   - https://drive.google.com/file/d/1fSsHEn1tFX_DvnzxDK3t5FjDrIuvMrnt/view
+  - https://github.com/surumeneco/SimpleCoins/pull/492
   - https://github.com/surumeneco/SimpleCoins/issues/423
 decision_ref: ''
 refs: []
@@ -85,3 +86,13 @@ No real player login, packet/click, map item distribution, durability ACK, admis
 ## Completion boundary
 
 Actual NMS CartographyTableMenu object created; controls and coin identities verified; result marker in genuine Paper job log; no source coin modified; prior merchant NMS and cartography synthetic coverage remains green; product jar unchanged. This is issue-work verification, **not** a normative Confirmed/Process Closure/Model/Implementation Gate or a full cartography inventory transaction. If valid, merge the independent three-file test-only change into develop.
+
+## Native result-slot callback follow-up (bounded verification extension)
+
+The prior [PR #492](https://github.com/surumeneco/SimpleCoins/pull/492) established, on actual Paper 26.2 NMS `CartographyTableMenu`, that a real FILLED_MAP+ordinary PAPER and the same map+genuine 5000C PAPER both generate `FILLED_MAP` output, whereas money in input slot0 or no real map yields `AIR`. This is result computation only, not a completed result take.
+
+This extension directly invokes the real NMS **result Slot.onTake(Player, ItemStack)** callback on a freshly constructed cartography menu for each of ordinary PAPER and genuine 5000C money, with an otherwise detached offline NMS player. Read actual input stack counts before and after the callback, separately from the original Bukkit-authored coin object, and compare the ordinary PAPER control. Whether this callback performs consumption is the observable unknown; do not infer success from a visual output or from a Bukkit synthetic event.
+
+A direct result-slot callback is **not a network-originating InventoryClickEvent**. It does not prove the presence/order of Paper's pre-click CartographyItemEvent, permission checks, player reward transfer, Shift/drag, JE/BE interface, G0/G3 ledger correctness, or system-wide event interception. If the callback consumes the tagged NMS private money copy, report precisely that; do not claim a real user lost currency. Keep the feature-independent deny admission active. This remains a `work_kind: verification` Draft without any CAT normative confirmation.
+
+Additional acceptance: exact same-head official Paper CI must record the observed native `onTake` before/after counts for real map+PAPER and real map+money, preserve original source currency PDC/model/count, and retain previous cartography result, merchant match/take, Domain and Phase6 checks. Merge the bounded verification unit only if all checks pass.
