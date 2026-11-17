@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -73,8 +74,13 @@ public final class JavaCurrencyPack {
                 }
                 if (matches > 1) throw new IOException("Ambiguous PNG for " + label);
                 if (matches == 0) {
-                    if (!label.equals(coin.value() + " Coin"))
-                        throw new IOException("Missing image for custom currency name: " + label);
+                    if (!label.equals(coin.value() + " Coin")) {
+                        // No matching custom texture: use the built-in image
+                        // for this denomination without creating a file named
+                        // after the new display label.
+                        selected.put(coin, null);
+                        continue;
+                    }
                     defaultsToCreate.add(coin);
                     resolved = label + ".png";
                 } else {
@@ -94,8 +100,9 @@ public final class JavaCurrencyPack {
         EnumMap<CoinDenomination, byte[]> imageBytes = new EnumMap<>(CoinDenomination.class);
         EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
         for (CoinDenomination coin : CoinDenomination.values()) {
-            Path input = PackImageSource.existingPng(imagesFolder, selected.get(coin));
-            imageBytes.put(coin, readAndValidatePng(input));
+            String imageFile = selected.get(coin);
+            imageBytes.put(coin, imageFile == null ? defaultPngBytes(coin.value())
+                    : readAndValidatePng(PackImageSource.existingPng(imagesFolder, imageFile)));
             names.put(coin, displayNames.get(coin));
         }
 
@@ -155,7 +162,7 @@ public final class JavaCurrencyPack {
         return raw;
     }
 
-    private static void writeDefaultPng(Path path, int value) throws IOException {
+    private static byte[] defaultPngBytes(int value) throws IOException {
         BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = image.createGraphics();
         try {
@@ -180,11 +187,18 @@ public final class JavaCurrencyPack {
         } finally {
             g.dispose();
         }
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        if (!ImageIO.write(image, "png", output))
+            throw new IOException("PNG encoder unavailable");
+        return output.toByteArray();
+    }
+
+    private static void writeDefaultPng(Path path, int value) throws IOException {
+        byte[] png = defaultPngBytes(value);
         try (OutputStream output = Files.newOutputStream(path,
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE,
                 LinkOption.NOFOLLOW_LINKS)) {
-            if (!ImageIO.write(image, "png", output))
-                throw new IOException("PNG encoder unavailable");
+            output.write(png);
         }
     }
 
