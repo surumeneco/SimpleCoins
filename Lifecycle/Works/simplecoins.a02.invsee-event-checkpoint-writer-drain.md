@@ -79,7 +79,7 @@ InvSee++ Paper 26.2 `InvseeImpl.save()` calls `EventHelper.callSpectatorInventor
 
 ## 実プラグインを使用する2つの独立した境界試験
 
-固定InvSee++ JAR、公式Paper 26.2、独立したdefault-deny guard、零人/loopback/使い捨てWorldを使用する。双方とも製品の実`GrantLedger`、実`CoinItemCodec`、`PaperGrantInventoryMaterializer`、実`CraftPlayer.saveData()`、本物のプレイヤー`UUID.dat`を使用し、先に本物の5000C貨幣/受領PDCが保存されていることを確認する。以下の2つのシナリオは**互いに独立した新規世界**で実行する。これはテストであり、本番の全writer排他実装ではない。
+固定InvSee++ JAR、公式Paper 26.2、独立したdefault-deny guard、零人/loopback/使い捨てWorldを使用する。双方とも製品の実`GrantLedger`、実`CoinItemCodec`、`PaperGrantInventoryMaterializer`、実`CraftPlayer.saveData()`、本物のプレイヤー`UUID.dat`を使用し、先に本物の5000C貨幣/受領PDCが保存されていることを確認する。**両シナリオは製品`PaperSavedSourceDiscovery.observed()`が成功してからだけ試験用playerdataを新規作成する**。開始を固定tickだけで判断せず、異常・170秒超をテスト失敗とする。起動中の正本ディレクトリ追加を検出する製品のfail-closedを回避・無効化しない。以下の2つのシナリオは**互いに独立した新規世界**で実行する。これはテストであり、本番の全writer排他実装ではない。
 
 ### 制御A：先行writerが正規貨幣を消した場合はACK拒否（既存の反例）
 
