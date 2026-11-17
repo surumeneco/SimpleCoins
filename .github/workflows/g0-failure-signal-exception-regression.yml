@@ -34,7 +34,7 @@ jobs:
       - name: Run ten actual startup coordinator JUnit cases
         run: |
           set -euo pipefail
-          gradle --no-daemon test --tests co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest
+          gradle --no-daemon :test --tests co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest
           test -s build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
           grep -F 'tests="10"' build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
           grep -F 'name="failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed()"' build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
