@@ -22,6 +22,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
@@ -58,6 +61,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private long verifiedSequence;
     private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
     private final boolean selectedMainhandProbe = Boolean.getBoolean("a02.invsee.probeSelectedMainhand");
+    private final boolean durableFsyncAndHalt = Boolean.getBoolean("a02.invsee.fsyncThenHalt");
+    private final boolean durableRecoveryCheck = Boolean.getBoolean("a02.invsee.checkAfterHalt");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
 
     @Override
@@ -68,7 +73,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
         }
         Bukkit.getScheduler().runTaskLater(this, () -> {
             try {
-                initializePhysicalProofThenInvokeActualPlugin();
+                if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
+                else initializePhysicalProofThenInvokeActualPlugin();
             } catch (Throwable failure) {
                 fail(failure);
             }
@@ -142,6 +148,52 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 .reduce(BigInteger.ZERO, BigInteger::add);
     }
 
+    /**
+     * Linux-only technical durability candidate: Paper saveData itself has no
+     * durable-return contract. Force the ACTUAL compressed UUID.dat and its
+     * containing directory after Paper returns, before our separate journal
+     * ACK. This does NOT create a lock against filesystem or plugin writers.
+     * It is deliberately absent from the product JAR.
+     */
+    private void forceActualPlayerdataAndContainingDirectory() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("File sync experiment must be isolated");
+        Path file = dataFile();
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(file)
+                || Files.isSymbolicLink(file.getParent()))
+            throw new IllegalStateException("Unsafe/nonregular playerdata under durability test");
+        // O_NOFOLLOW through LinkOption prevents following a replaced leaf.
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ,
+                StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+            channel.force(true);
+        }
+        // Required to request durability of Paper's temporary-file rename.
+        try (FileChannel parent = FileChannel.open(
+                file.getParent(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            parent.force(true);
+        }
+    }
+
+    /** Cold restart of the SAME real Paper player file and product ledger. */
+    private void verifyForcedSyncAfterAbruptRestart() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Files.isRegularFile(dataFile(),
+                LinkOption.NOFOLLOW_LINKS) || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("No genuine offline UUID.dat after abrupt halt");
+        GrantLedger replay = actualProductLedger();
+        Map<String, Object> disk = saved();
+        GrantReceiptState savedReceipt = SavedGrantReceiptNbt.readAndVerify(disk, replay, ID);
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(disk))
+                || savedReceipt.active() || savedReceipt.completedSequence() != 1
+                || replay.historySnapshot().size() != 1
+                || !replay.historySnapshot().getFirst().delivered()
+                || !replay.pending(ID).isEmpty())
+            throw new IllegalStateException("Physical 5000 C, receipt or durable ACK lost");
+        getLogger().info("PAPER_A02_FORCED_SYNC_ABRUPT_RESTART_PRESERVED_5000C_RECEIPT_ACK");
+        getLogger().info("PAPER_A02_FORCED_SYNC_GUARD_REMAINS_CLOSED");
+        Bukkit.shutdown();
+    }
+
     private void initializePhysicalProofThenInvokeActualPlugin() throws Exception {
         if (Files.exists(dataFile()))
             throw new IllegalStateException("Probe requires a fresh player UUID.dat");
@@ -150,8 +202,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
 
         // Keep hotbar selected mainhand (slot 0) unchanged across the grant.
-        // Paper also saves equipment.mainhand as a physical view of this slot;
-        // granting there would incorrectly change independent equipment.
+        // The #480 fixture revealed only absent versus empty equipment NBT;
+        // do not infer a mirrored mainhand ItemStack from that observation.
         if (selectedMainhandProbe) {
             if (player.getInventory().getHeldItemSlot() != 0)
                 throw new IllegalStateException("Expected default Paper selected hotbar index 0");
@@ -226,6 +278,29 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Real persisted proof before InvSee writer is invalid");
         verifiedSequence = proof.receipt().completedSequence();
         getLogger().info("PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED");
+        if (durableFsyncAndHalt) {
+            forceActualPlayerdataAndContainingDirectory();
+            // The file is re-verified AFTER its explicit filesystem sync.
+            // A successful readback is still not a writer-epoch lease.
+            var durableProof = SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+            if (durableProof.receipt().completedSequence() != grant.sequence()
+                    || !BigInteger.valueOf(5000).equals(durableProof.matchedMonetaryValue())
+                    || ledger.pending(ID).size() != 1)
+                throw new IllegalStateException("Durably synced grant proof invalid before ACK");
+            getLogger().info("PAPER_A02_REAL_PLAYERDATA_FILE_AND_DIRECTORY_FORCE_RETURNED");
+            ledger.acknowledge(grant, durableProof.receipt().completedSequence());
+            if (!ledger.pending(ID).isEmpty()
+                    || !BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+                throw new IllegalStateException("Durable ACK corrupted physical 5000 C proof");
+            getLogger().info("PAPER_A02_REAL_LEDGER_ACK_AFTER_PLAYERDATA_SYNC_RETURNED");
+            getLogger().info("PAPER_A02_DISPOSABLE_ABRUPT_JVM_HALT_AFTER_ACK");
+            // No shutdown hooks or graceful Paper save. The workflow must
+            // observe process exit 137 and cold-restart the SAME world.
+            Runtime.getRuntime().halt(137);
+            throw new AssertionError("Runtime.halt returned");
+        }
 
         Plugin plugin = Bukkit.getPluginManager().getPlugin("InvSeePlusPlus");
         if (!(plugin instanceof InvseePlusPlus installed)
