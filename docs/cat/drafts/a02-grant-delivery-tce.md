@@ -12,6 +12,7 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/468
   - https://github.com/surumeneco/SimpleCoins/pull/502
   - https://github.com/surumeneco/SimpleCoins/pull/505
+  - https://github.com/surumeneco/SimpleCoins/pull/510
 decision_ref: ''
 refs:
   - simplecoins.grants.pi.delivery
@@ -52,6 +53,7 @@ language: ja
 | r7 | クラッシュ復旧 | `入力.予約あり == 真 かつ 入力.未ack == 真 かつ 入力.保存済み現物受領対 == 偽 かつ 入力.予約全額受領済 == 真 かつ 入力.保存世代証拠有効 == 真 かつ 入力.他収納保全 == 真 かつ 入力.矛盾あり == 偽` | 1 | `出力.ack許可 = 偽; 出力.予約維持 = 真; 出力.異常遮断 = 真` |
 
 ## 反例・未決
+- **ACK直前のPaper native writerによる証拠失効（[#510](https://github.com/surumeneco/SimpleCoins/pull/510)）**：既知InvSee++の排出・新規拒否・file/dir fsync・真正fresh読戻しがすべて成立した直後でも、別入口の`CraftPlayer.saveData()`が貨幣を削除し、低レベルAPIが古いreceipt連番を信頼してACKを永続化できた。独立Paper JVMで現物0・delivered1を確認した、**意図的な不正低レベル呼出しの陰性試験**であり製品配布完了や実製品誤ACKの証拠ではない。Paper native保存がACKまで排除された証拠がない間、`入力.保存世代証拠有効`を真に写像して`v0/r0`へ進めてはならない。保存現物の不一致が既に判明した経路は`入力.矛盾あり=真`として`v2/r2`へ分類しACK不可・予約維持・異常遮断。後段writer不明のまま再読戻しだけ行っても保証は回復しない。**TCEの24分岐は変更せず**、必要な入力証拠の成立条件を補強する。
 - **イベント拒否開始と既入場writer完了は異なる**：[#499](https://github.com/surumeneco/SimpleCoins/pull/499)の`closeAndDrain()` JUnitは、既存permitが残る間は排他完了とせず、全排出→保存→fsync→現物+receipt照合→ACKまで新規writer拒否を維持する限定モデルを検証。[#500](https://github.com/surumeneco/SimpleCoins/pull/500)は実Paper/InvSee++で、初回保存イベントを許可した直後に新規拒否へ移行しても、初回の後続`saveData`が5000C貨幣を消し完了receiptを残す反例、後続2回目の保存だけを拒否できる事実を確認。したがって**排出未完**は`入力.保存世代証拠有効 == 偽`であり、`v2/r2`に振り分けてACK禁止・予約維持・異常遮断とする。新規拒否開始だけを根拠に`v0/r0`を選択しない。永久的な元スロット固定は採用しない。
 - **既知の1件と全writerの区別**：[#502](https://github.com/surumeneco/SimpleCoins/pull/502)の実Paper正例は、特定InvSee保存Future完了後に実file/dir fsync・fresh現物/receipt読戻し・ACK・強制終了/別JVM復元が成立することだけを示す。[#505](https://github.com/surumeneco/SimpleCoins/pull/505)は、同じInvSee++イベント拒否状態でもPaper標準`Player.saveData()`がイベント非経由で同じUUID.datの貨幣を消せる反例である。これは単なる`保存済み現物受領対`の瞬間的一致では防げない。**この限定条件下では`入力.保存世代証拠有効=偽`として`v2/r2`のACK禁止・予約維持・異常遮断を選ぶ**。#505の元予約は未ACKであり、実誤ACKや通常のプレイヤー取引を観測したとは言わない。TCEの条件/効果を新規承認なく変更せず、PI入力の根拠境界を補強する。
 

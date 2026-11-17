@@ -16,6 +16,7 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/500
   - https://github.com/surumeneco/SimpleCoins/pull/502
   - https://github.com/surumeneco/SimpleCoins/pull/505
+  - https://github.com/surumeneco/SimpleCoins/pull/510
 decision_ref: ''
 refs:
   - simplecoins.grants.pi.delivery
@@ -82,6 +83,8 @@ language: ja
 [#502](https://github.com/surumeneco/SimpleCoins/pull/502)では実配布InvSee++の**既に許可済みの1件の保存Future**を最後まで待ち、その1件が正規貨幣を保全したことを実UUID.dat/receiptで確かめた後に、ファイル/親ディレクトリfsync→新規読戻し→元予約ACK→異常終了→別Paper JVMの現物/台帳復元を実証した。これは**既知の1件を排出できた場合**の技術正例であり、他入口のwriter全件が止まった証明ではない。
 
 [#505](https://github.com/surumeneco/SimpleCoins/pull/505)では同じ公式Paper 26.2・実InvSee++で、InvSee保存イベントの事前拒否が確実に効いた後でも、同じオフラインCraftPlayerの**Paper標準`Player.saveData()`を直接呼ぶと、InvSeeイベントを一度も追加発火させずに同一UUID.datを上書き可能**と実証した。テストでslot1から正規5000Cのみを除去すると、署名済み完了receiptとSTONEを残したまま現物が0となり、実ファイル/親ディレクトリの同期と異常終了後の別Paper JVMでも同じ内容が復元された。元台帳は未ACKでfresh readbackは拒否したので、誤ACKの発生を主張しない。この反例によって**InvSee++固有の`SpectatorInventorySaveEvent`拒否をPaper標準保存まで包含する共通writer fenceにする案を棄却**する。実Paper APIの全保存イベント有無や、別pluginの無通知ファイル操作を網羅したという意味ではない。
+
+[#510](https://github.com/surumeneco/SimpleCoins/pull/510)では、既知InvSee++保存Futureが正常に終了し、新規InvSee保存も拒否され、file/dir fsync後の**新しい正しい現物+receipt読戻し**を得た後、ACK直前に**別入口のPaper標準`CraftPlayer.saveData()`**を実行した。その保存はInvSee拒否イベントを通らず正規5000C現物のみを消し、完了receiptは保持した。直後のfresh読戻しは欠損を正しく拒否するが、実験のため意図的に**古い証拠の連番を低レベル`GrantLedger.acknowledge`へ渡す**と誤ACKが永続化し、別Paper JVMで現物0・ACK済みを再現した。これは**不正な低レベル呼出しの反例**であり、未接続の製品coordinatorが実際に誤ACKしたことを意味しない。#502の正例と矛盾せず、正例で制御できたwriter集合がPaper native保存を包含していなかったことを示す。保存検査とACKを別々の時点で通過しただけでは同一世代保証にならない。
 
 したがって、`観測.プレイヤーデータ正本`や`観測.物理貨幣と受領証明`は、一度のファイル検査だけでなく「全当該writerが入場前から追跡され、拒否開始後には既入場処理がすべて終了し、その状態を**最終ACK永続化まで**維持」の実装可能な環境前提が必要。イベントに通知せず直接書換えるPlugin・Paper保存・外部ファイル操作の存在下でその前提が不明なら、`保存世代証拠有効`を真とみなさず未ACK/入室拒否を保つ。後日正常に取得した貨幣が移動することは許容し、発行済スロットを永久固定しない。
 
