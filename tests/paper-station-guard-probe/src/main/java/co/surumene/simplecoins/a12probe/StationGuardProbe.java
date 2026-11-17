@@ -287,7 +287,7 @@ public final class StationGuardProbe extends JavaPlugin {
             verifyNativeCartographyDirectClick(ctor, getSlot, nmsConvert,
                     bukkitConvert, access, filledMap, sourceCoin, codec);
             verifyServerHandlerPacketClick(ctor, getSlot, nmsConvert,
-                    bukkitConvert, access, filledMap, sourceCoin, codec);
+                    bukkitConvert, access, block, filledMap, sourceCoin, codec);
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
                     + " output=" + coinSecond
                     + " detachedOnly=true actualClick=false physicalConsumption=false");
@@ -479,8 +479,8 @@ public final class StationGuardProbe extends JavaPlugin {
      */
     private void verifyServerHandlerPacketClick(
             Constructor<?> cartographyCtor, Method getSlot, Method toNms,
-            Method toBukkit, Object access, ItemStack filledMap,
-            ItemStack sourceCoin, CoinItemCodec codec)
+            Method toBukkit, Object access, Block stationBlock,
+            ItemStack filledMap, ItemStack sourceCoin, CoinItemCodec codec)
             throws ReflectiveOperationException {
         Class<?> mcType = Class.forName("net.minecraft.server.MinecraftServer");
         Object mc = Bukkit.getServer().getClass().getMethod("getServer")
@@ -558,6 +558,12 @@ public final class StationGuardProbe extends JavaPlugin {
                     throw new IllegalStateException("A12 handler test player connected");
                 Object handlePlayer = detached.getClass().getMethod("getHandle")
                         .invoke(detached);
+                // Native container validity checks distance to the station;
+                // detached ServerPlayer defaults to the far-away spawn point.
+                handlePlayer.getClass().getMethod("setPos", double.class,
+                        double.class, double.class).invoke(handlePlayer,
+                        stationBlock.getX() + 0.5, stationBlock.getY() + 0.5,
+                        stationBlock.getZ() + 0.5);
                 Object profile = handlePlayer.getClass().getMethod("getGameProfile")
                         .invoke(handlePlayer);
                 Object cookie = cookieType
@@ -596,6 +602,12 @@ public final class StationGuardProbe extends JavaPlugin {
                         .getConstructor().newInstance();
                 Object packet = packetCtor.newInstance(id, state, (short) 2,
                         (byte) 0, pickup, changed, emptyHash);
+                boolean valid = (boolean) menuType.getMethod("stillValid", nmsPlayerType)
+                        .invoke(menu, handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_MENU_VALIDITY valid=" + valid
+                        + " station=" + stationBlock.getLocation().toVector());
+                if (!valid) throw new IllegalStateException(
+                        "Detached player's native menu is not usable by server handler");
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
                         + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
                         + " container=" + id + " state=" + state
