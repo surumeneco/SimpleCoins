@@ -145,6 +145,7 @@ jobs:
           grep -F 'A12_PACKET_PATH_HANDLER_CONSTRUCTOR ' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_PACKET_CONSTRUCTOR ' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_CONNECTION_CONSTRUCTOR ' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DETACHED_ENTITY_VALIDITY initiallyValid=false syntheticValid=true playerOnline=false' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_MENU_VALIDITY valid=true' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE initiallyJoining=false joining=true immobile=false channelConnected=false actualClient=false' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPER before=1 after=0' paper-a12-station.log
