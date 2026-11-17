@@ -96,11 +96,15 @@ jobs:
           grep -F 'A12_NMS_MERCHANT_TAGGED_COIN_TAKE accepted=' paper-a12-station.log
           grep -F 'A12_NMS_CARTOGRAPHY_NATIVE_RESULT_CONTROLS plain=FILLED_MAP coinFirst=AIR noMap=AIR' paper-a12-station.log
           grep -F 'A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND output=' paper-a12-station.log
+          grep -F 'A12_NMS_CARTOGRAPHY_RESULT_SLOT_CALLBACK input=ordinaryPAPER before=1 after=0' paper-a12-station.log
+          grep -F 'A12_NMS_CARTOGRAPHY_RESULT_SLOT_CALLBACK input=genuine5000C before=1 after=' paper-a12-station.log
+          grep -F 'A12_NMS_CARTOGRAPHY_NATIVE_ON_TAKE plainBefore=1 plainAfter=0 coinBefore=1 coinAfter=' paper-a12-station.log
           grep -F 'A12_STATION_DISPOSABLE_PROBE_COMPLETE' paper-a12-station.log
           if grep -Eq 'A12_STATION_PROBE_FAILED|A12_STATION_INVALID_ISOLATION' paper-a12-station.log; then exit 1; fi
           echo 'A12_PAPER_STATION_EVENT_BOUNDARY_OBSERVED_NOT_CONSUMPTION_PROOF'
           echo 'A12_NATIVE_MERCHANT_OFFER_PDC_MONEY_ACCEPTANCE_MEASURED_NO_PLAYER_TRADE'
           echo 'A12_NATIVE_CARTOGRAPHY_RESULT_CALCULATED_NOT_AN_ACTUAL_ITEM_TAKE'
+          echo 'A12_NATIVE_CARTOGRAPHY_RESULT_SLOT_ON_TAKE_OBSERVED_NOT_NETWORK_CLICK'
       - name: Upload log for precise result interpretation
         if: always()
         uses: actions/upload-artifact@v4
