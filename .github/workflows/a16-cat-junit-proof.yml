@@ -76,3 +76,58 @@ jobs:
                   raise SystemExit(f'Generated JUnit test did not Green: {cls}')
           print('A16_CAT_JUNIT_FOUR_GREEN_REAL_JUNIT_XML_PASSED')
           PYGREEN
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Canonical CAT JUnit Green receipts and Queue-state
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a16.image-fallback.md
+          python "$FLOW" validate --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+          for rule in s0 s1 s2 s3; do
+            python "$FLOW" run --work "$WORK" --id "green-$rule" --execute
+            python "$FLOW" queue-state --work "$WORK" \
+              --evidence "Lifecycle/Works/.cat-flow/evidence/green-$rule.json"
+          done
+          python - <<'PYQUEUE'
+          import json,pathlib
+          root=pathlib.Path('Lifecycle/Works/.cat-flow/cache')
+          queue=json.loads((root/'a16-image-fallback-queue.json').read_text())
+          assert len(queue['items'])==4
+          assert {x['model_ref'] for x in queue['items']}=={'s0','s1','s2','s3'}
+          assert all(x['status']=='done' and x['evidence_ref'] for x in queue['items'])
+          for x in queue['items']:
+              evidence=json.loads(pathlib.Path(x['evidence_ref']).read_text())
+              assert evidence['verdict']=='passed' and evidence['stage']=='green'
+              assert evidence['queue_context']['current_item_id']==x['id']
+          print('A16_CANONICAL_QUEUE_GREEN_RECEIPTS_FOUR_CASES_PASSED')
+          PYQUEUE
+      - name: Evaluate bounded implementation obligations without inventing pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a16.image-fallback.md
+          python "$FLOW" obligations --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance
+          python - <<'PYOB'
+          import json,pathlib
+          base=pathlib.Path('Lifecycle/Works/.cat-flow')
+          gate=json.loads((base/'conformance/implementation-conformance.json').read_text())
+          assert gate['verdict'] in ('passed','inconclusive'),gate
+          items=json.loads((base/'cache/implementation-obligations-evaluated.json').read_text())['items']
+          matching=[x for x in items if x['method'] in ('generated-test','generated-test-allowed-set')]
+          assert matching and all(x['status']=='passed' for x in matching),matching
+          print('A16_CAT_IMPLEMENTATION_VERDICT',gate['verdict'])
+          print('A16_CAT_OBLIGATIONS_OUTSTANDING',[(x['id'],x['status']) for x in items if x['status']!='passed'])
+          PYOB
