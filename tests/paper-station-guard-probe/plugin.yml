@@ -1,0 +1,7 @@
+name: SimpleCoinsStationGuardProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a12probe.StationGuardProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins]
+description: CI-only station event and merchant recipe boundary; never production
