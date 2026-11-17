@@ -28,8 +28,8 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a00.phase5-static-bytecode-structural-regression.md
-      - name: Verify 18 actual Python constant-pool and source-wiring regressions
+      - name: Verify 19 actual Python constant-pool and descriptor regressions
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p 'test_verify_phase5_saved_wiring.py' -v
-          echo A00_PHASE5_JVM_CONSTANT_POOL_18_CASES_GREEN
+          echo A00_PHASE5_JVM_CONSTANT_POOL_DESCRIPTOR_19_CASES_GREEN
