@@ -24,6 +24,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -282,6 +283,8 @@ public final class StationGuardProbe extends JavaPlugin {
                     + " plain=FILLED_MAP coinFirst=AIR noMap=AIR");
             verifyNativeCartographyOnTake(ctor, getSlot, nmsConvert, bukkitConvert,
                     playerInventory, access, playerHandle, filledMap, sourceCoin, codec);
+            verifyNativeCartographyDirectClick(ctor, getSlot, nmsConvert,
+                    bukkitConvert, access, filledMap, sourceCoin, codec);
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
                     + " output=" + coinSecond
                     + " detachedOnly=true actualClick=false physicalConsumption=false");
@@ -362,6 +365,108 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " plainBefore=" + before[0] + " plainAfter=" + after[0]
                 + " coinBefore=" + before[1] + " coinAfter=" + after[1]
                 + " sourceCoinIntact=true actualClick=false");
+    }
+
+    /**
+     * Calls the native menu.click operation directly, not the network packet
+     * listener. Captures actual Bukkit event notifications separately and
+     * never equates native click with a remote-client InventoryClickEvent.
+     */
+    private void verifyNativeCartographyDirectClick(
+            Constructor<?> ctor, Method getSlot, Method toNms, Method toBukkit,
+            Object access, ItemStack filledMap, ItemStack sourceCoin,
+            CoinItemCodec codec) throws ReflectiveOperationException {
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> nmsPlayerType = Class.forName("net.minecraft.world.entity.player.Player");
+        Class<?> slotType = Class.forName("net.minecraft.world.inventory.Slot");
+        // The click enum moved in newer Minecraft mappings; never guess a
+        // package here. Resolve the actual Paper runtime native method first.
+        Method clicked = java.util.Arrays.stream(
+                        ctor.getDeclaringClass().getMethods())
+                .filter(method -> method.getName().equals("clicked")
+                        && method.getParameterCount() == 4
+                        && method.getParameterTypes()[0] == int.class
+                        && method.getParameterTypes()[1] == int.class
+                        && method.getParameterTypes()[3].isAssignableFrom(nmsPlayerType))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No native CartographyTableMenu.clicked(int,int,enum,Player)"));
+        Class<?> nmsClickType = clicked.getParameterTypes()[2];
+        if (!nmsClickType.isEnum())
+            throw new IllegalStateException(
+                    "Native click type is not an enum: " + nmsClickType.getName());
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object pickup = Enum.valueOf((Class<? extends Enum>) nmsClickType, "PICKUP");
+        getLogger().info("A12_NMS_CARTOGRAPHY_ACTUAL_CLICK_SIGNATURE "
+                + clicked.toGenericString());
+        Method set = slotType.getMethod("set", nmsStackType);
+        Method get = slotType.getMethod("getItem");
+        Method count = nmsStackType.getMethod("getCount");
+        Method carried = ctor.getDeclaringClass().getMethod("getCarried");
+        AtomicInteger clickEvents = new AtomicInteger();
+        AtomicInteger cartographyEvents = new AtomicInteger();
+
+        Listener monitor = new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeAnyClick(InventoryClickEvent event) {
+                if (event.getRawSlot() == 2 &&
+                        event.getView().getType() == InventoryType.CARTOGRAPHY)
+                    clickEvents.incrementAndGet();
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeCartographyClick(CartographyItemEvent event) {
+                if (event.getRawSlot() == 2)
+                    cartographyEvents.incrementAndGet();
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(monitor, this);
+        try {
+            for (int i = 0; i < 2; i++) {
+                Player detached = detachedPlayer();
+                if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+                    throw new IllegalStateException("Native click tester was not isolated");
+                Object playerHandle = detached.getClass().getMethod("getHandle").invoke(detached);
+                Object playerInventory = playerHandle.getClass()
+                        .getMethod("getInventory").invoke(playerHandle);
+                Object menu = ctor.newInstance(121 + i, playerInventory, access);
+                Object slot0 = getSlot.invoke(menu, 0);
+                Object slot1 = getSlot.invoke(menu, 1);
+                Object slot2 = getSlot.invoke(menu, 2);
+                set.invoke(slot0, toNms.invoke(null, filledMap));
+                set.invoke(slot1, toNms.invoke(null, i == 0
+                        ? new ItemStack(Material.PAPER, 1) : sourceCoin.clone()));
+                ItemStack initial = (ItemStack) toBukkit.invoke(null, get.invoke(slot2));
+                if (initial.getType() != Material.FILLED_MAP)
+                    throw new IllegalStateException("Native-click test has no real output");
+                int before = ((Number) count.invoke(get.invoke(slot1))).intValue();
+                int clicksBefore = clickEvents.get();
+                int cartoBefore = cartographyEvents.get();
+                clicked.invoke(menu, 2, 0, pickup, playerHandle);
+                int after = ((Number) count.invoke(get.invoke(slot1))).intValue();
+                ItemStack cursor = (ItemStack) toBukkit.invoke(null, carried.invoke(menu));
+                Material carriedType = cursor == null ? Material.AIR : cursor.getType();
+                if (before != 1 || after < 0 || after > 1)
+                    throw new IllegalStateException("Invalid cartography direct native click counts");
+                getLogger().info("A12_NMS_CARTOGRAPHY_DIRECT_CLICK"
+                        + " input=" + (i == 0 ? "ordinaryPAPER" : "genuine5000C")
+                        + " before=" + before + " after=" + after
+                        + " inventoryClickEvents=" + (clickEvents.get() - clicksBefore)
+                        + " cartographyItemEvents=" + (cartographyEvents.get() - cartoBefore)
+                        + " carried=" + carriedType
+                        + " directNative=true networkPacket=false");
+                if (i == 0 && after != 0)
+                    throw new IllegalStateException("Native click did not consume normal paper");
+            }
+        } finally {
+            HandlerList.unregisterAll(monitor);
+        }
+        if (codec.identify(sourceCoin).orElseThrow() != CoinDenomination.FIVE_THOUSAND
+                || sourceCoin.getAmount() != 1)
+            throw new IllegalStateException("NMS direct click modified source coin");
+        getLogger().info("A12_NMS_CARTOGRAPHY_DIRECT_CLICK_EVENT_BOUNDARY"
+                + " totalInventoryClicks=" + clickEvents.get()
+                + " totalCartographyEvents=" + cartographyEvents.get()
+                + " sourceCoinIntact=true networkPacket=false");
     }
 
     /** A proxy view is sufficient for a deliberately synthetic event. */
