@@ -82,6 +82,17 @@ jobs:
             java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a12-station.log 2>&1
           result=$?
           set -e
+          # JVM-owned runtime class bytes, dumped by the disposable probe:
+          # disassemble with the SAME Java25 SDK before any failing grep exits.
+          if test -f plugins/A12Probe/diagnostic-classes/net/minecraft/server/network/ServerGamePacketListenerImpl.class; then
+            if javap -c -p -classpath plugins/A12Probe/diagnostic-classes \
+              net.minecraft.server.network.ServerGamePacketListenerImpl \
+              > packet-handler.javap.txt 2> packet-handler.javap-error.txt; then
+              echo A12_REAL_PAPER_PACKET_HANDLER_DISASSEMBLED
+            else
+              echo A12_REAL_PAPER_PACKET_HANDLER_DISASSEMBLY_UNAVAILABLE
+            fi
+          fi
           if [ "$result" -ne 0 ]; then
             echo "Paper station probe exit status $result" >&2
             tail -160 paper-a12-station.log
@@ -123,6 +134,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: paper-a12-station-probe
-          path: smoke/*.log
+          path: |
+            smoke/*.log
+            smoke/packet-handler.javap.txt
+            smoke/packet-handler.javap-error.txt
           retention-days: 7
           if-no-files-found: ignore
