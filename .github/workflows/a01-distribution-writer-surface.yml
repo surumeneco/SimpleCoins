@@ -27,6 +27,10 @@ jobs:
           set -euo pipefail
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.packaged-writer-entrypoints.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
       - name: Run deterministic classfile parsing and fail-closed tests
         shell: bash
         run: |
@@ -87,11 +91,55 @@ jobs:
                             ref['class'], ref['owner'], ref['method'])
           print('PINNED_DISTRIBUTION_STATIC_WRITER_SURFACE_OBSERVED_NOT_CLOSED')
           PY
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: 047781068471658c2118d6b5b60b8bc88aac6e3d
+          path: baseline-scanner
+          persist-credentials: false
+      - name: Quantify truly newly detected callrefs against unchanged pinned JAR bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python baseline-scanner/tools/audit_writer_surface.py \
+            --plugins pinned-server/plugins \
+            --output writer-surface-baseline.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          before = json.loads(Path('writer-surface-baseline.json').read_text(encoding='utf-8'))
+          after = json.loads(Path('writer-surface-report.json').read_text(encoding='utf-8'))
+          old = {j['jar']:j for j in before['jars']}
+          new = {j['jar']:j for j in after['jars']}
+          assert len(old) == len(new) == 24
+          assert old.keys() == new.keys()
+          total_new = 0
+          for name in sorted(old):
+              original, current = old[name], new[name]
+              for k in ('sha256','size','classes','method_references'):
+                  assert original[k] == current[k], (name, k)
+              for category in original['categories']:
+                  if category != 'STORED_FILE_WRITE':
+                      assert original['categories'][category] == current['categories'][category], name
+              gain = current['categories']['STORED_FILE_WRITE'] - original['categories']['STORED_FILE_WRITE']
+              assert gain >= 0, name
+              total_new += gain
+              if gain:
+                  print('A01_NEW_STATIC_FILE_WRITER_API_CALLREF',name,'delta=',gain)
+          print('A01_PINNED_24_JAR_STORED_FILE_WRITE_BEFORE',
+                sum(j['categories']['STORED_FILE_WRITE'] for j in old.values()))
+          print('A01_PINNED_24_JAR_STORED_FILE_WRITE_AFTER',
+                sum(j['categories']['STORED_FILE_WRITE'] for j in new.values()))
+          print('A01_PINNED_24_JAR_NEW_WRITER_API_CALLREFS',total_new)
+          print('A01_STATIC_INVOCATION_REFERENCE_ONLY_NOT_ALL_WRITER_CLOSURE')
+          PY
       - name: Save exact per-JAR SHA256 writer reference evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: a01-static-packaged-writer-entrypoints
-          path: writer-surface-report.json
+          path: |
+            writer-surface-report.json
+            writer-surface-baseline.json
           retention-days: 14
           if-no-files-found: ignore
