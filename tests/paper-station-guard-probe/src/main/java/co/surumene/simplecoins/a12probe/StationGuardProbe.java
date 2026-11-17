@@ -378,12 +378,27 @@ public final class StationGuardProbe extends JavaPlugin {
             CoinItemCodec codec) throws ReflectiveOperationException {
         Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
         Class<?> nmsPlayerType = Class.forName("net.minecraft.world.entity.player.Player");
-        Class<?> nmsClickType = Class.forName("net.minecraft.world.inventory.ClickType");
         Class<?> slotType = Class.forName("net.minecraft.world.inventory.Slot");
+        // The click enum moved in newer Minecraft mappings; never guess a
+        // package here. Resolve the actual Paper runtime native method first.
+        Method clicked = java.util.Arrays.stream(
+                        ctor.getDeclaringClass().getMethods())
+                .filter(method -> method.getName().equals("clicked")
+                        && method.getParameterCount() == 4
+                        && method.getParameterTypes()[0] == int.class
+                        && method.getParameterTypes()[1] == int.class
+                        && method.getParameterTypes()[3].isAssignableFrom(nmsPlayerType))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No native CartographyTableMenu.clicked(int,int,enum,Player)"));
+        Class<?> nmsClickType = clicked.getParameterTypes()[2];
+        if (!nmsClickType.isEnum())
+            throw new IllegalStateException(
+                    "Native click type is not an enum: " + nmsClickType.getName());
         @SuppressWarnings({"unchecked", "rawtypes"})
         Object pickup = Enum.valueOf((Class<? extends Enum>) nmsClickType, "PICKUP");
-        Method clicked = ctor.getDeclaringClass().getMethod(
-                "clicked", int.class, int.class, nmsClickType, nmsPlayerType);
+        getLogger().info("A12_NMS_CARTOGRAPHY_ACTUAL_CLICK_SIGNATURE "
+                + clicked.toGenericString());
         Method set = slotType.getMethod("set", nmsStackType);
         Method get = slotType.getMethod("getItem");
         Method count = nmsStackType.getMethod("getCount");
