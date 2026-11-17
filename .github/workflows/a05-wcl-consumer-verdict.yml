@@ -1,0 +1,49 @@
+name: A05 WCL consumer verdict formal CAT preflight
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md'
+      - 'tests/cat/a05-wcl-consumer-junit-binding.json'
+      - '.github/workflows/a05-wcl-consumer-verdict.yml'
+permissions:
+  contents: read
+jobs:
+  model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate Confirmed A05 Process Closure and Model Conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          python "$FLOW" validate --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('Lifecycle/Works/.cat-flow/cache')
+          model=json.loads((root/'a05-wcl-consumer-verdict-model.json').read_text())
+          vectors=json.loads((root/'a05-wcl-consumer-verdict-vectors.json').read_text())
+          queue=json.loads((root/'a05-wcl-consumer-verdict-queue.json').read_text())
+          expected={f's{i}' for i in range(8)}
+          assert model['status']=='confirmed'
+          assert {r['id'] for r in model['rules']}==expected
+          assert {c['id'] for c in vectors['cases']}=={f'case.s{i}' for i in range(8)}
+          assert len(queue['items'])==8
+          assert [x['status'] for x in queue['items']]==['current']+['pending']*7
+          print('A05_CONFIRMED_PROCESS_MODEL_AND_TDD_QUEUE_PRECONDITIONS_PASSED')
+          PY
