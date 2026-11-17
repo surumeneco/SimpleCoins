@@ -27,6 +27,10 @@ jobs:
           set -euo pipefail
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.packaged-writer-entrypoints.md
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
       - name: Run deterministic classfile parsing and fail-closed tests
         shell: bash
         run: |
