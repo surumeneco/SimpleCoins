@@ -2,7 +2,7 @@
 cat_version: '0.3'
 kind: process
 id: simplecoins.currency.station-consumption-exclusion
-status: draft
+status: confirmed
 process: simplecoins.currency.station-consumption-exclusion
 source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
@@ -15,14 +15,14 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/518
   - https://github.com/surumeneco/SimpleCoins/pull/519
   - https://github.com/surumeneco/SimpleCoins/pull/520
-decision_ref: ''
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
 refs:
   - simplecoins.currency.pi.station-result
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# Process: Merchant・Cartographyでの通常PAPER消費禁止（Draft）
+# Process: Merchant・Cartographyでの通常PAPER消費禁止
 
 ## 契約
 閉世界: 偽
@@ -54,7 +54,7 @@ language: ja
 | 結果操作 | simplecoins.currency.pi.station-result/evaluate |
 
 ## 規範入力と境界
-Drive 01/05の確定要件は、正規貨幣PAPERを**20種類の等価両替以外の素材として消費させない**ことである。Merchant/CartographyはCraftItemEventの保護対象と同一ではない。ユーザーが明示承認した禁止要件を具体的なPaperイベントへ写像するためのDraftであり、イベントの技術仕様を人間の追加承認なしに確定しない。
+Drive 01/05の確定要件は、正規貨幣PAPERを**20種類の等価両替以外の素材として消費させない**ことである。Merchant/CartographyはCraftItemEventの保護対象と同一ではない。ユーザーが明示承認した禁止要件と本Processの結果操作時の許可・拒否の意味は承認済み。ただし利用するPaperイベントの選択・網羅性は技術検証事項であり、未検証のイベント経路を実装済みと扱わない。
 
 対象はMerchant/Cartographyの**結果スロットで、入力のいずれかがSimpleCoins貨幣PDCを保有する場合の消費拒否**。正常なPAPERや結果取得以外の操作、貨幣の単なる移動を禁止しない。PDC型が不正でも貨幣マーカーを持つ入力は許可しない。入力の同世代観測が不可能な場合に結果消費を承認しない。
 
@@ -73,4 +73,4 @@ Drive 01/05の確定要件は、正規貨幣PAPERを**20種類の等価両替以
 
 これらは**実Paperのサーバー側packet-handlerをテスト内から直接起動**した証拠であり、認証済みクライアント、ソケット通信、JE/BE端末の実操作ではない。確認した通常クリック以外のShift・数字キー・ドラッグ・ダブルクリック等について、イベント発火・取消の保証は**未検証**。外部イベントでの保護だけでは、別プラグインがメニューのNMS APIを直接呼ぶ非協調経路を止められるとは限らない。現状の製品`CoinExchangeRecipes`はCraftItemEvent等のみを登録し、Merchant/Cartographyの専用listenerはない。旧PR #316の`PaperCurrencyConsumption.blocksResult`はイベント未配線の純粋関数であり、本Processの実装ではない。テスト専用listenerの取消成功は製品の価値保護成立を意味しない。
 
-本書は既存の貨幣価値保存要件を精密化する`Draft`。ネットワークイベントの技術選択と防護境界は正当な設計確認・CAT Confirmed・正式Gateを経るまで未承認であり、**本番の貨幣保護完了・公開許可を主張しない**。
+本書の許可・拒否の意味は利用者承認によりConfirmedとするが、ネットワークイベントの技術選択と防護境界は実証・CAT Gateを要し、**本番の貨幣保護完了・公開許可を主張しない**。

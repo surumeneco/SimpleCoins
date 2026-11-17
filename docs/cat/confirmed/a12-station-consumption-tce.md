@@ -2,7 +2,7 @@
 cat_version: '0.3'
 kind: tce
 id: simplecoins.currency.tce.station-result
-status: draft
+status: confirmed
 process: simplecoins.currency.station-consumption-exclusion
 source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
@@ -15,24 +15,24 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/518
   - https://github.com/surumeneco/SimpleCoins/pull/519
   - https://github.com/surumeneco/SimpleCoins/pull/520
-decision_ref: ''
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
 refs:
   - simplecoins.currency.pi.station-result
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# TCE: 通常PAPERステーションでの貨幣消費阻止（Draft）
+# TCE: 通常PAPERステーションでの貨幣消費阻止
 
-網羅要求: partial
+網羅要求: 閉包
 
 ## 振る舞い
 | ID | 起点 | 条件 | 結果 | 効果 |
 | --- | --- | --- | ---: | --- |
 | s0 | 結果操作 | `入力.結果操作 == 偽` | 1 | `出力.許可 = 真; 出力.取消 = 偽` |
 | s1 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 真 かつ 入力.貨幣マーカーあり == 偽` | 1 | `出力.許可 = 真; 出力.取消 = 偽` |
-| s2 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 真 かつ 入力.貨幣マーカーあり == 真` | 0 | `出力.許可 = 偽; 出力.取消 = 真` |
-| s3 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 偽` | 0 | `出力.許可 = 偽; 出力.取消 = 真` |
+| s2 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 真 かつ 入力.貨幣マーカーあり == 真` | 1 | `出力.許可 = 偽; 出力.取消 = 真` |
+| s3 | 結果操作 | `入力.結果操作 == 真 かつ 入力.入力読取可能 == 偽` | 1 | `出力.許可 = 偽; 出力.取消 = 真` |
 
 ## 実測に基づく代表的な検査ベクトル候補
 
@@ -44,4 +44,4 @@ language: ja
 
 ## 適用境界
 
-本TCEは四つの入力分岐の**部分Draft**で、事後の別Pluginによる変更、実クライアント操作・通常クリック以外のPaperイベント順序、直接NMS呼出しへの完全排他、全クラッシュ・G0/G3を閉包しない。`s2/s3`での拒否・取消は**受入仕様候補**であって、実プロダクトに実装済み、実イベントでキャンセル成功、正式CAT Confirmed/Gate成立という意味ではない。
+本TCEは承認済みの四つの入力分岐により**PIの必須Boolean入力の全組合せを覆う局所閉包仕様**で、事後の別Pluginによる変更、実クライアント操作・通常クリック以外のPaperイベント順序、直接NMS呼出しへの完全排他、全クラッシュ・G0/G3を閉包しない。`s2/s3`での拒否・取消は**承認済みの受入要求**であって、実プロダクトに実装済み、実イベントでキャンセル成功、正式CAT Gate成立という意味ではない。

@@ -1,10 +1,11 @@
 # CAT補助資料の読み方
 
-このフォルダは、既存のコードに対する観測・検証案・形式仕様の**Draft/Candidate**を保持します。正式なCAT-TDDのフロー、役割、入力・出力、生成物の所有者、規範承認とGateは[上流CAT-TDD](https://github.com/surumeneco/CAT-TDD)が決めます。
+このフォルダは、既存のコードに対する観測・検証案・形式仕様の**Draft/Candidate**と、利用者承認を受けた**Confirmed**を区別して保持します。正式なCAT-TDDのフロー、役割、入力・出力、生成物の所有者、規範承認とGateは[上流CAT-TDD](https://github.com/surumeneco/CAT-TDD)が決めます。
 
 ## 資料群
 
 - [drafts/](drafts/)：Paper独立受付ガードやBAN等の草案。編集時は個別のfront matter、参照SHA、決定根拠を確認。
+- [confirmed/](confirmed/)：利用者から明示承認を受けて、上流の`cat_promote.py`で移行したA05/A12の仕様。**Confirmedは正式CAT Gate通過・製品実装完了を意味しない**。
 - `phase5-*`：保存済み資産、BlockLocker、BAN、WCL、WorldScopeの観測・候補。
 - `phase6-*`：永続化、同時書込、journal、キャッシュ公開境界の観測・候補。
 - `phase7-*`：統計、発行、JE/BEパック・URLの観測・候補。

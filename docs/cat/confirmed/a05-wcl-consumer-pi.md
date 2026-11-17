@@ -2,25 +2,24 @@
 cat_version: '0.3'
 kind: pi
 id: simplecoins.external-storage-provider-integration.pi.capture
-status: draft
+status: confirmed
 process: simplecoins.external-storage-provider-integration
 source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/blob/develop/docs/verification/phase5-wcl-provider-contract.md
-decision_ref: ''
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
 refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# PI: WCL保管証拠の取込み境界（Draft）
+# PI: WCL保管証拠の取込み境界
 
 ## 境界
 | 相手Process | 方向 |
 | --- | --- |
-| simplecoins.world-source-discovery | 受信 |
-| simplecoins.settlement | 送信 |
+| simplecoins.settlement | 双方向 |
 
 ## 項目
 | ID | 方向 | Domain | 存在 |
@@ -45,6 +44,8 @@ language: ja
 ## 制約
 | 式 |
 | --- |
+
+※ `simplecoins.world-source-discovery` が確定したソース証拠は上位settlementからの入力として渡される。送信するのは未公開の正規化候補または保留判定であり、world source discoveryへ候補を返信する契約を追加するものではない。
 
 ## 入力と結果の意味
 
