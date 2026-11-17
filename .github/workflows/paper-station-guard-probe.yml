@@ -130,6 +130,12 @@ jobs:
           grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_UNCANCELLED inputSlot=0' paper-a12-station.log
           grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_UNCANCELLED inputSlot=1' paper-a12-station.log
           grep -F 'A12_MERCHANT_PAPER_INGREDIENT_REGISTERED tradePerformed=false taggedCoinAccepted=unverified' paper-a12-station.log
+          grep -F 'A12_MERCHANT_MENU_ABI_CLASS net.minecraft.world.inventory.MerchantMenu' paper-a12-station.log
+          grep -F 'A12_MERCHANT_MENU_ABI_CTOR ' paper-a12-station.log
+          grep -F 'A12_MERCHANT_MENU_ABI_CAPTURED actualTrade=false networkPacket=false playerOnline=false' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=ordinaryPAPER before=1 after=0 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 blocked=1' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_TEST_ONLY_DENIAL_PASSED onlinePlayers=0 socket=false realClient=false productionListener=false' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_PAPER_TAKE_CONTROL_ACCEPTED' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_PAPER_COST_MATCH plain=true stone=false taggedCoin=' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_TAGGED_COIN_TAKE accepted=' paper-a12-station.log
