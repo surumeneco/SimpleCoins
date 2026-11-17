@@ -1,0 +1,118 @@
+name: A13 wallet GUI lower-only drag CAT and JUnit
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/confirmed/a13-wallet-drag-*.md'
+      - 'Lifecycle/Works/simplecoins.a13.wallet-lower-drag.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/WalletMenu.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/WalletDragPolicy.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/WalletDragPolicyTest.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/A13WalletDragDriver.java'
+      - 'tests/cat/a13-wallet-drag-junit-binding.json'
+      - '.github/workflows/a13-wallet-drag.yml'
+permissions:
+  contents: read
+jobs:
+  wallet-drag-cat-junit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Source-Confirmed CAT closure and independent model/vectors
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a13.wallet-lower-drag.md
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/confirmed/a13-wallet-drag-{process,pi,tce}.md
+          python "$FLOW" validate --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+      - name: Run independent acceptance JUnit and previously established regression
+        run: gradle --no-daemon clean :test :admission-guard:test
+      - name: Emit current CAT-generated JUnit, verify actual Green, and advance Queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          COMPILE=cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py
+          WORK=Lifecycle/Works/simplecoins.a13.wallet-lower-drag.md
+          ROOT=Lifecycle/Works/.cat-flow/cache
+          OUT=src/test/java/co/surumene/simplecoins/paper/generated
+          mkdir -p "$OUT"
+          for i in 0 1 2 3 4 5; do
+            digest=$(printf 'case.s%s' "$i" | sha256sum | cut -c1-12)
+            output="$OUT/GeneratedA13WalletDragCase${digest}Test.java"
+            python "$COMPILE" tests \
+              "$ROOT/a13-wallet-drag-model.json" \
+              "$ROOT/a13-wallet-drag-vectors.json" \
+              tests/cat/a13-wallet-drag-junit-binding.json \
+              --queue "$ROOT/a13-wallet-drag-queue.json" --framework junit \
+              --process docs/cat/confirmed/a13-wallet-drag-process.md \
+              --pi docs/cat/confirmed/a13-wallet-drag-pi.md \
+              --tce docs/cat/confirmed/a13-wallet-drag-tce.md \
+              -o "$output"
+            grep -Fq "class GeneratedA13WalletDragCase${digest}Test" "$output"
+            python "$FLOW" run --work "$WORK" --id "green-s$i" --execute
+            python "$FLOW" queue-state --work "$WORK" \
+              --evidence "Lifecycle/Works/.cat-flow/evidence/green-s$i.json"
+          done
+          python - <<'PY'
+          import json, pathlib
+          q=json.loads(pathlib.Path('Lifecycle/Works/.cat-flow/cache/a13-wallet-drag-queue.json').read_text())
+          assert len(q['items'])==6
+          assert all(x['status']=='done' and x['evidence_ref'] for x in q['items'])
+          for x in q['items']:
+              receipt=json.loads(pathlib.Path(x['evidence_ref']).read_text())
+              assert receipt['verdict']=='passed' and receipt['stage']=='green'
+              assert receipt['queue_context']['current_item_id']==x['id']
+          print('A13_CAT_SIX_QUEUE_GREEN_RECEIPTS_PASSED')
+          PY
+      - name: Evaluate CAT implementation obligations without overriding inconclusive
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a13.wallet-lower-drag.md
+          python "$FLOW" obligations --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance
+          python - <<'PY'
+          import pathlib,json
+          p=pathlib.Path('Lifecycle/Works/.cat-flow/conformance/implementation-conformance.json')
+          data=json.loads(p.read_text())
+          if data['verdict'] not in ('passed','inconclusive'):
+              raise SystemExit('CAT implementation-conformance failed/blocked: '+str(data))
+          print('A13_CAT_IMPLEMENTATION_VERDICT', data['verdict'])
+          PY
+      - name: Save CAT/JUnit receipts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a13-cat-junit-evidence
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a13-wallet-drag-*.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+            Lifecycle/Works/.cat-flow/conformance/*.json
+            Lifecycle/Works/.cat-flow/evidence/green-*.json
+            Lifecycle/Works/.cat-flow/reports/green-*.xml
+            src/test/java/co/surumene/simplecoins/paper/generated/*.java
+          retention-days: 14
+          if-no-files-found: error
