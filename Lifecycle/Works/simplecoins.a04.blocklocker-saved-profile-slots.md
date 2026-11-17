@@ -47,7 +47,7 @@ spec_status: unknown
 ## Repositories
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
-| --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- |
 | SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.blocklocker-saved-profile-slots.md;src/test/java/co/surumene/simplecoins/domain/BlockLockerSavedHintsProfileSlotCandidateTest.java;.github/workflows/a04-blocklocker-profile-slot-regression.yml | — | src/test/java/co/surumene/simplecoins/domain/BlockLockerSavedHintsProfileSlotCandidateTest.java;.github/workflows/a04-blocklocker-profile-slot-regression.yml |
 
 ## Checks
