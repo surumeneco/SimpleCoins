@@ -163,6 +163,40 @@ jobs:
             exit 1
           fi
           echo 'A01_REAL_PAPER_PINNED_FIVE_ENABLED_CODESOURCE_OBSERVED_NOT_ALL_WRITERS'
+      - name: Verify enabled runtime CodeSource bytes against the pinned five distribution JARs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, re
+          from pathlib import Path
+          names = [
+              'InvSee++.jar',
+              'WonderfulGenomeLib-1.0.1.jar',
+              'WonderfulCoreLibrary-0.1.0.jar',
+              'WhatAWonderfulChicken-2.1.0.jar',
+              'WhatAWonderfulWolf-1.1.1.jar',
+          ]
+          ids = Path('expected-plugin-ids.txt').read_text(encoding='utf-8').splitlines()
+          assert len(names) == len(ids) == 5
+          paper_log = Path('smoke/paper-a01-runtime-roster.log').read_text(encoding='utf-8')
+          for name, plugin_id in zip(names, ids):
+              pattern = (r'A01_RUNTIME_WRITER_PLUGIN_ENABLED name=' + re.escape(plugin_id)
+                         + r' version=\\S+ source=(\\S+) sha256=([0-9a-f]{64}) bytes=(\\d+)')
+              matches = re.findall(pattern, paper_log)
+              assert len(matches) == 1, f'No unique runtime identity for {plugin_id}'
+              source, runtime_sha, size = matches[0]
+              raw = (Path('pinned-server/plugins') / name).read_bytes()
+              assert source == name, f'Paper has remapped this JAR: {plugin_id} -> {source}'
+              assert runtime_sha == hashlib.sha256(raw).hexdigest(), plugin_id
+              assert int(size) == len(raw), plugin_id
+              print('A01_LIVE_CODESOURCE_EQUALS_PINNED_DISTRIBUTION',
+                    plugin_id, 'sha256=', runtime_sha)
+          assert 'pluginManagerRegistered=8' in paper_log, \
+              'Unexpected extra runtime plugins loaded in the isolated eight-JAR test'
+          assert 'A01_ALL_FIVE_PINNED_WRITERS_ENABLED' in paper_log
+          print('A01_ALL_FIVE_RUNTIME_CODESOURCES_BYTE_IDENTICAL_AND_NO_EXTRA_PLUGINS')
+          PY
       - name: Archive actual Paper plugin identity observations
         if: always()
         uses: actions/upload-artifact@v4
