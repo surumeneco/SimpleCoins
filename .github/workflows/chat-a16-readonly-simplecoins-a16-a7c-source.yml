@@ -1,0 +1,28 @@
+name: simplecoins-a16-a7c-source read-only pinned source
+on:
+  push:
+    branches: ['infra/chat-a16-product-a7c-snapshot-20261118']
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a7c9220c052906da095561e0e7bf8daa7a9c9c81
+          persist-credentials: false
+      - name: Archive verified exact commit
+        run: |
+          test "$(git rev-parse HEAD)" = 'a7c9220c052906da095561e0e7bf8daa7a9c9c81'
+          printf '%s\n' 'surumeneco/SimpleCoins' 'a7c9220c052906da095561e0e7bf8daa7a9c9c81' "$(git rev-parse HEAD^{tree})" > snapshot.manifest
+          git archive --format=tar HEAD > source.tar
+          sha256sum source.tar > source.tar.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-a16-a7c-source
+          path: |
+            source.tar
+            source.tar.sha256
+            snapshot.manifest
+          retention-days: 1
