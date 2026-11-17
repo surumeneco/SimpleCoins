@@ -1,0 +1,29 @@
+name: Chat isolated source snapshot 20261118
+on:
+  push:
+    branches: ['infra/chat-snapshot-simplecoins-20261118']
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 303ac9e5c93fd2d7e1c9fc10de72e6cf41408939
+          persist-credentials: false
+      - name: Verify exact commit and record Git tree
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = '303ac9e5c93fd2d7e1c9fc10de72e6cf41408939'
+          printf '%s\n' 'surumeneco/SimpleCoins' '303ac9e5c93fd2d7e1c9fc10de72e6cf41408939' "$(git rev-parse HEAD^{tree})" > snapshot.manifest
+          git archive --format=tar HEAD > source.tar
+          sha256sum source.tar > source.tar.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-chat-source-20261118
+          path: |
+            source.tar
+            source.tar.sha256
+            snapshot.manifest
+          retention-days: 1
