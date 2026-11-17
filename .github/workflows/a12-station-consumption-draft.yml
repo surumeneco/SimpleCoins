@@ -1,0 +1,80 @@
+name: A12 Merchant Cartography CAT Draft syntax and scope
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/drafts/a12-station-consumption-*.md'
+      - 'Lifecycle/Works/simplecoins.a12.station-consumption-spec.md'
+      - '.github/workflows/a12-station-consumption-draft.yml'
+permissions:
+  contents: read
+jobs:
+  draft-scope-and-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate issue-work structure with normative upstream validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a12.station-consumption-spec.md
+      - name: Lint three new Draft artifacts with pinned upstream CAT linter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/drafts/a12-station-consumption-process.md \
+            docs/cat/drafts/a12-station-consumption-pi.md \
+            docs/cat/drafts/a12-station-consumption-tce.md
+      - name: Verify source ownership and unapproved boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("docs/cat/drafts")
+          process, pi, tce = (root / f"a12-station-consumption-{kind}.md"
+                              for kind in ("process", "pi", "tce"))
+          files = (process, pi, tce)
+          for kind, file in zip(("process", "pi", "tce"), files):
+              source = file.read_text(encoding="utf-8")
+              assert source.startswith("---\n"), file
+              assert f"kind: {kind}" in source, file
+              assert "status: draft" in source and "decision_ref: ''" in source, file
+              assert "status: confirmed" not in source, file
+              assert "https://github.com/surumeneco/SimpleCoins/pull/489" in source, file
+              assert "simplecoins.currency.station-consumption-exclusion" in source, file
+          assert "  - simplecoins.currency.pi.station-result" in process.read_text()
+          assert "refs: []" in pi.read_text()
+          assert "  - simplecoins.currency.pi.station-result" in tce.read_text()
+          assert "網羅要求: partial" in tce.read_text()
+          work = Path("Lifecycle/Works/simplecoins.a12.station-consumption-spec.md").read_text()
+          assert "work_kind: specification" in work
+          assert "process-closure | not-run" in work
+          assert "synthetic" in work.lower() and "Merchant" in work
+          print("A12_STATION_TRIPLE_DRAFT_SYNTAX_AND_AUTHORITY_BOUNDARY_PRESERVED")
+          PY
+          # Ensure the exact product sources used for issue-work observation
+          # have not been changed by this document-only PR.
+          printf '%s\n' \
+            '0fb218be7810aad63d3db61c5bd0133b5345897a  src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java' \
+            'c1722c0229ad57a540c820875826d0de5933a6cb  src/main/java/co/surumene/simplecoins/paper/CoinItemCodec.java' \
+            | while read -r expected file; do
+                actual=$(git hash-object "$file")
+                if [ "$actual" != "$expected" ]; then
+                  echo "Unrelated product code changed: $file $actual != $expected" >&2
+                  exit 1
+                fi
+              done
+          echo 'A12_STATION_EXISTING_COIN_GUARDS_NOT_MODIFIED'
