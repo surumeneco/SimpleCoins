@@ -487,6 +487,20 @@ public final class StationGuardProbe extends JavaPlugin {
                 .invoke(Bukkit.getServer());
         Class<?> serverPlayerType = Class.forName(
                 "net.minecraft.server.level.ServerPlayer");
+        // Retain exact runtime ServerPlayer implementation for the first
+        // isImmobile branch in the actual handler, not mapping-version guesses.
+        java.nio.file.Path playerDump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/server/level/ServerPlayer.class");
+        try (java.io.InputStream code = serverPlayerType.getResourceAsStream(
+                "/net/minecraft/server/level/ServerPlayer.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot read runtime ServerPlayer bytecode");
+            java.nio.file.Files.createDirectories(playerDump.getParent());
+            java.nio.file.Files.copy(code, playerDump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException("Cannot preserve actual ServerPlayer class", readFailure);
+        }
         Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
         Class<?> packetFlowType = Class.forName(
                 "net.minecraft.network.protocol.PacketFlow");
@@ -622,6 +636,11 @@ public final class StationGuardProbe extends JavaPlugin {
                         .invoke(menu, handlePlayer);
                 getLogger().info("A12_PACKET_HANDLER_MENU_VALIDITY valid=" + valid
                         + " station=" + stationBlock.getLocation().toVector());
+                boolean immobile = (boolean) serverPlayerType.getMethod("isImmobile")
+                        .invoke(handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_IMMOBILE_GATE isImmobile="
+                        + immobile + " playerOnline=" + detached.isOnline());
+
                 if (!valid) throw new IllegalStateException(
                         "Detached player's native menu is not usable by server handler");
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
