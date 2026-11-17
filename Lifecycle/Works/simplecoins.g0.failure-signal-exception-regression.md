@@ -54,7 +54,7 @@ spec_status: unknown
 
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| g0.failure-signal.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon test --tests co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest | failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed;rejectedBackgroundExecutorWithThrowingFailureSignalNeverSchedulesWork | src/test/java/co/surumene/simplecoins/domain/SettlementStartupCoordinatorTest.java | build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml | 300 |
+| g0.failure-signal.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon :test --tests co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest | failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed;rejectedBackgroundExecutorWithThrowingFailureSignalNeverSchedulesWork | src/test/java/co/surumene/simplecoins/domain/SettlementStartupCoordinatorTest.java | build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml | 300 |
 
 ## Gates
 
