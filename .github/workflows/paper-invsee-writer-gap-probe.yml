@@ -6,6 +6,7 @@ on:
       - 'tests/paper-invsee-writer-probe/**'
       - 'Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-invsee-save-veto.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-selected-mainhand-mirror.md'
       - '.github/workflows/paper-invsee-writer-gap-probe.yml'
 permissions:
   contents: read
@@ -35,6 +36,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-invsee-save-veto.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-selected-mainhand-mirror.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -155,6 +158,41 @@ jobs:
             exit 1
           fi
           echo 'PAPER_A02_REAL_INVSEE_COOPERATIVE_SAVE_EVENT_VETO_PASSED'
+      - name: Third independent Paper boot captures selected-mainhand saved-view rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-mainhand/plugins
+          cp smoke/paper.jar smoke-mainhand/paper.jar
+          cp smoke/plugins/*.jar smoke-mainhand/plugins/
+          printf 'eula=true\n' > smoke-mainhand/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25589\n' > smoke-mainhand/server.properties
+          cd smoke-mainhand
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.probeSelectedMainhand=true -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > paper-a02-mainhand-mirror.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "Selected-mainhand probe exit code $code" >&2
+            tail -200 paper-a02-mainhand-mirror.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' paper-a02-mainhand-mirror.log; then
+            tail -200 paper-a02-mainhand-mirror.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-mainhand-mirror.log
+          grep -F 'PAPER_A02_SELECTED_SLOT_SAVED_EQUIPMENT_VIEW_CHANGED' paper-a02-mainhand-mirror.log
+          grep -F 'PAPER_A02_SELECTED_SLOT_SINGLE_ROOT_5000_COIN_AND_RECEIPT_VALID' paper-a02-mainhand-mirror.log
+          grep -F 'PAPER_A02_SELECTED_SLOT_TRANSITION_REJECTS_VALID_SAVED_GRANT' paper-a02-mainhand-mirror.log
+          grep -F 'PAPER_A02_SELECTED_SLOT_PENDING_NO_ACK_PRESERVED' paper-a02-mainhand-mirror.log
+          if grep -Fq 'PAPER_A02_INVSEE_ACTUAL_PLUGIN_POST_PROOF_FALSE_ACK_REPRODUCED' paper-a02-mainhand-mirror.log; then
+            echo 'Selected-mainhand verification unexpectedly ACKed an unsaved grant' >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_SELECTED_MAINHAND_MIRROR_FALSE_REJECTION_REPRODUCED'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -162,5 +200,6 @@ jobs:
           path: |
             smoke/paper-a02-invsee.log
             smoke-guarded/paper-a02-invsee-veto.log
+            smoke-mainhand/paper-a02-mainhand-mirror.log
           if-no-files-found: ignore
           retention-days: 14
