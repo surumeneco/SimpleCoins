@@ -1,0 +1,7 @@
+name: SimpleCoinsEmptyPauseProbe
+version: '1.0.0-dev'
+main: co.surumene.simplecoins.a01probe.EmptyPauseProbe
+api-version: '26.2'
+load: POSTWORLD
+depend: [SimpleCoins]
+description: Disposable CI-only 2-JVM idle pause and independent filesystem writer probe
