@@ -1,0 +1,42 @@
+name: G0 startup failure-signal failclosed JUnit regression
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/test/java/co/surumene/simplecoins/domain/SettlementStartupCoordinatorTest.java'
+      - 'Lifecycle/Works/simplecoins.g0.failure-signal-exception-regression.md'
+      - '.github/workflows/g0-failure-signal-exception-regression.yml'
+permissions:
+  contents: read
+jobs:
+  failure-signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate draft issue-work structure, not formal CAT Gates
+        run: |
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.g0.failure-signal-exception-regression.md
+      - name: Run ten actual startup coordinator JUnit cases
+        run: |
+          set -euo pipefail
+          gradle --no-daemon test --tests co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest
+          test -s build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
+          grep -F 'tests="10"' build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
+          grep -F 'name="failureSignalThrowKeepsTheOriginalFaultAndAdmissionClosed()"' build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
+          grep -F 'name="rejectedBackgroundExecutorWithThrowingFailureSignalNeverSchedulesWork()"' build/test-results/test/TEST-co.surumene.simplecoins.domain.SettlementStartupCoordinatorTest.xml
+          echo 'G0_FAILURE_SIGNAL_FAILCLOSED_JUNIT_10_OF_10'
