@@ -503,6 +503,41 @@ public final class StationGuardProbe extends JavaPlugin {
                     || field.getName().toLowerCase(java.util.Locale.ROOT).contains("containermenu"))
                 getLogger().info("A12_PACKET_PATH_PLAYER_FIELD " + field.toGenericString());
         }
+        Class<?> cookie = Class.forName(
+                "net.minecraft.server.network.CommonListenerCookie");
+        for (Constructor<?> ctor : cookie.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_COOKIE_CONSTRUCTOR " + ctor.toGenericString());
+        for (Method method : cookie.getDeclaredMethods()) {
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                    && (method.getName().toLowerCase(java.util.Locale.ROOT).contains("create")
+                        || method.getName().toLowerCase(java.util.Locale.ROOT).contains("initial")))
+                getLogger().info("A12_PACKET_PATH_COOKIE_FACTORY " + method.toGenericString());
+        }
+        Class<?> containerInput = Class.forName("net.minecraft.world.inventory.ContainerInput");
+        getLogger().info("A12_PACKET_PATH_CONTAINER_INPUT type=" + containerInput.getName()
+                + " isEnum=" + containerInput.isEnum()
+                + " enumConstants=" + java.util.Arrays.toString(containerInput.getEnumConstants()));
+        for (Constructor<?> ctor : containerInput.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_INPUT_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : containerInput.getDeclaredFields())
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_INPUT_STATIC " + field.toGenericString());
+        Class<?> hashed = Class.forName("net.minecraft.network.HashedStack");
+        for (Constructor<?> ctor : hashed.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_HASHED_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : hashed.getDeclaredFields())
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_HASHED_STATIC " + field.toGenericString());
+        for (Method method : hashed.getDeclaredMethods())
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_HASHED_FACTORY " + method.toGenericString());
+        for (java.lang.reflect.Field field : serverPlayer.getDeclaredFields())
+            if (field.getName().toLowerCase(java.util.Locale.ROOT).contains("connection")
+                    || field.getName().toLowerCase(java.util.Locale.ROOT).contains("container"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_DECLARED_FIELD " + field.toGenericString());
+        for (Method method : serverPlayer.getMethods())
+            if (method.getName().equals("initMenu"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_INIT_MENU " + method.toGenericString());
         getLogger().info("A12_PACKET_PATH_ABI_INSPECTED entrypoints=1"
                 + " eventDispatch=unverified networkPacketSent=false"
                 + " detachedOnly=true");
