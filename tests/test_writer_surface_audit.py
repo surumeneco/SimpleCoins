@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -52,6 +53,57 @@ class AuditWriterSurfaceTest(unittest.TestCase):
                 refs = audit.class_callrefs(synthetic_class(owner, method))
                 self.assertEqual({(owner, method, "()V")}, refs)
                 self.assertIn(expected, audit.classify(owner, method))
+
+    def test_real_javac_file_writer_entrypoints_are_not_silent(self) -> None:
+        """Actual compiled JVM bytecode, not an invented symbolic method ref."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "ActualWritableSources.java"
+            source.write_text("""
+import java.io.*;
+import java.nio.channels.*;
+import java.nio.file.*;
+final class ActualWritableSources {
+    static void writerReferences(Path path) throws Exception {
+        try (var text = Files.newBufferedWriter(path)) { text.write("one"); }
+        try (var text = new FileWriter(path.toFile())) { text.write("two"); }
+        try (var channel = AsynchronousFileChannel.open(path, StandardOpenOption.WRITE)) { }
+        try (var channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+            channel.map(FileChannel.MapMode.READ_WRITE, 0, 4096);
+            channel.transferFrom(Channels.newChannel(
+                    new ByteArrayInputStream(new byte[0])), 0, 0);
+        }
+        try (var read = Files.newBufferedReader(path)) { }
+    }
+}
+""", encoding="utf-8")
+            subprocess.run(["javac", str(source)], cwd=root,
+                           check=True, timeout=30, capture_output=True, text=True)
+            actual = audit.class_callrefs(
+                (root / "ActualWritableSources.class").read_bytes())
+            expected_writer_refs = {
+                ("java/nio/file/Files", "newBufferedWriter"),
+                ("java/io/FileWriter", "<init>"),
+                ("java/nio/channels/AsynchronousFileChannel", "open"),
+                ("java/nio/channels/FileChannel", "map"),
+                ("java/nio/channels/FileChannel", "transferFrom"),
+            }
+            for owner, name in expected_writer_refs:
+                with self.subTest(owner=owner, method=name):
+                    self.assertTrue(
+                        any(o == owner and n == name for o, n, _ in actual),
+                        "The real javac output lacks the expected call ref")
+                    self.assertIn(
+                        "STORED_FILE_WRITE", audit.classify(owner, name),
+                        "A real Java file-writing entrypoint escaped classification")
+            self.assertTrue(any(
+                o == "java/nio/file/Files" and n == "newBufferedReader"
+                for o, n, _ in actual), "Control read-only call was not emitted")
+            self.assertNotIn(
+                "STORED_FILE_WRITE",
+                audit.classify("java/nio/file/Files", "newBufferedReader"),
+                "Read-only NIO operation must not be called a file write")
+            print("A01_REAL_JAVAC_FILE_WRITER_API_GAPS_CLASSIFIED_NOT_RUNTIME_QUISCENCE")
 
     def test_invalid_or_truncated_classfile_is_not_silent_zero(self) -> None:
         good = synthetic_class("java/nio/file/Files", "write")
