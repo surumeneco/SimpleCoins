@@ -50,7 +50,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.invsee-event-checkpoint-writer-drain.md;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-a02-invsee-post-entry-veto.yml | — | tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-a02-invsee-post-entry-veto.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.invsee-event-checkpoint-writer-drain.md;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-a02-invsee-post-entry-veto.yml;.github/workflows/paper-a02-native-save-bypasses-invsee-veto.yml | — | tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-a02-invsee-post-entry-veto.yml;.github/workflows/paper-a02-native-save-bypasses-invsee-veto.yml |
 
 ## Checks
 
@@ -77,9 +77,9 @@ spec_status: unknown
 
 InvSee++ Paper 26.2 `InvseeImpl.save()` calls `EventHelper.callSpectatorInventorySaveEvent` synchronously, checks `event.isCancelled()`, then queues the actual `FakeCraftPlayer.loadData()/saveData()` inside `CompletableFuture.supplyAsync` via `scheduler.executeSyncPlayer`. Existing #486 registered a veto **before** this event and proved that an immediate cancellation keeps the original 5000C coin+receipt through ACK and restart. It did not establish how to account for a writer that has **already passed** the veto checkpoint. #499 tested in-flight permit drain in JUnit, not this real writer.
 
-## 実プラグインを使用する2つの独立した境界試験
+## 実プラグインを使用する3つの独立した境界試験
 
-固定InvSee++ JAR、公式Paper 26.2、独立したdefault-deny guard、零人/loopback/使い捨てWorldを使用する。双方とも製品の実`GrantLedger`、実`CoinItemCodec`、`PaperGrantInventoryMaterializer`、実`CraftPlayer.saveData()`、本物のプレイヤー`UUID.dat`を使用し、先に本物の5000C貨幣/受領PDCが保存されていることを確認する。**両シナリオは製品`PaperSavedSourceDiscovery.observed()`が成功してからだけ試験用playerdataを新規作成する**。開始を固定tickだけで判断せず、異常・170秒超をテスト失敗とする。起動中の正本ディレクトリ追加を検出する製品のfail-closedを回避・無効化しない。以下の2つのシナリオは**互いに独立した新規世界**で実行する。これはテストであり、本番の全writer排他実装ではない。
+固定InvSee++ JAR、公式Paper 26.2、独立したdefault-deny guard、零人/loopback/使い捨てWorldを使用する。3件とも製品の実`GrantLedger`、実`CoinItemCodec`、`PaperGrantInventoryMaterializer`、実`CraftPlayer.saveData()`、本物のプレイヤー`UUID.dat`を使用し、先に本物の5000C貨幣/受領PDCが保存されていることを確認する。**全シナリオは製品`PaperSavedSourceDiscovery.observed()`が成功してからだけ試験用playerdataを新規作成する**。開始を固定tickだけで判断せず、異常・170秒超をテスト失敗とする。起動中の正本ディレクトリ追加を検出する製品のfail-closedを回避・無効化しない。以下の3つのシナリオは**互いに独立した新規世界**で実行する。これはテストであり、本番の全writer排他実装ではない。
 
 ### 制御A：先行writerが正規貨幣を消した場合はACK拒否（既存の反例）
 
@@ -94,12 +94,22 @@ InvSee++ Paper 26.2 `InvseeImpl.save()` calls `EventHelper.callSpectatorInventor
 3. 実`UUID.dat`とその親ディレクトリの`FileChannel.force(true)`が戻ったあと、**新しいManifestと本物の`SavedGrantDeliveryFileReadback.verify`**で、現物5000C・同一root receipt・変更していないSTONE/装備等を検証する。成功して初めて既存の一件だけ`GrantLedger.acknowledge`し、同じファイルの内容不変、元予約のACK冪等性、台帳再オープン時のdelivered 1／pending 0を確認する。
 4. 実JVMを`Runtime.halt(140)`で終了し、**同じ世界を新しいPaper JVMで起動**して現物5000C、署名済みreceipt、ACK済み1件、pending 0件、入室default-denyを実測する。通常のJava shutdown hookによる自動保存には依存しない。
 
-**本試験の閉包範囲**：正例の「排出」は、テスト自身が生成・追跡する**1件のInvSee++ `CompletableFuture`**が完了したときだけをいう。実ゲームの他のInvSee++入口、外部プラグイン、Paper独自保存、非協調writer、filesystem置換、OS電源断をこの計数で全件停止できると主張しない。先行writerが実際には`SaveResponse.saved`後に遅延書込みを行わないという保証も含め、G3全writer閉包は**別途立証が必要**。検証用ゲートを製品に配線せず、正式CAT Confirmed/Gatesと入室解禁は行わない。
+### 制御C：InvSee++イベント拒否中でもPaper本来のPlayer.saveDataは保存できる（追加の反例）
+
+1. 公式Paper 26.2上で製品`PaperGrantInventoryMaterializer`と真正`GrantLedger`により、操作されていない別の`CraftPlayer`にSTONE（slot 0）・正規5000C（slot 1）・本物の完了receiptを生成し、実`UUID.dat`へ`Player.saveData()`して`SavedGrantDeliveryFileReadback.verify`の一度の成功を確認する（未ACK）。
+2. 保存用`SpectatorInventorySaveEvent`の同一UUIDをLOWESTで拒否し、実配布InvSee++ APIからの保存を`notSaved`にする。イベント拒否回数を**1回**として記録し、保存前の現物5000Cとreceiptが不変なことを確認する。
+3. 元の**同じ**Paper`CraftPlayer`からslot 1だけを消し、InvSee++ APIを経由せず`Player.saveData()`を実行する。InvSee++イベント拒否回数は**1のまま**なのに、実`UUID.dat`の正規5000C現物が0になり、STONEと署名済み完了receiptが保存される。台帳はpending 1／未ACKのまま、新たな`SavedGrantDeliveryFileReadback`は欠損を検知して拒否する。
+4. 実playerdataファイルと親ディレクトリのforce後に`Runtime.halt(141)`で**通常停止を介さず**異常終了し、独立したPaper JVMで再起動。現物0・同じ完了receipt・未ACK予約1・独立入室default-denyを再確認する。正常な受領やACKを取り繕わない。
+
+この制御Cは**本物のPaper Player.saveDataというイベント非経由の可観測書込み経路**を直接検査し、InvSee++のイベント拒否を全Playerdata writer境界とする設計を棄却するためのもの。紙/PDCの作成元や製品の台帳は実物だが、消失は使い捨てプレイヤーのテスト専用直接操作で意図的に起こす。第三者が実際にこの順序を通常運用で起こす頻度、全Bukkit/Paper保存経路、実OS電源断・VPSの挙動は主張しない。
+
+**本試験の閉包範囲**：制御Bの正例の「排出」は、テスト自身が生成・追跡する**1件のInvSee++ `CompletableFuture`**が完了したときだけをいう。実ゲームの他のInvSee++入口、外部プラグイン、Paper独自保存、非協調writer、filesystem置換、OS電源断をこの計数で全件停止できると主張しない。先行writerが実際には`SaveResponse.saved`後に遅延書込みを行わないという保証も含め、G3全writer閉包は**別途立証が必要**。検証用ゲートを製品に配線せず、正式CAT Confirmed/Gatesと入室解禁は行わない。
 
 ## Acceptance
 
-- 固定SHA256のPaper/InvSee++実JARと本物の正規貨幣、PDC receipt、他収納STONE、実`GrantLedger`を使用し、制御A/Bを別の空のPaperワールド/JVMで検証する。
+- 固定SHA256のPaper/InvSee++実JARと本物の正規貨幣、PDC receipt、他収納STONE、実`GrantLedger`を使用し、制御A/B/Cを別の空のPaperワールド/JVMで検証する。
 - **制御A**は遅い拒否だけでは先行writerの現物消去を防げない反例を保持。新規読戻し拒否・未ACK・後続拒否を実測する。
 - **制御B**は先行writer Future完了までACKせず、新規拒否を保持したまま実保存fsync→fresh読戻し→1回ACK→`Runtime.halt(140)`→別Paper JVM cold restartで現物・receipt・台帳一件性を実測する。
+- **制御C**はInvSee++イベント拒否→Paper native saveによる同一playerdata上書き→現物0・元receipt・未ACK→fresh readback拒否→実file/dir fsync→`Runtime.halt(141)`→別実Paper JVMのcold restartを検証する。InvSee++イベントがPaper本来の保存へ介入したという誤主張をしない。
 - Domain/Phase6と、`tests/paper-invsee-writer-probe/**`に紐づく既存の実Paper回帰CIを**変更後の同一HEAD**で確認し、全件成功後のみ`develop`へ統合する。
 - Workは`status:draft`、CAT正式Gateはnot-run、製品ソース/設定/ガード/`main`は非変更。本番配布や実VPS受入は検証外。
