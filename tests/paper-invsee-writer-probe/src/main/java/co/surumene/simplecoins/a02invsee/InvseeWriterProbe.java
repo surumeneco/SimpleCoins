@@ -84,6 +84,13 @@ public final class InvseeWriterProbe extends JavaPlugin {
     // not a real Paper/all-plugin writer coordinator.
     private final boolean testAdmittedWriterDrainThenAck =
             Boolean.getBoolean("a02.invsee.drainAdmittedThenAck");
+    // A separate genuinely executed Paper.saveData path that never calls
+    // InvSee's SpectatorInventorySaveEvent. No production writer fence.
+    private final boolean testPaperDirectAfterInvseeVeto =
+            Boolean.getBoolean("a02.invsee.paperSaveBypassesVeto");
+    private final boolean recoverPaperDirectAfterHalt =
+            Boolean.getBoolean("a02.invsee.checkPaperDirectAfterHalt");
+    private Player originalDetachedPaperWriter;
     private final AtomicBoolean lateFenceClosed = new AtomicBoolean();
     private final AtomicInteger alreadyAdmittedSaveEvents = new AtomicInteger();
 
@@ -126,6 +133,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             getLogger().info("PAPER_A02_SOURCE_DISCOVERY_OBSERVED_BEFORE_WRITER");
             if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
             else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
+            else if (recoverPaperDirectAfterHalt) verifyPaperDirectAfterHalt();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
             fail(failure);
@@ -330,6 +338,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Probe requires a fresh player UUID.dat");
         ledger = actualProductLedger();
         Player player = detachedPlayer();
+        if (testPaperDirectAfterInvseeVeto)
+            originalDetachedPaperWriter = player;
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
 
         // Keep hotbar selected mainhand (slot 0) unchanged across the grant.
@@ -475,7 +485,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 }
             }, this);
         }
-        if (vetoInvsee || vetoAndDurableAck) {
+        if (vetoInvsee || vetoAndDurableAck || testPaperDirectAfterInvseeVeto) {
             // Test-only cooperative barrier: InvSee++ notifies before the
             // fake CraftPlayer loads/commits another offline UUID.dat.
             Bukkit.getPluginManager().registerEvents(new Listener() {
@@ -538,11 +548,15 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                         throw new IllegalStateException(
                                                                 "First already-admitted InvSee save was not completed");
                                                     verifyAlreadyAdmittedWriterThenDenyNext(api, inventory);
-                                                } else if (vetoInvsee || vetoAndDurableAck) {
+                                                } else if (vetoInvsee || vetoAndDurableAck
+                                                        || testPaperDirectAfterInvseeVeto) {
                                                     if (saved == null || saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "InvSee++ did not acknowledge cancelled save");
-                                                    verifyCancelledWriterLeavesProofIntact();
+                                                    if (testPaperDirectAfterInvseeVeto)
+                                                        verifyPaperDirectWriterBypassesInvseeEvent();
+                                                    else
+                                                        verifyCancelledWriterLeavesProofIntact();
                                                 } else {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
@@ -728,6 +742,104 @@ public final class InvseeWriterProbe extends JavaPlugin {
                         fail(error);
                     }
                 }, 2L));
+    }
+
+    /**
+     * NEGATIVE actual-Paper test: rejecting every new InvSee++ save event
+     * does not interpose on Bukkit's native Player.saveData() entrypoint.
+     * The retained detached CraftPlayer is the SAME original instance that
+     * produced the authentic signed coin + receipt in UUID.dat.
+     */
+    private void verifyPaperDirectWriterBypassesInvseeEvent() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testPaperDirectAfterInvseeVeto || vetoedSaveEvents.get() != 1
+                || originalDetachedPaperWriter == null
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("InvSee event veto not verified before Paper direct save");
+        var before = SavedGrantDeliveryFileReadback.verify(
+                discover(), ledger, ID, staged, priorRoot,
+                MAX_COMPRESSED, MAX_INFLATED);
+        if (!BigInteger.valueOf(5000).equals(before.matchedMonetaryValue())
+                || before.receipt().completedSequence() != grant.sequence())
+            throw new IllegalStateException("Missing original saved currency before direct Paper writer");
+        getLogger().info("PAPER_A02_INVSEE_VETO_FIRST_REAL_SAVE_CANCELLED_5000C_VALID");
+
+        Player writer = originalDetachedPaperWriter;
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        ItemStack[] originalStorage = writer.getInventory().getStorageContents();
+        if (originalStorage.length != PaperGrantInventorySlotPlan.STORAGE_SLOTS
+                || codec.identify(originalStorage[1]).orElse(null)
+                    != CoinDenomination.FIVE_THOUSAND
+                || originalStorage[0] == null
+                || originalStorage[0].getType() != Material.STONE)
+            throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
+        writer.getInventory().setItem(1, null);
+        // Real Paper's direct save path, NOT an InvSee API request.
+        writer.saveData();
+        if (vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("Paper.saveData unexpectedly fired InvSee save event");
+
+        Map<String, Object> after = saved();
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after)))
+            throw new IllegalStateException("Direct Paper save did not replace saved monetary state");
+        GrantReceiptState savedReceipt = SavedGrantReceiptNbt.readAndVerify(after, ledger, ID);
+        if (savedReceipt.active()
+                || savedReceipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Paper direct save changed receipt or issued false ACK");
+        if (!(after.get("Inventory") instanceof java.util.List<?> inventory)
+                || inventory.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number index
+                    && index.intValue() == 0))
+            throw new IllegalStateException("Paper direct save lost unrelated STONE");
+        boolean rejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            rejected = true;
+        }
+        if (!rejected)
+            throw new IllegalStateException("Fresh grant proof approved direct Paper coin loss");
+        getLogger().info("PAPER_A02_NATIVE_PLAYER_SAVEDATA_DID_NOT_INVOKE_INVSEE_VETO");
+        getLogger().info("PAPER_A02_NATIVE_PLAYER_SAVEDATA_ERASED_5000C_PRESERVED_RECEIPT_STONE");
+        getLogger().info("PAPER_A02_NATIVE_WRITER_FRESH_PROOF_REJECTED_LEDGER_PENDING");
+        // Evidence must survive abrupt JVM termination, not just memory.
+        forceActualPlayerdataAndContainingDirectory();
+        if (vetoedSaveEvents.get() != 1 || !BigInteger.ZERO.equals(totalSavedMoney(saved())))
+            throw new IllegalStateException("Direct Paper source changed before abrupt halt");
+        getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_FSYNC_COMPLETE_ABRUPT_HALT");
+        Runtime.getRuntime().halt(141);
+        throw new AssertionError("Paper direct save halt returned");
+    }
+
+    /** Cold Paper JVM must observe the same actual unACKed, coinless file. */
+    private void verifyPaperDirectAfterHalt() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !recoverPaperDirectAfterHalt)
+            throw new IllegalStateException("Invalid native-save cold-recovery probe");
+        GrantLedger reopened = actualProductLedger();
+        if (reopened.pending(ID).size() != 1
+                || reopened.historySnapshot().size() != 1
+                || reopened.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Original unACKed reservation was lost after direct save");
+        Map<String, Object> after = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(after, reopened, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after))
+                || receipt.active() || receipt.completedSequence() != 1
+                || !(after.get("Inventory") instanceof java.util.List<?> inventory)
+                || inventory.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))))
+            throw new IllegalStateException("Native Paper saved overwrite not replayed after cold restart");
+        getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_COLD_RESTART_COINLESS_RECEIPT_PENDING");
+        getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_GUARD_STILL_DEFAULT_DENY");
+        Bukkit.shutdown();
     }
 
     /** Lock the OLD target inode, without changing playerdata. */
