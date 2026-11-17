@@ -12,6 +12,8 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/468
   - https://github.com/surumeneco/SimpleCoins/pull/473
   - https://github.com/surumeneco/SimpleCoins/pull/480
+  - https://github.com/surumeneco/SimpleCoins/pull/499
+  - https://github.com/surumeneco/SimpleCoins/pull/500
 decision_ref: ''
 refs:
   - simplecoins.grants.pi.delivery
@@ -68,3 +70,13 @@ language: ja
 **技術上の重要な不足**：保存済playerdataの一度の読戻し・内容SHA/ctime証明が成功しても、その直後から永続ACKまで無通知の外部writerが変更できれば、古い受領/貨幣を根拠にACKしてしまう競合を排除できない。従ってTCEの`入力.保存世代証拠有効`を、検査瞬間だけの整合として真とみなさない。保護範囲と永続化の保証を別途選定・実証する必要がある。現行の読取専用ブリッジだけではG3の製品配布サービスを安全に有効化できない。
 
 実Paperで`CraftPlayer.saveData()`が成功値なしで戻り、保存無効・ファイル書込み失敗を黙殺し得ることを既存CIは確認した。`GrantLedger.acknowledge(grant,seq)`はディスク上の現物証拠を引数に要求しない。このProcessは配布サービスに必要な保存証拠を規範候補として記述するが、`fsync`/OS電源断の保証境界、同時接続・外部Pluginの変更とジャーナル整合は未決であり、正式なConfirmedではない。
+
+## 既入場writerの排出が必要な保存世代証拠（技術観測・Draft）
+
+[#499](https://github.com/surumeneco/SimpleCoins/pull/499)は、協調writerの入場許可→新規writer受付拒否→**既入場writer全員の排出完了**→本物の圧縮playerdata保存・file/parent fsync→本物の保存済貨幣+receipt読戻し→`GrantLedger`永続ACKまで排他を保持し、ACK後にだけ明示再開する**テスト専用**プロトコルをJUnitで検証した。これは実Paper保存/外部Plugin writerに配線していない。
+
+[#500](https://github.com/surumeneco/SimpleCoins/pull/500)では、**実配布InvSee++ 0.31.22＋公式Paper 26.2**で、初回`SpectatorInventorySaveEvent`を許可したMONITOR時点で新規拒否を開始しても、通過済みの初回保存が後から完了し、正規5000C現物だけが`UUID.dat`から消え、完了receiptと未ACK台帳が残ることを実証。2回目の保存は拒否される。後から登録した拒否は、既入場writerの書込みを遡及的に取り消せない。**この反例で「新規拒否開始＝writer排出済」とする方式を棄却**する。
+
+したがって、`観測.プレイヤーデータ正本`や`観測.物理貨幣と受領証明`は、一度のファイル検査だけでなく「全当該writerが入場前から追跡され、拒否開始後には既入場処理がすべて終了し、その状態を**最終ACK永続化まで**維持」の実装可能な環境前提が必要。イベントに通知せず直接書換えるPlugin・Paper保存・外部ファイル操作の存在下でその前提が不明なら、`保存世代証拠有効`を真とみなさず未ACK/入室拒否を保つ。後日正常に取得した貨幣が移動することは許容し、発行済スロットを永久固定しない。
+
+**技術的な未決**：全writerの列挙/排他の実装方法、旧writer待ちの上限・タイムアウト時の停止、main-thread/asyncのdeadlock回避、Crash後の安全な再開、OS電源断での保存/ACK同時耐久性。この節は承認済みの正規貨幣配布要件に基づく**設計候補と実測**であり、AIが正規CAT Confirmedを付与したものではない。

@@ -50,6 +50,7 @@ language: ja
 | r7 | クラッシュ復旧 | `入力.予約あり == 真 かつ 入力.未ack == 真 かつ 入力.保存済み現物受領対 == 偽 かつ 入力.予約全額受領済 == 真 かつ 入力.保存世代証拠有効 == 真 かつ 入力.他収納保全 == 真 かつ 入力.矛盾あり == 偽` | 1 | `出力.ack許可 = 偽; 出力.予約維持 = 真; 出力.異常遮断 = 真` |
 
 ## 反例・未決
+- **イベント拒否開始と既入場writer完了は異なる**：[#499](https://github.com/surumeneco/SimpleCoins/pull/499)の`closeAndDrain()` JUnitは、既存permitが残る間は排他完了とせず、全排出→保存→fsync→現物+receipt照合→ACKまで新規writer拒否を維持する限定モデルを検証。[#500](https://github.com/surumeneco/SimpleCoins/pull/500)は実Paper/InvSee++で、初回保存イベントを許可した直後に新規拒否へ移行しても、初回の後続`saveData`が5000C貨幣を消し完了receiptを残す反例、後続2回目の保存だけを拒否できる事実を確認。したがって**排出未完**は`入力.保存世代証拠有効 == 偽`であり、`v2/r2`に振り分けてACK禁止・予約維持・異常遮断とする。新規拒否開始だけを根拠に`v0/r0`を選択しない。永久的な元スロット固定は採用しない。
 - **実Paperの他収納等価性**：[PR #480](https://github.com/surumeneco/SimpleCoins/pull/480)は`equipment`欠損→空Compoundという構造的差のみで他収納保全を偽と判定する既存実装の反例。実装上の修正候補は`equipment`の空/欠損限定同値化であり、同値化が安全と立証されたときには`入力.他収納保全=真`へ写像する。非空の装備/PDC/異常型を広く同等視しない。これは**PI入力写像の未承認検討**で、24分岐自体と`網羅要求: 部分`を変更しない。
 
 - 実Paperの合成NMS Player保存、保存無効とIOException黙殺、物理貨幣/PDCの単一保存、在庫満杯・他収納保全、未ack SIGKILL後の次起動読み戻しとack回復は [#434](https://github.com/surumeneco/SimpleCoins/pull/434) / [#437](https://github.com/surumeneco/SimpleCoins/pull/437) に証拠がある。実ネットワークログイン・切断・OS電源断ではない。
