@@ -626,6 +626,27 @@ public final class StationGuardProbe extends JavaPlugin {
                         mcType, connectionType, serverPlayerType, cookieType)
                         .newInstance(mc, connection, handlePlayer, cookie);
                 playerConnection.set(handlePlayer, networkHandler);
+                // Paper's actual Player.isImmobile first checks Entity.valid.
+                // Detached synthetic ServerPlayer is never registered with
+                // the world, so its valid flag remains false. This flag is
+                // changed ONLY on an isolated fake player; no real login.
+                java.lang.reflect.Field validFlag = null;
+                Class<?> searchOwner = handlePlayer.getClass();
+                while (searchOwner != null && validFlag == null) {
+                    try { validFlag = searchOwner.getDeclaredField("valid"); }
+                    catch (NoSuchFieldException ignored) {
+                        searchOwner = searchOwner.getSuperclass();
+                    }
+                }
+                if (validFlag == null)
+                    throw new IllegalStateException(
+                            "No actual Paper Player/Entity valid field");
+                validFlag.setAccessible(true);
+                boolean originallyValid = validFlag.getBoolean(handlePlayer);
+                validFlag.setBoolean(handlePlayer, true);
+                getLogger().info("A12_PACKET_HANDLER_DETACHED_ENTITY_VALIDITY"
+                        + " initiallyValid=" + originallyValid
+                        + " syntheticValid=true playerOnline=" + detached.isOnline());
                 // The isolated Connection has no channel, so isDisconnected()
                 // returns true except during ServerPlayer.joining. Use this
                 // exact NMS transient state for an in-process handler probe;
