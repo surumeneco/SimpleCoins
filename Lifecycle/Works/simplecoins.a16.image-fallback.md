@@ -36,7 +36,8 @@ spec_status: confirmed
 ## Technologies
 | Technology |
 | --- |
-| Java 25; JUnit 5; Paper 26.2; CAT-TDD JUnit renderer (`develop` fd3f5c7); JUnit 5; JE/BE pack archives |
+| Java |
+| JUnit |
 
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
@@ -77,6 +78,7 @@ spec_status: confirmed
 - Display name alone changes without matching PNG: use denomination-specific built-in standard image and generate JE/BE candidate archives successfully; do not create an unwanted `New Name.png` file.
 - Exactly one matching valid PNG: use it. Multiple normalized matches or malformed candidate: reject without replacing the archives with an unknown candidate or altering existing images.
 - Existing denomination-fixed PDC/item_model and the independent default-deny admission remain unaffected.
-- CAT-TDD upstream PR #101/#102 implemented a genuine bounded JUnit renderer. Four independently selected source-derived model cases have been emitted into the `generated/` test namespace, with a separate fixture driver that inspects actual JE+BE bytes rather than guessing the expected outcome. The generated tests are external verification artifacts, **not** evidence that `queue-state` has advanced or that all normative Red/Green and implementation-conformance Gates passed.
+- Implementation environment: Java 25, JUnit Jupiter, Paper 26.2, JE/BE pack archives. The `Technologies` table above declares only technologies supported by the current CAT routing; it does not silently elevate these product constraints to separate Process behavior.
+- CAT-TDD upstream PR #101/#102 provide the bounded JUnit renderer. Four independently selected source-derived model cases were emitted in `generated/`, with a separate driver observing real JE/BE image bytes. The tests alone do not attest Queue or implementation-conformance status; verify the script-owned Green receipts and Queue for the exact source revision.
 - Real JUnit CI must observe `case.s3` expected Red on unchanged pre-PR product code, then Green with the proposed source, and all four cases with `gradle test`. Preserve the exact generated test source and all historical model/vectors and decision provenance. Do not modify generated oracles to satisfy implementation.
 - Run formal CAT Queue state transitions and script-owned Gates separately; pre-existing cases s0–s2 already pass pre-change, so do not fake expected Red failures or improperly mark them done. Deployment/admission remain denied.
