@@ -82,14 +82,6 @@ jobs:
           ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
           path: cat-tdd-fixed
           persist-credentials: false
-      - name: Diagnose real JUnit filtered execution and XML path
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "Gradle executable: $(command -v gradle)"
-          gradle --no-daemon test --tests co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase270ea3584cb1Test
-          find build/test-results/test -maxdepth 2 -type f -name '*.xml' -print | sort | head -30
-          test -s build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase270ea3584cb1Test.xml
       - name: Canonical CAT JUnit Green receipts and Queue-state
         shell: bash
         run: |
