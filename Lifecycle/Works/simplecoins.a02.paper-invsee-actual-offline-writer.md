@@ -49,7 +49,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md;tests/paper-invsee-writer-probe/build.gradle.kts;tests/paper-invsee-writer-probe/plugin.yml;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml | — | tests/paper-invsee-writer-probe/build.gradle.kts;tests/paper-invsee-writer-probe/plugin.yml;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md;tests/paper-invsee-writer-probe/build.gradle.kts;tests/paper-invsee-writer-probe/settings.gradle.kts;tests/paper-invsee-writer-probe/plugin.yml;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml | — | tests/paper-invsee-writer-probe/build.gradle.kts;tests/paper-invsee-writer-probe/settings.gradle.kts;tests/paper-invsee-writer-probe/plugin.yml;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml |
 
 ## Checks
 
