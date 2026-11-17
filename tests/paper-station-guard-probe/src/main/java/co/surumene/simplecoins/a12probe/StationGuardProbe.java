@@ -134,6 +134,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " physicalConsumption=false");
         verifyNativeMerchantOffer(registered.getFirst(), codec, money);
         verifyNativeCartographyResult(codec, money, detached);
+        characterizePacketClickEntryPoints();
     }
 
     /**
@@ -225,8 +226,15 @@ public final class StationGuardProbe extends JavaPlugin {
                 Math.min(world.getMaxHeight() - 4,
                         world.getHighestBlockYAt(x, z) + 4));
         Block block = world.getBlockAt(x, y, z);
+        // Terrain/foliage can exceed the HeightMap position by four blocks.
+        // This fixture owns a disposable world: find a true air position
+        // instead of assuming a fixed offset is unoccupied.
+        while (!block.getType().isAir() && y + 1 < world.getMaxHeight() - 1) {
+            block = world.getBlockAt(x, ++y, z);
+        }
         if (!block.getType().isAir())
-            throw new IllegalStateException("Disposable NMS cartography location not empty");
+            throw new IllegalStateException("No free disposable NMS cartography location");
+        getLogger().info("A12_NMS_CARTOGRAPHY_STATION_AIR_POSITION y=" + y);
 
         // Access needs an actual world/position to resolve the real map data.
         Class<?> nmsInventory = Class.forName("net.minecraft.world.entity.player.Inventory");
@@ -285,6 +293,8 @@ public final class StationGuardProbe extends JavaPlugin {
                     playerInventory, access, playerHandle, filledMap, sourceCoin, codec);
             verifyNativeCartographyDirectClick(ctor, getSlot, nmsConvert,
                     bukkitConvert, access, filledMap, sourceCoin, codec);
+            verifyServerHandlerPacketClick(ctor, getSlot, nmsConvert,
+                    bukkitConvert, access, block, filledMap, sourceCoin, codec);
             getLogger().info("A12_NMS_CARTOGRAPHY_NATIVE_RESULT_COIN_SECOND"
                     + " output=" + coinSecond
                     + " detachedOnly=true actualClick=false physicalConsumption=false");
@@ -467,6 +477,350 @@ public final class StationGuardProbe extends JavaPlugin {
                 + " totalInventoryClicks=" + clickEvents.get()
                 + " totalCartographyEvents=" + cartographyEvents.get()
                 + " sourceCoinIntact=true networkPacket=false");
+    }
+
+    /**
+     * Exercise the real Paper server packet-handler method, but without a
+     * socket or admitted user. This is NOT a network client test and must
+     * not be mistaken for a fully connected player transaction.
+     */
+    private void verifyServerHandlerPacketClick(
+            Constructor<?> cartographyCtor, Method getSlot, Method toNms,
+            Method toBukkit, Object access, Block stationBlock,
+            ItemStack filledMap, ItemStack sourceCoin, CoinItemCodec codec)
+            throws ReflectiveOperationException {
+        Class<?> mcType = Class.forName("net.minecraft.server.MinecraftServer");
+        Object mc = Bukkit.getServer().getClass().getMethod("getServer")
+                .invoke(Bukkit.getServer());
+        Class<?> serverPlayerType = Class.forName(
+                "net.minecraft.server.level.ServerPlayer");
+        Class<?> basePlayerType = Class.forName(
+                "net.minecraft.world.entity.player.Player");
+        java.nio.file.Path basePlayerDump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/world/entity/player/Player.class");
+        try (java.io.InputStream code = basePlayerType.getResourceAsStream(
+                "/net/minecraft/world/entity/player/Player.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot read runtime NMS Player superclass");
+            java.nio.file.Files.createDirectories(basePlayerDump.getParent());
+            java.nio.file.Files.copy(code, basePlayerDump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException("Cannot preserve Player superclass", readFailure);
+        }
+        // Retain exact runtime ServerPlayer implementation for the first
+        // isImmobile branch in the actual handler, not mapping-version guesses.
+        java.nio.file.Path playerDump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/server/level/ServerPlayer.class");
+        try (java.io.InputStream code = serverPlayerType.getResourceAsStream(
+                "/net/minecraft/server/level/ServerPlayer.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot read runtime ServerPlayer bytecode");
+            java.nio.file.Files.createDirectories(playerDump.getParent());
+            java.nio.file.Files.copy(code, playerDump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException("Cannot preserve actual ServerPlayer class", readFailure);
+        }
+        Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
+        Class<?> packetFlowType = Class.forName(
+                "net.minecraft.network.protocol.PacketFlow");
+        Class<?> connectionType = Class.forName("net.minecraft.network.Connection");
+        Class<?> handlerType = Class.forName(
+                "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        // Capture exact runtime bytecode for deterministic investigation of
+        // handler early-return conditions. Disposable Paper CI only.
+        java.nio.file.Path dump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/server/network/"
+                + "ServerGamePacketListenerImpl.class");
+        try (java.io.InputStream code = handlerType.getResourceAsStream(
+                "/net/minecraft/server/network/ServerGamePacketListenerImpl.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot load runtime Paper handler bytecode resource");
+            java.nio.file.Files.createDirectories(dump.getParent());
+            java.nio.file.Files.copy(code, dump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException(
+                    "Cannot preserve real PacketListener bytecode for diagnosis", readFailure);
+        }
+        Class<?> cookieType = Class.forName(
+                "net.minecraft.server.network.CommonListenerCookie");
+        Class<?> inputType = Class.forName(
+                "net.minecraft.world.inventory.ContainerInput");
+        Class<?> packetType = Class.forName(
+                "net.minecraft.network.protocol.game.ServerboundContainerClickPacket");
+        Class<?> hashedType = Class.forName("net.minecraft.network.HashedStack");
+        Class<?> fastMapType = Class.forName(
+                "it.unimi.dsi.fastutil.ints.Int2ObjectMap");
+        Class<?> nmsStackType = Class.forName("net.minecraft.world.item.ItemStack");
+        Class<?> menuType = Class.forName(
+                "net.minecraft.world.inventory.AbstractContainerMenu");
+        Class<?> nmsPlayerType = Class.forName(
+                "net.minecraft.world.entity.player.Player");
+        Class<?> slotType = Class.forName("net.minecraft.world.inventory.Slot");
+        Method slotSet = slotType.getMethod("set", nmsStackType);
+        Method slotGet = slotType.getMethod("getItem");
+        Method count = nmsStackType.getMethod("getCount");
+        Method handle = handlerType.getMethod("handleContainerClick", packetType);
+        Constructor<?> packetCtor = packetType.getConstructor(int.class,
+                int.class, short.class, byte.class, inputType, fastMapType, hashedType);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object pickup = Enum.valueOf((Class<? extends Enum>) inputType, "PICKUP");
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object serverbound = Enum.valueOf((Class<? extends Enum>) packetFlowType, "SERVERBOUND");
+        Object emptyHash = hashedType.getField("EMPTY").get(null);
+        java.lang.reflect.Field activeMenu = nmsPlayerType.getField("containerMenu");
+        java.lang.reflect.Field playerConnection = serverPlayerType.getField("connection");
+        AtomicInteger observedClicks = new AtomicInteger();
+        AtomicInteger observedCartography = new AtomicInteger();
+        AtomicInteger rejectedMoney = new AtomicInteger();
+
+        Listener temporaryGuard = new Listener() {
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            public void protect(InventoryClickEvent event) {
+                if (event.getRawSlot() != 2
+                        || event.getView().getType() != InventoryType.CARTOGRAPHY)
+                    return;
+                ItemStack input = event.getView().getTopInventory().getItem(1);
+                if (codec.hasCoinMarker(input)) {
+                    event.setCancelled(true);
+                    rejectedMoney.incrementAndGet();
+                }
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeClick(InventoryClickEvent event) {
+                if (event.getRawSlot() == 2
+                        && event.getView().getType() == InventoryType.CARTOGRAPHY)
+                    observedClicks.incrementAndGet();
+            }
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void observeCartography(CartographyItemEvent event) {
+                if (event.getRawSlot() == 2)
+                    observedCartography.incrementAndGet();
+            }
+        };
+        Bukkit.getPluginManager().registerEvents(temporaryGuard, this);
+        try {
+            for (int i = 0; i < 2; i++) {
+                boolean coinCase = i == 1;
+                Player detached = detachedPlayer();
+                if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+                    throw new IllegalStateException("A12 handler test player connected");
+                Object handlePlayer = detached.getClass().getMethod("getHandle")
+                        .invoke(detached);
+                // Native container validity checks distance to the station;
+                // detached ServerPlayer defaults to the far-away spawn point.
+                handlePlayer.getClass().getMethod("setPos", double.class,
+                        double.class, double.class).invoke(handlePlayer,
+                        stationBlock.getX() + 0.5, stationBlock.getY() + 0.5,
+                        stationBlock.getZ() + 0.5);
+                Object profile = handlePlayer.getClass().getMethod("getGameProfile")
+                        .invoke(handlePlayer);
+                Object cookie = cookieType
+                        .getMethod("createInitial", profileType, boolean.class)
+                        .invoke(null, profile, false);
+                Object connection = connectionType.getConstructor(packetFlowType)
+                        .newInstance(serverbound);
+                Object networkHandler = handlerType.getConstructor(
+                        mcType, connectionType, serverPlayerType, cookieType)
+                        .newInstance(mc, connection, handlePlayer, cookie);
+                playerConnection.set(handlePlayer, networkHandler);
+                // Paper's actual Player.isImmobile first checks Entity.valid.
+                // Detached synthetic ServerPlayer is never registered with
+                // the world, so its valid flag remains false. This flag is
+                // changed ONLY on an isolated fake player; no real login.
+                java.lang.reflect.Field validFlag = null;
+                Class<?> searchOwner = handlePlayer.getClass();
+                while (searchOwner != null && validFlag == null) {
+                    try { validFlag = searchOwner.getDeclaredField("valid"); }
+                    catch (NoSuchFieldException ignored) {
+                        searchOwner = searchOwner.getSuperclass();
+                    }
+                }
+                if (validFlag == null)
+                    throw new IllegalStateException(
+                            "No actual Paper Player/Entity valid field");
+                validFlag.setAccessible(true);
+                boolean originallyValid = validFlag.getBoolean(handlePlayer);
+                validFlag.setBoolean(handlePlayer, true);
+                getLogger().info("A12_PACKET_HANDLER_DETACHED_ENTITY_VALIDITY"
+                        + " initiallyValid=" + originallyValid
+                        + " syntheticValid=true playerOnline=" + detached.isOnline());
+                // The isolated Connection has no channel, so isDisconnected()
+                // returns true except during ServerPlayer.joining. Use this
+                // exact NMS transient state for an in-process handler probe;
+                // do not misrepresent it as a connected network user.
+                boolean initiallyJoining = serverPlayerType.getField("joining")
+                        .getBoolean(handlePlayer);
+                serverPlayerType.getField("joining").setBoolean(handlePlayer, true);
+                boolean immobileAfter = (boolean) serverPlayerType.getMethod("isImmobile")
+                        .invoke(handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE"
+                        + " initiallyJoining=" + initiallyJoining
+                        + " joining=true immobile=" + immobileAfter
+                        + " channelConnected=false actualClient=false");
+                for (String stateCheck : new String[]{"isAlive", "isDeadOrDying",
+                        "isRemoved", "isSleeping", "isSpectator", "isImmobile"}) {
+                    try {
+                        Object state = handlePlayer.getClass().getMethod(stateCheck)
+                                .invoke(handlePlayer);
+                        getLogger().info("A12_PACKET_HANDLER_PLAYER_STATE " + stateCheck
+                                + "=" + state);
+                    } catch (NoSuchMethodException unavailable) {
+                        getLogger().info("A12_PACKET_HANDLER_PLAYER_STATE "
+                                + stateCheck + "=method-absent");
+                    }
+                }
+                if (immobileAfter)
+                    throw new IllegalStateException(
+                            "Detached player remains immobile despite native joining state");
+
+                Object inventory = handlePlayer.getClass().getMethod("getInventory")
+                        .invoke(handlePlayer);
+                Object menu = cartographyCtor.newInstance(150 + i, inventory, access);
+                activeMenu.set(handlePlayer, menu);
+                Object first = getSlot.invoke(menu, 0);
+                Object second = getSlot.invoke(menu, 1);
+                Object result = getSlot.invoke(menu, 2);
+                slotSet.invoke(first, toNms.invoke(null, filledMap));
+                slotSet.invoke(second, toNms.invoke(null, coinCase
+                        ? sourceCoin.clone() : new ItemStack(Material.PAPER, 1)));
+                ItemStack resultStack = (ItemStack) toBukkit.invoke(null,
+                        slotGet.invoke(result));
+                if (resultStack.getType() != Material.FILLED_MAP)
+                    throw new IllegalStateException("Packet handler test has no result");
+                int before = ((Number) count.invoke(slotGet.invoke(second))).intValue();
+                int clickBefore = observedClicks.get();
+                int cartoBefore = observedCartography.get();
+                int blockBefore = rejectedMoney.get();
+                int id = ((Number) menuType.getField("containerId").get(menu)).intValue();
+                int state = ((Number) menuType.getMethod("getStateId")
+                        .invoke(menu)).intValue();
+                Object changed = Class.forName(
+                        "it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap")
+                        .getConstructor().newInstance();
+                Object packet = packetCtor.newInstance(id, state, (short) 2,
+                        (byte) 0, pickup, changed, emptyHash);
+                boolean valid = (boolean) menuType.getMethod("stillValid", nmsPlayerType)
+                        .invoke(menu, handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_MENU_VALIDITY valid=" + valid
+                        + " station=" + stationBlock.getLocation().toVector());
+                boolean immobile = (boolean) serverPlayerType.getMethod("isImmobile")
+                        .invoke(handlePlayer);
+                getLogger().info("A12_PACKET_HANDLER_IMMOBILE_GATE isImmobile="
+                        + immobile + " playerOnline=" + detached.isOnline());
+
+                if (!valid) throw new IllegalStateException(
+                        "Detached player's native menu is not usable by server handler");
+                getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " container=" + id + " state=" + state
+                        + " realServerHandler=true socket=false");
+                try {
+                    handle.invoke(networkHandler, packet);
+                } catch (java.lang.reflect.InvocationTargetException thrown) {
+                    throw new IllegalStateException("NMS packet handler rejected "
+                            + (coinCase ? "coin" : "paper") + " test invocation",
+                            thrown.getCause());
+                }
+                int after = ((Number) count.invoke(slotGet.invoke(second))).intValue();
+                getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT"
+                        + " input=" + (coinCase ? "genuine5000C" : "ordinaryPAPER")
+                        + " before=" + before + " after=" + after
+                        + " inventoryEvents=" + (observedClicks.get() - clickBefore)
+                        + " cartographyEvents=" + (observedCartography.get() - cartoBefore)
+                        + " blocked=" + (rejectedMoney.get() - blockBefore)
+                        + " socket=false");
+                if (before != 1 || observedClicks.get() == clickBefore)
+                    throw new IllegalStateException(
+                            "Actual server handler did not dispatch an inventory click");
+                if (coinCase && (after != 1 || rejectedMoney.get() != blockBefore + 1))
+                    throw new IllegalStateException(
+                            "Test-only packet click guard did not preserve tagged PAPER");
+                if (!coinCase && (after != 0 || rejectedMoney.get() != blockBefore))
+                    throw new IllegalStateException(
+                            "Plain PAPER was not accepted by packet click handler");
+            }
+            getLogger().info("A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED"
+                    + " socket=false onlinePlayers=0"
+                    + " realHandler=true actualNetworkClient=false");
+        } finally {
+            HandlerList.unregisterAll(temporaryGuard);
+        }
+    }
+
+    /**
+     * Inspect the actual Paper build's packet-handler ABI before attempting a
+     * network-path experiment. This never constructs a packet, admits a player
+     * or claims that an InventoryClickEvent is dispatched.
+     */
+    private void characterizePacketClickEntryPoints() throws ReflectiveOperationException {
+        Class<?> handler = Class.forName(
+                "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        Class<?> packet = Class.forName(
+                "net.minecraft.network.protocol.game.ServerboundContainerClickPacket");
+        Class<?> nmsConnection = Class.forName("net.minecraft.network.Connection");
+        Class<?> serverPlayer = Class.forName(
+                "net.minecraft.server.level.ServerPlayer");
+        java.util.List<Method> targets = java.util.Arrays.stream(handler.getMethods())
+                .filter(method -> method.getName().equals("handleContainerClick")
+                        && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0] == packet)
+                .toList();
+        if (targets.size() != 1)
+            throw new IllegalStateException(
+                    "NMS packet handler entrypoint is not unique: " + targets);
+        getLogger().info("A12_PACKET_PATH_HANDLER " + targets.getFirst().toGenericString());
+        for (Constructor<?> ctor : handler.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_HANDLER_CONSTRUCTOR " + ctor.toGenericString());
+        for (Constructor<?> ctor : packet.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_PACKET_CONSTRUCTOR " + ctor.toGenericString());
+        for (Constructor<?> ctor : nmsConnection.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_CONNECTION_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : serverPlayer.getFields()) {
+            if (field.getType() == handler || field.getType() == nmsConnection
+                    || field.getName().toLowerCase(java.util.Locale.ROOT).contains("containermenu"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_FIELD " + field.toGenericString());
+        }
+        Class<?> cookie = Class.forName(
+                "net.minecraft.server.network.CommonListenerCookie");
+        for (Constructor<?> ctor : cookie.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_COOKIE_CONSTRUCTOR " + ctor.toGenericString());
+        for (Method method : cookie.getDeclaredMethods()) {
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                    && (method.getName().toLowerCase(java.util.Locale.ROOT).contains("create")
+                        || method.getName().toLowerCase(java.util.Locale.ROOT).contains("initial")))
+                getLogger().info("A12_PACKET_PATH_COOKIE_FACTORY " + method.toGenericString());
+        }
+        Class<?> containerInput = Class.forName("net.minecraft.world.inventory.ContainerInput");
+        getLogger().info("A12_PACKET_PATH_CONTAINER_INPUT type=" + containerInput.getName()
+                + " isEnum=" + containerInput.isEnum()
+                + " enumConstants=" + java.util.Arrays.toString(containerInput.getEnumConstants()));
+        for (Constructor<?> ctor : containerInput.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_INPUT_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : containerInput.getDeclaredFields())
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_INPUT_STATIC " + field.toGenericString());
+        Class<?> hashed = Class.forName("net.minecraft.network.HashedStack");
+        for (Constructor<?> ctor : hashed.getDeclaredConstructors())
+            getLogger().info("A12_PACKET_PATH_HASHED_CONSTRUCTOR " + ctor.toGenericString());
+        for (java.lang.reflect.Field field : hashed.getDeclaredFields())
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_HASHED_STATIC " + field.toGenericString());
+        for (Method method : hashed.getDeclaredMethods())
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers()))
+                getLogger().info("A12_PACKET_PATH_HASHED_FACTORY " + method.toGenericString());
+        for (java.lang.reflect.Field field : serverPlayer.getDeclaredFields())
+            if (field.getName().toLowerCase(java.util.Locale.ROOT).contains("connection")
+                    || field.getName().toLowerCase(java.util.Locale.ROOT).contains("container"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_DECLARED_FIELD " + field.toGenericString());
+        for (Method method : serverPlayer.getMethods())
+            if (method.getName().equals("initMenu"))
+                getLogger().info("A12_PACKET_PATH_PLAYER_INIT_MENU " + method.toGenericString());
+        getLogger().info("A12_PACKET_PATH_ABI_INSPECTED entrypoints=1"
+                + " eventDispatch=unverified networkPacketSent=false"
+                + " detachedOnly=true");
     }
 
     /** A proxy view is sufficient for a deliberately synthetic event. */
