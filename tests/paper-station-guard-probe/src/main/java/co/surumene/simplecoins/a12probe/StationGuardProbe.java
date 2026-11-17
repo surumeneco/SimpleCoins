@@ -493,6 +493,22 @@ public final class StationGuardProbe extends JavaPlugin {
         Class<?> connectionType = Class.forName("net.minecraft.network.Connection");
         Class<?> handlerType = Class.forName(
                 "net.minecraft.server.network.ServerGamePacketListenerImpl");
+        // Capture exact runtime bytecode for deterministic investigation of
+        // handler early-return conditions. Disposable Paper CI only.
+        java.nio.file.Path dump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/server/network/"
+                + "ServerGamePacketListenerImpl.class");
+        try (java.io.InputStream code = handlerType.getResourceAsStream(
+                "/net/minecraft/server/network/ServerGamePacketListenerImpl.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot load runtime Paper handler bytecode resource");
+            java.nio.file.Files.createDirectories(dump.getParent());
+            java.nio.file.Files.copy(code, dump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException(
+                    "Cannot preserve real PacketListener bytecode for diagnosis", readFailure);
+        }
         Class<?> cookieType = Class.forName(
                 "net.minecraft.server.network.CommonListenerCookie");
         Class<?> inputType = Class.forName(
