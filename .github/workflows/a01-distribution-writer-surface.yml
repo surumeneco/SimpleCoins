@@ -56,7 +56,7 @@ jobs:
           python tools/audit_writer_surface.py \
             --plugins pinned-server/plugins \
             --output writer-surface-report.json \
-            --max-examples 8 \
+            --max-examples 20 \
             --require WonderfulCoreLibrary-0.1.0.jar \
             --require WhatAWonderfulChicken-2.1.0.jar \
             --require WhatAWonderfulWolf-1.1.1.jar \
@@ -72,6 +72,19 @@ jobs:
           for group in groups:
               print('SURFACE',group,'='.join(['',str(sum(j['categories'][group] for j in report['jars']))]))
           assert sum(j['classes'] for j in report['jars']) > 0
+          # Focus on packaged code paths relevant to offline playerdata and
+          # plugin-owned inventory changes. These are SYMBOLIC references.
+          interesting = {'InvSee++.jar', 'WhatAWonderfulChicken-2.1.0.jar',
+                         'WhatAWonderfulWolf-1.1.1.jar', 'blocklocker-1.15.jar'}
+          for jar in report['jars']:
+              if jar['jar'] not in interesting:
+                  continue
+              print('AUDIT_FOCUS', jar['jar'], 'sha256=', jar['sha256'])
+              for cat in ['PLAYERDATA_SAVE', 'INVENTORY_WRITE', 'PDC_WRITE',
+                          'STORED_FILE_WRITE', 'ASYNC_ENTRY']:
+                  for ref in jar['examples'].get(cat, []):
+                      print('AUDIT_CALLREF', jar['jar'], cat,
+                            ref['class'], ref['owner'], ref['method'])
           print('PINNED_DISTRIBUTION_STATIC_WRITER_SURFACE_OBSERVED_NOT_CLOSED')
           PY
       - name: Save exact per-JAR SHA256 writer reference evidence
