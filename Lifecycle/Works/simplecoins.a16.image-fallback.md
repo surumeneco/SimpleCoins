@@ -36,16 +36,21 @@ spec_status: confirmed
 ## Technologies
 | Technology |
 | --- |
-| Java 25; JUnit 5; Paper 26.2; pinned CAT 896cae83; JE/BE pack archives |
+| Java |
+| JUnit |
 
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a16.image-fallback.md;docs/cat/confirmed/a16-image-fallback-*.md;.github/workflows/a16-image-fallback-confirmed.yml;src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java;src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java | src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java | src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a16.image-fallback.md;Lifecycle/CAT/Reviews/simplecoins.a16.image-fallback-conditional.md;docs/cat/confirmed/a16-image-fallback-*.md;.github/workflows/a16-image-fallback-confirmed.yml;src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java;src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java;src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;.github/workflows/a16-cat-junit-proof.yml | src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java | src/test/java/co/surumene/simplecoins/domain/JavaCurrencyPackTest.java;src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;.github/workflows/a16-cat-junit-proof.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+| green-s0 | green | junit | @repo:SimpleCoins | bash -c 'gradle --no-daemon :test --tests co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase270ea3584cb1Test && cp build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase270ea3584cb1Test.xml {report}' | case.s0 | src/test/java/co/surumene/simplecoins/domain/generated/GeneratedA16ImageSelectionCase270ea3584cb1Test.java | — | 600 |
+| green-s1 | green | junit | @repo:SimpleCoins | bash -c 'gradle --no-daemon :test --tests co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase34c89fbe779cTest && cp build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase34c89fbe779cTest.xml {report}' | case.s1 | src/test/java/co/surumene/simplecoins/domain/generated/GeneratedA16ImageSelectionCase34c89fbe779cTest.java | — | 600 |
+| green-s2 | green | junit | @repo:SimpleCoins | bash -c 'gradle --no-daemon :test --tests co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCasee292a6c220f2Test && cp build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCasee292a6c220f2Test.xml {report}' | case.s2 | src/test/java/co/surumene/simplecoins/domain/generated/GeneratedA16ImageSelectionCasee292a6c220f2Test.java | — | 600 |
+| green-s3 | green | junit | @repo:SimpleCoins | bash -c 'gradle --no-daemon :test --tests co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test && cp build/test-results/test/TEST-co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test.xml {report}' | case.s3 | src/test/java/co/surumene/simplecoins/domain/generated/GeneratedA16ImageSelectionCase123a32c34595Test.java | — | 600 |
 
 ## Gates
 | Gate | Status | Evidence |
@@ -73,4 +78,7 @@ spec_status: confirmed
 - Display name alone changes without matching PNG: use denomination-specific built-in standard image and generate JE/BE candidate archives successfully; do not create an unwanted `New Name.png` file.
 - Exactly one matching valid PNG: use it. Multiple normalized matches or malformed candidate: reject without replacing the archives with an unknown candidate or altering existing images.
 - Existing denomination-fixed PDC/item_model and the independent default-deny admission remain unaffected.
-- Deterministic CAT model/vectors and independently observed Red/Green evidence; code edits only when the selected canonical Work Gate grants permission. Java renderer availability/limitation must be represented honestly rather than faking normative `passed`.
+- Implementation environment: Java 25, JUnit Jupiter, Paper 26.2, JE/BE pack archives. The `Technologies` table above declares only technologies supported by the current CAT routing; it does not silently elevate these product constraints to separate Process behavior.
+- CAT-TDD upstream PR #101/#102 provide the bounded JUnit renderer. Four independently selected source-derived model cases were emitted in `generated/`, with a separate driver observing real JE/BE image bytes. The tests alone do not attest Queue or implementation-conformance status; verify the script-owned Green receipts and Queue for the exact source revision.
+- Real JUnit CI must observe `case.s3` expected Red on unchanged pre-PR product code, then Green with the proposed source, and all four cases with `gradle test`. Preserve the exact generated test source and all historical model/vectors and decision provenance. Do not modify generated oracles to satisfy implementation.
+- Run formal CAT Queue state transitions and script-owned Gates separately; pre-existing cases s0–s2 already pass pre-change, so do not fake expected Red failures or improperly mark them done. Deployment/admission remain denied.

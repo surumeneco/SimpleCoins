@@ -51,12 +51,55 @@ class JavaCurrencyPackTest {
         assertEquals(9, mapping.split("\"bedrock_identifier\"").length - 1);
     }
 
-    @Test void missingRenamedImageIsRejectedWithoutPublishingOrMinting() throws Exception {
+    @Test void missingRenamedImageUsesBuiltInDenominationPngForJeAndBedrock() throws Exception {
+        Path baseline = temp.resolve("baseline");
+        JavaCurrencyPack.build(baseline, names());
+        byte[] standard = Files.readAllBytes(baseline.resolve("images/1 Coin.png"));
+
         var renamed = new EnumMap<>(names());
         renamed.put(CoinDenomination.values()[0], "First-Custom");
-        assertThrows(java.io.IOException.class,
-                () -> JavaCurrencyPack.build(temp.resolve("missing-custom"), renamed));
-        assertFalse(Files.exists(temp.resolve("missing-custom/SimpleCoins-java.zip")));
+        Path root = temp.resolve("renamed");
+        var result = JavaCurrencyPack.build(root, renamed);
+        assertFalse(Files.exists(root.resolve("images/First-Custom.png")));
+        assertFalse(Files.exists(root.resolve("images/1 Coin.png")));
+        try (ZipFile javaZip = new ZipFile(result.javaArchive().toFile());
+             ZipFile bedrockZip = new ZipFile(result.bedrockArchive().toFile())) {
+            assertArrayEquals(standard, javaZip.getInputStream(javaZip.getEntry(
+                    "assets/simplecoins/textures/item/coin_1.png")).readAllBytes());
+            assertArrayEquals(standard, bedrockZip.getInputStream(bedrockZip.getEntry(
+                    "textures/items/coin_1.png")).readAllBytes());
+            assertNotNull(javaZip.getEntry("assets/simplecoins/items/coin_1.json"));
+        }
+        assertTrue(Files.readString(result.bedrockMapping()).contains("First-Custom"));
+    }
+
+    @Test void malformedMatchingRenamedImageDoesNotSilentlyFallBack() throws Exception {
+        var renamed = new EnumMap<>(names());
+        renamed.put(CoinDenomination.values()[0], "First-Custom");
+        Path root = temp.resolve("malformed-custom");
+        Files.createDirectories(root.resolve("images"));
+        Files.write(root.resolve("images/First-Custom.png"), new byte[]{1, 2, 3, 4});
+        assertThrows(java.io.IOException.class, () -> JavaCurrencyPack.build(root, renamed));
+        assertFalse(Files.exists(root.resolve("SimpleCoins-java.zip")));
+    }
+
+    @Test void validMatchingRenamedImageOverridesBuiltInDefault() throws Exception {
+        var renamed = new EnumMap<>(names());
+        renamed.put(CoinDenomination.values()[0], "First-Custom");
+        Path root = temp.resolve("custom");
+        Files.createDirectories(root.resolve("images"));
+        // Use a valid but *different denomination* texture to detect precedence.
+        JavaCurrencyPack.build(temp.resolve("baseline"), names());
+        byte[] custom = Files.readAllBytes(temp.resolve("baseline/images/5 Coin.png"));
+        Files.write(root.resolve("images/First-Custom.png"), custom);
+        var result = JavaCurrencyPack.build(root, renamed);
+        try (ZipFile javaZip = new ZipFile(result.javaArchive().toFile());
+             ZipFile bedrockZip = new ZipFile(result.bedrockArchive().toFile())) {
+            assertArrayEquals(custom, javaZip.getInputStream(javaZip.getEntry(
+                    "assets/simplecoins/textures/item/coin_1.png")).readAllBytes());
+            assertArrayEquals(custom, bedrockZip.getInputStream(bedrockZip.getEntry(
+                    "textures/items/coin_1.png")).readAllBytes());
+        }
     }
 
     @Test void ambiguousUnderscoreAndHyphenNamesAreRejected() throws Exception {
