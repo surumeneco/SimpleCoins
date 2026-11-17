@@ -140,8 +140,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
         Player player = detachedPlayer();
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
 
-        // Save the baseline independently, with one unrelated physical item.
-        player.getInventory().setItem(9, new ItemStack(Material.STONE, 2));
+        // Keep hotbar selected mainhand (slot 0) unchanged across the grant.
+        // Paper also saves equipment.mainhand as a physical view of this slot;
+        // granting there would incorrectly change independent equipment.
+        player.getInventory().setItem(0, new ItemStack(Material.STONE, 2));
         player.saveData();
         priorRoot = saved();
         if (!BigInteger.ZERO.equals(totalSavedMoney(priorRoot)))
@@ -153,7 +155,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 GrantReceiptState.empty(), player.getInventory().getStorageContents())
                 .orElseThrow(() -> new IllegalStateException("No free real storage slot"));
         if (staged.placements().size() != 1
-                || staged.placements().getFirst().index() != 0)
+                || staged.placements().getFirst().index() != 1)
             throw new IllegalStateException("Unexpected candidate slot plan");
         ItemStack[] physical = PaperGrantInventoryMaterializer.buildCopy(
                 staged, GrantReceiptState.empty(),
@@ -197,13 +199,13 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                 MainSpectatorInventory inventory = response.getInventory();
                                 ItemStack[] storage = inventory.getStorageContents();
                                 if (storage.length != PaperGrantInventorySlotPlan.STORAGE_SLOTS
-                                        || codec.identify(storage[0]).orElse(null)
+                                        || codec.identify(storage[1]).orElse(null)
                                             != CoinDenomination.FIVE_THOUSAND
-                                        || storage[9] == null
-                                        || storage[9].getType() != Material.STONE)
+                                        || storage[0] == null
+                                        || storage[0].getType() != Material.STONE)
                                     throw new IllegalStateException(
                                             "InvSee++ read failed to capture real coin and other item");
-                                storage[0] = null;
+                                storage[1] = null;
                                 inventory.setStorageContents(storage);
                                 getLogger().info("PAPER_A02_INVSEE_REAL_OFFLINE_INVENTORY_CAPTURE_PASSED");
                                 api.saveInventory(inventory).whenComplete((saved, saveError) ->
@@ -238,7 +240,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || items.stream().noneMatch(item ->
                     item instanceof Map<?, ?> stack
                     && "minecraft:stone".equals(stack.get("id"))
-                    && stack.get("Slot") instanceof Number slot && slot.intValue() == 9))
+                    && stack.get("Slot") instanceof Number slot && slot.intValue() == 0))
             throw new IllegalStateException("InvSee++ damaged unrelated storage");
         GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(current,
                 ledger, ID);
