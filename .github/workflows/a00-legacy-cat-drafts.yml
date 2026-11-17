@@ -70,7 +70,7 @@ jobs:
           assert "  - simplecoins.paper.tce.exchange" not in exchange_pi
           wallet = paths[6].read_text(encoding="utf-8")
           for marker in ("WalletItemCodec", "WalletCrafting", "WalletMenu",
-                         "WalletTransferTransaction", "admission"):
+                         "WalletTransferTransaction", "入室ガード"):
               assert marker.lower() in wallet.lower(), marker
           assert "still-missing Paper wallet adapter" not in wallet
           print("A00_SEVEN_CAT_DRAFTS_RECONCILED_WITHOUT_NORMATIVE_PROMOTION")
