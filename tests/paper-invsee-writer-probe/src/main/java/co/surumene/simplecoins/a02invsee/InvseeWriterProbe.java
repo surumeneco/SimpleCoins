@@ -62,7 +62,9 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private final boolean vetoInvsee = Boolean.getBoolean("a02.invsee.cancel");
     private final boolean selectedMainhandProbe = Boolean.getBoolean("a02.invsee.probeSelectedMainhand");
     private final boolean durableFsyncAndHalt = Boolean.getBoolean("a02.invsee.fsyncThenHalt");
+    private final boolean syncBeforeAckHalt = Boolean.getBoolean("a02.invsee.fsyncThenHaltBeforeAck");
     private final boolean durableRecoveryCheck = Boolean.getBoolean("a02.invsee.checkAfterHalt");
+    private final boolean recoverPendingAfterHalt = Boolean.getBoolean("a02.invsee.recoverPendingAfterHalt");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
 
     @Override
@@ -74,6 +76,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
         Bukkit.getScheduler().runTaskLater(this, () -> {
             try {
                 if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
+                else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
                 else initializePhysicalProofThenInvokeActualPlugin();
             } catch (Throwable failure) {
                 fail(failure);
@@ -173,6 +176,78 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 file.getParent(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             parent.force(true);
         }
+    }
+
+    /**
+     * A separate cold JVM observes a forced playerdata save that survived
+     * WITHOUT any grant ACK. It may complete the existing journal record,
+     * but MUST NOT re-materialize the coin or save the player again.
+     */
+    private void verifyPendingAfterForcedSyncCrash() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Files.isRegularFile(dataFile(),
+                LinkOption.NOFOLLOW_LINKS) || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Recovery requires genuine isolated playerdata");
+        GrantLedger journal = actualProductLedger();
+        var pending = journal.pending(ID);
+        if (pending.size() != 1 || journal.historySnapshot().size() != 1)
+            throw new IllegalStateException("Pending single original reservation lost after crash");
+        GrantLedger.Grant original = pending.getFirst();
+        if (original.sequence() != 1 || original.amount() != 5000
+                || original.delivered()
+                || original.denomination() != CoinDenomination.FIVE_THOUSAND
+                || original.coinCount() != 1)
+            throw new IllegalStateException("Recovered original durable grant mutated");
+
+        Map<String, Object> disk = saved();
+        GrantReceiptState savedReceipt = SavedGrantReceiptNbt.readAndVerify(disk, journal, ID);
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(disk))
+                || savedReceipt.active() || savedReceipt.completedSequence() != 1)
+            throw new IllegalStateException("Recovered completed physical coin+receipt disagree");
+        Object inventory = disk.get("Inventory");
+        if (!(inventory instanceof java.util.List<?> items)
+                || items.stream().noneMatch(raw -> raw instanceof Map<?, ?> item
+                    && item.get("Slot") instanceof Number number
+                    && number.intValue() == 0
+                    && "minecraft:stone".equals(item.get("id"))))
+            throw new IllegalStateException("Unrelated player storage item lost");
+        getLogger().info("PAPER_A02_RECOVERED_SAVED_5000C_AND_RECEIPT_WITH_UNACKED_LEDGER");
+
+        // Reconstruct the EMPTY original recipient slot geometry for this
+        // isolated experiment, not a general proof of arbitrary historical
+        // partially completed grants or a production-replay design.
+        var historicalSlots = new java.util.ArrayList<String>(
+                java.util.Collections.nCopies(PaperGrantInventorySlotPlan.STORAGE_SLOTS, null));
+        historicalSlots.set(0, "original-stone-occupied");
+        PaperGrantInventorySlotPlan previous = PaperGrantInventorySlotPlan.stage(
+                journal, ID, original, GrantReceiptState.empty(),
+                new PaperGrantInventorySlotPlan.StorageSnapshot(historicalSlots))
+                .orElseThrow(() -> new IllegalStateException("Cannot reconstruct isolated baseline"));
+        if (previous.placements().size() != 1
+                || previous.placements().getFirst().index() != 1)
+            throw new IllegalStateException("Wrong physical grant destination on replay");
+        var readback = SavedGrantDeliveryReadback.verify(disk, journal, ID, previous);
+        if (!BigInteger.valueOf(5000).equals(readback.matchedMonetaryValue())
+                || readback.receipt().completedSequence() != original.sequence())
+            throw new IllegalStateException("Persisted grant evidence not authentic");
+        getLogger().info("PAPER_A02_RECOVERY_READBACK_EXISTING_PHYSICAL_COIN_NOT_REISSUED");
+
+        var savedBytesBefore = Files.readAllBytes(dataFile());
+        journal.acknowledge(original, readback.receipt().completedSequence());
+        var after = new GrantLedger(Bukkit.getPluginManager()
+                .getPlugin("SimpleCoins").getDataFolder().toPath().resolve("grants"));
+        if (after.historySnapshot().size() != 1
+                || !after.historySnapshot().getFirst().delivered()
+                || !after.pending(ID).isEmpty()
+                || !java.util.Arrays.equals(savedBytesBefore, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("ACK-only durable replay changed actual physical playerdata");
+        // Idempotent second ACK must not rewrite or duplicate physical money.
+        journal.acknowledge(original, readback.receipt().completedSequence());
+        if (!java.util.Arrays.equals(savedBytesBefore, Files.readAllBytes(dataFile()))
+                || !journal.pending(ID).isEmpty())
+            throw new IllegalStateException("Idempotent ACK reissued physical coin");
+        getLogger().info("PAPER_A02_RECOVERED_ONLY_DURABLE_ACK_WITHOUT_PLAYERDATA_WRITE");
+        getLogger().info("PAPER_A02_FSYNC_PREACK_CRASH_GUARD_REMAINS_CLOSED");
+        Bukkit.shutdown();
     }
 
     /** Cold restart of the SAME real Paper player file and product ledger. */
@@ -278,7 +353,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Real persisted proof before InvSee writer is invalid");
         verifiedSequence = proof.receipt().completedSequence();
         getLogger().info("PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED");
-        if (durableFsyncAndHalt) {
+        if (durableFsyncAndHalt || syncBeforeAckHalt) {
             forceActualPlayerdataAndContainingDirectory();
             // The file is re-verified AFTER its explicit filesystem sync.
             // A successful readback is still not a writer-epoch lease.
@@ -290,6 +365,15 @@ public final class InvseeWriterProbe extends JavaPlugin {
                     || ledger.pending(ID).size() != 1)
                 throw new IllegalStateException("Durably synced grant proof invalid before ACK");
             getLogger().info("PAPER_A02_REAL_PLAYERDATA_FILE_AND_DIRECTORY_FORCE_RETURNED");
+            if (syncBeforeAckHalt) {
+                if (ledger.pending(ID).size() != 1
+                        || ledger.historySnapshot().getFirst().delivered())
+                    throw new IllegalStateException("Before-ACK crash branch already issued ACK");
+                getLogger().info("PAPER_A02_FSYNC_COMPLETE_BEFORE_ACK_PENDING_ONE");
+                getLogger().info("PAPER_A02_ABRUPT_HALT_BEFORE_DURABLE_ACK");
+                Runtime.getRuntime().halt(138);
+                throw new AssertionError("Before-ACK halt returned");
+            }
             ledger.acknowledge(grant, durableProof.receipt().completedSequence());
             if (!ledger.pending(ID).isEmpty()
                     || !BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
