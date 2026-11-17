@@ -5,6 +5,7 @@ on:
     paths:
       - 'tests/paper-invsee-writer-probe/**'
       - 'Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-invsee-save-veto.md'
       - '.github/workflows/paper-invsee-writer-gap-probe.yml'
 permissions:
   contents: read
@@ -32,6 +33,8 @@ jobs:
           set -euo pipefail
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-invsee-actual-offline-writer.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.paper-invsee-save-veto.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -116,10 +119,48 @@ jobs:
           grep -F 'PAPER_A02_INVSEE_ACTUAL_PLUGIN_POST_PROOF_FALSE_ACK_REPRODUCED' paper-a02-invsee.log
           grep -F 'PAPER_A02_INVSEE_NO_CLIENT_NO_PRODUCTION_ISSUANCE' paper-a02-invsee.log
           echo 'PAPER_A02_PINNED_INVSEE_OFFLINE_WRITER_GAP_COUNTEREXAMPLE_PASSED'
+      - name: Second independent Paper boot proves cancellable InvSee++ writer veto
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-guarded/plugins
+          cp smoke/paper.jar smoke-guarded/paper.jar
+          cp smoke/plugins/*.jar smoke-guarded/plugins/
+          printf 'eula=true\n' > smoke-guarded/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25588\n' > smoke-guarded/server.properties
+          cd smoke-guarded
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.cancel=true -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > paper-a02-invsee-veto.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "InvSee++ save-event veto exit code $code" >&2
+            tail -200 paper-a02-invsee-veto.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' paper-a02-invsee-veto.log; then
+            tail -200 paper-a02-invsee-veto.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-invsee-veto.log
+          grep -F 'PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED' paper-a02-invsee-veto.log
+          grep -F 'PAPER_A02_INVSEE_REAL_OFFLINE_INVENTORY_CAPTURE_PASSED' paper-a02-invsee-veto.log
+          grep -F 'PAPER_A02_INVSEE_SAVE_EVENT_CANCELLED_BEFORE_FILE_WRITE' paper-a02-invsee-veto.log
+          grep -F 'PAPER_A02_INVSEE_CANCELLED_SAVE_PRESERVES_VALID_COIN_RECEIPT_PROOF' paper-a02-invsee-veto.log
+          grep -F 'PAPER_A02_INVSEE_CANCELLED_SAVE_LEAVES_LEDGER_PENDING' paper-a02-invsee-veto.log
+          if grep -Fq 'PAPER_A02_INVSEE_ACTUAL_PLUGIN_POST_PROOF_FALSE_ACK_REPRODUCED' paper-a02-invsee-veto.log; then
+            echo 'Veto path accidentally allowed the unsafe ACK path' >&2
+            exit 1
+          fi
+          echo 'PAPER_A02_REAL_INVSEE_COOPERATIVE_SAVE_EVENT_VETO_PASSED'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: paper-a02-actual-invsee-offline-writer-log
-          path: smoke/paper-a02-invsee.log
+          path: |
+            smoke/paper-a02-invsee.log
+            smoke-guarded/paper-a02-invsee-veto.log
           if-no-files-found: ignore
           retention-days: 14
