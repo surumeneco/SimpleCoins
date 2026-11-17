@@ -120,7 +120,11 @@ jobs:
               result = dict(pairs)
               assert len(pairs) == len(result)
               assert result['writerReadback'] == 'true'
-              assert result['physicalMinecraftAssetsTouched'] == 'false'
+              assert result['physicalMinecraftAssetsTouched'] == 'true'
+              assert result['onlyDisposableWorld'] == 'true'
+              assert result['actualPaperCoinPdcChecked'] == 'true'
+              assert result['realLiveCoinBefore'] == '1'
+              assert result['realLiveCoinAfter'] == '2'
               assert result['networkPlayers'] == '0'
               assert result['formalCatGate'] == 'not-run'
               for key in ('tickDelta', 'worldDelta', 'writerDelta'):
@@ -139,7 +143,13 @@ jobs:
           for state in (control, paused):
               assert int(state['writerDelta']) >= 15, \
                   ('Independent writer failed to run', state)
+              assert int(state['realLiveCoinMutationWorldTime']) >= 0
+          assert int(paused['worldBefore']) == int(paused['realLiveCoinMutationWorldTime']) == int(paused['worldAfter']), \
+              ('Real Paper Chest mutation occurred outside frozen world time', paused)
+          assert int(control['realLiveCoinMutationWorldTime']) > int(control['worldBefore']), \
+              ('Control world time did not pass during genuine Chest update', control)
           print('A01_PAPER_NO_PLAYER_PAUSE_REDUCED_WORLD_TICKS')
+          print('A01_REAL_PAPER_PDC_COIN_CHEST_MUTATED_1_TO_2_DURING_FROZEN_WORLD_TIME')
           print('A01_PAUSED_PAPER_STILL_PERMITTED_INDEPENDENT_FORCED_FILE_WRITES')
           print('A01_PAUSE_IS_NOT_GLOBAL_G0_OR_G3_WRITER_BARRIER')
           PY
