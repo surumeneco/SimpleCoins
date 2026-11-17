@@ -180,6 +180,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: a02-invsee-real-past-event-veto
-          path: |\n            smoke/*.log\n            smoke-positive/*.log
+          path: |
+            smoke/*.log
+            smoke-positive/*.log
           retention-days: 14
           if-no-files-found: ignore
