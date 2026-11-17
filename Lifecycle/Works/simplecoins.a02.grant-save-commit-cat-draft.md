@@ -30,6 +30,7 @@ spec_status: unknown
 | https://github.com/surumeneco/SimpleCoins/pull/437 |
 | https://github.com/surumeneco/SimpleCoins/pull/468 |
 | https://github.com/surumeneco/SimpleCoins/pull/473 |
+| https://github.com/surumeneco/SimpleCoins/pull/510 |
 | https://github.com/surumeneco/SimpleCoins/issues/423 |
 | https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view |
 
@@ -91,5 +92,6 @@ spec_status: unknown
 - 正式実装前に、全対象writerの明示的な入場・排出・排他保持を証明し、異常・タイムアウト・非協調writerを検出したらACK不可で停止する必要がある。既存のPaperの無人時pauseも同期タスク・実貨幣変更・独立ファイルwriterを止めないことを[#497](https://github.com/surumeneco/SimpleCoins/pull/497)/[#498](https://github.com/surumeneco/SimpleCoins/pull/498)が実証している。
 - [#502](https://github.com/surumeneco/SimpleCoins/pull/502)：実InvSee++の**既に入場済みの特定1保存Future**を待ってから、同じUUID.datの現物/receiptをsync/readbackし、ACK一回→JVM強制終了→別Paper JVMで現物5000C・receipt・delivered1/pending0を復元した。全writerドレインではなく既知Futureの正例に限定。
 - [#505](https://github.com/surumeneco/SimpleCoins/pull/505)：**InvSee++保存イベント拒否を実証した状態**から、同じ`CraftPlayer`へPaper標準`Player.saveData()`を直接行い、拒否イベントを発火せず正規5000Cを保存済み0に上書き可能。真正完了receiptと未ACK予約が残存し、fresh readbackが拒否。file/dir fsync→`Runtime.halt(141)`→別Paper JVMの復元まで実測。従って**InvSee固有イベントの一括拒否案はPaper native writerの共通排他手段にならない**。
+- [#510](https://github.com/surumeneco/SimpleCoins/pull/510)：実InvSee++の既知Futureを排出し次回InvSee保存を拒否、file/dir fsyncと正しいfresh保存証拠を取得した**後・永続ACK前**に、別入口のPaper `CraftPlayer.saveData()`で現物5000Cのみを除去。freshな再検査は不一致を拒否したが、古いsequenceによる**意図的な低レベル`GrantLedger.acknowledge`誤使用**ではdelivered1/pending0が永続化し、別実Paper JVMで現物0とともに復元された。#502の限定正例を全writer排他へ一般化できない。未接続の製品coordinatorがこの誤ACKをしたという主張ではない。**次に実装する共同writer境界にはPaper native保存の入場/停止/排出・読戻し後からACK完了までの保持が必須**であり、実証不能ならACK不可・default-denyを維持。TCE既存24分岐と`Draft`は維持し、PIの証拠入力への写像を補強する。
 - 保証範囲を狭める無断対応は認めない。実装候補は`Player.saveData()`、InvSee非同期保存、Paper/NMS/他プラグインwriterを**同じ入場・排出・ACKまでの排他境界で捕捉できること**を別途実証する必要がある。現行DraftをConfirmedにせず、未成立時のACK不可・入室拒否を維持。プラグイン内部で決算を行う既存02B仕様を、外部バッチへ無断変更しない。
 - 正規の`Confirmed`昇格・Process Closure/Model/Implementation Gate、実Paper製品coordinator接続、全writer閉包、OS電源断耐久性は**未実施**。両技術検証のGreenをG3の製品完成と扱わない。
