@@ -106,6 +106,9 @@ jobs:
           grep -F 'A12_PACKET_PATH_HANDLER_CONSTRUCTOR ' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_PACKET_CONSTRUCTOR ' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_CONNECTION_CONSTRUCTOR ' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPER before=1 after=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000C before=1 after=1' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED socket=false onlinePlayers=0' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_ABI_INSPECTED entrypoints=1 eventDispatch=unverified networkPacketSent=false' paper-a12-station.log
           grep -F 'A12_STATION_DISPOSABLE_PROBE_COMPLETE' paper-a12-station.log
           if grep -Eq 'A12_STATION_PROBE_FAILED|A12_STATION_INVALID_ISOLATION' paper-a12-station.log; then exit 1; fi
