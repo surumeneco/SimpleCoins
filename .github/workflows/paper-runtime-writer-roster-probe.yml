@@ -182,7 +182,7 @@ jobs:
           paper_log = Path('smoke/paper-a01-runtime-roster.log').read_text(encoding='utf-8')
           for name, plugin_id in zip(names, ids):
               pattern = (r'A01_RUNTIME_WRITER_PLUGIN_ENABLED name=' + re.escape(plugin_id)
-                         + r' version=\\S+ source=(\\S+) sha256=([0-9a-f]{64}) bytes=(\\d+)')
+                         + r' version=\S+ source=(\S+) sha256=([0-9a-f]{64}) bytes=(\d+)')
               matches = re.findall(pattern, paper_log)
               assert len(matches) == 1, f'No unique runtime identity for {plugin_id}'
               source, runtime_sha, size = matches[0]
