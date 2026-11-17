@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -75,6 +76,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private final boolean durableRecoveryCheck = Boolean.getBoolean("a02.invsee.checkAfterHalt");
     private final boolean recoverPendingAfterHalt = Boolean.getBoolean("a02.invsee.recoverPendingAfterHalt");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
+    private final boolean testPastEventCheckpoint =
+            Boolean.getBoolean("a02.invsee.probePastEventCheckpoint");
+    private final AtomicBoolean lateFenceClosed = new AtomicBoolean();
+    private final AtomicInteger alreadyAdmittedSaveEvents = new AtomicInteger();
 
     @Override
     public void onEnable() {
@@ -408,6 +413,34 @@ public final class InvseeWriterProbe extends JavaPlugin {
         if (!(plugin instanceof InvseePlusPlus installed)
                 || !plugin.isEnabled())
             throw new IllegalStateException("Actual InvSee++ plugin/API unavailable");
+        if (testPastEventCheckpoint) {
+            // A deliberately TOO-LATE fence: the FIRST actual save event is
+            // admitted at LOWEST. MONITOR closes new admission only after
+            // that first writer crossed its event veto checkpoint. The real
+            // InvSee implementation still has its saveData work outstanding.
+            Bukkit.getPluginManager().registerEvents(new Listener() {
+                @EventHandler(priority = EventPriority.LOWEST)
+                public void gateInvSeeSave(SpectatorInventorySaveEvent event) {
+                    if (!ID.equals(event.getInventory().getSpectatedPlayerId())) return;
+                    if (lateFenceClosed.get()) {
+                        vetoedSaveEvents.incrementAndGet();
+                        event.setCancelled(true);
+                    } else {
+                        alreadyAdmittedSaveEvents.incrementAndGet();
+                    }
+                }
+                @EventHandler(priority = EventPriority.MONITOR)
+                public void afterEventAdmission(SpectatorInventorySaveEvent event) {
+                    if (ID.equals(event.getInventory().getSpectatedPlayerId())
+                            && alreadyAdmittedSaveEvents.get() == 1
+                            && !event.isCancelled()
+                            && lateFenceClosed.compareAndSet(false, true)) {
+                        getLogger().info(
+                                "PAPER_A02_INVSEE_LATE_VETO_CLOSED_AFTER_FIRST_EVENT_ADMITTED");
+                    }
+                }
+            }, this);
+        }
         if (vetoInvsee || vetoAndDurableAck) {
             // Test-only cooperative barrier: InvSee++ notifies before the
             // fake CraftPlayer loads/commits another offline UUID.dat.
@@ -455,7 +488,12 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                 return;
                                             }
                                             try {
-                                                if (vetoInvsee || vetoAndDurableAck) {
+                                                if (testPastEventCheckpoint) {
+                                                    if (saved == null || !saved.isSaved())
+                                                        throw new IllegalStateException(
+                                                                "First already-admitted InvSee save was not completed");
+                                                    verifyAlreadyAdmittedWriterThenDenyNext(api, inventory);
+                                                } else if (vetoInvsee || vetoAndDurableAck) {
                                                     if (saved == null || saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "InvSee++ did not acknowledge cancelled save");
@@ -475,6 +513,76 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                 fail(error);
                             }
                         }));
+    }
+
+    /**
+     * InvSee's real asynchronous save was admitted before the fence closed
+     * inside the event dispatch. It must still be accounted as in-flight.
+     * This method does NOT ACK a stale proof or introduce a product fence.
+     */
+    private void verifyAlreadyAdmittedWriterThenDenyNext(
+            InvseeAPI api, MainSpectatorInventory inventory) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testPastEventCheckpoint || !lateFenceClosed.get()
+                || alreadyAdmittedSaveEvents.get() != 1
+                || vetoedSaveEvents.get() != 0)
+            throw new IllegalStateException("Late-fence fixture did not admit exactly one event");
+        if (!BigInteger.ZERO.equals(totalSavedMoney(saved())))
+            throw new IllegalStateException(
+                    "Writer admitted before fence did not remove physical saved 5000C");
+        var receipt = SavedGrantReceiptNbt.readAndVerify(saved(), ledger, ID);
+        if (receipt.active() || receipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException(
+                    "First post-fence write changed receipt or durable grant state");
+        var rootInventory = saved().get("Inventory");
+        if (!(rootInventory instanceof java.util.List<?> all)
+                || all.stream().noneMatch(raw -> raw instanceof Map<?, ?> item
+                    && "minecraft:stone".equals(item.get("id"))
+                    && item.get("Slot") instanceof Number slot && slot.intValue() == 0))
+            throw new IllegalStateException("First post-fence write lost unrelated STONE");
+        getLogger().info("PAPER_A02_INVSEE_FIRST_ADMITTED_SAVE_COMPLETED_AFTER_LATE_FENCE");
+        getLogger().info("PAPER_A02_INVSEE_SAVED_COIN_REMOVED_RECEIPT_RETAINED_LEDGER_PENDING");
+
+        api.saveInventory(inventory).whenComplete((second, failure) ->
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    try {
+                        if (failure != null)
+                            throw new IllegalStateException(
+                                    "Second InvSee save failed unexpectedly", failure);
+                        if (second == null || second.isSaved()
+                                || !lateFenceClosed.get()
+                                || alreadyAdmittedSaveEvents.get() != 1
+                                || vetoedSaveEvents.get() != 1)
+                            throw new IllegalStateException(
+                                    "Later save was not cancelled by late event fence");
+                        if (!BigInteger.ZERO.equals(totalSavedMoney(saved()))
+                                || ledger.pending(ID).size() != 1)
+                            throw new IllegalStateException(
+                                    "Later veto altered the first writer's saved physical state");
+                        boolean rejected = false;
+                        try {
+                            SavedGrantDeliveryFileReadback.verify(
+                                    discover(), ledger, ID, staged, priorRoot,
+                                    MAX_COMPRESSED, MAX_INFLATED);
+                        } catch (java.io.IOException expected) {
+                            rejected = true;
+                        }
+                        if (!rejected)
+                            throw new IllegalStateException(
+                                    "Fresh grant readback approved missing saved money");
+                        getLogger().info(
+                                "PAPER_A02_INVSEE_SECOND_SAVE_EVENT_VETOED_AFTER_FENCE");
+                        getLogger().info(
+                                "PAPER_A02_INVSEE_FRESH_PROOF_REJECTS_LOST_MONEY_NO_ACK");
+                        getLogger().info(
+                                "PAPER_A02_INVSEE_POST_EVENT_VETO_NEEDS_IN_FLIGHT_DRAIN");
+                        Bukkit.shutdown();
+                    } catch (Throwable error) {
+                        fail(error);
+                    }
+                }, 2L));
     }
 
     /** Lock the OLD target inode, without changing playerdata. */
