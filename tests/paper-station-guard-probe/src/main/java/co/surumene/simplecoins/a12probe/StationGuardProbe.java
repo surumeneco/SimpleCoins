@@ -494,6 +494,20 @@ public final class StationGuardProbe extends JavaPlugin {
                 .invoke(Bukkit.getServer());
         Class<?> serverPlayerType = Class.forName(
                 "net.minecraft.server.level.ServerPlayer");
+        Class<?> basePlayerType = Class.forName(
+                "net.minecraft.world.entity.player.Player");
+        java.nio.file.Path basePlayerDump = getDataFolder().toPath().resolve(
+                "diagnostic-classes/net/minecraft/world/entity/player/Player.class");
+        try (java.io.InputStream code = basePlayerType.getResourceAsStream(
+                "/net/minecraft/world/entity/player/Player.class")) {
+            if (code == null) throw new IllegalStateException(
+                    "Cannot read runtime NMS Player superclass");
+            java.nio.file.Files.createDirectories(basePlayerDump.getParent());
+            java.nio.file.Files.copy(code, basePlayerDump,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException readFailure) {
+            throw new IllegalStateException("Cannot preserve Player superclass", readFailure);
+        }
         // Retain exact runtime ServerPlayer implementation for the first
         // isImmobile branch in the actual handler, not mapping-version guesses.
         java.nio.file.Path playerDump = getDataFolder().toPath().resolve(
@@ -625,6 +639,18 @@ public final class StationGuardProbe extends JavaPlugin {
                         + " initiallyJoining=" + initiallyJoining
                         + " joining=true immobile=" + immobileAfter
                         + " channelConnected=false actualClient=false");
+                for (String stateCheck : new String[]{"isAlive", "isDeadOrDying",
+                        "isRemoved", "isSleeping", "isSpectator", "isImmobile"}) {
+                    try {
+                        Object state = handlePlayer.getClass().getMethod(stateCheck)
+                                .invoke(handlePlayer);
+                        getLogger().info("A12_PACKET_HANDLER_PLAYER_STATE " + stateCheck
+                                + "=" + state);
+                    } catch (NoSuchMethodException unavailable) {
+                        getLogger().info("A12_PACKET_HANDLER_PLAYER_STATE "
+                                + stateCheck + "=method-absent");
+                    }
+                }
                 if (immobileAfter)
                     throw new IllegalStateException(
                             "Detached player remains immobile despite native joining state");
