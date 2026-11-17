@@ -78,6 +78,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
     private final boolean testPastEventCheckpoint =
             Boolean.getBoolean("a02.invsee.probePastEventCheckpoint");
+    // Strictly one KNOWN InvSee Future tracked after first event admission,
+    // not a real Paper/all-plugin writer coordinator.
+    private final boolean testAdmittedWriterDrainThenAck =
+            Boolean.getBoolean("a02.invsee.drainAdmittedThenAck");
     private final AtomicBoolean lateFenceClosed = new AtomicBoolean();
     private final AtomicInteger alreadyAdmittedSaveEvents = new AtomicInteger();
 
@@ -413,7 +417,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
         if (!(plugin instanceof InvseePlusPlus installed)
                 || !plugin.isEnabled())
             throw new IllegalStateException("Actual InvSee++ plugin/API unavailable");
-        if (testPastEventCheckpoint) {
+        if (testPastEventCheckpoint || testAdmittedWriterDrainThenAck) {
             // A deliberately TOO-LATE fence: the FIRST actual save event is
             // admitted at LOWEST. MONITOR closes new admission only after
             // that first writer crossed its event veto checkpoint. The real
@@ -478,8 +482,14 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                         || storage[0].getType() != Material.STONE)
                                     throw new IllegalStateException(
                                             "InvSee++ read failed to capture real coin and other item");
-                                storage[1] = null;
-                                inventory.setStorageContents(storage);
+                                if (!testAdmittedWriterDrainThenAck) {
+                                    // The existing NEGATIVE control destroys money
+                                    // after the original positive grant readback.
+                                    storage[1] = null;
+                                    inventory.setStorageContents(storage);
+                                }
+                                // The new POSITIVE control saves the exact
+                                // unmodified 5000C + unrelated STONE inventory.
                                 getLogger().info("PAPER_A02_INVSEE_REAL_OFFLINE_INVENTORY_CAPTURE_PASSED");
                                 api.saveInventory(inventory).whenComplete((saved, saveError) ->
                                         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -488,7 +498,12 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                 return;
                                             }
                                             try {
-                                                if (testPastEventCheckpoint) {
+                                                if (testAdmittedWriterDrainThenAck) {
+                                                    if (saved == null || !saved.isSaved())
+                                                        throw new IllegalStateException(
+                                                                "Admitted preserving InvSee writer never completed");
+                                                    verifyDrainedAdmittedWriterBeforeAck(api, inventory);
+                                                } else if (testPastEventCheckpoint) {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
                                                                 "First already-admitted InvSee save was not completed");
@@ -579,6 +594,106 @@ public final class InvseeWriterProbe extends JavaPlugin {
                         getLogger().info(
                                 "PAPER_A02_INVSEE_POST_EVENT_VETO_NEEDS_IN_FLIGHT_DRAIN");
                         Bukkit.shutdown();
+                    } catch (Throwable error) {
+                        fail(error);
+                    }
+                }, 2L));
+    }
+
+    /**
+     * POSITIVE real-Paper control for the complete observed life of ONE known
+     * InvSee++ save future. The event veto closes AFTER its first admission.
+     * It is unsafe to ACK at that instant; only after SaveResponse.saved
+     * has completed can this fixture request fresh source proof.
+     *
+     * This does not authorize claims about other Paper / filesystem writers.
+     */
+    private void verifyDrainedAdmittedWriterBeforeAck(
+            InvseeAPI api, MainSpectatorInventory inventory) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testAdmittedWriterDrainThenAck || !lateFenceClosed.get()
+                || alreadyAdmittedSaveEvents.get() != 1
+                || vetoedSaveEvents.get() != 0
+                || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException(
+                    "Cannot begin post-future safe phase before one known writer completes");
+        // The first real InvSee Future has resolved; verify physical effect,
+        // not only the API's success flag. In contrast to the destructive
+        // control, this writer must have preserved existing issued money.
+        Map<String, Object> afterWriter = saved();
+        var observedReceipt = SavedGrantReceiptNbt.readAndVerify(
+                afterWriter, ledger, ID);
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(afterWriter))
+                || observedReceipt.active()
+                || observedReceipt.completedSequence() != grant.sequence()
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException(
+                    "Admitted writer completed but changed physical coin/receipt");
+        getLogger().info("PAPER_A02_INVSEE_ADMITTED_PRESERVING_WRITER_DRAINED_BEFORE_ACK");
+
+        // Prove that a later save event is indeed refused while the guard
+        // remains closed. The first writer's resolved Future is known, but
+        // the event by itself never furnished a global in-flight count.
+        api.saveInventory(inventory).whenComplete((second, failure) ->
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    try {
+                        if (failure != null)
+                            throw new IllegalStateException(
+                                    "Second real InvSee save failed unexpectedly", failure);
+                        if (second == null || second.isSaved()
+                                || !lateFenceClosed.get()
+                                || alreadyAdmittedSaveEvents.get() != 1
+                                || vetoedSaveEvents.get() != 1)
+                            throw new IllegalStateException(
+                                    "Closed event fence accepted a second SaveData writer");
+                        if (ledger.pending(ID).size() != 1
+                                || !BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+                            throw new IllegalStateException(
+                                    "Source changed during the rejected second save");
+                        getLogger().info("PAPER_A02_INVSEE_SECOND_SAVE_VETOED_BEFORE_ACK");
+
+                        // Paper saved the actual UUID.dat in the first real
+                        // InvSee Future; request Linux file+parent force and
+                        // get a NEW authenticated same-root transition readback.
+                        forceActualPlayerdataAndContainingDirectory();
+                        byte[] savedBeforeAck = Files.readAllBytes(dataFile());
+                        var proof = SavedGrantDeliveryFileReadback.verify(
+                                discover(), ledger, ID, staged, priorRoot,
+                                MAX_COMPRESSED, MAX_INFLATED);
+                        if (proof.receipt().active()
+                                || proof.receipt().completedSequence() != grant.sequence()
+                                || !BigInteger.valueOf(5000).equals(
+                                        proof.matchedMonetaryValue())
+                                || !lateFenceClosed.get()
+                                || !Arrays.equals(savedBeforeAck, Files.readAllBytes(dataFile())))
+                            throw new IllegalStateException(
+                                    "Drained known-writer source readback is invalid");
+                        getLogger().info("PAPER_A02_INVSEE_DRAIN_FILE_DIR_FSYNC_FRESH_PROOF");
+
+                        ledger.acknowledge(grant, proof.receipt().completedSequence());
+                        var reopened = new GrantLedger(Bukkit.getPluginManager()
+                                .getPlugin("SimpleCoins").getDataFolder().toPath()
+                                .resolve("grants"));
+                        if (!reopened.pending(ID).isEmpty()
+                                || reopened.historySnapshot().size() != 1
+                                || !reopened.historySnapshot().getFirst().delivered()
+                                || !ledger.pending(ID).isEmpty()
+                                || vetoedSaveEvents.get() != 1
+                                || !lateFenceClosed.get()
+                                || !BigInteger.valueOf(5000).equals(totalSavedMoney(saved()))
+                                || !Arrays.equals(savedBeforeAck, Files.readAllBytes(dataFile())))
+                            throw new IllegalStateException(
+                                    "Durable ACK of verified saved coin is inconsistent");
+                        ledger.acknowledge(grant, proof.receipt().completedSequence());
+                        if (!Arrays.equals(savedBeforeAck, Files.readAllBytes(dataFile())))
+                            throw new IllegalStateException("Repeated ACK rewrote the playerdata");
+                        getLogger().info("PAPER_A02_INVSEE_ONE_DURABLE_ACK_AFTER_KNOWN_WRITER_DRAIN");
+                        getLogger().info("PAPER_A02_INVSEE_DRAIN_GUARD_STILL_DEFAULT_DENY");
+                        getLogger().info("PAPER_A02_INVSEE_DRAIN_ABRUPT_HALT_AFTER_ACK");
+                        // Actual playerdata, directory and ledger must survive
+                        // a cold second Paper JVM without shutdown hooks.
+                        Runtime.getRuntime().halt(140);
+                        throw new AssertionError("Expected abrupt halt did not terminate JVM");
                     } catch (Throwable error) {
                         fail(error);
                     }
