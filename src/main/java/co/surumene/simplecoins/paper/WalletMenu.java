@@ -325,11 +325,31 @@ public final class WalletMenu implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof Holder) {
-            // Preserve both wallet source slot and all nine pseudo-items.
-            // A later JE/BE UX enhancement may support narrower drag patterns.
+        if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
+        try {
+            boolean validSession = !halted
+                    && event.getWhoClicked() instanceof Player player
+                    && player.getUniqueId().equals(holder.player)
+                    && currentWallet(player, holder) != null;
+            boolean lowerOnly = true;
+            boolean touchesWalletSource = false;
+            for (int rawSlot : event.getRawSlots()) {
+                // Raw and player-local slot numbers differ (especially in the hotbar).
+                if (rawSlot < 0 || event.getView().getInventory(rawSlot)
+                        != event.getView().getBottomInventory()) {
+                    lowerOnly = false;
+                    continue;
+                }
+                if (event.getView().convertSlot(rawSlot) == holder.hotbarSlot)
+                    touchesWalletSource = true;
+            }
+            if (WalletDragPolicy.shouldCancel(event.isCancelled(), validSession,
+                    wallets.hasWalletMarker(event.getOldCursor()), lowerOnly,
+                    touchesWalletSource)) event.setCancelled(true);
+        } catch (RuntimeException invalidViewOrWallet) {
+            // Unknown slot mapping/identity is not permission to mutate money.
             event.setCancelled(true);
         }
     }
