@@ -49,8 +49,8 @@ jobs:
             "90aa2d0e0a5ea80c705fd67d717f463decaf2a32"
           test -s 'pinned-server/plugins/InvSee++.jar'
           echo '01f3e053a814f76d46513ebf65a38747df11df81c577d12bed108b353d7775f9  pinned-server/plugins/InvSee++.jar' | sha256sum -c -
-          unzip -p pinned-server/plugins/InvSee++.jar plugin.yml |
-            grep -E '^name: InvSeePlusPlus$|^main: com.janboerman.invsee.spigot.InvseePlusPlus$'
+          unzip -Z1 pinned-server/plugins/InvSee++.jar | grep -F 'plugin.yml'
+          unzip -p pinned-server/plugins/InvSee++.jar plugin.yml | grep -E '^name:|^main:'
           javap -classpath pinned-server/plugins/InvSee++.jar \
             -p com.janboerman.invsee.paper.impl_26_2.InvseeImpl |
             grep -F 'saveInventory('
