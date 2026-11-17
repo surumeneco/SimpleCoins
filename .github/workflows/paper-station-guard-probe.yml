@@ -102,6 +102,11 @@ jobs:
           grep -F 'A12_NMS_CARTOGRAPHY_DIRECT_CLICK input=ordinaryPAPER before=1 after=0' paper-a12-station.log
           grep -F 'A12_NMS_CARTOGRAPHY_DIRECT_CLICK input=genuine5000C before=1 after=' paper-a12-station.log
           grep -F 'A12_NMS_CARTOGRAPHY_DIRECT_CLICK_EVENT_BOUNDARY totalInventoryClicks=' paper-a12-station.log
+          grep -F 'A12_PACKET_PATH_HANDLER ' paper-a12-station.log
+          grep -F 'A12_PACKET_PATH_HANDLER_CONSTRUCTOR ' paper-a12-station.log
+          grep -F 'A12_PACKET_PATH_PACKET_CONSTRUCTOR ' paper-a12-station.log
+          grep -F 'A12_PACKET_PATH_CONNECTION_CONSTRUCTOR ' paper-a12-station.log
+          grep -F 'A12_PACKET_PATH_ABI_INSPECTED entrypoints=1 eventDispatch=unverified networkPacketSent=false' paper-a12-station.log
           grep -F 'A12_STATION_DISPOSABLE_PROBE_COMPLETE' paper-a12-station.log
           if grep -Eq 'A12_STATION_PROBE_FAILED|A12_STATION_INVALID_ISOLATION' paper-a12-station.log; then exit 1; fi
           echo 'A12_PAPER_STATION_EVENT_BOUNDARY_OBSERVED_NOT_CONSUMPTION_PROOF'
