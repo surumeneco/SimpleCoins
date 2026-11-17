@@ -22,7 +22,7 @@ project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4D
 spec_status: unknown
 ---
 
-# A02 — Paper selected-hotbar persisted mainhand mirror transition
+# A02 — Paperの空equipment Compoundを他収納改変と誤判定する保存差分
 
 ## Evidence
 
