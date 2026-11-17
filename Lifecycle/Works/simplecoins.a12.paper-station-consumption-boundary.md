@@ -86,6 +86,12 @@ Drive 01 and 05 explicitly require genuine, PDC-identified PAPER money to be con
 - No synthetic event should physically remove currency or move player assets. Keep this test code in the disposable `tests/` project, never in the production JAR. No changing product plugins, admission, ledger or `main`.
 - Follow-up production protection requires distinct CARTOGRAPHY/MERCHANT event boundaries and tests of **actual consumption**, not only `blocksResult` helper. For normative semantic behavior changes, use the already Draft A12 Process/PI/TCE and legitimate CAT Confirmed/process/model/implementation Gates, not this verification result.
 
+## Product listener absence counterexample (bounded verification scope)
+
+- The existing Merchant server packet-handler test executes two cases under a **disposable test-only** InventoryClickEvent guard, so it shows that cancellation is technically possible, not whether SimpleCoins production already protects currency. Extend that same fixed-Paper test with a **third, otherwise identical genuine-5000C result click**, explicitly switch off only the disposable guard, keep SimpleCoins and independent default-deny guard loaded, and record whether the native input decreases from one to zero. This directly measures the missing product Merchant protection without new instrumentation or speculative Plugin permutations.
+- Require an actual InventoryClickEvent and result-slot consumption (1→0) in the no-probe-guard case, while the guarded case remains 1→1 and ordinary PAPER remains 1→0. No connected player, external socket, playerdata persistence, JE/BE client or monetary service is exercised; do not conflate this with a network-authenticated trade or final product release.
+- **This is an observation test, not a proposed production fix**: success should establish the current gap for the existing A12 Draft and enable a narrowly scoped product listener after legitimate specification confirmation. If production protection already exists, fail the characterization and investigate before recording a defect. No product code, Draft status, security guard or main is changed.
+
 ## Acceptance / stop condition
 
 - CAT Work structure valid; isolated Paper plugin actually compiles and runs on official Paper build 134, produces both cartography input event markers plus merchant recipe marker; fails if either event becomes unexpectedly blocked or physical money changes.
