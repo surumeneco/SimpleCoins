@@ -49,7 +49,7 @@ spec_status: confirmed
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.paper-station-result-staging.md;src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java;src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml | src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java | src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.paper-station-result-staging.md;src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java;src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;tests/paper-station-guard-probe/src/main/java/co/surumene/simplecoins/a12probe/StationGuardProbe.java;tests/paper-vanilla-choice-probe/src/main/java/co/surumene/simplecoins/a12probe/VanillaChoiceProbe.java;build.gradle.kts;.github/workflows/paper-station-product-guard.yml;.github/workflows/paper-station-guard-probe.yml | src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java | src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;tests/paper-station-guard-probe/src/main/java/co/surumene/simplecoins/a12probe/StationGuardProbe.java;tests/paper-vanilla-choice-probe/src/main/java/co/surumene/simplecoins/a12probe/VanillaChoiceProbe.java;build.gradle.kts;.github/workflows/paper-station-product-guard.yml;.github/workflows/paper-station-guard-probe.yml |
 
 ## Checks
 
@@ -67,7 +67,7 @@ spec_status: confirmed
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | not-run | — |
+| ci | passed | [Exact-head #44207755155](https://github.com/surumeneco/SimpleCoins/actions/runs/44207755155) native Merchant/Cartography result+Shift, [#44207754896](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754896) product event 16 cases, [#44207754835](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754835) vanilla craft; all 13 workflows succeeded at `8dc87ac05a4943436bdc305c1adcc811277c2d5a` |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -81,13 +81,11 @@ with a three-slot proxy view of Merchant/Cartography result slot 2. The fixture
 checks ordinary PAPER remains permitted, correctly marked and malformed-PDC
 coins are denied, and moving input/lower items remains permitted. No NMS
 physical result consumption, socket, actual client, third-party update or
-settlement publication is claimed by this particular fixture. Prior #518–#522
-supply independent packet-handler contrast evidence.
+settlement publication is claimed by this particular fixture. Prior #518–#522 supply **pre-change** packet-handler contrasts. This PR's separate actual Paper handler fixture observes product preservation for Merchant/Cartography results under ordinary and Shift/QUICK_MOVE clicks, without a real socket or player login.
 
 Product result-slot listener has been staged after a genuine expected Red
 on the former product (Paper event bus run 44205074411). This is **only** a
 partial event-surface mitigation, not complete CAT acceptance. The Confirmed
 Process remains explicitly open-world; script-owned Process Closure remains
 blocked rather than being rewritten to passed.
-Uncollaborative NMS writers, later plugin overrides and unverified shift/click
-variants remain separate from the local listener's proof.
+Direct-NMS writers, later plugin overrides, authenticated network clients, and unverified other click types (number-key, double-click, drag) remain outside this local listener proof.
