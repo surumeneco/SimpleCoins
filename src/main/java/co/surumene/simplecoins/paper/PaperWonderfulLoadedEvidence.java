@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 
@@ -82,7 +83,33 @@ public final class PaperWonderfulLoadedEvidence {
         UUID worldId = entity.getWorld().getUID();
         if (!entity.isValid() || Bukkit.getEntity(entityId) != entity)
             return no(Status.INCOMPLETE, "entity-not-authoritatively-loaded");
+        return readVerified(consumer, entityId, worldId, providerId, null);
+    }
 
+    /**
+     * Unpublished candidate from an independently observed saved Entity PDC.
+     * This method does NOT read disk, prove that the supplied PDC is authentic,
+     * establish same-generation saved authority, load a chunk or publish money.
+     * The caller must own the saved source manifest, exact Entity identity,
+     * bounded NBT reconstruction, pre/post content witness and deduplication.
+     */
+    public static Result readStored(Plugin consumer, UUID entityId, UUID worldId,
+                                    String providerId, PersistentDataContainer savedPdc) {
+        Objects.requireNonNull(consumer);
+        Objects.requireNonNull(entityId);
+        Objects.requireNonNull(worldId);
+        Objects.requireNonNull(providerId);
+        Objects.requireNonNull(savedPdc);
+        if (!Bukkit.isPrimaryThread())
+            throw new IllegalStateException("WCL stored reads require Paper primary thread");
+        return readVerified(consumer, entityId, worldId, providerId, savedPdc);
+    }
+
+    /** Shared, source-bound WCL contract and strict identity/result normalization. */
+    private static Result readVerified(Plugin consumer, UUID entityId, UUID worldId,
+                                       String providerId, PersistentDataContainer savedPdc) {
+        if (!PaperWonderfulReaderRegistry.EXPECTED.containsKey(providerId))
+            return no(Status.MISMATCH, "unknown-expected-provider");
         PaperWonderfulReaderRegistry.Assessment registration =
                 PaperWonderfulReaderRegistry.inspect(consumer);
         if (!registration.registrationsPresent()) {
@@ -125,7 +152,11 @@ public final class PaperWonderfulLoadedEvidence {
             if (reader == null)
                 return no(Status.INCOMPLETE, "selected-provider-disappeared");
 
-            Object raw = service.getMethod("readLoaded", UUID.class).invoke(reader, entityId);
+            Object raw = savedPdc == null
+                    ? service.getMethod("readLoaded", UUID.class).invoke(reader, entityId)
+                    : service.getMethod("readStored", UUID.class, UUID.class, Optional.class,
+                            PersistentDataContainer.class).invoke(
+                                    reader, entityId, worldId, Optional.empty(), savedPdc);
             Class<?> success = loader.loadClass(
                     "co.surumene.wcl.api.inventory.StorageReadResult$Success");
             Class<?> notFound = loader.loadClass(
@@ -180,7 +211,9 @@ public final class PaperWonderfulLoadedEvidence {
                 items.add(new StoredItem(slot, bytes));
             }
             return new Result(Status.SUCCESS, Optional.of(new Snapshot(entityId, worldId,
-                    providerId, relationships, items)), "verified-loaded-provider-snapshot");
+                    providerId, relationships, items)),
+                    savedPdc == null ? "verified-loaded-provider-snapshot"
+                            : "verified-stored-provider-snapshot");
         } catch (ReflectiveOperationException | LinkageError | ClassCastException failed) {
             return no(Status.INCOMPLETE, "wcl-runtime-interface-unavailable");
         } catch (RuntimeException failed) {
