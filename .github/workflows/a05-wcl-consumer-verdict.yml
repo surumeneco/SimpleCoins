@@ -11,7 +11,7 @@ permissions:
 jobs:
   model:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -89,14 +89,62 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.2.1"
-      - name: Execute actual current-item source-derived JUnit against product
+      - name: Complete all eight source-derived JUnit cases with script-owned Queue receipts
         shell: bash
         run: |
           set -euo pipefail
-          target=src/test/java/co/surumene/simplecoins/domain/generated
-          mkdir -p "$target"
-          # Script-generated file copied byte-for-byte; do not change the oracle.
-          cp Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java \
-            "$target/A05WclEvidenceGeneratedTest.java"
-          gradle --no-daemon :test \
-            --tests 'co.surumene.simplecoins.domain.generated.GeneratedA05WclEvidenceCase*Test'
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          ROOT=Lifecycle/Works/.cat-flow
+          CAT=cat-tdd-fixed/.cat-system/scripts
+          SOURCE="$ROOT/generated/A05WclEvidenceGeneratedTest.java"
+          TARGET=src/test/java/co/surumene/simplecoins/domain/generated
+          mkdir -p "$TARGET"
+          for i in 0 1 2 3 4 5 6 7; do
+            python "$CAT/cat_compile_v2.py" tests \
+              "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
+              "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
+              tests/cat/a05-wcl-consumer-junit-binding.json \
+              --framework junit \
+              --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
+              --process docs/cat/confirmed/a05-wcl-consumer-process.md \
+              --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
+              --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
+              -o "$SOURCE"
+            grep -F 'CAPABILITIES NOT VERIFIED' "$SOURCE" >/dev/null
+            grep -F "@DisplayName(\"case.s$i\")" "$SOURCE" >/dev/null
+            cp "$SOURCE" "$TARGET/A05WclEvidenceGeneratedTest.java"
+            python "$CAT/cat_flow.py" run --work "$WORK" --id "a05-green-s$i" --execute > "$ROOT/run-s$i.json"
+            python - "$ROOT/run-s$i.json" "$i" <<'PY'
+          import json,sys
+          result=json.load(open(sys.argv[1]))
+          assert result['check_id']=='a05-green-s'+sys.argv[2],result
+          assert result['verdict']=='passed',result
+          assert result['observed_targets']=={'case.s'+sys.argv[2]:'passed'},result
+          print('A05_CAT_SOURCED_JUNIT_GREEN_'+sys.argv[2])
+          PY
+            python "$CAT/cat_flow.py" queue-state --work "$WORK" \
+              --evidence "$ROOT/evidence/a05-green-s$i.json"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('Lifecycle/Works/.cat-flow')
+          queue=json.loads((root/'cache/a05-wcl-consumer-verdict-queue.json').read_text())
+          assert [x['status'] for x in queue['items']]==['done']*8
+          for i,entry in enumerate(queue['items']):
+              assert entry['id']=='case.s'+str(i)
+              receipt=json.loads((root/'evidence/a05-green-s'+str(i)+'.json').read_text())
+              assert receipt['schema']=='cat-flow-evidence/v1'
+              assert receipt['verdict']=='passed' and receipt['observed_targets']=={'case.s'+str(i):'passed'}
+          print('A05_CONFIRMED_EIGHT_CASE_SCRIPT_OWNED_QUEUE_GREEN_PASSED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a05-confirmed-pi-only-eight-queue-evidence
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-*.json
+            Lifecycle/Works/.cat-flow/evidence/a05-green-*.json
+            Lifecycle/Works/.cat-flow/reports/a05-green-*.xml
+            Lifecycle/Works/.cat-flow/run-s*.json
+          if-no-files-found: error
