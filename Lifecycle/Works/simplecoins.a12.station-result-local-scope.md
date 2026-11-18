@@ -27,6 +27,7 @@ spec_status: confirmed
 | URI |
 | --- |
 | https://github.com/surumeneco/SimpleCoins/pull/529 |
+| https://github.com/surumeneco/SimpleCoins/pull/532#issuecomment-6976353886 |
 | https://github.com/surumeneco/SimpleCoins/issues/423 |
 | https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view |
 
@@ -66,10 +67,10 @@ spec_status: confirmed
 | deployment | not-run | — |
 | real-use | not-run | — |
 
-## Acceptance and required decision
+## Acceptance and executed decision
 
 This issue-work records the user-approved **Confirmed** finite-input pure decision as a separate Process. It does **not** alter or waive the existing Confirmed A12 open-world Process, its Process Closure, the Java/Paper event adapter or G0/G3.
 
-Static lint and `--allow-draft` model compilation are non-normative readiness checks. Normative vector/test generation remains blocked until legitimate confirmation. After this approval, use the actual canonical CAT flow and `spec-test-sync` against existing Paper event behavior; do not fabricate Red for code already implemented.
+The user-approved Confirmed local scope was checked with canonical CAT-TDD Python at pinned `896cae8313a533a3c74073a8c3150daad314ff90`: source syntax PASS; independent Process Closure `passed`; Model Conformance `passed`; deterministic vector selection produced four cases (s0–s3). The PI output exclusivity is guaranteed by the TCE effects, not misclassified as a pre-input PI constraint. This issue-work does not claim independent `spec-test-sync` suite execution, product Implementation Conformance, wider A12 Closure or Paper live-client acceptance. Continue `spec-test-sync` on the implemented behavior without artificial Red; unresolved Paper adapter and G0/G3 remain separate.
 
 **Decision:** the user approved the separate pure-decision Process boundary on 2026-11-18 (reference: https://github.com/surumeneco/SimpleCoins/pull/532#issuecomment-6976353886). The existing broader A12 Process remains open-world and unresolved.
