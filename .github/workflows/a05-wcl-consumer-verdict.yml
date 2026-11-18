@@ -82,3 +82,21 @@ jobs:
             Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-queue.json
             Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
           if-no-files-found: error
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.2.1"
+      - name: Execute actual current-item source-derived JUnit against product
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=src/test/java/co/surumene/simplecoins/domain/generated
+          mkdir -p "$target"
+          # Script-generated file copied byte-for-byte; do not change the oracle.
+          cp Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java \
+            "$target/A05WclEvidenceGeneratedTest.java"
+          gradle --no-daemon test \
+            --tests 'co.surumene.simplecoins.domain.generated.GeneratedA05WclEvidenceCase*Test'
