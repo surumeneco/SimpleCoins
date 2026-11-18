@@ -96,6 +96,11 @@ public final class StationResultGuardLiveProbe extends JavaPlugin {
                     case "getType" -> type;
                     case "getTopInventory" -> top;
                     case "getBottomInventory" -> viewer.getInventory();
+                    case "convertSlot" -> (Integer) args[0] < 3
+                            ? (Integer) args[0] : (Integer) args[0] - 3;
+                    case "countSlots" -> 3 + viewer.getInventory().getSize();
+                    case "getInventory" -> (Integer) args[0] < 3
+                            ? top : viewer.getInventory();
                     case "getPlayer" -> viewer;
                     case "getItem" -> ((Integer) args[0]) < 3
                             ? top.getItem((Integer) args[0])
