@@ -1,0 +1,88 @@
+---
+cat_version: '0.2'
+kind: work
+id: simplecoins.a05.stored-reader
+status: draft
+process: simplecoins.external-storage-provider-integration
+source_refs:
+  - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
+  - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
+  - https://github.com/surumeneco/SimpleCoins/issues/423
+decision_ref: user-chat:2026-11-18:A05-A12-drafts-approved
+refs: []
+entry: confirmed-spec
+mode: implementation
+flow: spec-implementation
+work_kind: implementation
+parent: ''
+depends_on: []
+issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
+project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4Df0dl/view
+spec_status: confirmed
+---
+
+# A05 — 検証済みSAVED Entity PDCから実登録WCLの未公開収納候補を読む
+
+## Evidence
+| URI |
+| --- |
+| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/confirmed/a05-wcl-consumer-process.md |
+| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/verification/phase5-wcl-provider-contract.md |
+| https://github.com/surumeneco/SimpleCoins/pull/534 |
+| https://github.com/surumeneco/SimpleCoins/pull/535 |
+
+## Scope
+| Process IDs | Changed IDs | Preserved IDs |
+| --- | --- | --- |
+| simplecoins.external-storage-provider-integration | simplecoins.a05.stored-reader | simplecoins.settlement;simplecoins.world-source-discovery;simplecoins.a05.wcl-consumer-verdict |
+
+## Technologies
+| Technology |
+| --- |
+| Java |
+| JUnit |
+
+## Repositories
+| Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
+| --- | --- | --- | --- | --- | --- | --- |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.stored-reader.md;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLoadedEvidence.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLoadedEvidence.java | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
+
+## Checks
+| ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+
+## Gates
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| process-closure | not-run | — |
+| model-conformance | not-run | — |
+| implementation-conformance | not-run | — |
+| semantic-review | not-run | — |
+| test-oracle-review | not-run | — |
+| red-review | not-run | — |
+| pr-review | not-run | — |
+| ci | not-run | — |
+| merge | not-run | — |
+| deployment | not-run | — |
+| real-use | not-run | — |
+
+## Compilation
+| Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-process.md | @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-tce.md | — | — | — | @work/.cat-flow/cache/a05-stored-reader-model.json | @work/.cat-flow/cache/a05-stored-reader-vectors.json | @work/.cat-flow/cache/a05-stored-reader-queue.json | @repo:SimpleCoins/tests/cat/a05-wcl-consumer-junit-binding.json | @work/.cat-flow/generated/A05StoredReaderGeneratedTest.java | @work/.cat-flow/cache/a05-stored-reader-obligations.json | — | false |
+
+## Acceptance and safe boundary
+
+- This is an **independent read-only collection adapter** for independently sourced stored Entity PDC, not the full confirmed A05 candidate-adoption decision or the higher-level G0 generation guarantee.
+- Use an actual validated WCL/WWC/WWW registration. Accept only caller-supplied Entity/World UUID plus independently reconstructed SAVED PDC, without loading/generating chunks. Invoke `readStored` strictly on Paper's main thread, distinguish `Success`, `NotFound`, `Failure`, unavailable and identity mismatch. Return no candidate for any non-success result.
+- For `Success`, compare entity UUID, world UUID and provider ID; copy and preserve slot-bearing serialized items and relationship evidence without monetary decoding, owner inference or any write.
+- Use the existing pinned distribution JAR Paper probe, not newly fabricated service implementations. Validate actual standalone class Red/Green and actual Paper runtime success.
+- Current canonical JUnit renderer does not support the Confirmed Process's observation/action capabilities; no source-derived JUnit/Queue Green or full Implementation Conformance is claimed for this bounded collector. Record that blocked formal step and preserve the wider Work unchanged.
+- Never call this result a confirmed settlement, empty-world proof, G0/G3 proof, or player admission permission.
+
+## Evidence handoff (no global authority claim)
+
+- An existing independent real Paper probe already discovers every required world file and verifies witness-stamped Anvil data without loading the far entity chunk. Reuse its detached PDC and real WCL/WWC/WWW provider snapshots; do **not** add a second saved parser or invent a source.
+- Implement `PaperWonderfulLoadedEvidence.readStored(consumer, entityId, worldId, providerId, detachedPdc)` using the existing runtime WCL contract and strict provider validation. The detached PDC alone does **not** prove source identity or generation; the caller retains witness/recheck responsibility.
+- Red: existing pinned-distribution Paper probe must fail to compile before new method. Green: on real far WWC/WWW SAVED PDC, product evidence retains the actual slot/serialized bytes and relationship UUIDs, distinguishes unsupported schema as `FAILURE`, verifies wrong provider `NotFound` does not yield a candidate; no far chunk load.
+- CAT Process Closure/Model Conformance was previously scoped to approved A05, but this Work does not claim source-derived JUnit or full A05 Implementation Conformance while explicit observation/action binding is unresolved.

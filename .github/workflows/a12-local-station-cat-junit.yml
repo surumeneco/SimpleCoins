@@ -1,0 +1,133 @@
+name: A12 confirmed local station decision CAT JUnit proof
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/confirmed/a12-station-local-decision-*.md'
+      - 'Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/A12StationResultDecisionDriver.java'
+      - 'tests/cat/a12-station-local-junit-binding.json'
+      - '.github/workflows/a12-local-station-cat-junit.yml'
+  push:
+    branches: ['feature/a12-paper-station-result-guard-20261118']
+permissions:
+  contents: read
+jobs:
+  local-pure-station-decision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate Confirmed source and produce canonical model, vectors and Queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md
+          python "$FLOW" validate --work "$WORK"
+          python cat-tdd-fixed/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files \
+            docs/cat/confirmed/a12-station-local-decision-process.md \
+            docs/cat/confirmed/a12-station-local-decision-pi.md \
+            docs/cat/confirmed/a12-station-local-decision-tce.md
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+          python - <<'PY'
+          import json,pathlib
+          w=pathlib.Path('Lifecycle/Works/.cat-flow/cache')
+          m=json.loads((w/'a12-station-local-model.json').read_text())
+          v=json.loads((w/'a12-station-local-vectors.json').read_text())
+          q=json.loads((w/'a12-station-local-queue.json').read_text())
+          assert m['status']=='confirmed' and m['coverage_requirement']=='closed'
+          assert all(x['result']=='proved' for x in m['coverage_checks'].values())
+          assert [x['id'] for x in v['cases']]==[f'case.s{i}' for i in range(4)]
+          assert [x['id'] for x in q['items']]==[f'case.s{i}' for i in range(4)]
+          print('A12_LOCAL_CONFIRMED_MODEL_FOUR_VECTORS_PASSED')
+          PY
+      - name: Generate exactly one canonical JUnit test per Queue vector and execute Green
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=cat-tdd-fixed/.cat-system/scripts
+          FLOW="$ROOT/cat_flow.py"
+          WORK=Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md
+          BASE=Lifecycle/Works/.cat-flow/cache
+          MODEL="$BASE/a12-station-local-model.json"
+          VECTORS="$BASE/a12-station-local-vectors.json"
+          QUEUE="$BASE/a12-station-local-queue.json"
+          P=docs/cat/confirmed/a12-station-local-decision-process.md
+          I=docs/cat/confirmed/a12-station-local-decision-pi.md
+          T=docs/cat/confirmed/a12-station-local-decision-tce.md
+          B=tests/cat/a12-station-local-junit-binding.json
+          mkdir -p src/test/java/co/surumene/simplecoins/paper/generated
+          for rule in s0 s1 s2 s3; do
+            case "$rule" in
+              s0) digest=270ea3584cb1 ;;
+              s1) digest=34c89fbe779c ;;
+              s2) digest=e292a6c220f2 ;;
+              s3) digest=123a32c34595 ;;
+            esac
+            target="src/test/java/co/surumene/simplecoins/paper/generated/GeneratedA12StationLocalCase${digest}Test.java"
+            python "$ROOT/cat_compile_v2.py" tests "$MODEL" "$VECTORS" "$B" --framework junit \
+              --queue "$QUEUE" --process "$P" --pi "$I" --tce "$T" -o "$target"
+            grep -F "Source TCE: $rule" "$target"
+            python "$FLOW" run --work "$WORK" --id "green-$rule" --execute
+            python "$FLOW" queue-state --work "$WORK" \
+              --evidence "Lifecycle/Works/.cat-flow/evidence/green-$rule.json"
+          done
+          python - <<'PY'
+          import json,pathlib
+          base=pathlib.Path('Lifecycle/Works/.cat-flow')
+          q=json.loads((base/'cache/a12-station-local-queue.json').read_text())
+          assert len(q['items'])==4
+          assert all(x['status']=='done' and x['evidence_ref'] for x in q['items'])
+          for x in q['items']:
+            e=json.loads(pathlib.Path(x['evidence_ref']).read_text())
+            assert e['verdict']=='passed' and e['stage']=='green'
+            assert e['queue_context']['current_item_id']==x['id']
+          print('A12_CANONICAL_CAT_JUNIT_FOUR_GREEN_QUEUE_RECEIPTS_PASSED')
+          PY
+      - name: Bounded implementation conformance without false global pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md
+          python "$FLOW" obligations --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('Lifecycle/Works/.cat-flow/conformance/implementation-conformance.json')
+          e=json.loads(p.read_text())
+          assert e['verdict'] in ('passed','inconclusive'),e
+          print('A12_LOCAL_IMPLEMENTATION_CONFORMANCE',e['verdict'])
+          PY
+      - name: Preserve script-owned CAT and JUnit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a12-local-decision-cat-junit-evidence
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a12-station-local-*.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+            Lifecycle/Works/.cat-flow/conformance/*.json
+            Lifecycle/Works/.cat-flow/evidence/green-*.json
+            Lifecycle/Works/.cat-flow/reports/green-*.xml
+          if-no-files-found: ignore
+          retention-days: 14

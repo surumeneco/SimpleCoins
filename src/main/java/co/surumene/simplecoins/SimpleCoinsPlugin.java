@@ -14,6 +14,7 @@ import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
 import co.surumene.simplecoins.paper.WorldScopeConfigReader;
 import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
+import co.surumene.simplecoins.paper.PaperWonderfulReaderRegistry;
 import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
@@ -209,6 +210,15 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         Bukkit.shutdown();
                     }, issuanceGrants);
             sourceDiscovery.start();
+            // Discover the full, currently registered WCL reader set, not the
+            // ServicesManager.load() single winner. This is startup diagnostics,
+            // not an inventory capture or valid G0 accounting-generation proof.
+            var wclRegistration = PaperWonderfulReaderRegistry.inspect(this);
+            getLogger().info("SIMPLECOINS_WCL_REGISTRATION_OBSERVED"
+                    + " status=" + wclRegistration.status()
+                    + " reason=" + wclRegistration.reason()
+                    + " providers=" + wclRegistration.owners().keySet()
+                    + " (REGISTRATION ONLY; asset collection and admission disabled)");
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();

@@ -1,0 +1,76 @@
+---
+cat_version: '0.2'
+kind: work
+id: simplecoins.a12.station-result-local-scope
+status: draft
+process: simplecoins.currency.station-result-local-decision
+source_refs:
+  - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
+  - https://github.com/surumeneco/SimpleCoins/issues/423
+  - https://github.com/surumeneco/SimpleCoins/pull/529
+decision_ref: user-chat:2026-11-18:A12-station-result-local-decision-approved
+refs: []
+entry: issue
+mode: shadow
+flow: issue-work
+work_kind: specification
+parent: ''
+depends_on: []
+issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
+project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4Df0dl/view
+spec_status: confirmed
+---
+
+# A12: 局所判定と全体保証の責務分離（承認済み）
+
+## Evidence
+| URI |
+| --- |
+| https://github.com/surumeneco/SimpleCoins/pull/529 |
+| https://github.com/surumeneco/SimpleCoins/pull/532#issuecomment-6976353886 |
+| https://github.com/surumeneco/SimpleCoins/issues/423 |
+| https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view |
+
+## Scope
+| Process IDs | Changed IDs | Preserved IDs |
+| --- | --- | --- |
+| simplecoins.currency.station-result-local-decision | simplecoins.a12.station-result-local-scope | simplecoins.currency.station-consumption-exclusion |
+
+## Technologies
+| Technology |
+| --- |
+| Java |
+| JUnit |
+| Paper |
+
+## Repositories
+| Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
+| --- | --- | --- | --- | --- | --- | --- |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-result-local-scope.md;docs/cat/confirmed/a12-station-local-decision-process.md;docs/cat/confirmed/a12-station-local-decision-pi.md;docs/cat/confirmed/a12-station-local-decision-tce.md | — | — |
+
+## Checks
+| ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+
+## Gates
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| process-closure | not-run | Approved Confirmed scope; formal Gate remains to be run |
+| model-conformance | not-run | Approved Confirmed scope; formal Gate remains to be run |
+| implementation-conformance | not-run | Product/adapter not yet formally verified |
+| semantic-review | not-run | User approval established; conditional review only if prescribed |
+| test-oracle-review | not-run | — |
+| red-review | not-run | — |
+| pr-review | not-run | — |
+| ci | not-run | — |
+| merge | not-run | — |
+| deployment | not-run | — |
+| real-use | not-run | — |
+
+## Acceptance and executed decision
+
+This issue-work records the user-approved **Confirmed** finite-input pure decision as a separate Process. It does **not** alter or waive the existing Confirmed A12 open-world Process, its Process Closure, the Java/Paper event adapter or G0/G3.
+
+The user-approved Confirmed local scope was checked with canonical CAT-TDD Python at pinned `896cae8313a533a3c74073a8c3150daad314ff90`: source syntax PASS; independent Process Closure `passed`; Model Conformance `passed`; deterministic vector selection produced four cases (s0–s3). The PI output exclusivity is guaranteed by the TCE effects, not misclassified as a pre-input PI constraint. This issue-work does not claim independent `spec-test-sync` suite execution, product Implementation Conformance, wider A12 Closure or Paper live-client acceptance. Continue `spec-test-sync` on the implemented behavior without artificial Red; unresolved Paper adapter and G0/G3 remain separate.
+
+**Decision:** the user approved the separate pure-decision Process boundary on 2026-11-18 (reference: https://github.com/surumeneco/SimpleCoins/pull/532#issuecomment-6976353886). The existing broader A12 Process remains open-world and unresolved.
