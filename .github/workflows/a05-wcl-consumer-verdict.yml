@@ -98,5 +98,5 @@ jobs:
           # Script-generated file copied byte-for-byte; do not change the oracle.
           cp Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java \
             "$target/A05WclEvidenceGeneratedTest.java"
-          gradle --no-daemon test \
+          gradle --no-daemon :test \
             --tests 'co.surumene.simplecoins.domain.generated.GeneratedA05WclEvidenceCase*Test'
