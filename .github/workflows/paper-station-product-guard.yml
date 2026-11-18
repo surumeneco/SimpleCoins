@@ -1,0 +1,82 @@
+name: A12 product station result guard actual Paper event dispatch
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'src/main/java/co/surumene/simplecoins/paper/CoinStationResultGuard.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java'
+      - 'tests/paper-station-product-smoke/**'
+      - 'build.gradle.kts'
+      - '.github/workflows/paper-station-product-guard.yml'
+  push:
+    branches: ['feature/a12-paper-station-result-guard-20261118']
+permissions:
+  contents: read
+jobs:
+  product-station-events:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build product and separate test-only observer
+        run: |
+          gradle --no-daemon :test :admission-guard:test jar :admission-guard:jar paperStationProductProbeJar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+          unzip -p build/libs/SimpleCoinsStationProductProbe-1.0.0.jar plugin.yml | grep -F 'name: SimpleCoinsStationProductProbe'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq StationResultGuardLiveProbe.class; then
+            echo 'Test observer packaged in product JAR' >&2
+            exit 1
+          fi
+      - name: Download SHA256-verified Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A12-Product/1.0 (CI)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          echo "$sha" | grep -Eq '^[0-9a-fA-F]{64}$'
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Verify production listener with isolated real Paper event bus
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/Guard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp build/libs/SimpleCoinsStationProductProbe-1.0.0.jar smoke/plugins/StationProductProbe.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25597\n' > smoke/server.properties
+          cd smoke
+          set +e
+          timeout --signal=TERM --kill-after=5s 160s java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a12-product.log 2>&1
+          result=$?
+          set -e
+          if [ "$result" -ne 0 ]; then tail -120 paper-a12-product.log; exit 1; fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a12-product.log
+          grep -F 'A12_PRODUCT_STATION_EVENT_CASES=16' paper-a12-product.log
+          grep -F 'A12_PRODUCT_STATION_GUARD_PASSED' paper-a12-product.log
+          if grep -Eq 'A12_PRODUCT_STATION_(GUARD_FAILED|INVALID_ISOLATION)' paper-a12-product.log; then
+            tail -120 paper-a12-product.log
+            exit 1
+          fi
+          echo A12_PRODUCT_STATION_EVENT_BUS_PASSED_SYNTHETIC_CLICK_NOT_NETWORK_CONSUMPTION
+      - name: Upload Paper diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a12-product-station-guard-paper-log
+          path: smoke/paper-a12-product.log
+          if-no-files-found: ignore
+          retention-days: 7

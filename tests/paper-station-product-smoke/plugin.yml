@@ -1,0 +1,7 @@
+name: SimpleCoinsStationProductProbe
+version: '1.0.0-ci-only'
+main: co.surumene.simplecoins.paper.StationResultGuardLiveProbe
+api-version: '26.2'
+load: POSTWORLD
+depend:
+  - SimpleCoins

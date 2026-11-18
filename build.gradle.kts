@@ -107,3 +107,16 @@ tasks.register<Jar>("paperFakeGeyserProviderJar") {
         rename { "plugin.yml" }
     }
 }
+
+
+// Disposable Paper 26.2 product station event probe, never in production JAR.
+tasks.register<Jar>("paperStationProductProbeJar") {
+    dependsOn(tasks.named("testClasses"))
+    archiveBaseName.set("SimpleCoinsStationProductProbe")
+    from(sourceSets.test.get().output) {
+        include("co/surumene/simplecoins/paper/StationResultGuardLiveProbe.class")
+    }
+    from("tests/paper-station-product-smoke/plugin.yml") {
+        rename { "plugin.yml" }
+    }
+}
