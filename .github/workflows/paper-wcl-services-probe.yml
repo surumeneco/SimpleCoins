@@ -169,6 +169,7 @@ jobs:
           grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' paper-a05.log
           grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
       - name: Verify world saved real WWC entity persists across a second Paper process
@@ -194,6 +195,7 @@ jobs:
             grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' "paper-a05-$phase.log"
             if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a05-$phase.log"; then
               tail -180 "paper-a05-$phase.log"
               exit 1
