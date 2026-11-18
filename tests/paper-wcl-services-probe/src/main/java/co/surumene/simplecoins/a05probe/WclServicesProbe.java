@@ -268,11 +268,22 @@ public final class WclServicesProbe extends JavaPlugin {
                 PersistentDataType.INTEGER, 98);
         requireUnsupported(providers.get("wwc").readStored(
                 wolfEntity, world.getUID(), Optional.empty(), invalidChicken), "WWC");
+        var brokenChicken = PaperWonderfulLoadedEvidence.readStored(
+                this, wolfEntity, world.getUID(), "wwc", invalidChicken);
+        if (brokenChicken.status() != PaperWonderfulLoadedEvidence.Status.FAILURE
+                || brokenChicken.snapshot().isPresent())
+            throw new IllegalStateException("Product WCL must not adopt unsupported WWC schema");
 
         wolfPdc.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
                 PersistentDataType.INTEGER, 98);
         requireUnsupported(www.readStored(
                 wolfEntity, world.getUID(), Optional.empty(), wolfPdc), "WWW");
+        var brokenWolf = PaperWonderfulLoadedEvidence.readStored(
+                this, wolfEntity, world.getUID(), "www", wolfPdc);
+        if (brokenWolf.status() != PaperWonderfulLoadedEvidence.Status.FAILURE
+                || brokenWolf.snapshot().isPresent())
+            throw new IllegalStateException("Product WCL must not adopt unsupported WWW schema");
+        getLogger().info("PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED");
         getLogger().info("PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED");
     }
 
