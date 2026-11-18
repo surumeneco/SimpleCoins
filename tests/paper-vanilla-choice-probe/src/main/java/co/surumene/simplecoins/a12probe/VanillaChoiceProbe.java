@@ -112,7 +112,8 @@ public final class VanillaChoiceProbe extends JavaPlugin {
                 CraftItemEvent.getHandlerList().getRegisteredListeners()) {
             if (registration.getPlugin() == product
                     && registration.getListener() instanceof CoinExchangeRecipes listener) {
-                if (guard != null) throw new IllegalStateException("Duplicate registered currency guard");
+                if (guard != null && guard != listener)
+                    throw new IllegalStateException("Distinct duplicate currency guard instance");
                 guard = listener;
             }
         }
