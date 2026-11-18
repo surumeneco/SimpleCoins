@@ -4,12 +4,12 @@ Status: **verification protocol, not evidence of successful real Paper 26.2 or J
 
 ## Environment and immutable evidence
 
-Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffolding versions, SimpleCoins commit SHA, exact `resource-pack.public-url` (redact signed query tokens), server log and test client versions. Use a disposable test server with a fresh player profile; never change production resources to run this check.
+Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffolding versions, SimpleCoins commit SHA, **the externally hosted Java pack URL and the server configuration actually requesting it, if present** (redact signed query tokens), server log and client versions. The current `config.yml` has no `resource-pack.public-url` field; `SimpleCoinsPlugin` builds the JE ZIP but does not publish or request it for clients. Do not claim a product-provided public URL or a successful delivery before the actual hosting/serving path exists. Use a disposable test server with a fresh player profile; never change production resources to run this check.
 
 ## Nexo absent — SimpleCoins-owned assets
 
 1. Start Paper 26.2 with SimpleCoins and Geyser/Floodgate, without Nexo. Check `plugins/SimpleCoins/SimpleCoins-java.zip`, `plugins/SimpleCoins/geyser/SimpleCoins.mcpack` and `plugins/SimpleCoins/geyser/simplecoins.json` exist. Check Geyser's managed `packs/simplecoins-generated.mcpack` and `custom_mappings/simplecoins-generated.json` are installed.
-2. Host the **generated** Java ZIP at the configured HTTP(S) URL. From a separate network, download it with the **exact** configured URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
+2. **After an actual Java pack distribution path is configured** (external HTTP(S) hosting and the server's real resource-pack request configuration, or a subsequently implemented equivalent), host the **generated** Java ZIP at that verified URL. This is a future acceptance action, not a capability already provided by the current SimpleCoins plugin. From a separate network, download it with the **exact** URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
 
    ```bash
    bash docs/verification/verify-je-pack.sh plugins/SimpleCoins/SimpleCoins-java.zip
@@ -28,17 +28,17 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 
 ## Nexo present — delegated Java pack
 
-1. Restart with Nexo installed. Verify SimpleCoins does not send its own Java pack, and that Nexo owns Java pack generation/hosting. Check duplicate resource-pack prompts do not occur.
+1. On a disposable server with an **implemented and verified Nexo integration**, restart with Nexo installed. Verify SimpleCoins does not generate/serve a duplicate pack and that the actual Nexo Java pack generation/hosting is connected. The current bootstrap merely suppresses SimpleCoins-owned pack generation when Nexo is detected; **it does not yet register SimpleCoins currency assets with Nexo**. If that integration is absent, record the acceptance case as `blocked`, not `pass`. Check duplicate resource-pack prompts only when a real pack request can occur.
 2. Verify Geyser's Bedrock mapping/pack comes from an explicitly configured conversion/delegation path (e.g. Scaffolding). **Do not infer that Nexo's Java pack is automatically converted by Geyser.** If no verified conversion exists, mark BE as blocked/not-run rather than passed.
 3. Repeat JE and BE denomination/model checks, preserving the same currency PDC identities and amounts as the Nexo-absent case.
 
 ## Admin command and offline grant acceptance (disposable server only)
 
-The current `plugin.yml` exposes `/simplecoins` (alias `/sc`) with `simplecoins.admin` permission. `CoinCommand` implements `give`; the read-only balance/dead-asset location and reason query requested by TASK-20261101-006 is **not implemented** in the inspected command handler. Do not mark the admin-query acceptance complete based on the issuance tests below.
+**Current-implementation preflight:** at `develop@7dc4ffdc2f08900ad87aa8a440fb39805c931ace`, `src/main/resources/plugin.yml` registers **no commands or permission nodes**, there is **no `CoinCommand` source file**, and `SimpleCoinsPlugin` registers **no give/administration command executor or player-delivery coordinator**. It keeps admission default-deny. Therefore `/sc give` and the `simplecoins.admin` node in the historical steps below are **not executable product interfaces** on this HEAD; do not attempt to test them as implemented or count missing-command errors as monetary function tests. Names, aliases and nodes require verification against the eventual implemented descriptor and the [Drive 03 command specification](https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view). The numbered cases are **future acceptance conditions only**, currently `blocked` pending product implementation and G0/G3 assurance.
 
-1. On a disposable Paper 26.2 server, confirm a non-privileged sender cannot reserve or issue currency; grant `simplecoins.admin` to a test operator and record the command result. Do not use production playerdata or journal files.
-2. Use an existing, previously joined test player who is currently offline. Run `/sc give <player-uuid> 100`. Record the reservation ID and issuance journal entry; before login, no physical coins should be delivered. On login, verify the exact total and persisted receipt; disconnect/reconnect and restart the disposable server, then verify no duplicate delivery.
-3. With an online test player, run `/sc give <player-name> 50 3`. Verify exactly three denomination-50 coins are reserved and delivered, not a minimum-coin decomposition of 150. Repeat reconnect/restart checks.
+1. **Only after the real command is registered**, record its effective alias and permission node from the tested JAR, then verify that an unauthorized sender cannot reserve/issue and an authorized test operator can. Do not assume `simplecoins.admin` is the implemented node. Do not use production playerdata or journal files.
+2. Once the approved alias/command is implemented, use a previously joined test player who is currently offline; execute the **implemented amount-based** `give` form with that player's verified identity and amount 100. Record reservation ID and journal entry; before login, no physical coins should be delivered. On login, verify the exact total and persisted receipt; disconnect/reconnect and restart the disposable server, then verify no duplicate delivery.
+3. Once implemented, use an online test player and the **item-name plus count** `give` form to give three coins of denomination 50, using the actual accepted item name. Verify exactly three such coins are issued (not amount-based minimum-coin decomposition of 150), then repeat reconnect/restart checks. Do not assume `50` is a valid item-name token.
 4. Fill all 36 player storage slots before a reserved grant is delivered. Verify no coin is dropped or falsely acknowledged and the reservation remains pending; free space, trigger delivery again, and verify the total is neither lost nor duplicated. Record the saved playerdata receipt and journal state.
 5. In a disposable copy only, inject a corrupt/missing journal record or an unconfirmed saved receipt, restart, and verify issuance fails closed rather than replaying an uncertain grant. Keep this separate from a successful delivery case; do not induce failure on production.
 
@@ -61,8 +61,8 @@ Record each case as pass/fail/not-run with the tested commit, Paper version, jou
 
 ## Negative cases and release gate
 
-- Blank public URL: no JE pack request; operator warning remains visible.
-- Invalid public URL (e.g. hostless HTTPS, unsupported scheme, embedded credentials, fragment): no client request and a diagnostic log.
+- Missing external Java pack hosting or server resource-pack request: no JE pack delivery; do not mark the JE client check `pass` on generated ZIP alone.
+- Invalid or obsolete Java resource-pack URL in the **actual serving configuration** (e.g. invalid HTTPS/redirect, wrong ZIP): do not claim client delivery; require reachable verified bytes and observable client result. No unimplemented SimpleCoins `public-url` setting or warning message is assumed.
 - Public URL points to an old ZIP: compare SHA-1 to the generated ZIP; mismatch is a failed deployment gate even if the client displays cached textures.
 - Interrupted/modified managed Geyser resources: startup must not silently overwrite unowned or modified files.
 
