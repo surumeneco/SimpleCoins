@@ -65,7 +65,7 @@ jobs:
           set -e
           if [ "$result" -ne 0 ]; then tail -120 paper-a12-product.log; exit 1; fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a12-product.log
-          grep -F 'A12_PRODUCT_STATION_EVENT_CASES=16' paper-a12-product.log
+          grep -F 'A12_PRODUCT_STATION_EVENT_CASES=18' paper-a12-product.log
           grep -F 'A12_PRODUCT_STATION_GUARD_PASSED' paper-a12-product.log
           if grep -Eq 'A12_PRODUCT_STATION_(GUARD_FAILED|INVALID_ISOLATION)' paper-a12-product.log; then
             tail -120 paper-a12-product.log
