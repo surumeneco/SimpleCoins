@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/main/java/co/surumene/simplecoins/paper/WorldScopeConfigReader.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperSavedSourceDiscovery.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulReaderRegistry.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WorldStorageDiscovery.java'
       - 'src/main/resources/config.yml'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
@@ -83,6 +84,7 @@ jobs:
           if [ "$ready" != 1 ]; then echo 'Paper startup timed out'; cat paper.log; exit 1; fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
+          grep -F 'SIMPLECOINS_WCL_REGISTRATION_OBSERVED status=INCOMPLETE reason=wcl-missing-or-disabled providers=[]' paper.log
           observed=0
           for _ in $(seq 1 120); do
             if grep -Fq 'SIMPLECOINS_SAVED_DISCOVERY_FAILED' paper.log; then
