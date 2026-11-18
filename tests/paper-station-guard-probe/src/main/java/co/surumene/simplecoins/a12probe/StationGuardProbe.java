@@ -302,6 +302,8 @@ public final class StationGuardProbe extends JavaPlugin {
         @SuppressWarnings({"unchecked", "rawtypes"})
         Object pickup = Enum.valueOf((Class<? extends Enum>) inputType, "PICKUP");
         @SuppressWarnings({"unchecked", "rawtypes"})
+        Object quickMove = Enum.valueOf((Class<? extends Enum>) inputType, "QUICK_MOVE");
+        @SuppressWarnings({"unchecked", "rawtypes"})
         Object serverbound = Enum.valueOf(
                 (Class<? extends Enum>) packetFlowType, "SERVERBOUND");
         Object emptyHash = hashedType.getField("EMPTY").get(null);
@@ -334,9 +336,10 @@ public final class StationGuardProbe extends JavaPlugin {
         };
         Bukkit.getPluginManager().registerEvents(guard, this);
         try {
-            for (int i = 0; i < 3; i++) {
-                boolean coinCase = i >= 1;
-                boolean withoutProbeGuard = i == 2;
+            for (int i = 0; i < 6; i++) {
+                boolean shift = i >= 3;
+                boolean coinCase = (i % 3) >= 1;
+                boolean withoutProbeGuard = (i % 3) == 2;
                 probeProtectionEnabled.set(!withoutProbeGuard);
                 Player detached = detachedPlayer();
                 if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
@@ -402,10 +405,10 @@ public final class StationGuardProbe extends JavaPlugin {
                         "it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap")
                         .getConstructor().newInstance();
                 Object packet = packetCtor.newInstance(id, state, (short) 2,
-                        (byte) 0, pickup, changed, emptyHash);
+                        (byte) 0, shift ? quickMove : pickup, changed, emptyHash);
                 getLogger().info("A12_MERCHANT_PACKET_HANDLER_BEGIN"
                         + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
-                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER") + (shift ? "Shift" : "")
                         + " menuValid=true socket=false onlinePlayers=0");
                 try {
                     packetHandle.invoke(handler, packet);
@@ -419,7 +422,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 int blockedDelta = stopped.get() - denyBefore;
                 getLogger().info("A12_MERCHANT_PACKET_HANDLER_RESULT"
                         + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
-                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER") + (shift ? "Shift" : "")
                         + " before=" + before + " after=" + after
                         + " inventoryEvents=" + eventDelta
                         + " blocked=" + blockedDelta
@@ -815,6 +818,8 @@ public final class StationGuardProbe extends JavaPlugin {
         @SuppressWarnings({"unchecked", "rawtypes"})
         Object pickup = Enum.valueOf((Class<? extends Enum>) inputType, "PICKUP");
         @SuppressWarnings({"unchecked", "rawtypes"})
+        Object quickMove = Enum.valueOf((Class<? extends Enum>) inputType, "QUICK_MOVE");
+        @SuppressWarnings({"unchecked", "rawtypes"})
         Object serverbound = Enum.valueOf((Class<? extends Enum>) packetFlowType, "SERVERBOUND");
         Object emptyHash = hashedType.getField("EMPTY").get(null);
         java.lang.reflect.Field activeMenu = nmsPlayerType.getField("containerMenu");
@@ -852,9 +857,10 @@ public final class StationGuardProbe extends JavaPlugin {
         };
         Bukkit.getPluginManager().registerEvents(temporaryGuard, this);
         try {
-            for (int i = 0; i < 3; i++) {
-                boolean coinCase = i >= 1;
-                boolean withoutProbeGuard = i == 2;
+            for (int i = 0; i < 6; i++) {
+                boolean shift = i >= 3;
+                boolean coinCase = (i % 3) >= 1;
+                boolean withoutProbeGuard = (i % 3) == 2;
                 probeProtectionEnabled.set(!withoutProbeGuard);
                 Player detached = detachedPlayer();
                 if (detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
@@ -953,7 +959,7 @@ public final class StationGuardProbe extends JavaPlugin {
                         "it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap")
                         .getConstructor().newInstance();
                 Object packet = packetCtor.newInstance(id, state, (short) 2,
-                        (byte) 0, pickup, changed, emptyHash);
+                        (byte) 0, shift ? quickMove : pickup, changed, emptyHash);
                 boolean valid = (boolean) menuType.getMethod("stillValid", nmsPlayerType)
                         .invoke(menu, handlePlayer);
                 getLogger().info("A12_PACKET_HANDLER_MENU_VALIDITY valid=" + valid
@@ -967,7 +973,7 @@ public final class StationGuardProbe extends JavaPlugin {
                         "Detached player's native menu is not usable by server handler");
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_BEGIN"
                         + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
-                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER") + (shift ? "Shift" : "")
                         + " container=" + id + " state=" + state
                         + " realServerHandler=true socket=false");
                 try {
@@ -980,7 +986,7 @@ public final class StationGuardProbe extends JavaPlugin {
                 int after = ((Number) count.invoke(slotGet.invoke(second))).intValue();
                 getLogger().info("A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT"
                         + " input=" + (withoutProbeGuard ? "genuine5000CNoProbeGuard"
-                                : coinCase ? "genuine5000C" : "ordinaryPAPER")
+                                : coinCase ? "genuine5000C" : "ordinaryPAPER") + (shift ? "Shift" : "")
                         + " before=" + before + " after=" + after
                         + " inventoryEvents=" + (observedClicks.get() - clickBefore)
                         + " cartographyEvents=" + (observedCartography.get() - cartoBefore)
