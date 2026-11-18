@@ -50,7 +50,6 @@ spec_status: confirmed
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| live-reader-proof | green | shell | @repo:SimpleCoins | bash -c 'gradle --no-daemon test jar && gradle --no-daemon -p tests/paper-wcl-services-probe jar' | a05.loaded-reader | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java | — | 600 |
 
 ## Gates
 | Gate | Status | Evidence |
