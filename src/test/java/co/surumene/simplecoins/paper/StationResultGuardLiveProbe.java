@@ -74,17 +74,26 @@ public final class StationResultGuardLiveProbe extends JavaPlugin {
                         slot == 1 ? malformed : null, 2, true, "malformedSlot" + slot);
                 passed += 2;
             }
+            // Confirmed local TCE s3: result-taking when the two input slots cannot be read fails closed.
+            verify(viewer, type, null, null, 2, true, "unreadableInputs", true);
+            passed++;
             verify(viewer, type, coin, null, 0, false, "inputMove");
             verify(viewer, type, coin, null, 3, false, "lowerMove");
             passed += 2;
         }
-        if (passed != 16)
+        if (passed != 18)
             throw new IllegalStateException("Incomplete station verification");
         getLogger().info("A12_PRODUCT_STATION_EVENT_CASES=" + passed);
     }
 
     private static void verify(Player viewer, InventoryType type, ItemStack first,
                                ItemStack second, int raw, boolean deny, String label) {
+        verify(viewer, type, first, second, raw, deny, label, false);
+    }
+
+    private static void verify(Player viewer, InventoryType type, ItemStack first,
+                               ItemStack second, int raw, boolean deny, String label,
+                               boolean unreadableInputs) {
         // A controlled three-slot proxy allows checking the production
         // handler's result-vs-input discrimination for both window types.
         Inventory top = Bukkit.createInventory(null, InventoryType.CARTOGRAPHY);
@@ -94,7 +103,11 @@ public final class StationResultGuardLiveProbe extends JavaPlugin {
                 InventoryView.class.getClassLoader(), new Class<?>[]{InventoryView.class},
                 (p, method, args) -> switch (method.getName()) {
                     case "getType" -> type;
-                    case "getTopInventory" -> top;
+                    case "getTopInventory" -> {
+                        if (unreadableInputs)
+                            throw new IllegalStateException("A12 deliberate unreadable station inputs");
+                        yield top;
+                    }
                     case "getBottomInventory" -> viewer.getInventory();
                     case "convertSlot" -> (Integer) args[0] < 3
                             ? (Integer) args[0] : (Integer) args[0] - 3;
