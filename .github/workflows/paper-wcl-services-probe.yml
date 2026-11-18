@@ -10,6 +10,7 @@ on:
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLoadedEvidence.java'
       - 'Lifecycle/Works/simplecoins.a05.live-loaded-reader.md'
+      - 'Lifecycle/Works/simplecoins.a05.stored-reader.md'
       - 'Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
@@ -47,6 +48,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-loaded-reader.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.stored-reader.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
@@ -229,6 +232,7 @@ jobs:
               reload)
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_STORED_WWC_WWW_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' "paper-a05-$phase.log" ;;
