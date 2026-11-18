@@ -1,0 +1,7 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.currency.station-result-local-decision",
+  "test_package": "co.surumene.simplecoins.paper",
+  "test_class": "GeneratedA12StationLocal",
+  "driver_class": "co.surumene.simplecoins.paper.A12StationResultDecisionDriver"
+}

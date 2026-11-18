@@ -127,17 +127,20 @@ jobs:
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a12-station.log
-          grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_UNCANCELLED inputSlot=0' paper-a12-station.log
-          grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_UNCANCELLED inputSlot=1' paper-a12-station.log
+          grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_PRODUCT_CANCELLED inputSlot=0' paper-a12-station.log
+          grep -F 'A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_PRODUCT_CANCELLED inputSlot=1' paper-a12-station.log
           grep -F 'A12_MERCHANT_PAPER_INGREDIENT_REGISTERED tradePerformed=false taggedCoinAccepted=unverified' paper-a12-station.log
           grep -F 'A12_MERCHANT_MENU_ABI_CLASS net.minecraft.world.inventory.MerchantMenu' paper-a12-station.log
           grep -F 'A12_MERCHANT_MENU_ABI_CTOR ' paper-a12-station.log
           grep -F 'A12_MERCHANT_MENU_ABI_CAPTURED actualTrade=false networkPacket=false playerOnline=false' paper-a12-station.log
           grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=ordinaryPAPER before=1 after=0 inventoryEvents=1 blocked=0' paper-a12-station.log
-          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 blocked=1' paper-a12-station.log
-          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000CNoProbeGuard before=1 after=0 inventoryEvents=1 blocked=0' paper-a12-station.log
-          grep -F 'A12_MERCHANT_UNGUARDED_PRODUCT_COIN_CONSUMPTION before=1 after=0 inventoryEvents=1 probeDenied=0 productionListener=false' paper-a12-station.log
-          grep -F 'A12_MERCHANT_PACKET_HANDLER_TEST_ONLY_DENIAL_PASSED onlinePlayers=0 socket=false realClient=false productionListener=false' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000CNoProbeGuard before=1 after=1 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=ordinaryPAPERShift before=1 after=0 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000CShift before=1 after=1 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_RESULT input=genuine5000CNoProbeGuardShift before=1 after=1 inventoryEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PRODUCT_COIN_PRESERVED before=1 after=1 inventoryEvents=1 probeDenied=0 productionListener=true' paper-a12-station.log
+          grep -F 'A12_MERCHANT_PACKET_HANDLER_PRODUCT_DENIAL_PASSED onlinePlayers=0 socket=false realClient=false productionListener=true' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_PAPER_TAKE_CONTROL_ACCEPTED' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_PAPER_COST_MATCH plain=true stone=false taggedCoin=' paper-a12-station.log
           grep -F 'A12_NMS_MERCHANT_TAGGED_COIN_TAKE accepted=' paper-a12-station.log
@@ -157,10 +160,13 @@ jobs:
           grep -F 'A12_PACKET_HANDLER_MENU_VALIDITY valid=true' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_TRANSIENT_JOIN_STATE initiallyJoining=true joining=true immobile=false channelConnected=false actualClient=false' paper-a12-station.log
           grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPER before=1 after=0 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=1' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000CNoProbeGuard before=1 after=0 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
-          grep -F 'A12_CARTOGRAPHY_UNGUARDED_PRODUCT_COIN_CONSUMPTION before=1 after=0 inventoryEvents=1 cartographyEvents=1 probeDenied=0 productionListener=false originalCoinUnchanged=true' paper-a12-station.log
-          grep -F 'A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED socket=false onlinePlayers=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000C before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000CNoProbeGuard before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=ordinaryPAPERShift before=1 after=0 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000CShift before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_DIRECT_INVOKE_RESULT input=genuine5000CNoProbeGuardShift before=1 after=1 inventoryEvents=1 cartographyEvents=1 blocked=0' paper-a12-station.log
+          grep -F 'A12_CARTOGRAPHY_PRODUCT_COIN_PRESERVED before=1 after=1 inventoryEvents=1 cartographyEvents=1 probeDenied=0 productionListener=true originalCoinUnchanged=true' paper-a12-station.log
+          grep -F 'A12_PACKET_HANDLER_PRODUCT_COIN_CANCELLATION_PASSED socket=false onlinePlayers=0' paper-a12-station.log
           grep -F 'A12_PACKET_PATH_ABI_INSPECTED entrypoints=1 eventDispatch=unverified networkPacketSent=false' paper-a12-station.log
           grep -F 'A12_STATION_DISPOSABLE_PROBE_COMPLETE' paper-a12-station.log
           if grep -Eq 'A12_STATION_PROBE_FAILED|A12_STATION_INVALID_ISOLATION' paper-a12-station.log; then exit 1; fi
