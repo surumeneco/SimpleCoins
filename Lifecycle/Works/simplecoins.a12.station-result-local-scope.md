@@ -8,7 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1BscHPnPya9gFa36JQY4GBMcpX0TU_8p5/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
   - https://github.com/surumeneco/SimpleCoins/pull/529
-decision_ref: pending-user-approval:a12-local-decision-process
+decision_ref: user-chat:2026-11-18:A12-station-result-local-decision-approved
 refs: []
 entry: issue
 mode: shadow
@@ -18,10 +18,10 @@ parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
 project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4Df0dl/view
-spec_status: draft
+spec_status: confirmed
 ---
 
-# A12: 局所判定と全体保証の責務分離（承認待ち）
+# A12: 局所判定と全体保証の責務分離（承認済み）
 
 ## Evidence
 | URI |
@@ -45,7 +45,7 @@ spec_status: draft
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-result-local-scope.md;docs/cat/drafts/a12-station-local-decision-process.md;docs/cat/drafts/a12-station-local-decision-pi.md;docs/cat/drafts/a12-station-local-decision-tce.md | — | — |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-result-local-scope.md;docs/cat/confirmed/a12-station-local-decision-process.md;docs/cat/confirmed/a12-station-local-decision-pi.md;docs/cat/confirmed/a12-station-local-decision-tce.md | — | — |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
@@ -54,10 +54,10 @@ spec_status: draft
 ## Gates
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| process-closure | not-run | Draft is not Confirmed |
-| model-conformance | not-run | Draft only |
-| implementation-conformance | not-run | Draft only |
-| semantic-review | not-run | User decision pending |
+| process-closure | not-run | Approved Confirmed scope; formal Gate remains to be run |
+| model-conformance | not-run | Approved Confirmed scope; formal Gate remains to be run |
+| implementation-conformance | not-run | Product/adapter not yet formally verified |
+| semantic-review | not-run | User approval established; conditional review only if prescribed |
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
@@ -68,8 +68,8 @@ spec_status: draft
 
 ## Acceptance and required decision
 
-This issue-work **specification Draft** proposes a closed finite-input pure decision as a separate Process. It does **not** alter or waive the existing Confirmed A12 open-world Process, its Process Closure, the Java/Paper event adapter or G0/G3.
+This issue-work records the user-approved **Confirmed** finite-input pure decision as a separate Process. It does **not** alter or waive the existing Confirmed A12 open-world Process, its Process Closure, the Java/Paper event adapter or G0/G3.
 
-Static lint and `--allow-draft` model compilation are non-normative readiness checks. Normative vector/test generation remains blocked until legitimate confirmation. After approval, use the actual canonical CAT flow and `spec-test-sync` against existing Paper event behavior; do not fabricate Red for code already implemented.
+Static lint and `--allow-draft` model compilation are non-normative readiness checks. Normative vector/test generation remains blocked until legitimate confirmation. After this approval, use the actual canonical CAT flow and `spec-test-sync` against existing Paper event behavior; do not fabricate Red for code already implemented.
 
-**Decision requested:** approve/reject the separate pure-decision Process boundary while retaining the existing broader A12 Process unchanged and unresolved.
+**Decision:** the user approved the separate pure-decision Process boundary on 2026-11-18 (reference: https://github.com/surumeneco/SimpleCoins/pull/532#issuecomment-6976353886). The existing broader A12 Process remains open-world and unresolved.
