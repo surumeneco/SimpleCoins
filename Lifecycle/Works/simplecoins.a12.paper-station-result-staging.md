@@ -30,6 +30,7 @@ spec_status: confirmed
 | https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/confirmed/a12-station-consumption-process.md |
 | https://github.com/surumeneco/SimpleCoins/pull/520 |
 | https://github.com/surumeneco/SimpleCoins/pull/522 |
+| https://github.com/surumeneco/SimpleCoins/pull/532 |
 
 ## Scope
 
@@ -67,7 +68,7 @@ spec_status: confirmed
 | test-oracle-review | not-run | — |
 | red-review | not-run | — |
 | pr-review | not-run | — |
-| ci | passed | [Exact-head #44207755155](https://github.com/surumeneco/SimpleCoins/actions/runs/44207755155) native Merchant/Cartography result+Shift, [#44207754896](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754896) product event 16 cases, [#44207754835](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754835) vanilla craft; all 13 workflows succeeded at `8dc87ac05a4943436bdc305c1adcc811277c2d5a` |
+| ci | not-run | Prior-head verification only: [#44207755155](https://github.com/surumeneco/SimpleCoins/actions/runs/44207755155) native Merchant/Cartography result+Shift, [#44207754896](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754896) product event 16 cases, [#44207754835](https://github.com/surumeneco/SimpleCoins/actions/runs/44207754835) vanilla craft; all 13 workflows succeeded at `8dc87ac05a4943436bdc305c1adcc811277c2d5a`; current modified HEAD not yet verified |
 | merge | not-run | — |
 | deployment | not-run | — |
 | real-use | not-run | — |
@@ -89,3 +90,7 @@ partial event-surface mitigation, not complete CAT acceptance. The Confirmed
 Process remains explicitly open-world; script-owned Process Closure remains
 blocked rather than being rewritten to passed.
 Direct-NMS writers, later plugin overrides, authenticated network clients, and unverified other click types (number-key, double-click, drag) remain outside this local listener proof.
+
+## Approved local decision boundary (independent of the open-world process)
+
+[PR #532](https://github.com/surumeneco/SimpleCoins/pull/532) was merged into `develop@9dccbf08c8ca7f59eba2c021d65166fd376294de` after explicit user-chat approval. Its separate Confirmed `simplecoins.currency.station-result-local-decision` pure function accepts three normalized Booleans and has four exclusive TCE rules. Canonical local Process Closure and Model Conformance passed, with four normative vectors; this does **not** close the pre-existing broader `simplecoins.currency.station-consumption-exclusion` process or establish Java binding/Implementation Conformance. The product handler here is tested on the Paper event surface and now includes injected unreadable-input fail-closed cases corresponding to local TCE s3. This remains supplemental Paper execution evidence, not a fabricated source-derived JUnit spec-test-sync result. No release, real clients or full writer fence is claimed.
