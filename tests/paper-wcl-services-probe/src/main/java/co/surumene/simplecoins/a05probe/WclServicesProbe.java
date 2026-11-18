@@ -6,6 +6,7 @@ import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
 import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
@@ -197,6 +198,29 @@ public final class WclServicesProbe extends JavaPlugin {
                     chickenCommander, storedShulker, coins);
             if (!live.items().equals(saved.items()) || !live.relationships().equals(saved.relationships()))
                 throw new IllegalStateException("WWC LIVE and stored reader disagree for same entity");
+            // Product collector, not this independent observer, must preserve
+            // the real loaded WWC source with exact identities and serialized bytes.
+            var product = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "wwc");
+            if (product.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                    || product.snapshot().isEmpty())
+                throw new IllegalStateException("Product WCL loaded collector failed: " + product);
+            var candidate = product.snapshot().orElseThrow();
+            if (!candidate.entityId().equals(chicken.getUniqueId())
+                    || !candidate.worldId().equals(world.getUID())
+                    || !"wwc".equals(candidate.providerId())
+                    || !candidate.relationships().equals(live.relationships())
+                    || candidate.items().size() != live.items().size()
+                    || candidate.items().stream().noneMatch(item ->
+                            "shulker".equals(item.slot())
+                            && Arrays.equals(storedShulker, item.bytes())))
+                throw new IllegalStateException("Product WCL candidate source/evidence mismatch");
+            // A non-target service returning NotFound cannot be treated as
+            // proof of zero money in any other world/provider.
+            var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
+            if (wrongProvider.status() != PaperWonderfulLoadedEvidence.Status.NOT_FOUND
+                    || wrongProvider.snapshot().isPresent())
+                throw new IllegalStateException("Non-target WCL result must not be adopted");
+            getLogger().info("PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED");
             getLogger().info("PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED");
         } finally {
             chicken.remove();
