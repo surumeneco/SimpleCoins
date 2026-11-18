@@ -16,6 +16,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.ServerLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -36,6 +40,7 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     private final Runnable safeStop;
     private final GrantLedger issuanceLedger;
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean launched = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicReference<WorldStorageDiscovery.Manifest> observed =
@@ -60,12 +65,58 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         this.issuanceLedger = issuanceLedger;
     }
 
+    private record WorldRoots(Map<String, Path> immutableRoots,
+                              Set<Path> immutablePlayerRoots) {}
+
     public void start() {
         if (!Bukkit.isPrimaryThread())
-            throw new IllegalStateException("World roots must be captured on Paper main thread");
+            throw new IllegalStateException("Saved-source discovery setup requires Paper main thread");
         if (!started.compareAndSet(false, true))
             throw new IllegalStateException("Saved-source discovery is one-shot");
 
+        // Paper initial spawn generation can create new region files after
+        // plugin onEnable. A walk begun here would treat expected startup I/O
+        // as conflicting monetary authority and unnecessarily stop the server.
+        // Collect all currently loaded worlds and begin the strict walk only
+        // AFTER ServerLoadEvent, on the next server tick. The manifest and
+        // content verification are unchanged; no money is published here.
+        Bukkit.getPluginManager().registerEvents(new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void onServerReady(ServerLoadEvent event) {
+                if (closed.get() || !launched.compareAndSet(false, true)) return;
+                try {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (closed.get()) return;
+                        try {
+                            WorldRoots roots = captureWorldRoots();
+                            plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY");
+                            launchDiscovery(roots);
+                        } catch (RuntimeException | Error fail) {
+                            signalFailure(fail);
+                        }
+                    });
+                } catch (RuntimeException schedulingFailure) {
+                    signalFailure(schedulingFailure);
+                }
+            }
+        }, plugin);
+
+        // A stalled filesystem walk must not leave an apparently successful
+        // startup. This watchdog runs on Paper's main thread, not on the worker.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (closed.get() || !finished.compareAndSet(false, true)) return;
+            IOException timeout = new IOException(
+                    "Saved-source discovery did not finish within 180 seconds");
+            failure.compareAndSet(null, timeout);
+            plugin.getLogger().log(Level.SEVERE, "SIMPLECOINS_SAVED_DISCOVERY_FAILED", timeout);
+            safeStop.run();
+        }, DISCOVERY_TIMEOUT_TICKS);
+    }
+
+    /** Run only on the primary thread after Paper has finished startup load. */
+    private WorldRoots captureWorldRoots() {
+        if (!Bukkit.isPrimaryThread())
+            throw new IllegalStateException("World roots must be captured on Paper main thread");
         Map<String, Path> worldRoots = new LinkedHashMap<>();
         Set<Path> sharedPlayerRoots = new HashSet<>();
         for (World world : Bukkit.getWorlds()) {
@@ -89,9 +140,14 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         }
         if (worldRoots.isEmpty())
             throw new IllegalStateException("No loaded worlds for source inventory");
-        Map<String, Path> immutableRoots = Map.copyOf(worldRoots);
-        Set<Path> immutablePlayerRoots = Set.copyOf(sharedPlayerRoots);
+        return new WorldRoots(Map.copyOf(worldRoots), Set.copyOf(sharedPlayerRoots));
 
+    }
+
+    private void launchDiscovery(WorldRoots roots) {
+        if (closed.get()) return;
+        Map<String, Path> immutableRoots = roots.immutableRoots();
+        Set<Path> immutablePlayerRoots = roots.immutablePlayerRoots();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 var manifest = WorldStorageDiscovery.discover(
@@ -128,16 +184,6 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
             }
         });
 
-        // A stalled filesystem walk must not leave an apparently successful
-        // startup. This watchdog runs on Paper's main thread, not on the worker.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (closed.get() || !finished.compareAndSet(false, true)) return;
-            IOException timeout = new IOException(
-                    "Saved-source discovery did not finish within 180 seconds");
-            failure.compareAndSet(null, timeout);
-            plugin.getLogger().log(Level.SEVERE, "SIMPLECOINS_SAVED_DISCOVERY_FAILED", timeout);
-            safeStop.run();
-        }, DISCOVERY_TIMEOUT_TICKS);
     }
 
     private void signalFailure(Throwable fail) {
