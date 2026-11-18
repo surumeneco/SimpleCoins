@@ -43,7 +43,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md;src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/test/java/co/surumene/simplecoins/paper/A12StationResultDecisionDriver.java;src/test/java/co/surumene/simplecoins/paper/generated/*;tests/cat/a12-station-local-junit-binding.json;.github/workflows/a12-local-station-cat-junit.yml | src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java | src/test/java/co/surumene/simplecoins/paper/A12StationResultDecisionDriver.java;src/test/java/co/surumene/simplecoins/paper/generated/*;.github/workflows/a12-local-station-cat-junit.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.station-local-decision-implementation.md;Lifecycle/CAT/Reviews/simplecoins.a12.station-local-result-conditional.md;src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/test/java/co/surumene/simplecoins/paper/A12StationResultDecisionDriver.java;src/test/java/co/surumene/simplecoins/paper/generated/*;tests/cat/a12-station-local-junit-binding.json;.github/workflows/a12-local-station-cat-junit.yml | src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java | src/test/java/co/surumene/simplecoins/paper/A12StationResultDecisionDriver.java;src/test/java/co/surumene/simplecoins/paper/generated/*;.github/workflows/a12-local-station-cat-junit.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
