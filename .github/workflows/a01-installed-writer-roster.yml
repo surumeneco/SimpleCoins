@@ -104,3 +104,114 @@ jobs:
             writer-installed-altered.json
           retention-days: 14
           if-no-files-found: ignore
+
+  compare-current-distribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify unit contracts of inventory comparator
+        run: python tests/test_verify_writer_inventory.py
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: historical-distribution
+          sparse-checkout: |
+            plugins
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e
+          path: current-distribution
+          sparse-checkout: |
+            plugins
+          persist-credentials: false
+      - name: Compare two immutable full 24-JAR sets and verify refreshed reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C historical-distribution rev-parse HEAD)" = '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          test "$(git -C current-distribution rev-parse HEAD)" = '79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e'
+          for name in WonderfulCoreLibrary-0.1.0.jar blocklocker-1.15.jar InvSee++.jar; do
+            test -s "historical-distribution/plugins/$name"
+            test -s "current-distribution/plugins/$name"
+          done
+          test -s 'historical-distribution/plugins/WhatAWonderfulChicken-2.1.0.jar'
+          test -s 'historical-distribution/plugins/WhatAWonderfulWolf-1.1.1.jar'
+          test -s 'current-distribution/plugins/WhatAWonderfulChicken-2.1.1.jar'
+          test -s 'current-distribution/plugins/WhatAWonderfulWolf-1.1.2.jar'
+          python tools/audit_writer_surface.py \
+            --plugins historical-distribution/plugins \
+            --output a01-historical-static-reference.json \
+            --max-examples 2 \
+            --require WonderfulCoreLibrary-0.1.0.jar \
+            --require WhatAWonderfulChicken-2.1.0.jar \
+            --require WhatAWonderfulWolf-1.1.1.jar \
+            --require blocklocker-1.15.jar
+          python tools/audit_writer_surface.py \
+            --plugins current-distribution/plugins \
+            --output a01-current-static-reference.json \
+            --max-examples 2 \
+            --require WonderfulCoreLibrary-0.1.0.jar \
+            --require WhatAWonderfulChicken-2.1.1.jar \
+            --require WhatAWonderfulWolf-1.1.2.jar \
+            --require blocklocker-1.15.jar
+          python tools/verify_writer_inventory.py \
+            --reference-json a01-current-static-reference.json \
+            --installed-plugins current-distribution/plugins \
+            --report-json a01-current-roster-match.json
+          if python tools/verify_writer_inventory.py \
+            --reference-json a01-historical-static-reference.json \
+            --installed-plugins current-distribution/plugins \
+            --report-json a01-historical-roster-drift.json; then
+            echo "Outdated historical writer reference incorrectly accepted current JAR set" >&2
+            exit 1
+          fi
+          python - <<'PYCHECK'
+          import json
+          from pathlib import Path
+          def load(name):
+              return json.loads(Path(name).read_text(encoding='utf-8'))
+          historical=load('a01-historical-static-reference.json')
+          current=load('a01-current-static-reference.json')
+          match=load('a01-current-roster-match.json')
+          drift=load('a01-historical-roster-drift.json')
+          h={x['jar']:x for x in historical['jars']}
+          c={x['jar']:x for x in current['jars']}
+          assert len(h)==len(c)==24
+          old={'WhatAWonderfulChicken-2.1.0.jar','WhatAWonderfulWolf-1.1.1.jar'}
+          new={'WhatAWonderfulChicken-2.1.1.jar','WhatAWonderfulWolf-1.1.2.jar'}
+          assert set(h)-set(c)==old,(set(h)-set(c))
+          assert set(c)-set(h)==new,(set(c)-set(h))
+          for name in set(h)&set(c):
+              for field in ('sha256','size'):
+                  assert h[name][field]==c[name][field],(name,field)
+          assert match['status']=='match'
+          assert match['expected_jar_count']==24 and len(match['matching'])==24
+          assert not any(match[key] for key in ('missing','unexpected','altered','rejected'))
+          assert drift['status']=='mismatch',drift
+          assert set(drift['missing'])==old,drift['missing']
+          assert set(drift['unexpected'])==new,drift['unexpected']
+          assert len(drift['matching'])==22 and not drift['altered'],drift
+          for name in sorted(old):
+              print('A01_HISTORICAL_ONLY_JAR',name)
+          for name in sorted(new):
+              print('A01_CURRENT_JAR',name,c[name]['sha256'])
+          print('A01_FIXED_CURRENT_24_JAR_SHA256_ROSTER_VERIFIED')
+          print('A01_OLD_REFERENCE_MUST_NOT_BE_TREATED_AS_CURRENT')
+          print('A01_STATIC_WRITER_REFERENCE_NOT_QUIESCENCE_OR_G0_G3')
+          PYCHECK
+      - name: Preserve both point-in-time reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-current-vs-historical-plugin-writer-roster
+          path: |
+            a01-historical-static-reference.json
+            a01-current-static-reference.json
+            a01-current-roster-match.json
+            a01-historical-roster-drift.json
+          retention-days: 14
+          if-no-files-found: ignore
