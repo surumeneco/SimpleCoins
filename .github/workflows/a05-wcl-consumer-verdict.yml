@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
-          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          ref: 381af68c91a1cb4c3a0b908d7edd660d87bbb49b
           path: cat-tdd-fixed
           persist-credentials: false
       - name: Validate Confirmed A05 Process Closure and Model Conformance
@@ -47,3 +47,38 @@ jobs:
           assert [x['status'] for x in queue['items']]==['current']+['pending']*7
           print('A05_CONFIRMED_PROCESS_MODEL_AND_TDD_QUEUE_PRECONDITIONS_PASSED')
           PY
+      - name: Generate exact current A05 PI-only JUnit test (capabilities unverified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=Lifecycle/Works/.cat-flow
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py
+          python "$FLOW" tests \
+            "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
+            "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
+            tests/cat/a05-wcl-consumer-junit-binding.json \
+            --framework junit \
+            --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
+            --process docs/cat/confirmed/a05-wcl-consumer-process.md \
+            --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
+            --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
+            -o "$ROOT/generated/A05WclEvidenceGeneratedTest.java"
+          python - <<'PY'
+          from pathlib import Path
+          source=Path('Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java').read_text()
+          assert 'CAPABILITIES NOT VERIFIED' in source
+          assert '@DisplayName("case.s0")' in source
+          assert '観測.同一世代の取込み' in source
+          assert '作用.候補保留' in source
+          assert source.count('@DisplayName(')==1
+          print('A05_PI_ONLY_CAT_SOURCE_DERIVED_CURRENT_ITEM_GENERATED_CAPABILITIES_UNVERIFIED')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a05-pi-only-cat-current-item
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-model.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-vectors.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-queue.json
+            Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
+          if-no-files-found: error
