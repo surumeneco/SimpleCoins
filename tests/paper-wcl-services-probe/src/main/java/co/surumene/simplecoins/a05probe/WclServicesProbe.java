@@ -760,6 +760,25 @@ public final class WclServicesProbe extends JavaPlugin {
                                     Optional.empty(), detached), "WWC detached unloaded NBT");
                     assertChickenStorage(source, wwcUuid, world.getUID(), PERSISTENCE_FOLLOW,
                             wwcBytes, coins);
+                    var productionStored = PaperWonderfulLoadedEvidence.readStored(
+                            this, entityId, world.getUID(), "wwc", detached);
+                    if (productionStored.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                            || productionStored.snapshot().isEmpty()
+                            || !PERSISTENCE_FOLLOW.equals(
+                                productionStored.snapshot().orElseThrow()
+                                        .relationships().get("follow_target"))
+                            || productionStored.snapshot().orElseThrow().items().size() != 1
+                            || !"shulker".equals(
+                                productionStored.snapshot().orElseThrow().items().getFirst().slot())
+                            || !Arrays.equals(wwcBytes,
+                                productionStored.snapshot().orElseThrow().items().getFirst().bytes()))
+                        throw new IOException("Product offline WWC saved PDC evidence mismatch");
+                    var wrongSpecies = PaperWonderfulLoadedEvidence.readStored(
+                            this, entityId, world.getUID(), "www", detached);
+                    if (wrongSpecies.status() != PaperWonderfulLoadedEvidence.Status.NOT_FOUND
+                            || wrongSpecies.snapshot().isPresent())
+                        throw new IOException("Wrong-provider offline reader must return no candidate");
+
                 } else {
                     if (++recognized[1] != 1 || !wwwUuid.equals(entityId)
                             || !"minecraft:wolf".equals(entity.get("id"))
@@ -779,6 +798,25 @@ public final class WclServicesProbe extends JavaPlugin {
                             PersistentDataType.BYTE_ARRAY, runtime);
                     assertPersistedWolf(providers.get("www"), wwwUuid, world.getUID(),
                             detached, coins);
+                    var productionStored = PaperWonderfulLoadedEvidence.readStored(
+                            this, entityId, world.getUID(), "www", detached);
+                    if (productionStored.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                            || productionStored.snapshot().isEmpty())
+                        throw new IOException("Product offline WWW read failed");
+                    var wolfSource = productionStored.snapshot().orElseThrow();
+                    if (!wolfSource.entityId().equals(wwwUuid)
+                            || !wolfSource.worldId().equals(world.getUID())
+                            || !"www".equals(wolfSource.providerId())
+                            || !WOLF_COMMANDER.equals(wolfSource.relationships().get("commander"))
+                            || !WOLF_OWNER.equals(wolfSource.relationships().get("owner"))
+                            || wolfSource.items().size() != 2
+                            || wolfSource.items().stream().noneMatch(item ->
+                                "weapon".equals(item.slot())
+                                && Arrays.equals(
+                                    coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
+                                    item.bytes())))
+                        throw new IOException("Product offline WWW identities/serialized items differ");
+
                 }
             }
         });
@@ -800,6 +838,8 @@ public final class WclServicesProbe extends JavaPlugin {
                     + recognized[0] + " WWW=" + recognized[1]);
         if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
             throw new IllegalStateException("Saved Entity read accidentally loaded far chunk");
+        getLogger().info("PAPER_A05_PRODUCT_STORED_WWC_WWW_SOURCE_PROOF_PASSED"
+                + " entities=2 source=verified-Anvil-PDC chunkUnloaded=true");
         getLogger().info("PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED"
                 + " source=entities/r.1.1.mca entities=2"
                 + " regionChunk=" + FAR_CHUNK + "," + FAR_CHUNK
