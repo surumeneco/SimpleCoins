@@ -29,7 +29,24 @@ public final class WclStorageEvidenceDecision {
 
     public static Verdict decide(Evidence evidence) {
         Objects.requireNonNull(evidence, "evidence");
-        // Current Queue case.s0 is intentionally Red before the implementation.
+        // The booleans must come from the upstream provenance/owner/generation
+        // verifier. This pure verdict must never invent positive evidence.
+        if (!evidence.providersVerified() || evidence.contradictionPresent()) {
+            return Verdict.HOLD;
+        }
+        if (!evidence.targetEntityVerified() && evidence.nonTargetEntityVerified()) {
+            return Verdict.CONTINUE_VERIFIED_NON_TARGET;
+        }
+        if (evidence.targetEntityVerified()
+                && !evidence.nonTargetEntityVerified()
+                && evidence.successfulRead()
+                && evidence.sourceIdentityVerified()
+                && evidence.ownershipVerified()
+                && evidence.sameGenerationAndDeduplicated()) {
+            return Verdict.ADOPT_UNPUBLISHED;
+        }
+        // Unknown target, impossible simultaneous target/non-target, read
+        // failure, source mismatch, ownership gap or stale generation.
         return Verdict.HOLD;
     }
 }
