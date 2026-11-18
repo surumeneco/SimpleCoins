@@ -6,6 +6,8 @@ on:
       - 'tests/paper-wcl-services-probe/**'
       - '.github/workflows/paper-wcl-services-probe.yml'
       - 'src/main/resources/plugin.yml'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulReaderRegistry.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md'
       - 'Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-stored-currency-providers.md'
@@ -153,6 +155,7 @@ jobs:
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a05.log
+          grep -F 'SIMPLECOINS_WCL_REGISTRATION_OBSERVED status=PRESENT reason=two-registration-sources-present' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_SERVICES_REGISTERED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' paper-a05.log
           grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' paper-a05.log
@@ -178,6 +181,7 @@ jobs:
               exit 1
             fi
             grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' "paper-a05-$phase.log"
+            grep -F 'SIMPLECOINS_WCL_REGISTRATION_OBSERVED status=PRESENT reason=two-registration-sources-present' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
