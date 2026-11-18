@@ -144,20 +144,29 @@ public final class CoinExchangeRecipes implements Listener {
      * This protects the observed InventoryClickEvent route, not arbitrary
      * direct NMS writes, late third-party mutation, or physical settlement.
      */
+    /** Pure decision for the separately Confirmed station-result-local Process. */
+    static boolean stationResultShouldCancel(boolean targetResultOperation,
+                                             boolean inputsReadable,
+                                             boolean currencyMarkerPresent) {
+        return targetResultOperation && (!inputsReadable || currencyMarkerPresent);
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onStationResultClick(InventoryClickEvent event) {
         InventoryType type = event.getView().getType();
-        if ((type != InventoryType.MERCHANT && type != InventoryType.CARTOGRAPHY)
-                || event.getRawSlot() != 2) return;
+        boolean target = (type == InventoryType.MERCHANT || type == InventoryType.CARTOGRAPHY)
+                && event.getRawSlot() == 2;
+        if (!target) return;
         try {
             Inventory inputs = event.getView().getTopInventory();
-            if (inputs == null || inputs.getSize() < 3
-                    || codec.hasCoinMarker(inputs.getItem(0))
-                    || codec.hasCoinMarker(inputs.getItem(1))) {
+            boolean readable = inputs != null && inputs.getSize() >= 3;
+            boolean marked = readable && (codec.hasCoinMarker(inputs.getItem(0))
+                    || codec.hasCoinMarker(inputs.getItem(1)));
+            if (stationResultShouldCancel(target, readable, marked))
                 event.setCancelled(true);
-            }
         } catch (RuntimeException unreadableInputs) {
-            event.setCancelled(true);
+            if (stationResultShouldCancel(target, false, false))
+                event.setCancelled(true);
         }
     }
 
