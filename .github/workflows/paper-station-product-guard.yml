@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [develop]
     paths:
-      - 'src/main/java/co/surumene/simplecoins/paper/CoinStationResultGuard.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java'
       - 'tests/paper-station-product-smoke/**'

@@ -10,6 +10,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.CrafterCraftEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.inventory.ItemStack;
@@ -127,6 +130,33 @@ public final class CoinExchangeRecipes implements Listener {
         if (needsGuard(matrix, recipe)
                 && (!isApproved(recipe, matrix)
                     || !hasAuthorizedResult(recipe, event.getResult()))) {
+            event.setCancelled(true);
+        }
+    }
+
+
+    /**
+     * The *result take* is the monetary boundary for native merchant and
+     * cartography menus. The coins' PDC marker, even if malformed, must never
+     * be spent as ordinary PAPER. Reading the two input slots is synchronous
+     * on Paper's event thread; an unreadable slot fails closed.
+     *
+     * This protects the observed InventoryClickEvent route, not arbitrary
+     * direct NMS writes, late third-party mutation, or physical settlement.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onStationResultClick(InventoryClickEvent event) {
+        InventoryType type = event.getView().getType();
+        if ((type != InventoryType.MERCHANT && type != InventoryType.CARTOGRAPHY)
+                || event.getRawSlot() != 2) return;
+        try {
+            Inventory inputs = event.getView().getTopInventory();
+            if (inputs == null || inputs.getSize() < 3
+                    || codec.hasCoinMarker(inputs.getItem(0))
+                    || codec.hasCoinMarker(inputs.getItem(1))) {
+                event.setCancelled(true);
+            }
+        } catch (RuntimeException unreadableInputs) {
             event.setCancelled(true);
         }
     }

@@ -49,7 +49,7 @@ spec_status: confirmed
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.paper-station-result-staging.md;src/main/java/co/surumene/simplecoins/paper/CoinStationResultGuard.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java;src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml | src/main/java/co/surumene/simplecoins/paper/CoinStationResultGuard.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java | src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a12.paper-station-result-staging.md;src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java;src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml | src/main/java/co/surumene/simplecoins/paper/CoinExchangeRecipes.java;src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java | src/test/java/co/surumene/simplecoins/paper/StationResultGuardLiveProbe.java;tests/paper-station-product-smoke/*;build.gradle.kts;.github/workflows/paper-station-product-guard.yml |
 
 ## Checks
 
@@ -84,7 +84,10 @@ physical result consumption, socket, actual client, third-party update or
 settlement publication is claimed by this particular fixture. Prior #518–#522
 supply independent packet-handler contrast evidence.
 
-Product listener code, if staged after a genuine expected Red, must remain
-reviewable as a partial event-surface mitigation, not complete CAT acceptance.
+Product result-slot listener has been staged after a genuine expected Red
+on the former product (Paper event bus run 44205074411). This is **only** a
+partial event-surface mitigation, not complete CAT acceptance. The Confirmed
+Process remains explicitly open-world; script-owned Process Closure remains
+blocked rather than being rewritten to passed.
 Uncollaborative NMS writers, later plugin overrides and unverified shift/click
 variants remain separate from the local listener's proof.
