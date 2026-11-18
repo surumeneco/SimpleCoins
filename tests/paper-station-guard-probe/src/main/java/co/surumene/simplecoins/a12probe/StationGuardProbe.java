@@ -98,12 +98,12 @@ public final class StationGuardProbe extends JavaPlugin {
                         view, InventoryType.SlotType.RESULT, 2,
                         ClickType.LEFT, InventoryAction.PICKUP_ALL);
                 Bukkit.getPluginManager().callEvent(attempt);
-                if (attempt.isCancelled())
+                if (!attempt.isCancelled())
                     throw new IllegalStateException(
-                            "Product or other plugin already rejects this synthetic event");
+                            "Product listener did not deny synthetic result of marked currency");
                 if (codec.identify(cartography.getItem(coinSlot)).isEmpty())
                     throw new IllegalStateException("Probe dispatch consumed test money");
-                getLogger().info("A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_UNCANCELLED"
+                getLogger().info("A12_CARTOGRAPHY_SYNTHETIC_RESULT_CLICK_PRODUCT_CANCELLED"
                         + " inputSlot=" + coinSlot
                         + " resultSlot=2"
                         + " realPaperInventory=true syntheticView=true"
@@ -427,16 +427,13 @@ public final class StationGuardProbe extends JavaPlugin {
                 if (before != 1 || eventDelta != 1)
                     throw new IllegalStateException(
                             "Real merchant packet handler did not notify InventoryClickEvent");
-                if (coinCase && !withoutProbeGuard && (after != 1 || blockedDelta != 1))
+                if (coinCase && (after != 1 || blockedDelta != 0))
                     throw new IllegalStateException(
-                            "Merchant test-only currency cancel did not protect input");
-                if (withoutProbeGuard && (after != 0 || blockedDelta != 0))
-                    throw new IllegalStateException(
-                            "Unexpected Merchant currency preservation without the test-only listener");
+                            "Product Merchant currency listener failed to preserve marked PAPER");
                 if (withoutProbeGuard)
-                    getLogger().info("A12_MERCHANT_UNGUARDED_PRODUCT_COIN_CONSUMPTION"
-                            + " before=1 after=0 inventoryEvents=1 probeDenied=0"
-                            + " productionListener=false playerOnline=false socket=false");
+                    getLogger().info("A12_MERCHANT_PRODUCT_COIN_PRESERVED"
+                            + " before=1 after=1 inventoryEvents=1 probeDenied=0"
+                            + " productionListener=true playerOnline=false socket=false");
                 if (!coinCase && (after != 0 || blockedDelta != 0))
                     throw new IllegalStateException(
                             "Ordinary PAPER merchant input was not consumed");
@@ -444,9 +441,9 @@ public final class StationGuardProbe extends JavaPlugin {
                         != CoinDenomination.FIVE_THOUSAND || originalCoin.getAmount() != 1)
                     throw new IllegalStateException("Merchant probe modified original coin");
             }
-            getLogger().info("A12_MERCHANT_PACKET_HANDLER_TEST_ONLY_DENIAL_PASSED"
+            getLogger().info("A12_MERCHANT_PACKET_HANDLER_PRODUCT_DENIAL_PASSED"
                     + " onlinePlayers=0 socket=false realClient=false"
-                    + " productionListener=false");
+                    + " productionListener=true");
         } finally {
             HandlerList.unregisterAll(guard);
         }
@@ -992,15 +989,12 @@ public final class StationGuardProbe extends JavaPlugin {
                 if (before != 1 || observedClicks.get() == clickBefore)
                     throw new IllegalStateException(
                             "Actual server handler did not dispatch an inventory click");
-                if (coinCase && !withoutProbeGuard
-                        && (after != 1 || rejectedMoney.get() != blockBefore + 1))
+                if (coinCase && (after != 1 || rejectedMoney.get() != blockBefore))
                     throw new IllegalStateException(
-                            "Test-only packet click guard did not preserve tagged PAPER");
-                if ((!coinCase || withoutProbeGuard)
-                        && (after != 0 || rejectedMoney.get() != blockBefore))
-                    throw new IllegalStateException(withoutProbeGuard
-                            ? "Unguarded real product cartography coin unexpectedly survived"
-                            : "Plain PAPER was not accepted by packet click handler");
+                            "Product Cartography currency listener failed to preserve marked PAPER");
+                if (!coinCase && (after != 0 || rejectedMoney.get() != blockBefore))
+                    throw new IllegalStateException(
+                            "Plain PAPER was not accepted by packet click handler");
                 if (withoutProbeGuard) {
                     if (observedClicks.get() - clickBefore != 1
                             || observedCartography.get() - cartoBefore != 1
@@ -1008,15 +1002,15 @@ public final class StationGuardProbe extends JavaPlugin {
                                     != CoinDenomination.FIVE_THOUSAND
                             || sourceCoin.getAmount() != 1)
                         throw new IllegalStateException(
-                                "Unguarded cartography counterexample had invalid source/events");
-                    getLogger().info("A12_CARTOGRAPHY_UNGUARDED_PRODUCT_COIN_CONSUMPTION"
-                            + " before=1 after=0 inventoryEvents=1"
+                                "Protected cartography packet result had invalid source/events");
+                    getLogger().info("A12_CARTOGRAPHY_PRODUCT_COIN_PRESERVED"
+                            + " before=1 after=1 inventoryEvents=1"
                             + " cartographyEvents=1 probeDenied=0"
-                            + " productionListener=false originalCoinUnchanged=true");
+                            + " productionListener=true originalCoinUnchanged=true");
                 }
             }
             probeProtectionEnabled.set(true);
-            getLogger().info("A12_PACKET_HANDLER_TEST_ONLY_COIN_CANCELLATION_PASSED"
+            getLogger().info("A12_PACKET_HANDLER_PRODUCT_COIN_CANCELLATION_PASSED"
                     + " socket=false onlinePlayers=0"
                     + " realHandler=true actualNetworkClient=false");
         } finally {
