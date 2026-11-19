@@ -97,4 +97,50 @@ class WclHybridLiveOverlayTest {
                         new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
                         Map.of("shulker", BigInteger.valueOf(-1))));
     }
+
+    @Test void provenNativeWolfMirrorIsPresentExactlyOnceAndRetainsOwnerEvidence() throws Exception {
+        String physical = "world/world/entity/" + WOLF + "/equipment/mainhand";
+        var vanilla = new HybridLiveSourceStage.ChunkSource(CHUNK, List.of(
+                new HybridLiveSourceStage.Value(physical, "world", BigInteger.valueOf(10000))));
+        var wolf = new WclHybridLiveOverlay.Selected(CHUNK, WOLF, "www",
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.OWNER, OWNER),
+                Map.of("weapon", BigInteger.valueOf(10000), "cargo:7", BigInteger.valueOf(5000)),
+                Set.of("weapon"));
+        var overlay = WclHybridLiveOverlay.attach(List.of(vanilla), List.of(wolf));
+        assertEquals(1, overlay.sources().size());
+        var contents = overlay.sources().get(0).values();
+        assertEquals(2, contents.size());
+        assertEquals(1, contents.stream().filter(v -> v.physicalKey().equals(physical)).count());
+        assertEquals(BigInteger.valueOf(15000),
+                contents.stream().map(HybridLiveSourceStage.Value::amount)
+                        .reduce(BigInteger.ZERO, BigInteger::add));
+        assertEquals(Set.of(physical), overlay.mirroredPhysicalKeys());
+        assertEquals(OWNER, overlay.wclOwners().get(physical).owner());
+    }
+
+    @Test void proofWithoutExactCapturedNativeAmountOrPositionMustReject() {
+        String physical = "world/world/entity/" + WOLF + "/equipment/mainhand";
+        var mismatch = new HybridLiveSourceStage.ChunkSource(CHUNK, List.of(
+                new HybridLiveSourceStage.Value(physical, "world", BigInteger.valueOf(1000))));
+        var proven = new WclHybridLiveOverlay.Selected(CHUNK, WOLF, "www",
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
+                Map.of("weapon", BigInteger.valueOf(10000)), Set.of("weapon"));
+        assertThrows(IOException.class, () ->
+                WclHybridLiveOverlay.attach(List.of(mismatch), List.of(proven)));
+        assertThrows(IOException.class, () ->
+                WclHybridLiveOverlay.attach(List.of(VANILLA), List.of(proven)));
+    }
+
+    @Test void positiveMirrorDoesNotInheritUnverifiedOrForeignProof() {
+        var invalid = new WclHybridLiveOverlay.Selected(CHUNK, WOLF, "www",
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
+                Map.of("weapon", BigInteger.valueOf(10000)), Set.of("cargo:7"));
+        assertThrows(IOException.class, () ->
+                WclHybridLiveOverlay.attach(List.of(VANILLA), List.of(invalid)));
+        var zeroProof = new WclHybridLiveOverlay.Selected(CHUNK, WOLF, "www",
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
+                Map.of("weapon", BigInteger.ZERO), Set.of("weapon"));
+        assertThrows(IOException.class, () ->
+                WclHybridLiveOverlay.attach(List.of(VANILLA), List.of(zeroProof)));
+    }
 }
