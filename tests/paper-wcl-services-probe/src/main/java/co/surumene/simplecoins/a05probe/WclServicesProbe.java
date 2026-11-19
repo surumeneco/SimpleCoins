@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulLiveOwnerEvidence;
+import co.surumene.simplecoins.paper.PaperWonderfulLiveCandidates;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
@@ -337,6 +338,33 @@ public final class WclServicesProbe extends JavaPlugin {
             if (nonTargetOwner.kind() != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
                 throw new IllegalStateException("Wrong WCL provider was adopted for LIVE owner");
             getLogger().info("PAPER_A05_PRODUCT_LIVE_OWNER_EVIDENCE_PASSED");
+            // The new product bridge must derive value, physical alias, and
+            // owner from its one real WCL read, not from separate snapshots.
+            var joined = PaperWonderfulLiveCandidates.collect(
+                    this, chicken, "wwc", new java.util.HashSet<>(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!joined.entityId().equals(chicken.getUniqueId())
+                    || !joined.worldId().equals(world.getUID())
+                    || !"world".equals(joined.worldName())
+                    || !joined.relationships().equals(live.relationships())
+                    || joined.ownerEvidence().kind()
+                            != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.OWNER
+                    || !chickenCommander.equals(joined.ownerEvidence().owner())
+                    || !BigInteger.valueOf(10000).equals(joined.total())
+                    || !BigInteger.valueOf(10000).equals(joined.slotValues().get("shulker"))
+                    || !("entity/" + chicken.getUniqueId() + "/wcl/wwc/shulker")
+                            .equals(joined.physicalSlotKeys().get("shulker")))
+                throw new IllegalStateException("Product LIVE WCL joined candidate mismatch");
+            try {
+                PaperWonderfulLiveCandidates.collect(
+                        this, chicken, "www", new java.util.HashSet<>(),
+                        2 * 1024 * 1024, 16 * 1024 * 1024);
+                throw new IllegalStateException("Wrong provider became a WCL asset");
+            } catch (IOException expected) {
+                if (!expected.getMessage().startsWith("WCL LIVE source not usable: "))
+                    throw expected;
+            }
+            getLogger().info("PAPER_A05_PRODUCT_SINGLE_READ_LIVE_OWNER_VALUE_ALIAS_PASSED");
             // A non-target service returning NotFound cannot be treated as
             // proof of zero money in any other world/provider.
             var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
