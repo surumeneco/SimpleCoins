@@ -38,15 +38,22 @@ import org.bukkit.plugin.Plugin;
 public final class PaperCapturedHybridSettlement {
     private final PaperLiveUniverseAssets.Observed observed;
     private final Set<UUID> walletIds;
+    private final Map<String, World> capturedWorlds;
+    private final PaperLiveUniverseAssets.Budget captureBudget;
     private final AtomicBoolean consumed = new AtomicBoolean();
+    private boolean autoEnumerationCompleted;
     /** Explicit main-thread LIVE WCL reads from this capture's wallet generation. */
     private final List<WclHybridLiveOverlay.Selected> selectedWcl = new ArrayList<>();
 
 
     private PaperCapturedHybridSettlement(PaperLiveUniverseAssets.Observed observed,
-                                         Set<UUID> walletIds) {
+                                         Set<UUID> walletIds,
+                                         Map<String, World> capturedWorlds,
+                                         PaperLiveUniverseAssets.Budget captureBudget) {
         this.observed = Objects.requireNonNull(observed, "validated Paper source report");
         this.walletIds = new HashSet<>(Objects.requireNonNull(walletIds, "wallet UUIDs"));
+        this.capturedWorlds = Map.copyOf(Objects.requireNonNull(capturedWorlds));
+        this.captureBudget = captureBudget; // null only for the test-only fromObserved seam
     }
 
     /**
@@ -56,17 +63,71 @@ public final class PaperCapturedHybridSettlement {
     public static PaperCapturedHybridSettlement capture(
             Collection<World> selectedWorlds,
             PaperLiveUniverseAssets.Budget budget) throws IOException {
+        List<World> selection = List.copyOf(Objects.requireNonNull(selectedWorlds));
         Set<UUID> liveWallets = new HashSet<>();
         var snapshot = PaperLiveUniverseAssets.scanWithSources(
-                selectedWorlds, budget, liveWallets);
-        return new PaperCapturedHybridSettlement(snapshot, liveWallets);
+                selection, budget, liveWallets);
+        Map<String, World> selected = new java.util.LinkedHashMap<>();
+        for (World world : selection) {
+            if (selected.putIfAbsent(world.getName(), world) != null)
+                throw new IOException("Duplicate Paper World identity during LIVE capture");
+        }
+        return new PaperCapturedHybridSettlement(snapshot, liveWallets, selected, budget);
     }
 
     /** Test seam for genuine immutable `Observed` contracts without a mock server. */
     static PaperCapturedHybridSettlement fromObserved(
             PaperLiveUniverseAssets.Observed verifiedObserved,
             Set<UUID> liveWalletIds) {
-        return new PaperCapturedHybridSettlement(verifiedObserved, liveWalletIds);
+        return new PaperCapturedHybridSettlement(verifiedObserved, liveWalletIds, Map.of(), null);
+    }
+
+    /**
+     * Automatically enumerate all PDC-marked WWC/WWW Entities within the
+     * exact currently loaded Chunk set captured from these Paper World
+     * instances, and route them through the existing one-read wallet-shared
+     * candidate collector. This is only a bounded LIVE read; no writer epoch,
+     * all-world completeness or settlement publication is implied.
+     */
+    public synchronized PaperWonderfulLiveEntityDiscovery.Report includeDiscoveredLoadedWcl(
+            Plugin consumer) throws IOException {
+        if (consumed.get())
+            throw new IllegalStateException("WCL enumeration after capture consumption");
+        try {
+            Objects.requireNonNull(consumer, "WCL consumer");
+            if (captureBudget == null)
+                throw new IOException("WCL discovery requires an actual Paper World capture");
+            if (autoEnumerationCompleted || !selectedWcl.isEmpty())
+                throw new IOException("WCL automatic and explicit selection cannot be mixed");
+            var first = PaperWonderfulLiveEntityDiscovery.discover(
+                    capturedWorlds, observed.sources(),
+                    captureBudget.maxChunks(), captureBudget.maxEntities());
+            for (var holder : first.holders()) {
+                includeLoadedWcl(consumer, holder.entity(), holder.providerId(),
+                        captureBudget.maxSerializedBytes(), captureBudget.maxInflatedBytes());
+            }
+            // A provider call can change loaded entity markers or move holders.
+            // Rescan identities and ALL entity UUIDs, not just the WCL count.
+            var second = PaperWonderfulLiveEntityDiscovery.discover(
+                    capturedWorlds, observed.sources(),
+                    captureBudget.maxChunks(), captureBudget.maxEntities());
+            if (first.scannedChunks() != second.scannedChunks()
+                    || first.scannedEntities() != second.scannedEntities()
+                    || !first.observedEntityIds().equals(second.observedEntityIds())
+                    || !first.identities().equals(second.identities()))
+                throw new IOException("LIVE WCL Entity population changed during provider reads");
+            Map<UUID, Entity> selectedObjects = new java.util.HashMap<>();
+            for (var holder : first.holders())
+                selectedObjects.put(holder.entity().getUniqueId(), holder.entity());
+            for (var holder : second.holders())
+                if (selectedObjects.get(holder.entity().getUniqueId()) != holder.entity())
+                    throw new IOException("LIVE WCL Entity object changed during provider reads");
+            autoEnumerationCompleted = true;
+            return first;
+        } catch (IOException | RuntimeException failed) {
+            consumed.set(true); // discard every partial candidate and shared wallet UUID
+            throw failed;
+        }
     }
 
     /**
@@ -81,6 +142,10 @@ public final class PaperCapturedHybridSettlement {
             int maxSerializedBytes, int maxInflatedBytes) throws IOException {
         if (consumed.get())
             throw new IllegalStateException("WCL selection after capture consumption");
+        if (autoEnumerationCompleted) {
+            consumed.set(true);
+            throw new IllegalStateException("Cannot add explicit WCL after full LIVE enumeration");
+        }
         try {
             Objects.requireNonNull(entity, "selected LIVE WCL Entity");
             if (!Bukkit.isPrimaryThread())

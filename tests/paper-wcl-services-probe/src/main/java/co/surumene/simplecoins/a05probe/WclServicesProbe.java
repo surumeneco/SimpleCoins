@@ -393,6 +393,37 @@ public final class WclServicesProbe extends JavaPlugin {
                             && location.value().equals(BigInteger.valueOf(10000))))
                 throw new IllegalStateException("Paper hybrid WCL 10000C candidate was not staged");
             getLogger().info("PAPER_A05_PRODUCT_WCL_HYBRID_UNPUBLISHED_STAGE_PASSED");
+            // Enumerate the ACTUAL loaded Chunk Entity population rather than
+            // handing the Chicken to the capture. This remains only a local
+            // unpublished LIVE-source candidate, not a frozen G0 generation.
+            var autoMoney = PaperCapturedHybridSettlement.capture(
+                    List.of(world),
+                    new PaperLiveUniverseAssets.Budget(
+                            1, 4096, 4096, 4096, 131072, 1,
+                            2 * 1024 * 1024, 16 * 1024 * 1024));
+            var found = autoMoney.includeDiscoveredLoadedWcl(this);
+            if (found.scannedChunks() < 1
+                    || found.scannedEntities() < 1
+                    || found.holders().stream().noneMatch(h ->
+                            h.entity().getUniqueId().equals(chicken.getUniqueId())
+                            && "wwc".equals(h.providerId()))
+                    || found.isCompleteSettlementSource())
+                throw new IllegalStateException("Automatically enumerated WCL holder missing");
+            var autoStaged = autoMoney.stageCandidate(
+                    new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                    new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                    (sourceWorld, position) -> null,
+                    (sourceWorld, savedChunk) -> Map.of(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024,
+                    (source, value) -> new SettlementAccumulator.Asset(
+                            source.id(), value.physicalKey(), value.world(), null,
+                            false, false, false, value.amount(), value.physicalKey()));
+            var autoResult = autoStaged.pending().commit();
+            if (!autoResult.deadLocations().stream().anyMatch(location ->
+                    location.owner().equals(chickenCommander)
+                    && location.value().equals(BigInteger.valueOf(10000))))
+                throw new IllegalStateException("Automatic WCL holder not handed to Hybrid staging");
+            getLogger().info("PAPER_A05_AUTO_DISCOVERED_LOADED_WCL_STAGE_PASSED");
             // A non-target service returning NotFound cannot be treated as
             // proof of zero money in any other world/provider.
             var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
