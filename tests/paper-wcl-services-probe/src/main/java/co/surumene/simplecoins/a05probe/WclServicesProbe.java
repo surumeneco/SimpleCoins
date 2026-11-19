@@ -18,6 +18,7 @@ import co.surumene.simplecoins.paper.PaperWonderfulSavedSettlementSource;
 import co.surumene.simplecoins.paper.PaperLoadedChunkAssets;
 import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
+import co.surumene.simplecoins.domain.ResolvedEntitySettlementImport;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
@@ -1129,33 +1130,63 @@ public final class WclServicesProbe extends JavaPlugin {
                                         + " dead=" + localResult.dead()
                                         + " personal=" + localResult.personalBalances()
                                         + " worldTotal=" + localResult.statistics().worldTotal());
-                            // In the shipped REAL WWW persisted fixture,
-                            // the WCL reported owner and independent vanilla
-                            // tame Owner evidence are contradictory. That HOLD
-                            // MUST win before even examining weapon mirroring.
-                            // Pure JUnit separately tests positive mirrored
-                            // weapon/head rejection when owner is coherent.
+                            // A real Paper-persisted Wolf with a native 10000C
+                            // main-hand coin and the SAME WCL weapon must
+                            // contribute that item once, not twice. Its WCL
+                            // commander has priority over its tame owner.
                             var savedWww = sourced.stream()
                                     .filter(candidate -> "www".equals(candidate.providerId()))
                                     .findFirst().orElseThrow(() ->
                                             new IOException("No real saved WWW source"));
-                            if (savedWww.savedOwnerEvidence(true, saved).kind()
-                                    != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
-                                throw new IOException("Shipped saved WWW owner contradiction was lost");
-                            var mustReject = new SettlementAccumulator(
+                            var expectedCommander = new co.surumene.simplecoins.domain.WclOwnerEvidence.Decision(
+                                    co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.OWNER,
+                                    WOLF_COMMANDER);
+                            if (!expectedCommander.equals(savedWww.savedOwnerEvidence(true, saved)))
+                                throw new IOException("Real SAVED WWW tame-owner evidence mismatch");
+                            var once = new SettlementAccumulator(
                                     new WorldScope(true, Set.of(), Set.of()), Set.of(sourceId));
+                            var sharedWallets = new java.util.HashSet<UUID>();
+                            ResolvedEntitySettlementImport.stageChunk(
+                                    once, sourceId, source.world(), saved.nbt(),
+                                    Map.of(wwwUuid.toString(),
+                                            new ResolvedEntitySettlementImport.Ownership(
+                                                    WOLF_COMMANDER, false, false)),
+                                    sharedWallets);
                             var allWcl = new PaperWonderfulSavedSettlementSource(
                                     WclServicesProbe.this, Map.of(world.getName(), world.getUID()),
                                     boundedManifest, Set.of(), null, Set.of(),
                                     2 * 1024 * 1024, 16 * 1024 * 1024);
-                            try {
-                                allWcl.stage(source, saved, mustReject, new java.util.HashSet<>());
-                                throw new IOException("Contradictory SAVED WWW owner became an asset");
-                            } catch (IOException expectedHold) {
-                                if (!("Unresolved SAVED WCL owner: " + savedWww.entityId())
-                                        .equals(expectedHold.getMessage()))
-                                    throw expectedHold;
+                            allWcl.stage(source, saved, once, sharedWallets);
+                            once.completeSource(sourceId);
+                            var onceResult = once.commit();
+                            if (!BigInteger.valueOf(25000).equals(onceResult.dead())
+                                    || !BigInteger.ZERO.equals(onceResult.statistics().worldTotal()))
+                                throw new IOException("Real SAVED WWW 10000C mirror counted incorrectly"
+                                        + " dead=" + onceResult.dead()
+                                        + " total=" + onceResult.statistics().worldTotal());
+                            getLogger().info("PAPER_A05_SAVED_WCL_NATIVE_WWW_MIRROR_ONCE_PASSED");
+                            // Negative owner test: remove only the independent
+                            // vanilla tame-owner witness from this otherwise
+                            // persisted Entity. The WCL report must still HOLD;
+                            // this synthetic alteration is NOT a real source.
+                            Object withoutTame = null;
+                            for (Object value : (List<?>) saved.nbt().get("Entities")) {
+                                if (value instanceof Map<?,?> entity &&
+                                        wwwUuid.equals(readSavedUuid(entity.get("UUID")))) {
+                                    Map<String,Object> modified = new HashMap<>();
+                                    for (var entry : entity.entrySet())
+                                        modified.put((String)entry.getKey(), entry.getValue());
+                                    modified.remove("Owner");
+                                    withoutTame = modified;
+                                }
                             }
+                            if (withoutTame == null)
+                                throw new IOException("Actual WWW entity absent for owner-negative fixture");
+                            var ownerNegative = new AnvilRegionReader.Chunk(
+                                    saved.x(), saved.z(), Map.of("Entities", List.of(withoutTame)));
+                            if (savedWww.savedOwnerEvidence(true, ownerNegative).kind()
+                                    != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
+                                throw new IOException("WWW taming owner-contradiction HOLD regression");
                             getLogger().info("PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED");
 
                             try {
