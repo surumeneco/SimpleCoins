@@ -1,1 +1,20 @@
-{"schema":"cat-junit-driver-binding/v1","process":"simplecoins.external-storage-provider-integration","test_package":"co.surumene.simplecoins.domain.generated","test_class":"GeneratedA05WclEvidenceTest","driver_class":"co.surumene.simplecoins.domain.A05WclEvidenceDriver"}
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.external-storage-provider-integration",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedA05WclEvidenceTest",
+  "driver_class": "co.surumene.simplecoins.domain.A05WclEvidenceDriver",
+  "capability_scope": {
+    "kind": "pi-only-unverified",
+    "observations": [
+      "観測.必要な収納提供者の登録",
+      "観測.個体と保存元の同一性",
+      "観測.読取結果と関係者",
+      "観測.同一世代の取込み"
+    ],
+    "actions": [
+      "作用.候補保留",
+      "作用.個体の正規化候補"
+    ]
+  }
+}

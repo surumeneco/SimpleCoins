@@ -11,13 +11,13 @@ permissions:
 jobs:
   model:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
-          ref: fd3f5c7e0646627780250dcc3fa5684d35a5f9cd
+          ref: 381af68c91a1cb4c3a0b908d7edd660d87bbb49b
           path: cat-tdd-fixed
           persist-credentials: false
       - name: Validate Confirmed A05 Process Closure and Model Conformance
@@ -47,3 +47,143 @@ jobs:
           assert [x['status'] for x in queue['items']]==['current']+['pending']*7
           print('A05_CONFIRMED_PROCESS_MODEL_AND_TDD_QUEUE_PRECONDITIONS_PASSED')
           PY
+      - name: Generate exact current A05 PI-only JUnit test (capabilities unverified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=Lifecycle/Works/.cat-flow
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py
+          python "$FLOW" tests \
+            "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
+            "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
+            tests/cat/a05-wcl-consumer-junit-binding.json \
+            --framework junit \
+            --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
+            --process docs/cat/confirmed/a05-wcl-consumer-process.md \
+            --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
+            --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
+            -o "$ROOT/generated/A05WclEvidenceGeneratedTest.java"
+          python - <<'PY'
+          from pathlib import Path
+          source=Path('Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java').read_text()
+          assert 'CAPABILITIES NOT VERIFIED' in source
+          assert '@DisplayName("case.s0")' in source
+          assert '観測.同一世代の取込み' in source
+          assert '作用.候補保留' in source
+          assert source.count('@DisplayName(')==1
+          print('A05_PI_ONLY_CAT_SOURCE_DERIVED_CURRENT_ITEM_GENERATED_CAPABILITIES_UNVERIFIED')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a05-pi-only-cat-current-item
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-model.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-vectors.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-queue.json
+            Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
+          if-no-files-found: error
+          include-hidden-files: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.2.1"
+      - name: Complete all eight source-derived JUnit cases with script-owned Queue receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          ROOT=Lifecycle/Works/.cat-flow
+          CAT=cat-tdd-fixed/.cat-system/scripts
+          SOURCE="$ROOT/generated/A05WclEvidenceGeneratedTest.java"
+          TARGET=src/test/java/co/surumene/simplecoins/domain/generated
+          mkdir -p "$TARGET"
+          for i in 0 1 2 3 4 5 6 7; do
+            python "$CAT/cat_compile_v2.py" tests \
+              "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
+              "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
+              tests/cat/a05-wcl-consumer-junit-binding.json \
+              --framework junit \
+              --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
+              --process docs/cat/confirmed/a05-wcl-consumer-process.md \
+              --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
+              --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
+              -o "$SOURCE"
+            grep -F 'CAPABILITIES NOT VERIFIED' "$SOURCE" >/dev/null
+            grep -F "@DisplayName(\"case.s$i\")" "$SOURCE" >/dev/null
+            cp "$SOURCE" "$TARGET/A05WclEvidenceGeneratedTest.java"
+            python "$CAT/cat_flow.py" run --work "$WORK" --id "a05-green-s$i" --execute > "$ROOT/run-s$i.json"
+            python - "$ROOT/run-s$i.json" "$i" <<'PY'
+          import json,sys
+          result=json.load(open(sys.argv[1]))
+          assert result['check_id']=='a05-green-s'+sys.argv[2],result
+          assert result['verdict']=='passed',result
+          assert result['observed_targets']=={'case.s'+sys.argv[2]:'passed'},result
+          print('A05_CAT_SOURCED_JUNIT_GREEN_'+sys.argv[2])
+          PY
+            python "$CAT/cat_flow.py" queue-state --work "$WORK" \
+              --evidence "$ROOT/evidence/a05-green-s$i.json"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('Lifecycle/Works/.cat-flow')
+          queue=json.loads((root/'cache/a05-wcl-consumer-verdict-queue.json').read_text())
+          assert [x['status'] for x in queue['items']]==['done']*8
+          for i,entry in enumerate(queue['items']):
+              assert entry['id']=='case.s'+str(i)
+              receipt=json.loads((root/('evidence/a05-green-s'+str(i)+'.json')).read_text())
+              assert receipt['schema']=='cat-flow-evidence/v1'
+              assert receipt['verdict']=='passed' and receipt['observed_targets']=={'case.s'+str(i):'passed'}
+          print('A05_CONFIRMED_EIGHT_CASE_SCRIPT_OWNED_QUEUE_GREEN_PASSED')
+          PY
+      - name: Evaluate implementation obligations and record bounded CAT verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          ROOT=Lifecycle/Works/.cat-flow
+          python "$FLOW" obligations --work "$WORK" > "$ROOT/a05-obligations-result.json"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance > "$ROOT/a05-implementation-verdict.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('Lifecycle/Works/.cat-flow')
+          result=json.loads((root/'a05-implementation-verdict.json').read_text())
+          assert result.get('gate')=='implementation-conformance',result
+          assert result.get('status') in ('passed','inconclusive'),result
+          obligations=json.loads((root/'cache/implementation-obligations-evaluated.json').read_text())
+          items=obligations.get('items')
+          assert isinstance(items,list) and items,obligations
+          assert all(item.get('status')!='failed' for item in items),items
+          print('A05_IMPLEMENTATION_CONFORMANCE_ACTUAL_STATUS='+result['status'])
+          print('A05_OBLIGATIONS_ACTUAL_COUNTS='+str({
+              status:sum(x.get('status')==status for x in items)
+              for status in ('passed','inconclusive','not-run','failed')}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a05-implementation-conformance-bounded
+          path: |
+            Lifecycle/Works/.cat-flow/a05-obligations-result.json
+            Lifecycle/Works/.cat-flow/a05-implementation-verdict.json
+            Lifecycle/Works/.cat-flow/conformance/implementation-conformance.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-obligations.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+          if-no-files-found: warn
+          include-hidden-files: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a05-confirmed-pi-only-eight-queue-evidence
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-*.json
+            Lifecycle/Works/.cat-flow/evidence/a05-green-*.json
+            Lifecycle/Works/.cat-flow/reports/a05-green-*.xml
+            Lifecycle/Works/.cat-flow/run-s*.json
+          if-no-files-found: error
+          include-hidden-files: true
