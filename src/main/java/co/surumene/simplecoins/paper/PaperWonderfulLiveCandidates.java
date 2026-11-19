@@ -27,7 +27,18 @@ public final class PaperWonderfulLiveCandidates {
                             String providerId, Map<String, UUID> relationships,
                             WclOwnerEvidence.Decision ownerEvidence,
                             Map<String, BigInteger> slotValues,
-                            Map<String, String> physicalSlotKeys) {
+                            Map<String, String> physicalSlotKeys,
+                            Map<String, PaperWonderfulLoadedEvidence.StoredItem> sourceItems) {
+        /** Old test-only/local snapshot shape cannot prove item identity. */
+        public Candidate(UUID entityId, UUID worldId, String worldName, String providerId,
+                         Map<String, UUID> relationships,
+                         WclOwnerEvidence.Decision ownerEvidence,
+                         Map<String, BigInteger> slotValues,
+                         Map<String, String> physicalSlotKeys) {
+            this(entityId, worldId, worldName, providerId, relationships,
+                    ownerEvidence, slotValues, physicalSlotKeys, Map.of());
+        }
+
         public Candidate {
             Objects.requireNonNull(entityId, "verified Entity UUID");
             Objects.requireNonNull(worldId, "verified World UUID");
@@ -38,6 +49,12 @@ public final class PaperWonderfulLiveCandidates {
             relationships = Map.copyOf(Objects.requireNonNull(relationships));
             slotValues = Map.copyOf(Objects.requireNonNull(slotValues));
             physicalSlotKeys = Map.copyOf(Objects.requireNonNull(physicalSlotKeys));
+            sourceItems = Map.copyOf(Objects.requireNonNull(sourceItems, "same-read WCL items"));
+            if (!sourceItems.isEmpty() && !slotValues.keySet().equals(sourceItems.keySet()))
+                throw new IllegalArgumentException("WCL same-read items differ from valued slots");
+            for (var item : sourceItems.entrySet())
+                if (!item.getKey().equals(item.getValue().slot()))
+                    throw new IllegalArgumentException("WCL source ItemStack slot mismatch");
             if (!slotValues.keySet().equals(physicalSlotKeys.keySet()))
                 throw new IllegalArgumentException("WCL source slots and aliases disagree");
             for (BigInteger value : slotValues.values()) {
@@ -101,8 +118,13 @@ public final class PaperWonderfulLiveCandidates {
                 || !providerId.equals(snapshot.providerId()))
             throw new IOException("WCL LIVE Entity authority changed during candidate read");
 
+        Map<String, PaperWonderfulLoadedEvidence.StoredItem> sameRead =
+                new java.util.LinkedHashMap<>();
+        for (var item : snapshot.items())
+            if (sameRead.putIfAbsent(item.slot(), item) != null)
+                throw new IOException("Duplicate WCL same-read ItemStack slot");
         return new Candidate(snapshot.entityId(), snapshot.worldId(),
                 entity.getWorld().getName(), providerId, snapshot.relationships(),
-                owner, values, aliases);
+                owner, values, aliases, sameRead);
     }
 }
