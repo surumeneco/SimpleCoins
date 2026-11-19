@@ -339,7 +339,7 @@ public final class PaperCapturedHybridSettlement {
         // The callback executes within the normal saved Anvil visitor BEFORE
         // its source is completed and shares the same pending transaction and
         // wallet identities. Failure discards this one-shot candidate.
-        SettlementScanRunner.SavedEntitySupplement savedWclSupplement =
+        PaperWonderfulSavedSettlementSource savedWclSupplement =
                 savedWclConsumer == null ? null : new PaperWonderfulSavedSettlementSource(
                         savedWclConsumer, savedWorldIds, manifest, currentlyBanned,
                         banSources, wclCandidates.stream()
@@ -394,6 +394,8 @@ public final class PaperCapturedHybridSettlement {
         if (staged.savedContentWitness() == null)
             throw new IOException("Saved monetary source fingerprint evidence unavailable");
         staged.savedContentWitness().requireUnchanged();
+        if (savedWclSupplement != null)
+            savedWclSupplement.requireWorldIdentityUnchanged();
         return staged;
     }
 }
