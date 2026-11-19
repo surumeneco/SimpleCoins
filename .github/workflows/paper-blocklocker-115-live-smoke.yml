@@ -9,6 +9,11 @@ on:
       - 'tests/paper-blocklocker-smoke/**'
       - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md'
       - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md'
+      - 'Lifecycle/Works/simplecoins.a04.live-blocklocker-owner-stage.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/LiveContainerPhysicalSlot.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/LiveContainerPhysicalSlotTest.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperBlockLockerLiveClassifier.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/PaperBlockLockerLiveClassifierTest.java'
       - 'build.gradle.kts'
       - '.github/workflows/paper-blocklocker-115-live-smoke.yml'
 jobs:
@@ -36,6 +41,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.live-blocklocker-owner-stage.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
