@@ -25,12 +25,16 @@ class WclLiveTameObservationTest {
                         WclLiveTameObservation.chicken(false)).kind());
     }
 
-    @Test void authoritativeTamedWolfIdentifiesOwner() throws Exception {
+    @Test void authoritativeTamedWolfWithMatchingWclOwnerIdentifiesOwner() throws Exception {
         var result = WclLiveTameObservation.wolf(true, true, OWNER);
         assertTrue(result.verified());
         assertEquals(OWNER, result.owner());
-        assertEquals(OWNER,
-                WclOwnerEvidence.decide(true, "www", Map.of(), result).owner());
+        assertEquals(OWNER, WclOwnerEvidence.decide(
+                true, "www", Map.of("owner", OWNER), result).owner());
+        // A missing WCL owner key does not prove the complete relationship
+        // snapshot agrees with vanilla; the existing A05 rule is conservative.
+        assertEquals(WclOwnerEvidence.Kind.HOLD,
+                WclOwnerEvidence.decide(true, "www", Map.of(), result).kind());
     }
 
     @Test void authoritativeUntamedWolfProvesAbsence() throws Exception {
