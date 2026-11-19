@@ -46,7 +46,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md;src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java;src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java | src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java | src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md;src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java;src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java | src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java | src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
