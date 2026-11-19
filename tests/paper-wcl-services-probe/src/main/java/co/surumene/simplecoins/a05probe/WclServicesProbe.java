@@ -7,6 +7,7 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
+import co.surumene.simplecoins.paper.PaperWonderfulLiveOwnerEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
@@ -325,6 +326,17 @@ public final class WclServicesProbe extends JavaPlugin {
                 throw new IllegalStateException("Product WWC nested shulker money mismatch: "
                         + moneyBySlot);
             getLogger().info("PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED");
+            // Actual same-Entity LIVE ownership evidence, not a synthetic map.
+            // This regular Chicken has no vanilla tame owner, and the real
+            // WCL follow_target must therefore take ownership priority.
+            var localOwner = PaperWonderfulLiveOwnerEvidence.readLoaded(this, chicken, "wwc");
+            if (localOwner.kind() != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.OWNER
+                    || !chickenCommander.equals(localOwner.owner()))
+                throw new IllegalStateException("LIVE WCL Chicken owner candidate mismatch");
+            var nonTargetOwner = PaperWonderfulLiveOwnerEvidence.readLoaded(this, chicken, "www");
+            if (nonTargetOwner.kind() != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
+                throw new IllegalStateException("Wrong WCL provider was adopted for LIVE owner");
+            getLogger().info("PAPER_A05_PRODUCT_LIVE_OWNER_EVIDENCE_PASSED");
             // A non-target service returning NotFound cannot be treated as
             // proof of zero money in any other world/provider.
             var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
