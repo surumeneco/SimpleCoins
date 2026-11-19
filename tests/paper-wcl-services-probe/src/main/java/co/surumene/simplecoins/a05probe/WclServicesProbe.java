@@ -261,6 +261,77 @@ public final class WclServicesProbe extends JavaPlugin {
     }
 
     /**
+     * Actual loaded Paper Wolf: the same 10000C is present in native
+     * equipment.mainhand and one WCL weapon read, while 5000C is independent
+     * WCL cargo. The source is physically captured before the provider read.
+     * It is an UNPUBLISHED staged candidate, not an all-writer G0 guarantee.
+     */
+    private void verifyRealLiveWolfEquipmentMirror(World world) throws Exception {
+        var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000a052");
+        UUID commander = UUID.fromString("00000000-0000-0000-0000-00000000a053");
+        Wolf wolf = world.spawn(new Location(world, 35.5, 120, 35.5), Wolf.class);
+        try {
+            wolf.setOwner(Bukkit.getOfflinePlayer(owner));
+            ItemStack nativeMoney = coins.create(CoinDenomination.TEN_THOUSAND, 1);
+            wolf.getEquipment().setItemInMainHand(nativeMoney);
+            byte[] runtime = wolfRuntimeFixture(owner, commander,
+                    nativeMoney.serializeAsBytes(),
+                    coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
+            var data = wolf.getPersistentDataContainer();
+            data.set(new NamespacedKey("whatawonderfulwolf", "type"),
+                    PersistentDataType.STRING, "wonderful_wolf");
+            data.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
+                    PersistentDataType.INTEGER, 1);
+            data.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
+                    PersistentDataType.BYTE_ARRAY, runtime);
+
+            if (!wolf.isValid() || Bukkit.getEntity(wolf.getUniqueId()) != wolf)
+                throw new IOException("Product LIVE mirror Wolf missing from actual Paper Entity index");
+            var candidate = PaperWonderfulLiveCandidates.collect(
+                    this, wolf, "www", new java.util.HashSet<>(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!commander.equals(candidate.ownerEvidence().owner())
+                    || !BigInteger.valueOf(10000).equals(candidate.slotValues().get("weapon"))
+                    || !BigInteger.valueOf(5000).equals(candidate.slotValues().get("cargo:7")))
+                throw new IOException("Product same-read WWW LIVE owner/coin source mismatch");
+
+            var capture = PaperCapturedHybridSettlement.capture(
+                    List.of(world),
+                    new PaperLiveUniverseAssets.Budget(
+                            1, 4096, 4096, 4096, 131072, 1,
+                            2 * 1024 * 1024, 16 * 1024 * 1024));
+            capture.includeLoadedWcl(this, wolf, "www",
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            var staged = capture.stageCandidate(
+                    new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                    new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                    (sourceWorld, position) -> null,
+                    (sourceWorld, savedChunk) -> Map.of(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024,
+                    (source, value) -> new SettlementAccumulator.Asset(
+                            source.id(), value.physicalKey(), value.world(),
+                            value.physicalKey().equals("world/" + world.getName()
+                                    + "/entity/" + wolf.getUniqueId() + "/equipment/mainhand")
+                                    ? commander : null,
+                            false, false, false,
+                            value.amount(), value.physicalKey()));
+            var result = staged.pending().commit();
+            if (!BigInteger.valueOf(15000).equals(result.dead())
+                    || !BigInteger.ZERO.equals(result.statistics().worldTotal())
+                    || result.deadLocations().stream().noneMatch(location ->
+                            commander.equals(location.owner())
+                            && BigInteger.valueOf(10000).equals(location.value())))
+                throw new IOException("LIVE WCL/native WWW equipment counted more than once or lost"
+                        + " DEAD=" + result.dead()
+                        + " worldTotal=" + result.statistics().worldTotal());
+            getLogger().info("PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED");
+        } finally {
+            wolf.remove();
+        }
+    }
+
+    /**
      * Actual serialized ItemStacks and live Bukkit PDC; the World is disposable.
      * This is a provider-read fixture, not a real economy snapshot.
      */
@@ -438,6 +509,9 @@ public final class WclServicesProbe extends JavaPlugin {
         } finally {
             chicken.remove();
         }
+        // The isolated provider test also exercises the product's complete
+        // LIVE capture → readLoaded → overlay → source staging path.
+        verifyRealLiveWolfEquipmentMirror(world);
 
         UUID wolfOwner = UUID.fromString("00000000-0000-0000-0000-00000000a052");
         UUID wolfCommander = UUID.fromString("00000000-0000-0000-0000-00000000a053");
