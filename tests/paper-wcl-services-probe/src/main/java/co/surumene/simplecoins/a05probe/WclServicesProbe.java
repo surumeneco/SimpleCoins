@@ -736,9 +736,24 @@ public final class WclServicesProbe extends JavaPlugin {
                         if (source.kind() != WorldStorageDiscovery.Kind.ENTITY) return;
                         if (!source.world().equals(world.getName()))
                             throw new IOException("Cross-world saved Entity source");
-                        candidates.addAll(PaperWonderfulSavedChunkCandidates.collect(
+                        var sourced = PaperWonderfulSavedChunkCandidates.collect(
                                 WclServicesProbe.this, source, world.getUID(), saved,
-                                seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024));
+                                seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024);
+                        candidates.addAll(sourced);
+                        if (saved.x() == FAR_CHUNK && saved.z() == FAR_CHUNK
+                                && !sourced.isEmpty()) {
+                            try {
+                                PaperWonderfulSavedChunkCandidates.collect(
+                                        WclServicesProbe.this, source, world.getUID(), saved,
+                                        seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024);
+                                throw new IOException("Duplicate saved WCL source was accepted");
+                            } catch (IOException duplicate) {
+                                if (!duplicate.getMessage().startsWith(
+                                        "Duplicate WCL saved Entity UUID across selected chunks: "))
+                                    throw duplicate;
+                            }
+                            getLogger().info("PAPER_A05_PRODUCT_SAVED_WCL_DUPLICATE_ENTITY_REJECTED_PASSED");
+                        }
                         if (!(saved.nbt().get("Entities") instanceof List<?> entities))
                             throw new IOException("Traversed Entity Chunk missing saved Entities list");
                         for (Object raw : entities) {
