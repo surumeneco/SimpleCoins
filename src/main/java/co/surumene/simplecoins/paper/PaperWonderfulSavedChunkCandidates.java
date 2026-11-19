@@ -40,7 +40,8 @@ public final class PaperWonderfulSavedChunkCandidates {
     public record Candidate(
             WorldStorageDiscovery.SourceFile source, UUID worldId,
             int chunkX, int chunkZ, UUID entityId, String providerId,
-            Map<String, UUID> relationships, Map<String, BigInteger> slotValues) {
+            Map<String, UUID> relationships, Map<String, BigInteger> slotValues,
+            Map<String, PaperWonderfulLoadedEvidence.StoredItem> sourceItems) {
         public Candidate {
             Objects.requireNonNull(source, "saved source");
             Objects.requireNonNull(worldId, "world UUID");
@@ -48,6 +49,21 @@ public final class PaperWonderfulSavedChunkCandidates {
             Objects.requireNonNull(providerId, "storage provider");
             relationships = Map.copyOf(Objects.requireNonNull(relationships));
             slotValues = Map.copyOf(Objects.requireNonNull(slotValues));
+            sourceItems = Map.copyOf(Objects.requireNonNull(sourceItems));
+            if (!sourceItems.isEmpty() && !sourceItems.keySet().equals(slotValues.keySet()))
+                throw new IllegalArgumentException("WCL same-read item bytes/values disagree");
+            for (var item : sourceItems.entrySet()) {
+                if (!item.getKey().equals(item.getValue().slot()))
+                    throw new IllegalArgumentException("WCL slot item identity mismatch");
+            }
+        }
+
+        /** Source-less fixture compatibility, never sufficient for mirror proof. */
+        public Candidate(WorldStorageDiscovery.SourceFile source, UUID worldId,
+                         int chunkX, int chunkZ, UUID entityId, String providerId,
+                         Map<String, UUID> relationships, Map<String, BigInteger> slotValues) {
+            this(source, worldId, chunkX, chunkZ, entityId, providerId,
+                    relationships, slotValues, Map.of());
         }
 
         /**
@@ -154,8 +170,14 @@ public final class PaperWonderfulSavedChunkCandidates {
             var snapshot = result.snapshot().orElseThrow();
             Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
                     snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
+            Map<String, PaperWonderfulLoadedEvidence.StoredItem> sameRead =
+                    new java.util.LinkedHashMap<>();
+            for (var item : snapshot.items()) {
+                if (sameRead.putIfAbsent(item.slot(), item) != null)
+                    throw new IOException("Repeated WCL stored ItemStack identity");
+            }
             var candidate = new Candidate(source, worldId, chunk.x(), chunk.z(),
-                    entityId, provider, snapshot.relationships(), values);
+                    entityId, provider, snapshot.relationships(), values, sameRead);
             // Unknown provider slot identities may not silently become another
             // minted physical source. This remains an unpublished candidate.
             candidate.physicalSlotKeys();
