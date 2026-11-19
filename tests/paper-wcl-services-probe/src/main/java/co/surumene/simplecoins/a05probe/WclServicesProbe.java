@@ -7,12 +7,14 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
+import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
 import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -103,6 +105,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 }
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
+                verifySerializedWclValuationBoundaries(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
                 switch (phase) {
                     case "baseline" -> { }
@@ -147,6 +150,48 @@ public final class WclServicesProbe extends JavaPlugin {
                 Bukkit.shutdown();
             }
         }, 50L);
+    }
+
+    /**
+     * The value adapter must preserve an observed non-money zero but never
+     * reinterpret malformed or duplicate physical WCL slots as zero.
+     * These are detached snapshots, not a claim of source/generation proof.
+     */
+    private void verifySerializedWclValuationBoundaries(World world) throws IOException {
+        UUID entity = UUID.fromString("00000000-0000-0000-0000-00000000a05a");
+        var nonMoney = new PaperWonderfulLoadedEvidence.StoredItem(
+                "non-money", new ItemStack(Material.STONE).serializeAsBytes());
+        var base = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "wwc", Map.of(), List.of(nonMoney));
+        Map<String, BigInteger> observed = PaperWonderfulSnapshotAssets.slotValues(
+                base, 2 * 1024 * 1024, 16 * 1024 * 1024);
+        if (observed.size() != 1 || !BigInteger.ZERO.equals(observed.get("non-money")))
+            throw new IOException("Non-money WCL slot is not positively represented as zero");
+
+        var duplicate = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "wwc", Map.of(), List.of(nonMoney, nonMoney));
+        try {
+            PaperWonderfulSnapshotAssets.slotValues(
+                    duplicate, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            throw new IOException("Duplicate physical WCL slot was accepted");
+        } catch (IOException expected) {
+            if (!"Invalid or duplicate WCL source slot".equals(expected.getMessage()))
+                throw expected;
+        }
+
+        var bad = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "www", Map.of(),
+                List.of(new PaperWonderfulLoadedEvidence.StoredItem(
+                        "damaged", new byte[]{0, 0})));
+        try {
+            PaperWonderfulSnapshotAssets.slotValues(
+                    bad, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            throw new IOException("Malformed serialized WCL item was accepted");
+        } catch (IOException expected) {
+            if ("Malformed serialized WCL item was accepted".equals(expected.getMessage()))
+                throw expected;
+        }
+        getLogger().info("PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED");
     }
 
     /**
@@ -214,6 +259,13 @@ public final class WclServicesProbe extends JavaPlugin {
                             "shulker".equals(item.slot())
                             && Arrays.equals(storedShulker, item.bytes())))
                 throw new IllegalStateException("Product WCL candidate source/evidence mismatch");
+            var moneyBySlot = PaperWonderfulSnapshotAssets.slotValues(
+                    candidate, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (moneyBySlot.size() != 1
+                    || !BigInteger.valueOf(10000).equals(moneyBySlot.get("shulker")))
+                throw new IllegalStateException("Product WWC nested shulker money mismatch: "
+                        + moneyBySlot);
+            getLogger().info("PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED");
             // A non-target service returning NotFound cannot be treated as
             // proof of zero money in any other world/provider.
             var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
@@ -784,6 +836,14 @@ public final class WclServicesProbe extends JavaPlugin {
                             || !Arrays.equals(wwcBytes,
                                 productionStored.snapshot().orElseThrow().items().getFirst().bytes()))
                         throw new IOException("Product offline WWC saved PDC evidence mismatch");
+                    var valueBySlot = PaperWonderfulSnapshotAssets.slotValues(
+                            productionStored.snapshot().orElseThrow(), 2 * 1024 * 1024,
+                            16 * 1024 * 1024);
+                    if (valueBySlot.size() != 1
+                            || !BigInteger.valueOf(10000).equals(valueBySlot.get("shulker")))
+                        throw new IOException("Product offline WWC shulker value mismatch: "
+                                + valueBySlot);
+                    getLogger().info("PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED");
                     var wrongSpecies = PaperWonderfulLoadedEvidence.readStored(
                             this, entityId, world.getUID(), "www", detached);
                     if (wrongSpecies.status() != PaperWonderfulLoadedEvidence.Status.NOT_FOUND
@@ -827,6 +887,14 @@ public final class WclServicesProbe extends JavaPlugin {
                                     coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
                                     item.bytes())))
                         throw new IOException("Product offline WWW identities/serialized items differ");
+                    var valueBySlot = PaperWonderfulSnapshotAssets.slotValues(
+                            wolfSource, 2 * 1024 * 1024, 16 * 1024 * 1024);
+                    if (valueBySlot.size() != 2
+                            || !BigInteger.valueOf(10000).equals(valueBySlot.get("weapon"))
+                            || !BigInteger.valueOf(5000).equals(valueBySlot.get("cargo:7")))
+                        throw new IOException("Product offline WWW weapon/cargo values mismatch: "
+                                + valueBySlot);
+                    getLogger().info("PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED");
 
                 }
             }

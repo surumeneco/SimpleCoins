@@ -9,6 +9,9 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulReaderRegistry.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLoadedEvidence.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSnapshotAssets.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperLiveItemValue.java'
+      - 'Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md'
       - 'Lifecycle/Works/simplecoins.a05.live-loaded-reader.md'
       - 'Lifecycle/Works/simplecoins.a05.current-distribution-compat.md'
       - 'Lifecycle/Works/simplecoins.a05.stored-reader.md'
@@ -69,6 +72,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -170,6 +175,8 @@ jobs:
           grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' paper-a05.log
           grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED' paper-a05.log
           grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' paper-a05.log
@@ -197,6 +204,8 @@ jobs:
             grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWC_LIVE_STORED_SHULKER_COIN_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' "paper-a05-$phase.log"
             if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a05-$phase.log"; then
@@ -238,6 +247,8 @@ jobs:
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_STORED_WWC_WWW_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' "paper-a05-$phase.log" ;;

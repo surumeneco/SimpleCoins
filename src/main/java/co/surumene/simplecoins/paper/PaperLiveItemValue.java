@@ -58,7 +58,21 @@ public final class PaperLiveItemValue {
         } catch (RuntimeException invalid) {
             throw new IOException("Paper ItemStack could not be serialized", invalid);
         }
-        if (encoded.length < 2 || encoded.length > maxSerializedBytes)
+        return serialized(encoded, maxSerializedBytes, maxInflatedBytes, seenWallets);
+    }
+
+    /**
+     * Evaluate a provider-supplied serialized ItemStack without reconstructing
+     * a mutable Bukkit inventory. Only a separately verified WCL snapshot may
+     * confer source identity; this operation proves neither source generation
+     * nor complete item discovery.
+     */
+    static BigInteger serialized(byte[] encoded, int maxSerializedBytes,
+                                 int maxInflatedBytes, Set<UUID> seenWallets) throws IOException {
+        limits(maxSerializedBytes, maxInflatedBytes);
+        requireMainThread();
+        Objects.requireNonNull(seenWallets, "wallet identity context");
+        if (encoded == null || encoded.length < 2 || encoded.length > maxSerializedBytes)
             throw new IOException("Paper ItemStack exceeds serialized byte budget");
         InputStream raw = new ByteArrayInputStream(encoded);
         InputStream decoded = (encoded[0] == (byte) 0x1f && encoded[1] == (byte) 0x8b)
