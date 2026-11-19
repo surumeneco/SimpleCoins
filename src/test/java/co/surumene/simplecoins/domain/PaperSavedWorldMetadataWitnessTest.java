@@ -129,8 +129,10 @@ class PaperSavedWorldMetadataWitnessTest {
         Path dir = root("w");
         Path external = temp.resolve("outside-metadata.dat");
         Files.write(external, metadata(A));
-        Files.createSymbolicLink(dir.resolve("data/paper/metadata.dat"), external);
+        // First discover a legitimate World root. The source is then
+        // replaced with a symbolic link before the identity evidence read.
         var manifest = discover(Map.of("w", dir));
+        Files.createSymbolicLink(dir.resolve("data/paper/metadata.dat"), external);
         assertThrows(IOException.class, () ->
                 PaperSavedWorldMetadataWitness.capture(manifest, Map.of("w", A)));
     }
