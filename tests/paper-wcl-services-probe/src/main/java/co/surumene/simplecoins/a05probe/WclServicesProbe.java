@@ -1109,8 +1109,19 @@ public final class WclServicesProbe extends JavaPlugin {
                                         + " dead=" + localResult.dead()
                                         + " personal=" + localResult.personalBalances()
                                         + " worldTotal=" + localResult.statistics().worldTotal());
-                            // Using the COMPLETE real saved chunk must reject
-                            // unproven WWW mirrored weapon rather than 2x count.
+                            // In the shipped REAL WWW persisted fixture,
+                            // the WCL reported owner and independent vanilla
+                            // tame Owner evidence are contradictory. That HOLD
+                            // MUST win before even examining weapon mirroring.
+                            // Pure JUnit separately tests positive mirrored
+                            // weapon/head rejection when owner is coherent.
+                            var savedWww = sourced.stream()
+                                    .filter(candidate -> "www".equals(candidate.providerId()))
+                                    .findFirst().orElseThrow(() ->
+                                            new IOException("No real saved WWW source"));
+                            if (savedWww.savedOwnerEvidence(true, saved).kind()
+                                    != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
+                                throw new IOException("Shipped saved WWW owner contradiction was lost");
                             var mustReject = new SettlementAccumulator(
                                     new WorldScope(true, Set.of(), Set.of()), Set.of(sourceId));
                             var allWcl = new PaperWonderfulSavedSettlementSource(
@@ -1119,11 +1130,11 @@ public final class WclServicesProbe extends JavaPlugin {
                                     2 * 1024 * 1024, 16 * 1024 * 1024);
                             try {
                                 allWcl.stage(source, saved, mustReject, new java.util.HashSet<>());
-                                throw new IOException("SAVED WWW weapon mirror incorrectly became monetary asset");
-                            } catch (IOException expectedMirror) {
-                                if (!expectedMirror.getMessage().startsWith(
-                                        "SAVED WCL equipment mirror lacks item equivalence evidence: "))
-                                    throw expectedMirror;
+                                throw new IOException("Contradictory SAVED WWW owner became an asset");
+                            } catch (IOException expectedHold) {
+                                if (!("Unresolved SAVED WCL owner: " + savedWww.entityId())
+                                        .equals(expectedHold.getMessage()))
+                                    throw expectedHold;
                             }
                             getLogger().info("PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED");
 
