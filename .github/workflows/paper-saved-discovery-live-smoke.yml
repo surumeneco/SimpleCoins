@@ -12,6 +12,10 @@ on:
       - 'src/main/resources/plugin.yml'
       - '.github/workflows/paper-saved-discovery-live-smoke.yml'
       - 'Lifecycle/Works/simplecoins.a01.paper26-shared-playerdata-discovery.md'
+      - 'Lifecycle/Works/simplecoins.a01.startup-world-universe-identity.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WorldSourceIdentitySnapshot.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WorldSourceIdentitySnapshotTest.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/PaperSavedWorldMetadataWitness.java'
 
 jobs:
   bounded-saved-source-walk:
@@ -36,6 +40,8 @@ jobs:
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.paper26-shared-playerdata-discovery.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.startup-world-universe-identity.md
       - name: Build and verify both plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
@@ -103,13 +109,15 @@ jobs:
             exit 1
           fi
           grep -F 'SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY' paper.log
+          grep -F 'SIMPLECOINS_SAVED_WORLD_SOURCE_IDENTITY_VERIFIED' paper.log
           grep -F 'SIMPLECOINS_SAVED_DISCOVERY_OBSERVED' paper.log
           python3 - <<'PYLOG'
           from pathlib import Path
           log=Path('paper.log').read_text().splitlines()
           launch=[i for i,v in enumerate(log) if 'SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY' in v]
+          identity=[i for i,v in enumerate(log) if 'SIMPLECOINS_SAVED_WORLD_SOURCE_IDENTITY_VERIFIED' in v]
           observed=[i for i,v in enumerate(log) if 'SIMPLECOINS_SAVED_DISCOVERY_OBSERVED' in v]
-          assert len(launch)==len(observed)==1 and launch[0]<observed[0], (launch,observed)
+          assert len(launch)==len(identity)==len(observed)==1 and launch[0]<identity[0]<observed[0], (launch,identity,observed)
           print('PAPER_SAVED_DISCOVERY_POSTLOAD_LAUNCH_ONCE_PASSED')
           PYLOG
           test -f plugins/SimpleCoins/normal-mutations/head || { echo 'RED_JOURNAL_HEAD_NOT_CREATED'; exit 1; }

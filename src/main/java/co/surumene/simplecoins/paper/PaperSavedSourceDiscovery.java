@@ -3,6 +3,8 @@ package co.surumene.simplecoins.paper;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WorldSourceIdentitySnapshot;
+import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -66,7 +68,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     }
 
     private record WorldRoots(Map<String, Path> immutableRoots,
-                              Set<Path> immutablePlayerRoots) {}
+                              Set<Path> immutablePlayerRoots,
+                              WorldSourceIdentitySnapshot capturedIdentities) {}
 
     public void start() {
         if (!Bukkit.isPrimaryThread())
@@ -91,7 +94,7 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                             WorldRoots roots = captureWorldRoots();
                             plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY");
                             launchDiscovery(roots);
-                        } catch (RuntimeException | Error fail) {
+                        } catch (IOException | RuntimeException | Error fail) {
                             signalFailure(fail);
                         }
                     });
@@ -114,16 +117,19 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     }
 
     /** Run only on the primary thread after Paper has finished startup load. */
-    private WorldRoots captureWorldRoots() {
+    private WorldRoots captureWorldRoots() throws IOException {
         if (!Bukkit.isPrimaryThread())
             throw new IllegalStateException("World roots must be captured on Paper main thread");
         Map<String, Path> worldRoots = new LinkedHashMap<>();
+        Map<String, WorldSourceIdentitySnapshot.Identity> identities = new LinkedHashMap<>();
         Set<Path> sharedPlayerRoots = new HashSet<>();
         for (World world : Bukkit.getWorlds()) {
             if (world == null || world.getName().isBlank())
                 throw new IllegalStateException("Invalid live Paper world");
             Path worldPath = world.getWorldPath().toAbsolutePath().normalize();
             Path prior = worldRoots.putIfAbsent(world.getName(), worldPath);
+            identities.putIfAbsent(world.getName(),
+                    new WorldSourceIdentitySnapshot.Identity(world.getUID(), worldPath));
             // Paper 26.2 exposes a dimension folder here. Playerdata is a
             // level-wide source at <level>/players/data, NOT a child of that
             // dimension. Do not guess a sibling world name from Bukkit names.
@@ -140,7 +146,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         }
         if (worldRoots.isEmpty())
             throw new IllegalStateException("No loaded worlds for source inventory");
-        return new WorldRoots(Map.copyOf(worldRoots), Set.copyOf(sharedPlayerRoots));
+        return new WorldRoots(Map.copyOf(worldRoots), Set.copyOf(sharedPlayerRoots),
+                WorldSourceIdentitySnapshot.capture(identities));
 
     }
 
@@ -148,10 +155,18 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         if (closed.get()) return;
         Map<String, Path> immutableRoots = roots.immutableRoots();
         Set<Path> immutablePlayerRoots = roots.immutablePlayerRoots();
+        WorldSourceIdentitySnapshot capturedIdentities = roots.capturedIdentities();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 var manifest = WorldStorageDiscovery.discover(
                         immutableRoots, scope, maxSourceEntries, immutablePlayerRoots);
+                capturedIdentities.requireDiscoveredManifest(manifest);
+                // Bind every original registered World UUID to the actual
+                // Paper 26.2 per-dimension metadata, even with no MCA files.
+                // This IO is deliberately off the Paper main thread.
+                PaperSavedWorldMetadataWitness.Witness diskWorldIds =
+                        PaperSavedWorldMetadataWitness.capture(
+                                manifest, capturedIdentities.worldIds());
                 // A directory that gains a NEW saved file while being walked
                 // must not be reported as an unchanged discovered generation.
                 manifest.requireUnchangedDiscovery();
@@ -172,13 +187,36 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                             + " awaitingAcknowledgement=" + report.awaitingAcknowledgement()
                             + " (OBSERVATION ONLY; admission remains blocked)");
                 }
-                if (closed.get() || !finished.compareAndSet(false, true)) return;
-                observed.set(manifest);
-                plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_OBSERVED"
-                        + " worldRoots=" + immutableRoots.size()
-                        + " authoritativeFiles=" + manifest.worldFiles().size()
-                        + " playerdataFiles=" + manifest.playerDataFiles().size()
-                        + " (UNPUBLISHED; admission remains disabled)");
+                // Do not expose a discovered Manifest on the async worker.
+                // The registered Bukkit universe may have changed during the
+                // file walk and receipt audit without changing disk names.
+                diskWorldIds.requireUnchanged();
+                if (closed.get() || finished.get()) return;
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (closed.get() || finished.get()) return;
+                    try {
+                        WorldRoots current = captureWorldRoots(); // main thread
+                        capturedIdentities.requireSameRegisteredWorlds(
+                                current.capturedIdentities());
+                        if (!immutablePlayerRoots.equals(current.immutablePlayerRoots()))
+                            throw new IOException("Paper shared playerdata roots changed during discovery");
+                        capturedIdentities.requireDiscoveredManifest(manifest);
+                        diskWorldIds.requireUnchanged();
+                        if (closed.get() || !finished.compareAndSet(false, true)) return;
+                        observed.set(manifest);
+                        plugin.getLogger().info(
+                                "SIMPLECOINS_SAVED_WORLD_SOURCE_IDENTITY_VERIFIED"
+                                + " worlds=" + capturedIdentities.worldIds().size()
+                                + " (ONE-SHOT PRECONDITION ONLY; no world writer freeze)");
+                        plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_OBSERVED"
+                                + " worldRoots=" + immutableRoots.size()
+                                + " authoritativeFiles=" + manifest.worldFiles().size()
+                                + " playerdataFiles=" + manifest.playerDataFiles().size()
+                                + " (UNPUBLISHED; admission remains disabled)");
+                    } catch (IOException | RuntimeException | Error changed) {
+                        signalFailure(changed);
+                    }
+                });
             } catch (Exception | Error fail) {
                 signalFailure(fail);
             }
