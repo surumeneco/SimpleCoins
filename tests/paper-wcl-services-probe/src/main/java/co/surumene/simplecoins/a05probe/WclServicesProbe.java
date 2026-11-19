@@ -1044,6 +1044,43 @@ public final class WclServicesProbe extends JavaPlugin {
             if (!expectedInvalid.getMessage().startsWith("Invalid saved WCL UUID: "))
                 throw expectedInvalid;
         }
+        pdc.put(genomeKey, "00000000-0000-0000-0000-00000000a0f1");
+        pdc.put(versionKey, 99);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Unsupported saved WCL schema was accepted");
+        } catch (IOException invalidSchema) {
+            if (!invalidSchema.getMessage().startsWith("Unsupported saved "))
+                throw invalidSchema;
+        }
+        pdc.put(versionKey, providerId.equals("wwc") ? 4 : 2);
+        String physicalKey = ns + (providerId.equals("wwc")
+                ? ":equipment_shulker_box" : ":runtime_state");
+        Object actualBytes = pdc.put(physicalKey, "not a byte array");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Wrong-type saved WCL inventory was accepted");
+        } catch (IOException badType) {
+            if (!badType.getMessage().startsWith("Malformed/oversized saved WCL bytes: "))
+                throw badType;
+        }
+        pdc.put(physicalKey, actualBytes);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 1);
+            throw new IOException("Over-budget saved WCL inventory was accepted");
+        } catch (IOException overBudget) {
+            if (!overBudget.getMessage().startsWith("Malformed/oversized saved WCL bytes: "))
+                throw overBudget;
+        }
+        Object originalSpecies = cloned.put("id", "minecraft:cow");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Wrong species of saved WCL Entity was accepted");
+        } catch (IOException badSpecies) {
+            if (!"Saved WCL Entity species/provider mismatch".equals(badSpecies.getMessage()))
+                throw badSpecies;
+        }
+        cloned.put("id", originalSpecies);
         getLogger().info("PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED"
                 + " provider=" + providerId);
     }
