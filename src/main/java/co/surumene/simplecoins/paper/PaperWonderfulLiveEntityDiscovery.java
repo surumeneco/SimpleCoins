@@ -57,11 +57,14 @@ public final class PaperWonderfulLiveEntityDiscovery {
         }
     }
 
-    public record Report(List<Holder> holders, int scannedChunks, int scannedEntities) {
+    public record Report(List<Holder> holders, int scannedChunks, int scannedEntities,
+                         Set<UUID> observedEntityIds) {
         public Report {
             holders = List.copyOf(Objects.requireNonNull(holders));
-            if (scannedChunks < 0 || scannedEntities < 0)
-                throw new IllegalArgumentException("Negative LIVE enumeration counters");
+            observedEntityIds = Set.copyOf(Objects.requireNonNull(observedEntityIds));
+            if (scannedChunks < 0 || scannedEntities < 0
+                    || scannedEntities != observedEntityIds.size())
+                throw new IllegalArgumentException("Invalid LIVE enumeration counters");
         }
         public boolean isCompleteSettlementSource() { return false; }
         public Set<Identity> identities() {
@@ -176,6 +179,6 @@ public final class PaperWonderfulLiveEntityDiscovery {
             if (!observed.equals(selected))
                 throw new IOException("Captured LIVE Chunk set changed during WCL scan");
         }
-        return new Report(candidates, loaded.size(), scanned);
+        return new Report(candidates, loaded.size(), scanned, seenEntities);
     }
 }
