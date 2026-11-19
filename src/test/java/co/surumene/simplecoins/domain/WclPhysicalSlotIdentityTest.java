@@ -55,4 +55,20 @@ class WclPhysicalSlotIdentityTest {
         assertThrows(IOException.class,
                 () -> WclPhysicalSlotIdentity.keys(WOLF, "www", List.of("weapon", "weapon")));
     }
+
+    @Test void shippedChickenProviderAcceptsCarpetShulkerAndHeadIndependently() throws Exception {
+        var keys = WclPhysicalSlotIdentity.keys(WOLF, "wwc",
+                List.of("carpet", "shulker", "head"));
+        assertEquals(Set.of("carpet", "shulker", "head"), keys.keySet());
+        assertEquals("entity/" + WOLF + "/wcl/wwc/carpet", keys.get("carpet"));
+        assertEquals("entity/" + WOLF + "/wcl/wwc/shulker", keys.get("shulker"));
+        assertEquals("entity/" + WOLF + "/equipment/head", keys.get("head"));
+    }
+
+    @Test void shippedChickenProviderDoesNotAcceptInventedFourthSlot() {
+        assertThrows(IOException.class,
+                () -> WclPhysicalSlotIdentity.keys(WOLF, "wwc",
+                        List.of("head", "carpet", "shulker", "extra")));
+    }
+
 }
