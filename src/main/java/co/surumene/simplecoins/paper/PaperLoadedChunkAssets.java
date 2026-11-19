@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -127,6 +129,23 @@ public final class PaperLoadedChunkAssets {
                       int maxSlots, int maxSerializedBytes, int maxInflatedBytes,
                       Set<UUID> walletIds, Set<UUID> entityIds,
                       Set<String> keys) throws IOException {
+        return scan(chunk, maxTiles, maxEntities, maxSlots,
+                maxSerializedBytes, maxInflatedBytes,
+                walletIds, entityIds, keys, new HashMap<>());
+    }
+
+    /**
+     * Capture the exact positive non-Player equipment ItemStack bytes during
+     * its original monetary valuation. This MUST be the same scan, never a
+     * second pass that could silently substitute another LIVE generation.
+     * Failure makes the entire caller's shared wallet generation unusable.
+     */
+    static Slice scan(Chunk chunk, int maxTiles, int maxEntities,
+                      int maxSlots, int maxSerializedBytes, int maxInflatedBytes,
+                      Set<UUID> walletIds, Set<UUID> entityIds,
+                      Set<String> keys, Map<String,byte[]> equipmentEvidence)
+            throws IOException {
+        Objects.requireNonNull(equipmentEvidence, "captured same-scan equipment NBT");
         Objects.requireNonNull(chunk, "loaded chunk");
         Objects.requireNonNull(walletIds, "shared wallet identities");
         Objects.requireNonNull(entityIds, "shared entity identities");
@@ -238,6 +257,18 @@ public final class PaperLoadedChunkAssets {
                         if (projection != null) heldKey = projection;
                         if (!keys.add(heldKey))
                             throw new IOException("Duplicate live equipment slot: " + heldKey);
+                        final byte[] serialized;
+                        try {
+                            serialized = stacks[i].serializeAsBytes();
+                        } catch (RuntimeException invalid) {
+                            throw new IOException("Captured LIVE equipment ItemStack serialization failed",
+                                    invalid);
+                        }
+                        if (serialized.length < 2 || serialized.length > maxSerializedBytes
+                                || equipmentEvidence.putIfAbsent(
+                                        heldKey, serialized.clone()) != null)
+                            throw new IOException("Duplicate/invalid LIVE equipment NBT evidence: "
+                                    + heldKey);
                         found.add(new Entry(heldKey, worldId, equipmentValue));
                     }
                 }
