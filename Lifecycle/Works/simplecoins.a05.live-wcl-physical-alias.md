@@ -41,7 +41,6 @@ spec_status: confirmed
 | --- |
 | Java |
 | JUnit |
-| Paper |
 
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
