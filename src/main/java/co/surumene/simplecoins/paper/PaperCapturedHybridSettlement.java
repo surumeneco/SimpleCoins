@@ -222,7 +222,7 @@ public final class PaperCapturedHybridSettlement {
             HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
         return stageCandidateInternal(manifest, scope, currentlyBanned, null,
                 blockOwners, entityOwners, maximumCompressedBytes,
-                maximumInflatedBytes, liveOwnership);
+                maximumInflatedBytes, liveOwnership, null, null);
     }
 
     /** Use one complete, immutable provider-reported BAN generation for both
@@ -239,7 +239,42 @@ public final class PaperCapturedHybridSettlement {
         Objects.requireNonNull(banSources, "BAN source coverage");
         return stageCandidateInternal(manifest, scope, null, banSources,
                 blockOwners, entityOwners, maximumCompressedBytes,
-                maximumInflatedBytes, liveOwnership);
+                maximumInflatedBytes, liveOwnership, null, null);
+    }
+
+    /**
+     * Optional SAVED WCL provider read, executed within the SAME selected
+     * SAVED Anvil Entity callback as normal Entity monetary staging.
+     * Caller must independently establish world UUID provenance, writer
+     * exclusion and complete LIVE/SAVED source selection. Result unpublished.
+     */
+    public SettlementScanRunner.Staged stageCandidateWithSavedWcl(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope,
+            Set<UUID> currentlyBanned,
+            SettlementScanRunner.BlockOwnerLookup blockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes, int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        return stageCandidateInternal(manifest, scope, currentlyBanned, null,
+                blockOwners, entityOwners, maximumCompressedBytes,
+                maximumInflatedBytes, liveOwnership,
+                Objects.requireNonNull(consumer), Map.copyOf(verifiedWorldIds));
+    }
+
+    /** Variant where the same BAN provider generation covers saved and LIVE. */
+    public SettlementScanRunner.Staged stageCandidateWithSavedWclAndBanCoverage(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope,
+            BanSourceCoverage banSources,
+            SettlementScanRunner.BlockOwnerLookup blockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes, int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        return stageCandidateInternal(manifest, scope, null,
+                Objects.requireNonNull(banSources), blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, liveOwnership,
+                Objects.requireNonNull(consumer), Map.copyOf(verifiedWorldIds));
     }
 
     private SettlementScanRunner.Staged stageCandidateInternal(
@@ -251,7 +286,8 @@ public final class PaperCapturedHybridSettlement {
             SettlementScanRunner.EntityOwnerLookup entityOwners,
             int maximumCompressedBytes,
             int maximumInflatedBytes,
-            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+            HybridLiveSourceStage.Classifier liveOwnership,
+            Plugin savedWclConsumer, Map<String, UUID> savedWorldIds) throws IOException {
         List<WclHybridLiveOverlay.Selected> wclCandidates;
         synchronized (this) {
             if (!consumed.compareAndSet(false, true))
@@ -299,17 +335,26 @@ public final class PaperCapturedHybridSettlement {
             throw new IOException("Duplicate/invalid observed LIVE source selection", invalid);
         }
 
-        // This traverses and validates ALL saved files but excludes disk
-        // currency shadowed by those previously observed live sources.
+        // Select SAVED WCL only for chunks that the partition routed to disk.
+        // The callback executes within the normal saved Anvil visitor BEFORE
+        // its source is completed and shares the same pending transaction and
+        // wallet identities. Failure discards this one-shot candidate.
+        SettlementScanRunner.SavedEntitySupplement savedWclSupplement =
+                savedWclConsumer == null ? null : new PaperWonderfulSavedSettlementSource(
+                        savedWclConsumer, savedWorldIds, manifest, currentlyBanned,
+                        banSources, wclCandidates.stream()
+                                .map(WclHybridLiveOverlay.Selected::entityId)
+                                .collect(java.util.stream.Collectors.toSet()),
+                        maximumCompressedBytes, maximumInflatedBytes);
         SettlementScanRunner.Staged staged = banSources == null
                 ? SettlementScanRunner.stage(
                         manifest, scope, currentlyBanned, blockOwners, entityOwners,
                         maximumCompressedBytes, maximumInflatedBytes, walletIds,
-                        selection)
+                        selection, savedWclSupplement)
                 : SettlementScanRunner.stageWithBanCoverage(
                         manifest, scope, banSources, blockOwners, entityOwners,
                         maximumCompressedBytes, maximumInflatedBytes, walletIds,
-                        selection);
+                        selection, savedWclSupplement);
 
         // Same physical source keys and balances; explicit ownership MUST be
         // provided. A failure never returns the staged result to the caller.

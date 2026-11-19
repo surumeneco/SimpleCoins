@@ -14,6 +14,7 @@ import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
+import co.surumene.simplecoins.paper.PaperWonderfulSavedSettlementSource;
 import co.surumene.simplecoins.paper.PaperLoadedChunkAssets;
 import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
@@ -1066,6 +1067,77 @@ public final class WclServicesProbe extends JavaPlugin {
                         candidates.addAll(sourced);
                         if (saved.x() == FAR_CHUNK && saved.z() == FAR_CHUNK
                                 && !sourced.isEmpty()) {
+                            // Real detached saved PDC from an unloaded Anvil Entity:
+                            // use one authentic WWC holder as an isolated
+                            // local source without claiming source closure.
+                            Object justWwc = null;
+                            if (!(saved.nbt().get("Entities") instanceof List<?> rawEntities))
+                                throw new IOException("Missing actual SAVED Entity chunk payload");
+                            for (Object original : rawEntities) {
+                                if (original instanceof Map<?, ?> data
+                                        && "minecraft:chicken".equals(data.get("id"))
+                                        && wwcUuid.equals(readSavedUuid(data.get("UUID")))) {
+                                    if (justWwc != null)
+                                        throw new IOException("Duplicate real WWC in saved source");
+                                    justWwc = original;
+                                }
+                            }
+                            if (justWwc == null)
+                                throw new IOException("Real SAVED WCL WWC not found for isolated test");
+                            var wwcOnly = new AnvilRegionReader.Chunk(
+                                    saved.x(), saved.z(),
+                                    Map.of("Entities", List.of(justWwc)));
+                            String sourceId = source.path().toAbsolutePath().normalize().toString();
+                            var wwcStaged = new SettlementAccumulator(
+                                    new WorldScope(true, Set.of(), Set.of()), Set.of(sourceId));
+                            var localWcl = new PaperWonderfulSavedSettlementSource(
+                                    WclServicesProbe.this, Map.of(world.getName(), world.getUID()),
+                                    boundedManifest, Set.of(), null, Set.of(),
+                                    2 * 1024 * 1024, 16 * 1024 * 1024);
+                            localWcl.stage(source, wwcOnly, wwcStaged, new java.util.HashSet<>());
+                            wwcStaged.completeSource(sourceId);
+                            var localResult = wwcStaged.commit();
+                            // The isolated Paper fixture has no corresponding
+                            // playerdata for this commander. Confirmed 02A
+                            // therefore requires DEAD rather than PERSONAL.
+                            if (!BigInteger.valueOf(10000).equals(localResult.dead())
+                                    || !BigInteger.ZERO.equals(localResult.statistics().worldTotal())
+                                    || localResult.deadLocations().stream().noneMatch(loc ->
+                                            PERSISTENCE_FOLLOW.equals(loc.owner())
+                                            && BigInteger.valueOf(10000).equals(loc.value())))
+                                throw new IOException("SAVED WWC real 10000C not staged as DEAD"
+                                        + " dead=" + localResult.dead()
+                                        + " personal=" + localResult.personalBalances()
+                                        + " worldTotal=" + localResult.statistics().worldTotal());
+                            // In the shipped REAL WWW persisted fixture,
+                            // the WCL reported owner and independent vanilla
+                            // tame Owner evidence are contradictory. That HOLD
+                            // MUST win before even examining weapon mirroring.
+                            // Pure JUnit separately tests positive mirrored
+                            // weapon/head rejection when owner is coherent.
+                            var savedWww = sourced.stream()
+                                    .filter(candidate -> "www".equals(candidate.providerId()))
+                                    .findFirst().orElseThrow(() ->
+                                            new IOException("No real saved WWW source"));
+                            if (savedWww.savedOwnerEvidence(true, saved).kind()
+                                    != co.surumene.simplecoins.domain.WclOwnerEvidence.Kind.HOLD)
+                                throw new IOException("Shipped saved WWW owner contradiction was lost");
+                            var mustReject = new SettlementAccumulator(
+                                    new WorldScope(true, Set.of(), Set.of()), Set.of(sourceId));
+                            var allWcl = new PaperWonderfulSavedSettlementSource(
+                                    WclServicesProbe.this, Map.of(world.getName(), world.getUID()),
+                                    boundedManifest, Set.of(), null, Set.of(),
+                                    2 * 1024 * 1024, 16 * 1024 * 1024);
+                            try {
+                                allWcl.stage(source, saved, mustReject, new java.util.HashSet<>());
+                                throw new IOException("Contradictory SAVED WWW owner became an asset");
+                            } catch (IOException expectedHold) {
+                                if (!("Unresolved SAVED WCL owner: " + savedWww.entityId())
+                                        .equals(expectedHold.getMessage()))
+                                    throw expectedHold;
+                            }
+                            getLogger().info("PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED");
+
                             try {
                                 PaperWonderfulSavedChunkCandidates.collect(
                                         WclServicesProbe.this, source, world.getUID(), saved,
