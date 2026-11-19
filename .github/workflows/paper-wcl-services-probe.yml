@@ -14,6 +14,9 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
       - 'Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md'
+      - 'Lifecycle/Works/simplecoins.a05.wcl-physical-slot-collisions.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WclPhysicalSlotIdentity.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WclPhysicalSlotIdentityTest.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperLiveItemValue.java'
       - 'Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md'
@@ -85,6 +88,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wcl-physical-slot-collisions.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
