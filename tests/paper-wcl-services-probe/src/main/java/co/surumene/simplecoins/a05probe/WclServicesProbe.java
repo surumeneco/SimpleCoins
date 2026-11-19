@@ -457,13 +457,19 @@ public final class WclServicesProbe extends JavaPlugin {
             byte[] moneyShulker = createMoneyShulker();
             seedChickenStorage(owner.getPersistentDataContainer(),
                     PERSISTENCE_FOLLOW, moneyShulker);
-            var wcl = success(providers.get("wwc").readLoaded(owner.getUniqueId()),
-                    "WWC display original loaded storage");
+            // A synthetically tagged, newly spawned Chicken is not yet a
+            // WWC-managed loaded individual. Use the shipped saved-PDC reader
+            // rather than assuming readLoaded will register a game individual.
+            var wcl = success(providers.get("wwc").readStored(owner.getUniqueId(),
+                    world.getUID(), Optional.empty(), owner.getPersistentDataContainer()),
+                    "WWC display original stored-PDC source");
             if (wcl.items().size() != 1 || !"shulker".equals(wcl.items().getFirst().slot()))
                 throw new IOException("WWC display parent shulker source missing");
-            var original = PaperWonderfulLoadedEvidence.readLoaded(this, owner, "wwc");
+            var original = PaperWonderfulLoadedEvidence.readStored(this,
+                    owner.getUniqueId(), world.getUID(), "wwc",
+                    owner.getPersistentDataContainer());
             if (original.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS)
-                throw new IOException("Product WCL could not read display parent shulker");
+                throw new IOException("Product WCL could not read stored display parent shulker");
             var values = PaperWonderfulSnapshotAssets.slotValues(
                     original.snapshot().orElseThrow(), 2 * 1024 * 1024, 16 * 1024 * 1024);
             if (!BigInteger.valueOf(10000).equals(values.get("shulker")))
