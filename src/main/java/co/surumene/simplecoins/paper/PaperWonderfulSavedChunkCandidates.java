@@ -2,6 +2,7 @@ package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WclPhysicalSlotIdentity;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -45,6 +46,15 @@ public final class PaperWonderfulSavedChunkCandidates {
             Objects.requireNonNull(providerId, "storage provider");
             relationships = Map.copyOf(Objects.requireNonNull(relationships));
             slotValues = Map.copyOf(Objects.requireNonNull(slotValues));
+        }
+
+        /**
+         * Names used by the normal Entity equipment staging path for the same
+         * physical observation. A collision means HOLD until the two views are
+         * independently proven equivalent; it must never double the amount.
+         */
+        public Map<String, String> physicalSlotKeys() throws IOException {
+            return WclPhysicalSlotIdentity.keys(entityId, providerId, slotValues.keySet());
         }
     }
 
@@ -120,8 +130,12 @@ public final class PaperWonderfulSavedChunkCandidates {
             var snapshot = result.snapshot().orElseThrow();
             Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
                     snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
-            candidates.add(new Candidate(source, worldId, chunk.x(), chunk.z(),
-                    entityId, provider, snapshot.relationships(), values));
+            var candidate = new Candidate(source, worldId, chunk.x(), chunk.z(),
+                    entityId, provider, snapshot.relationships(), values);
+            // Unknown provider slot identities may not silently become another
+            // minted physical source. This remains an unpublished candidate.
+            candidate.physicalSlotKeys();
+            candidates.add(candidate);
         }
         return List.copyOf(candidates);
     }
