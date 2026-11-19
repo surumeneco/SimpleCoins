@@ -95,8 +95,14 @@ public final class WorldSourceIdentitySnapshot {
      */
     public void requireSameRegisteredWorlds(
             Map<String, Identity> current) throws IOException {
-        WorldSourceIdentitySnapshot after = capture(current);
-        if (!captured.equals(after.captured))
+        requireSameRegisteredWorlds(capture(current));
+    }
+
+    /** Same check when the Paper adapter has already captured a fresh set. */
+    public void requireSameRegisteredWorlds(
+            WorldSourceIdentitySnapshot current) throws IOException {
+        Objects.requireNonNull(current, "current Paper Worlds");
+        if (!captured.equals(current.captured))
             throw new IOException("Paper registered World universe changed during discovery");
     }
 }
