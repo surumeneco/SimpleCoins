@@ -100,4 +100,76 @@ class WclSavedSlotSupplementTest {
         acc.completeSource(SOURCE);
         assertEquals(BigInteger.ZERO, acc.commit().statistics().worldTotal());
     }
+
+    @Test void provenSavedEquipmentMirrorKeepsOnePreviouslyStagedNativeCoin() throws Exception {
+        var acc = pending();
+        var sourceKey = "entity/" + ENTITY + "/equipment/mainhand";
+        acc.accept(new SettlementAccumulator.Asset(SOURCE, sourceKey, "world",
+                OWNER, false, false, true, BigInteger.valueOf(10000),
+                "world/world/" + sourceKey));
+        WclSavedSlotSupplement.stage(acc, SOURCE, "world", ENTITY, "www",
+                Map.of("weapon", BigInteger.valueOf(10000)),
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.OWNER, OWNER),
+                Set.of(), Set.of(OWNER), Set.of("weapon"));
+        acc.completeSource(SOURCE);
+        var result = acc.commit();
+        assertEquals(BigInteger.valueOf(10000), result.statistics().worldTotal());
+        assertEquals(BigInteger.valueOf(10000), result.personalBalances().get(OWNER));
+        assertEquals(BigInteger.ZERO, result.free());
+    }
+
+    @Test void provenHeadMirrorStillRequiresMatchingExistingNativeSlot() throws Exception {
+        var acc = pending();
+        var sourceKey = "entity/" + ENTITY + "/equipment/head";
+        acc.accept(new SettlementAccumulator.Asset(SOURCE, sourceKey, "world",
+                null, false, false, false, BigInteger.valueOf(10000),
+                "world/world/" + sourceKey));
+        WclSavedSlotSupplement.stage(acc, SOURCE, "world", ENTITY, "wwc",
+                Map.of("head", BigInteger.valueOf(10000)),
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
+                Set.of(), Set.of(), Set.of("head"));
+        acc.completeSource(SOURCE);
+        assertEquals(BigInteger.valueOf(10000), acc.commit().free());
+    }
+
+    @Test void amountOwnerAndMissingNativeCannotBeCoalesced() throws Exception {
+        var nativeKey = "entity/" + ENTITY + "/equipment/mainhand";
+        for (int different : new int[]{0, 1, 2}) {
+            var acc = pending();
+            if (different != 2)
+                acc.accept(new SettlementAccumulator.Asset(SOURCE, nativeKey, "world",
+                        different == 1 ? null : OWNER, false, false,
+                        different == 1 ? false : true,
+                        different == 0 ? BigInteger.valueOf(5000) : BigInteger.valueOf(10000),
+                        "world/world/" + nativeKey));
+            assertThrows(IOException.class, () -> WclSavedSlotSupplement.stage(
+                    acc, SOURCE, "world", ENTITY, "www",
+                    Map.of("weapon", BigInteger.valueOf(10000)),
+                    new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.OWNER, OWNER),
+                    Set.of(), Set.of(OWNER), Set.of("weapon")));
+            assertThrows(IllegalStateException.class, acc::commit);
+        }
+    }
+
+    @Test void proofForNonmirrorOrUnknownProviderSlotIsRejected() {
+        var acc = pending();
+        assertThrows(IOException.class, () -> WclSavedSlotSupplement.stage(
+                acc, SOURCE, "world", ENTITY, "wwc",
+                Map.of("shulker", BigInteger.valueOf(10000)),
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.FREE, null),
+                Set.of(), Set.of(), Set.of("shulker")));
+    }
+
+    @Test void classificationChangeFromPersonalToDeadIsNotEquivalent() throws Exception {
+        var acc = pending();
+        var key = "entity/" + ENTITY + "/equipment/mainhand";
+        acc.accept(new SettlementAccumulator.Asset(SOURCE, key, "world",
+                OWNER, false, false, true, BigInteger.valueOf(10000),
+                "world/world/" + key));
+        assertThrows(IOException.class, () -> WclSavedSlotSupplement.stage(
+                acc, SOURCE, "world", ENTITY, "www",
+                Map.of("weapon", BigInteger.valueOf(10000)),
+                new WclOwnerEvidence.Decision(WclOwnerEvidence.Kind.OWNER, OWNER),
+                Set.of(OWNER), Set.of(OWNER), Set.of("weapon")));
+    }
 }
