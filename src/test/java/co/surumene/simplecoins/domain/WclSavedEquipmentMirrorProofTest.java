@@ -109,4 +109,21 @@ class WclSavedEquipmentMirrorProofTest {
         assertThrows(IOException.class, () -> WclSavedEquipmentMirrorProof.prove(
                 chunk, ENTITY, "www", "weapon", serialized(item), 8, 4096));
     }
+
+    @Test void paperRootDataVersionIsAllowedOnlyWithMatchingRuntimeVersion() throws Exception {
+        var item = money(10000, 1);
+        var wclEncoding = new java.util.HashMap<String,Object>(item);
+        wclEncoding.put("DataVersion", 4903);
+        var chunk = Map.<String,Object>of("Entities", List.of(wolf(ENTITY, item)));
+        byte[] wrapped = serialized(wclEncoding);
+        assertThrows(IOException.class, () -> WclSavedEquipmentMirrorProof.prove(
+                chunk, ENTITY, "www", "weapon", wrapped, 4096, 4096));
+        WclSavedEquipmentMirrorProof.prove(
+                chunk, ENTITY, "www", "weapon", wrapped, 4096, 4096, 4903);
+        assertThrows(IOException.class, () -> WclSavedEquipmentMirrorProof.prove(
+                chunk, ENTITY, "www", "weapon", wrapped, 4096, 4096, 4904));
+        wclEncoding.put("unrelated", 1);
+        assertThrows(IOException.class, () -> WclSavedEquipmentMirrorProof.prove(
+                chunk, ENTITY, "www", "weapon", serialized(wclEncoding), 4096, 4096, 4903));
+    }
 }
