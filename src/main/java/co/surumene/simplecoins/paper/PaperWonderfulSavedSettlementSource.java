@@ -137,7 +137,8 @@ public final class PaperWonderfulSavedSettlementSource
                     throw new IOException("No same-read WCL equipment bytes for mirror");
                 WclSavedEquipmentMirrorProof.prove(
                         chunk.nbt(), candidate.entityId(), candidate.providerId(),
-                        slot.getKey(), stored.bytes(), maxSerialized, maxInflated);
+                        slot.getKey(), stored.bytes(), maxSerialized, maxInflated,
+                        Bukkit.getUnsafe().getDataVersion());
                 provenEquipmentMirrors.add(slot.getKey());
             }
             WclSavedSlotSupplement.stage(
