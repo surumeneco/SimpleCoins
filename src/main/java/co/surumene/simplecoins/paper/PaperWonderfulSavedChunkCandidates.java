@@ -4,6 +4,7 @@ import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WclPhysicalSlotIdentity;
 import co.surumene.simplecoins.domain.WclOwnerEvidence;
+import co.surumene.simplecoins.domain.SavedEntityOwner;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -67,6 +68,17 @@ public final class PaperWonderfulSavedChunkCandidates {
                 boolean providerReadVerified, WclOwnerEvidence.TameOwner tame)
                 throws IOException {
             return WclOwnerEvidence.decide(providerReadVerified, providerId, relationships, tame);
+        }
+
+        /** Candidate-owned conversion from the independently selected SAVED chunk. */
+        public WclOwnerEvidence.Decision savedOwnerEvidence(
+                boolean providerReadVerified, AnvilRegionReader.Chunk savedChunk)
+                throws IOException {
+            Objects.requireNonNull(savedChunk, "selected saved Entity chunk");
+            if (savedChunk.x() != chunkX || savedChunk.z() != chunkZ)
+                throw new IOException("Saved WCL owner evidence chunk mismatch");
+            return ownerEvidence(providerReadVerified,
+                    SavedEntityOwner.wclTameObservation(savedChunk.nbt(), entityId, providerId));
         }
     }
 

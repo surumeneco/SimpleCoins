@@ -31,4 +31,44 @@ class SavedEntityOwnerTest {
         assertThrows(java.io.IOException.class, () ->
                 SavedEntityOwner.extract(Map.of("Entities", List.of(wolf))));
     }
+
+    @Test void savedWclWolfOwnerIsVerifiedFromSelectedUuid() throws Exception {
+        UUID wolf = new UUID(0, 84);
+        var chunk = Map.<String,Object>of("Entities", List.of(
+                Map.of("id", "minecraft:wolf", "UUID", new int[]{0,0,0,84},
+                       "Owner", new int[]{0,0,0,42})));
+        var evidence = SavedEntityOwner.wclTameObservation(chunk, wolf, "www");
+        assertTrue(evidence.verified());
+        assertEquals(new UUID(0, 42), evidence.owner());
+    }
+
+    @Test void normalChickenHasVerifiedNoVanillaTameOwner() throws Exception {
+        var chunk = Map.<String,Object>of("Entities", List.of(
+                Map.of("id", "minecraft:chicken", "UUID", new int[]{0,0,0,85})));
+        var evidence = SavedEntityOwner.wclTameObservation(chunk, new UUID(0,85), "wwc");
+        assertTrue(evidence.verified());
+        assertNull(evidence.owner());
+    }
+
+    @Test void missingOrWrongSpeciesIsNotEvidenceOfFree() {
+        var chunk = Map.<String,Object>of("Entities", List.of(
+                Map.of("id", "minecraft:chicken", "UUID", new int[]{0,0,0,85})));
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityOwner.wclTameObservation(chunk, new UUID(0,84), "wwc"));
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityOwner.wclTameObservation(chunk, new UUID(0,85), "www"));
+    }
+
+    @Test void malformedOrDuplicatedSavedWolfUuidMustNotProveAbsentOwner() {
+        var duplicate = Map.<String,Object>of("Entities", List.of(
+                Map.of("id", "minecraft:wolf", "UUID", new int[]{0,0,0,84}),
+                Map.of("id", "minecraft:wolf", "UUID", new int[]{0,0,0,84})));
+        var malformed = Map.<String,Object>of("Entities", List.of(
+                Map.of("id", "minecraft:wolf", "UUID", new int[]{0,0,0,84},
+                       "Owner", "bad-owner")));
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityOwner.wclTameObservation(duplicate, new UUID(0,84), "www"));
+        assertThrows(java.io.IOException.class, () ->
+                SavedEntityOwner.wclTameObservation(malformed, new UUID(0,84), "www"));
+    }
 }

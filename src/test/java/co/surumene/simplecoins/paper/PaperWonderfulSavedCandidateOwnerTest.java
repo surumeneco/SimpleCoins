@@ -40,4 +40,33 @@ class PaperWonderfulSavedCandidateOwnerTest {
         assertEquals(WclOwnerEvidence.Kind.FREE,
                 candidate.ownerEvidence(true, WclOwnerEvidence.TameOwner.verifiedAbsent()).kind());
     }
+
+    @Test void savedCandidateReadsVanillaWolfOwnerWithoutGuessing() throws Exception {
+        UUID owner = new UUID(0,42);
+        var candidate = new PaperWonderfulSavedChunkCandidates.Candidate(
+                new WorldStorageDiscovery.SourceFile("world", Path.of("r.0.0.mca"),
+                        WorldStorageDiscovery.Kind.ENTITY),
+                new UUID(0,10), 0,0, ENTITY, "www", Map.of("owner", owner),
+                Map.of("cargo:7", BigInteger.valueOf(3000)));
+        var chunk = new co.surumene.simplecoins.domain.AnvilRegionReader.Chunk(0,0,
+                Map.of("Entities", java.util.List.of(
+                        Map.of("id", "minecraft:wolf", "UUID", new int[]{0,0,0,153},
+                               "Owner", new int[]{0,0,0,42}))));
+        assertEquals(owner, candidate.savedOwnerEvidence(true, chunk).owner());
+        assertEquals(WclOwnerEvidence.Kind.HOLD,
+                candidate.savedOwnerEvidence(false, chunk).kind());
+    }
+
+    @Test void candidateCannotUseWrongChunkAsAffirmativeAbsence() throws Exception {
+        var candidate = new PaperWonderfulSavedChunkCandidates.Candidate(
+                new WorldStorageDiscovery.SourceFile("world", Path.of("r.0.0.mca"),
+                        WorldStorageDiscovery.Kind.ENTITY),
+                new UUID(0,10), 0,0, ENTITY, "wwc", Map.of(),
+                Map.of("shulker", BigInteger.valueOf(10000)));
+        var chunk = new co.surumene.simplecoins.domain.AnvilRegionReader.Chunk(1,0,
+                Map.of("Entities", java.util.List.of(
+                        Map.of("id", "minecraft:chicken", "UUID", new int[]{0,0,0,153}))));
+        assertThrows(java.io.IOException.class,
+                () -> candidate.savedOwnerEvidence(true, chunk));
+    }
 }

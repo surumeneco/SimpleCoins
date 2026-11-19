@@ -23,6 +23,42 @@ public final class SavedEntityOwner {
 
     private SavedEntityOwner() {}
 
+    /**
+     * Read the independently saved vanilla tame-owner observation for exactly
+     * one WWC/WWW WCL candidate. The caller must prove this chunk is from the
+     * same selected, immutable source generation; parsing cannot prove that.
+     * A verified normal Chicken is not a tameable, unlike a saved Wolf.
+     */
+    public static WclOwnerEvidence.TameOwner wclTameObservation(
+            Map<String, Object> chunk, UUID target, String providerId) throws IOException {
+        if (target == null) throw new IOException("Missing selected WCL Entity UUID");
+        String species;
+        if ("wwc".equals(providerId)) species = "minecraft:chicken";
+        else if ("www".equals(providerId)) species = "minecraft:wolf";
+        else throw new IOException("Unknown provider for saved tame observation: " + providerId);
+
+        // Validate ALL saved Entity UUIDs before inferring positive absence.
+        if (!SavedEntityUuidIntegrity.identities(chunk).contains(target))
+            throw new IOException("Selected WCL Entity absent from saved chunk: " + target);
+        List<?> entities = (List<?>) chunk.get("Entities");
+        boolean found = false;
+        for (Object raw : entities) {
+            if (!(raw instanceof Map<?, ?> entity))
+                throw new IOException("Malformed saved Entity in WCL tame source");
+            UUID id = uuid(entity.get("UUID"), "selected WCL Entity UUID");
+            if (!target.equals(id)) continue;
+            if (!species.equals(entity.get("id")))
+                throw new IOException("Selected WCL Entity has the wrong saved species");
+            found = true;
+            break;
+        }
+        if (!found) throw new IOException("Selected WCL Entity disappeared during read");
+        if ("wwc".equals(providerId)) return WclOwnerEvidence.TameOwner.verifiedAbsent();
+        UUID owner = extract(chunk).get(target.toString());
+        return owner == null ? WclOwnerEvidence.TameOwner.verifiedAbsent()
+                : WclOwnerEvidence.TameOwner.verified(owner);
+    }
+
     public static Map<String, UUID> extract(Map<String, Object> chunk) throws IOException {
         if (chunk == null || !(chunk.get("Entities") instanceof List<?> entities))
             throw new IOException("Missing saved entity chunk Entities list");

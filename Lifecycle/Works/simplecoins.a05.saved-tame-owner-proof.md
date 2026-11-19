@@ -48,7 +48,7 @@ spec_status: confirmed
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 
 ## Gates
 | Gate | Status | Evidence |
