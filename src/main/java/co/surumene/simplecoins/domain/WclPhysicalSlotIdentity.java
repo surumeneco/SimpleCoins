@@ -22,6 +22,21 @@ import java.util.UUID;
 public final class WclPhysicalSlotIdentity {
     private WclPhysicalSlotIdentity() {}
 
+    /**
+     * Map the exact shipped WWC ephemeral ArmorStand display roles to their
+     * WCL-held logical source slots. Caller validates provenance and entity
+     * identity independently before using this as a collision witness.
+     */
+    public static String wwcDisplayKey(UUID chickenId, String displayRole) throws IOException {
+        Objects.requireNonNull(chickenId, "display parent Chicken UUID");
+        String slot = switch (Objects.requireNonNull(displayRole, "WWC display role")) {
+            case "CARPET" -> "carpet";
+            case "SHULKER_BOX" -> "shulker";
+            default -> throw new IOException("Unknown WWC display role: " + displayRole);
+        };
+        return keys(chickenId, "wwc", java.util.List.of(slot)).get(slot);
+    }
+
     public static Map<String, String> keys(UUID entityId, String providerId,
                                            Collection<String> slots) throws IOException {
         Objects.requireNonNull(entityId, "verified Entity UUID");
