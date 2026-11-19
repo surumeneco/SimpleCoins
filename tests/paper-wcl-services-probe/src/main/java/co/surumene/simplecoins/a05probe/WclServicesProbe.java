@@ -991,8 +991,14 @@ public final class WclServicesProbe extends JavaPlugin {
         Wolf wolf = world.spawn(
                 new Location(world, anchor + 10.5, 120, anchor + 10.5), Wolf.class);
         wolf.addScoreboardTag(FAR_WWW_TAG);
+        // Paper must persist both the genuine vanilla equipment item and
+        // the same WCL runtime weapon, plus a verifiable tame-owner. Only
+        // then can the unchanged SAVED source prove one physical coin.
+        wolf.setOwner(Bukkit.getOfflinePlayer(WOLF_OWNER));
+        ItemStack mirroredWeapon = coins.create(CoinDenomination.TEN_THOUSAND, 1);
+        wolf.getEquipment().setItemInMainHand(mirroredWeapon);
         byte[] runtime = wolfRuntimeFixture(WOLF_OWNER, WOLF_COMMANDER,
-                coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
+                mirroredWeapon.serializeAsBytes(),
                 coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
         PersistentDataContainer pdc = wolf.getPersistentDataContainer();
         pdc.set(new NamespacedKey("whatawonderfulwolf", "type"),
