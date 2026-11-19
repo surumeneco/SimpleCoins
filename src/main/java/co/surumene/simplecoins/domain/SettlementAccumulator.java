@@ -58,9 +58,10 @@ public final class SettlementAccumulator {
     }
 
     /**
-     * An actual Paper LIVE wolf's main hand has a world-qualified source key,
-     * while saved Entity equipment and the verified WCL weapon use the Entity
-     * UUID's unqualified key. Normalize only the physical collision identity;
+     * Paper LIVE Entity equipment uses a world-qualified physical key while
+     * saved Entity equipment and known WWC head / WWW weapon WCL mirrors use
+     * their Entity UUID's unqualified key. Normalize only proven collision
+     * identity for these two slots;
      * source/provenance keys and the original Asset remain unchanged.
      *
      * This does not prove WCL and LIVE values are equal or from one writer
@@ -70,8 +71,10 @@ public final class SettlementAccumulator {
         String key = asset.physicalKey();
         if (asset.world() == null) return key;
         String prefix = "world/" + asset.world() + "/entity/";
-        String suffix = "/equipment/mainhand";
-        if (!key.startsWith(prefix) || !key.endsWith(suffix)) return key;
+        String suffix = key.endsWith("/equipment/mainhand")
+                ? "/equipment/mainhand" : key.endsWith("/equipment/head")
+                ? "/equipment/head" : null;
+        if (suffix == null || !key.startsWith(prefix)) return key;
         String rawEntityId = key.substring(prefix.length(), key.length() - suffix.length());
         try {
             UUID entityId = UUID.fromString(rawEntityId);

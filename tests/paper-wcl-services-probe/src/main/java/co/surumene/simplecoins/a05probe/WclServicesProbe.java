@@ -108,6 +108,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 }
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
+                verifyShippedWwcThreeSlotReadback(selected, world);
                 verifySerializedWclValuationBoundaries(world);
                 verifyCrossProviderWalletIdentity(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
@@ -390,6 +391,51 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IllegalStateException("Product WCL must not adopt unsupported WWW schema");
         getLogger().info("PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED");
         getLogger().info("PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED");
+    }
+
+    /**
+     * Shipped WWC exposes three PDC-backed items, not only the previously
+     * tested shulker. Detached, explicitly synthetic Paper PDC: read-only
+     * provider contract check, not a game-managed WWC lifecycle guarantee.
+     */
+    private void verifyShippedWwcThreeSlotReadback(
+            Map<String, WonderfulStorageReader> providers, World world) throws IOException {
+        UUID chicken = UUID.fromString("00000000-0000-0000-0000-00000000a06c");
+        var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        var pdc = new ItemStack(Material.PAPER).getItemMeta().getPersistentDataContainer();
+        seedChickenStorage(pdc, PERSISTENCE_FOLLOW, createMoneyShulker());
+        pdc.set(new NamespacedKey("whatawonderfulchicken", "equipment_carpet"),
+                PersistentDataType.BYTE_ARRAY,
+                new ItemStack(Material.RED_CARPET).serializeAsBytes());
+        pdc.set(new NamespacedKey("whatawonderfulchicken", "equipment_head"),
+                PersistentDataType.BYTE_ARRAY,
+                coins.create(CoinDenomination.FIVE_THOUSAND, 1).serializeAsBytes());
+        StorageSnapshot direct = success(
+                providers.get("wwc").readStored(chicken, world.getUID(), Optional.empty(), pdc),
+                "Shipped WWC all three slots");
+        if (!chicken.equals(direct.entityId()) || direct.items().size() != 3
+                || !PERSISTENCE_FOLLOW.equals(direct.relationships().get("follow_target")))
+            throw new IOException("Shipped WWC three-slot snapshot incomplete");
+        var result = PaperWonderfulLoadedEvidence.readStored(this, chicken, world.getUID(),
+                "wwc", pdc);
+        if (result.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS)
+            throw new IOException("Product WCL adapter rejected three-slot WWC: " + result);
+        var snapshot = result.snapshot().orElseThrow();
+        Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
+                snapshot, 2 * 1024 * 1024, 16 * 1024 * 1024);
+        if (!values.keySet().equals(Set.of("carpet", "shulker", "head"))
+                || !BigInteger.ZERO.equals(values.get("carpet"))
+                || !BigInteger.valueOf(10000).equals(values.get("shulker"))
+                || !BigInteger.valueOf(5000).equals(values.get("head")))
+            throw new IOException("Shipped WWC three-slot monetary valuation incomplete");
+        var keys = co.surumene.simplecoins.domain.WclPhysicalSlotIdentity.keys(
+                chicken, "wwc", values.keySet());
+        String entity = "entity/" + chicken;
+        if (!(entity + "/wcl/wwc/carpet").equals(keys.get("carpet"))
+                || !(entity + "/wcl/wwc/shulker").equals(keys.get("shulker"))
+                || !(entity + "/equipment/head").equals(keys.get("head")))
+            throw new IOException("Shipped WWC head/carpet/shulker physical aliases incomplete");
+        getLogger().info("PAPER_A05_REAL_WWC_THREE_SLOTS_HEAD_ALIAS_PASSED total=15000");
     }
 
     private static void seedChickenStorage(PersistentDataContainer pdc,

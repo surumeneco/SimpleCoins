@@ -15,6 +15,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
       - 'Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md'
       - 'Lifecycle/Works/simplecoins.a05.wcl-physical-slot-collisions.md'
+      - 'Lifecycle/Works/simplecoins.a05.wwc-complete-slots.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/SettlementAccumulator.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/LiveWclPhysicalAliasTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WclPhysicalSlotIdentity.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WclPhysicalSlotIdentityTest.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md'
@@ -90,6 +93,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wcl-physical-slot-collisions.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wwc-complete-slots.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -271,6 +276,7 @@ jobs:
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=www' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_DISCOVERED_SAVED_WCL_CANDIDATES_25000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_SAVED_WCL_SLOT_ALIASES_MAPPED_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_REAL_WWC_THREE_SLOTS_HEAD_ALIAS_PASSED total=15000' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WCL_DUPLICATE_ENTITY_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WCL_UNKNOWN_OR_CONTRADICTORY_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED provider=wwc' "paper-a05-$phase.log"
