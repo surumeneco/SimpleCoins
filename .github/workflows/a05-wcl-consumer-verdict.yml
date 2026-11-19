@@ -82,6 +82,7 @@ jobs:
             Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-queue.json
             Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
           if-no-files-found: error
+          include-hidden-files: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -133,7 +134,7 @@ jobs:
           assert [x['status'] for x in queue['items']]==['done']*8
           for i,entry in enumerate(queue['items']):
               assert entry['id']=='case.s'+str(i)
-              receipt=json.loads((root/'evidence/a05-green-s'+str(i)+'.json').read_text())
+              receipt=json.loads((root/('evidence/a05-green-s'+str(i)+'.json')).read_text())
               assert receipt['schema']=='cat-flow-evidence/v1'
               assert receipt['verdict']=='passed' and receipt['observed_targets']=={'case.s'+str(i):'passed'}
           print('A05_CONFIRMED_EIGHT_CASE_SCRIPT_OWNED_QUEUE_GREEN_PASSED')
@@ -148,3 +149,4 @@ jobs:
             Lifecycle/Works/.cat-flow/reports/a05-green-*.xml
             Lifecycle/Works/.cat-flow/run-s*.json
           if-no-files-found: error
+          include-hidden-files: true
