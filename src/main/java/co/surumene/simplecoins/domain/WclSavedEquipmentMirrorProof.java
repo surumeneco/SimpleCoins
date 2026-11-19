@@ -24,6 +24,30 @@ public final class WclSavedEquipmentMirrorProof {
     public static void prove(Map<String, Object> savedChunk, UUID entityId,
                              String providerId, String providerSlot, byte[] storedItem,
                              int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        proveWithVersion(savedChunk, entityId, providerId, providerSlot, storedItem,
+                maxSerializedBytes, maxInflatedBytes, null);
+    }
+
+    /**
+     * Paper 26.2 ItemStack.serializeAsBytes() can include root DataVersion,
+     * whereas the same Entity's vanilla persisted equipment compound does not.
+     * Ignore ONLY that root wrapper when it exactly matches the current Paper
+     * server data version. Never strip unknown fields or rewrite item content.
+     */
+    public static void prove(Map<String, Object> savedChunk, UUID entityId,
+                             String providerId, String providerSlot, byte[] storedItem,
+                             int maxSerializedBytes, int maxInflatedBytes,
+                             int expectedPaperDataVersion) throws IOException {
+        if (expectedPaperDataVersion <= 0)
+            throw new IOException("Invalid Paper data-version authority for WCL equipment");
+        proveWithVersion(savedChunk, entityId, providerId, providerSlot, storedItem,
+                maxSerializedBytes, maxInflatedBytes, expectedPaperDataVersion);
+    }
+
+    private static void proveWithVersion(Map<String, Object> savedChunk, UUID entityId,
+                             String providerId, String providerSlot, byte[] storedItem,
+                             int maxSerializedBytes, int maxInflatedBytes,
+                             Integer expectedPaperDataVersion) throws IOException {
         Objects.requireNonNull(savedChunk, "SAVED Entity chunk");
         Objects.requireNonNull(entityId, "selected SAVED Entity UUID");
         Objects.requireNonNull(providerId, "verified WCL provider");
@@ -76,7 +100,17 @@ public final class WclSavedEquipmentMirrorProof {
             throw new IOException("Invalid WCL mirrored ItemStack NBT", invalid);
         }
 
-        if (!equalNbt(vanillaItem, reported))
+        Map<String, Object> comparable = reported;
+        if (reported.containsKey("DataVersion")) {
+            Object version = reported.get("DataVersion");
+            if (expectedPaperDataVersion == null
+                    || !(version instanceof Integer serializedVersion)
+                    || !serializedVersion.equals(expectedPaperDataVersion))
+                throw new IOException("WCL ItemStack DataVersion differs from active Paper version");
+            comparable = new java.util.LinkedHashMap<>(reported);
+            comparable.remove("DataVersion");
+        }
+        if (!equalNbt(vanillaItem, comparable))
             throw new IOException("WCL ItemStack contents differ from SAVED vanilla equipment");
     }
 
