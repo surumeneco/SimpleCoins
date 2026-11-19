@@ -9,6 +9,8 @@ import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulLiveOwnerEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulLiveCandidates;
+import co.surumene.simplecoins.paper.PaperCapturedHybridSettlement;
+import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
@@ -365,6 +367,32 @@ public final class WclServicesProbe extends JavaPlugin {
                     throw expected;
             }
             getLogger().info("PAPER_A05_PRODUCT_SINGLE_READ_LIVE_OWNER_VALUE_ALIAS_PASSED");
+            // Test the product's actual loaded-Chunk capture and its shared
+            // WCL wallet generation. The result is *not* a publishable G0
+            // settlement or proof that every WWC/WWW Entity was discovered.
+            var capturedMoney = PaperCapturedHybridSettlement.capture(
+                    List.of(world),
+                    new PaperLiveUniverseAssets.Budget(
+                            1, 4096, 4096, 4096, 131072, 1,
+                            2 * 1024 * 1024, 16 * 1024 * 1024));
+            capturedMoney.includeLoadedWcl(
+                    this, chicken, "wwc", 2 * 1024 * 1024, 16 * 1024 * 1024);
+            var localStage = capturedMoney.stageCandidate(
+                    new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                    new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                    (sourceWorld, position) -> null,
+                    (sourceWorld, savedChunk) -> Map.of(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024,
+                    (source, value) -> new SettlementAccumulator.Asset(
+                            source.id(), value.physicalKey(), value.world(), null,
+                            false, false, false, value.amount(), value.physicalKey()));
+            var stagedMoney = localStage.pending().commit();
+            if (!stagedMoney.dead().equals(BigInteger.valueOf(10000))
+                    || !stagedMoney.deadLocations().stream().anyMatch(location ->
+                            location.owner().equals(chickenCommander)
+                            && location.value().equals(BigInteger.valueOf(10000))))
+                throw new IllegalStateException("Paper hybrid WCL 10000C candidate was not staged");
+            getLogger().info("PAPER_A05_PRODUCT_WCL_HYBRID_UNPUBLISHED_STAGE_PASSED");
             // A non-target service returning NotFound cannot be treated as
             // proof of zero money in any other world/provider.
             var wrongProvider = PaperWonderfulLoadedEvidence.readLoaded(this, chicken, "www");
