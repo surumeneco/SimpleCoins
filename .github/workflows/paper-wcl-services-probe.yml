@@ -14,6 +14,9 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
       - 'Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md'
+      - 'Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidateTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java'
@@ -113,6 +116,14 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md --kind model
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
             --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md --kind model-conformance
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md --kind process-closure
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile \
+            --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md --kind model
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md --kind model-conformance
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
