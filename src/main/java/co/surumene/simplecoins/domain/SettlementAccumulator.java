@@ -57,6 +57,32 @@ public final class SettlementAccumulator {
         this.required = Set.copyOf(requiredSources);
     }
 
+    /**
+     * An actual Paper LIVE wolf's main hand has a world-qualified source key,
+     * while saved Entity equipment and the verified WCL weapon use the Entity
+     * UUID's unqualified key. Normalize only the physical collision identity;
+     * source/provenance keys and the original Asset remain unchanged.
+     *
+     * This does not prove WCL and LIVE values are equal or from one writer
+     * epoch. Any duplicated candidate must still invalidate the transaction.
+     */
+    private static String collisionKey(Asset asset) {
+        String key = asset.physicalKey();
+        if (asset.world() == null) return key;
+        String prefix = "world/" + asset.world() + "/entity/";
+        String suffix = "/equipment/mainhand";
+        if (!key.startsWith(prefix) || !key.endsWith(suffix)) return key;
+        String rawEntityId = key.substring(prefix.length(), key.length() - suffix.length());
+        try {
+            UUID entityId = UUID.fromString(rawEntityId);
+            if (entityId.toString().equals(rawEntityId))
+                return "entity/" + entityId + suffix;
+        } catch (IllegalArgumentException malformed) {
+            // Unverified/noncanonical keys never gain a fabricated alias.
+        }
+        return key;
+    }
+
     public void accept(Asset asset) {
         checkOpen();
         try {
@@ -65,8 +91,9 @@ public final class SettlementAccumulator {
             if (completed.contains(asset.source()) || failures.containsKey(asset.source()))
                 throw new IllegalStateException("Source is no longer accepting assets: " + asset.source());
             // Reject the same physical slot even when exposed by multiple memory/disk adapters.
-            if (!occupiedSlots.add(asset.physicalKey()))
-                throw new IllegalArgumentException("Duplicate physical asset slot: " + asset.physicalKey());
+            String collisionKey = collisionKey(asset);
+            if (!occupiedSlots.add(collisionKey))
+                throw new IllegalArgumentException("Duplicate physical asset slot: " + collisionKey);
             if (!worldScope.includes(asset.world())) return;
 
             AssetOwner.Result owner = AssetOwner.resolve(asset.owner(), asset.everyoneProtected(),
