@@ -72,3 +72,11 @@ spec_status: confirmed
 - Return a **local** outcome (owner UUID / explicitly verified Free / HOLD), never a published P/F/D balance. Positive commander outranks owner. An independently verified tame owner can supply WWC's fallback; missing fallback evidence must HOLD. For WWW, contradictory WCL owner versus independently verified vanilla tame owner must HOLD.
 - Connect this evidence qualification to existing unpublished saved WCL Candidate without changing its physical slots, amounts or provenance. The caller must still verify source generation, BAN, playerdata, LIVE/SAVED dedup and all writer exclusion.
 - Tests: owner priority, positive WWW fallback, WWC follow-target, UNKNOWN→HOLD, explicit absent→Free, conflicting owners→HOLD, unsupported keys→reject, invalid provider proof→HOLD. Direct Java execution and JUnit CI are independent of formal CAT implementation conformance; do not release G0/G3/admission.
+ 
+## Compilation
+| Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-process.md | @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a05-wcl-consumer-tce.md | — | — | — | @work/.cat-flow/cache/a05-owner-model.json | @work/.cat-flow/cache/a05-owner-vectors.json | @work/.cat-flow/cache/a05-owner-queue.json | @repo:SimpleCoins/tests/cat/a05-wcl-consumer-junit-binding.json | @work/.cat-flow/generated/A05WclOwnerEvidenceGeneratedTest.java | @work/.cat-flow/cache/a05-owner-obligations.json | — | false |
+
+## Formal proof boundary
+The Confirmed A05 s0–s7 specify the general adopt/hold/non-target verdict, not individual WWC/WWW source owner observations. The formal Process and Model gates may pass on the unchanged Confirmed source, but JUnit tests of this relationship bridge do not prove upstream ownership observation capability or full Implementation Conformance. The verified process-closure/model-conformance results at source pin 896cae are scoped to the existing Confirmed contract. Do not treat a successful local/CI regression as published accounting or as a formal implementation-conformance pass.
