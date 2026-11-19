@@ -4,6 +4,7 @@ import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperCapturedHybridSettlement;
 import co.surumene.simplecoins.paper.PaperLiveUniverseAssets;
+import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.BlockEntitySettlementImport;
@@ -22,6 +23,9 @@ import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.WorldCreator;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.inventory.ItemStack;
@@ -45,6 +49,10 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                 || !Bukkit.getOnlinePlayers().isEmpty()) {
             getLogger().severe("A01_PROBE_INVALID_ISOLATION");
             Bukkit.shutdown();
+            return;
+        }
+        if ("registry-veto".equals(System.getProperty("a01.probe.phase", "seed"))) {
+            proveRealPaperWorldRegistrationInvalidation();
             return;
         }
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -208,6 +216,60 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                 Bukkit.shutdown();
             }
         }, 50L);
+    }
+
+    /**
+     * Separate disposable JVM: wait until SimpleCoins has genuinely finished
+     * its normal post-ServerLoad saved-source discovery, then create a REAL
+     * Paper World. The product's public read-only discovery method is reached
+     * through a CI-only reflection seam; nothing is exposed by production.
+     */
+    private void proveRealPaperWorldRegistrationInvalidation() {
+        try {
+            Plugin simpleCoins = Bukkit.getPluginManager().getPlugin("SimpleCoins");
+            if (simpleCoins == null || !simpleCoins.isEnabled())
+                throw new IllegalStateException("SimpleCoins absent in World transition fixture");
+            var field = simpleCoins.getClass().getDeclaredField("sourceDiscovery");
+            field.setAccessible(true);
+            Object source = field.get(simpleCoins);
+            if (!(source instanceof PaperSavedSourceDiscovery discovery))
+                throw new IllegalStateException("Product source discovery unavailable");
+            new BukkitRunnable() {
+                private int polls;
+                @Override public void run() {
+                    try {
+                        if (!discovery.observed().isPresent()) {
+                            if (++polls > 80)
+                                throw new IllegalStateException(
+                                        "Saved source did not reach OBSERVED before World transition");
+                            return;
+                        }
+                        if (!Bukkit.getOnlinePlayers().isEmpty())
+                            throw new IllegalStateException("Unexpected online players");
+                        getLogger().info("PAPER_A01_WORLD_REGISTRY_VETO_PRECONDITION_OBSERVED");
+                        World additional = Bukkit.createWorld(
+                                new WorldCreator("a01-actual-dynamic-world"));
+                        if (additional == null)
+                            throw new IllegalStateException("Real dynamic Paper World was not loaded");
+                        if (discovery.observed().isPresent() || discovery.failure().isEmpty())
+                            throw new IllegalStateException(
+                                    "WorldLoad after OBSERVED did not revoke source discovery");
+                        getLogger().info("PAPER_A01_WORLD_REGISTRY_VETO_FAIL_STOP_PASSED"
+                                + " registeredWorld=" + additional.getName());
+                        cancel();
+                        // The product listener already invokes shutdown.
+                    } catch (Throwable failure) {
+                        getLogger().log(Level.SEVERE,
+                                "PAPER_A01_ZERO_PLAYER_PROBE_FAILED", failure);
+                        cancel();
+                        Bukkit.shutdown();
+                    }
+                }
+            }.runTaskTimer(this, 5L, 5L);
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            getLogger().log(Level.SEVERE, "PAPER_A01_ZERO_PLAYER_PROBE_FAILED", failure);
+            Bukkit.shutdown();
+        }
     }
 
     /** Compare the actual production LIVE physical slot, not merely a total. */
