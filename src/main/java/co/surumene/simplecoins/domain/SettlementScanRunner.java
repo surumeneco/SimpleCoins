@@ -31,6 +31,22 @@ public final class SettlementScanRunner {
                 String world, Map<String, Object> savedChunk) throws IOException;
     }
 
+    /**
+     * Optional source-local supplement. Invoked ONLY for the authoritative
+     * SAVED Entity chunk, after the regular item imports, before source
+     * completion. It shares the pending transaction and physical wallet set.
+     * If an exception escapes, discard the entire pending generation.
+     */
+    @FunctionalInterface
+    public interface SavedEntitySupplement {
+        void stage(WorldStorageDiscovery.SourceFile source,
+                   AnvilRegionReader.Chunk chunk,
+                   SettlementAccumulator pending, Set<UUID> sharedWalletIds)
+                throws IOException;
+    }
+
+
+
     /** Pending accounting state only; no commit or publication is performed. */
     public record Staged(SettlementAccumulator pending,
                          WorldSnapshotTraversal.Report report,
@@ -87,6 +103,23 @@ public final class SettlementScanRunner {
             int maximumInflatedBytes,
             Set<UUID> sharedWalletIds,
             SavedLiveSourcePartition partition) throws IOException {
+        return stageWithBanCoverage(manifest, scope, banSources, blockOwners,
+                entityOwners, maximumCompressedBytes, maximumInflatedBytes,
+                sharedWalletIds, partition, null);
+    }
+
+    /** Same BAN generation with optional source-local SAVED Entity supplement. */
+    public static Staged stageWithBanCoverage(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldScope scope,
+            BanSourceCoverage banSources,
+            BlockOwnerLookup blockOwners,
+            EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes,
+            int maximumInflatedBytes,
+            Set<UUID> sharedWalletIds,
+            SavedLiveSourcePartition partition,
+            SavedEntitySupplement savedSupplement) throws IOException {
         Objects.requireNonNull(manifest, "saved manifest");
         Objects.requireNonNull(banSources, "complete BAN source observations");
         Objects.requireNonNull(blockOwners, "external block owner resolver");
@@ -125,7 +158,8 @@ public final class SettlementScanRunner {
             return Map.copyOf(validated);
         };
         return stage(manifest, scope, banned, validatedBlocks, validatedEntities,
-                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, partition);
+                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, partition,
+                savedSupplement);
     }
 
     public static Staged stage(WorldStorageDiscovery.Manifest manifest,
@@ -177,6 +211,26 @@ public final class SettlementScanRunner {
                                int maximumInflatedBytes,
                                Set<UUID> sharedWalletIds,
                                SavedLiveSourcePartition partition) throws IOException {
+        return stage(manifest, scope, currentlyBanned, blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds,
+                partition, null);
+    }
+
+    /**
+     * Source-local SAVED supplements use exactly the same Anvil chunk decode,
+     * source ID, wallet generation and partition routing as regular imports.
+     * A supplement never runs on shadowed LIVE Entity chunks.
+     */
+    public static Staged stage(WorldStorageDiscovery.Manifest manifest,
+                               WorldScope scope,
+                               Set<UUID> currentlyBanned,
+                               BlockOwnerLookup blockOwners,
+                               EntityOwnerLookup entityOwners,
+                               int maximumCompressedBytes,
+                               int maximumInflatedBytes,
+                               Set<UUID> sharedWalletIds,
+                               SavedLiveSourcePartition partition,
+                               SavedEntitySupplement savedSupplement) throws IOException {
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(manifest);
         Objects.requireNonNull(scope);
@@ -237,6 +291,8 @@ public final class SettlementScanRunner {
                             ResolvedEntitySettlementImport.stageChunk(
                                     pending, id, source.world(), chunk.nbt(), owners,
                                     seenSavedWallets);
+                            if (savedSupplement != null)
+                                savedSupplement.stage(source, chunk, pending, seenSavedWallets);
                         }
                     }
 
