@@ -27,7 +27,7 @@ public final class PaperWonderfulSavedPdc {
     private PaperWonderfulSavedPdc() {}
 
     public static PersistentDataContainer reconstruct(
-            UUID expectedEntityId, String providerId, Map<String, Object> savedEntity,
+            UUID expectedEntityId, String providerId, Map<?, ?> savedEntity,
             int maximumSerializedBytes) throws IOException {
         Objects.requireNonNull(expectedEntityId, "expected source Entity UUID");
         Objects.requireNonNull(providerId, "expected WCL provider");
