@@ -11,6 +11,8 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLoadedEvidence.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSnapshotAssets.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedPdc.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java'
+      - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperLiveItemValue.java'
       - 'Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md'
@@ -78,6 +80,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -255,6 +259,9 @@ jobs:
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=wwc' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=www' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_DISCOVERED_SAVED_WCL_CANDIDATES_25000_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_SAVED_WCL_DUPLICATE_ENTITY_REJECTED_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_PRODUCT_SAVED_WCL_UNKNOWN_OR_CONTRADICTORY_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED provider=wwc' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED provider=www' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' "paper-a05-$phase.log"
