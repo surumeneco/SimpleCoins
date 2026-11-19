@@ -36,11 +36,27 @@ public final class PaperWonderfulLiveOwnerEvidence {
                 PaperWonderfulLoadedEvidence.readLoaded(consumer, entity, providerId);
         if (result.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS)
             return hold();
-        PaperWonderfulLoadedEvidence.Snapshot snapshot = result.snapshot().orElseThrow();
+        // The same authoritative WCL snapshot can also be consumed by the
+        // unpublished monetary-slot candidate. Do not perform a second read.
+        return fromVerifiedLoadedSnapshot(entity, providerId, result.snapshot().orElseThrow());
+    }
+
+    /**
+     * Qualify the already VERIFIED WCL readLoaded Success for the exact Entity.
+     * Package-private: callers must not substitute an independently supplied
+     * snapshot for a successful PaperWonderfulLoadedEvidence.readLoaded.
+     * This check is local and cannot establish a frozen settlement epoch.
+     */
+    static WclOwnerEvidence.Decision fromVerifiedLoadedSnapshot(
+            Entity entity, String providerId,
+            PaperWonderfulLoadedEvidence.Snapshot snapshot) throws IOException {
+        Objects.requireNonNull(entity, "selected loaded Entity");
+        Objects.requireNonNull(providerId, "expected WCL provider");
+        Objects.requireNonNull(snapshot, "verified WCL snapshot");
+        if (!Bukkit.isPrimaryThread())
+            throw new IllegalStateException("LIVE WCL owner reads require Paper primary thread");
 
         UUID entityId = entity.getUniqueId();
-        // Re-evaluate authority after the provider call. Never use an
-        // independently reconstructed/invalid or wrong-world Entity.
         boolean authoritative = entity.isValid() && Bukkit.getEntity(entityId) == entity
                 && entityId.equals(snapshot.entityId())
                 && entity.getWorld().getUID().equals(snapshot.worldId())
