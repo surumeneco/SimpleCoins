@@ -1097,11 +1097,18 @@ public final class WclServicesProbe extends JavaPlugin {
                             localWcl.stage(source, wwcOnly, wwcStaged, new java.util.HashSet<>());
                             wwcStaged.completeSource(sourceId);
                             var localResult = wwcStaged.commit();
-                            if (!BigInteger.valueOf(10000).equals(
-                                    localResult.personalBalances().get(PERSISTENCE_FOLLOW))
-                                    || !BigInteger.valueOf(10000).equals(
-                                            localResult.statistics().worldTotal()))
-                                throw new IOException("SAVED WWC real source 10000C not staged into existing source");
+                            // The isolated Paper fixture has no corresponding
+                            // playerdata for this commander. Confirmed 02A
+                            // therefore requires DEAD rather than PERSONAL.
+                            if (!BigInteger.valueOf(10000).equals(localResult.dead())
+                                    || !BigInteger.ZERO.equals(localResult.statistics().worldTotal())
+                                    || localResult.deadLocations().stream().noneMatch(loc ->
+                                            PERSISTENCE_FOLLOW.equals(loc.owner())
+                                            && BigInteger.valueOf(10000).equals(loc.value())))
+                                throw new IOException("SAVED WWC real 10000C not staged as DEAD"
+                                        + " dead=" + localResult.dead()
+                                        + " personal=" + localResult.personalBalances()
+                                        + " worldTotal=" + localResult.statistics().worldTotal());
                             // Using the COMPLETE real saved chunk must reject
                             // unproven WWW mirrored weapon rather than 2x count.
                             var mustReject = new SettlementAccumulator(
