@@ -248,6 +248,19 @@ public final class PaperLiveUniverseAssets {
     public static Observed scanWithSources(Collection<World> selectedWorlds,
                                            Budget budget,
                                            Set<UUID> sharedWalletIds) throws IOException {
+        return scanWithSources(selectedWorlds, budget, sharedWalletIds, new HashMap<>());
+    }
+
+    /**
+     * Capture original positive Entity gear bytes alongside the exact same
+     * Paper monetary scan, not by re-reading equipment in a later pass.
+     */
+    static Observed scanWithSources(Collection<World> selectedWorlds,
+                                    Budget budget, Set<UUID> sharedWalletIds,
+                                    Map<String, byte[]> liveEquipmentBytes) throws IOException {
+        Objects.requireNonNull(liveEquipmentBytes, "same-scan equipment evidence");
+        if (!liveEquipmentBytes.isEmpty())
+            throw new IOException("LIVE gear evidence must start empty");
         Objects.requireNonNull(sharedWalletIds, "shared physical wallet identity generation");
         Objects.requireNonNull(selectedWorlds, "selected Paper Worlds");
         Objects.requireNonNull(budget, "bounded live scan");
@@ -295,7 +308,7 @@ public final class PaperLiveUniverseAssets {
                                         entry.physicalKey(), entry.world(), entry.amount()))
                                 .toList();
                         sources.add(new HybridLiveSourceStage.ChunkSource(chunk, values));
-                    });
+                    }, liveEquipmentBytes);
             int readTiles = Math.addExact(report.scannedBlockInventories(),
                     report.unhandledTileEntities());
             int readEntities = Math.addExact(

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -147,6 +149,19 @@ public final class PaperLoadedWorldAssets {
                        int maxSerializedBytes, int maxInflatedBytes,
                        Set<UUID> walletIds, Set<UUID> entityIds,
                        Set<String> physicalSlots, SliceObserver observed) throws IOException {
+        return scan(world, maxChunks, maxTiles, maxEntities, maxSlots,
+                maxSerializedBytes, maxInflatedBytes,
+                walletIds, entityIds, physicalSlots, observed, new HashMap<>());
+    }
+
+    /** Preserve original gear bytes through the same bounded World pass. */
+    static Report scan(World world, int maxChunks, int maxTiles,
+                       int maxEntities, int maxSlots,
+                       int maxSerializedBytes, int maxInflatedBytes,
+                       Set<UUID> walletIds, Set<UUID> entityIds,
+                       Set<String> physicalSlots, SliceObserver observed,
+                       Map<String,byte[]> equipmentEvidence) throws IOException {
+        Objects.requireNonNull(equipmentEvidence, "LIVE equipment proof context");
         Objects.requireNonNull(observed, "loaded Chunk source observer");
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(walletIds, "shared wallet identities");
@@ -180,7 +195,7 @@ public final class PaperLoadedWorldAssets {
                     Math.max(1, maxEntities - entities),
                     Math.max(1, maxSlots - slots),
                     maxSerializedBytes, maxInflatedBytes,
-                    walletIds, entityIds, physicalSlots);
+                    walletIds, entityIds, physicalSlots, equipmentEvidence);
             int nextTiles = Math.addExact(slice.scannedBlockInventories(), slice.unhandledTileEntities());
             int nextEntities = Math.addExact(Math.addExact(
                     Math.addExact(slice.scannedItemEntities(), slice.scannedDisplayEntities()),

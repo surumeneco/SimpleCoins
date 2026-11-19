@@ -29,7 +29,14 @@ public final class WclHybridLiveOverlay {
     public record Selected(SavedLiveSourcePartition.Chunk chunk,
                            UUID entityId, String providerId,
                            WclOwnerEvidence.Decision ownerEvidence,
-                           Map<String, BigInteger> slotValues) {
+                           Map<String, BigInteger> slotValues,
+                           Set<String> verifiedEquipmentMirrorSlots) {
+        /** Legacy selections cannot assert verified equipment mirrors. */
+        public Selected(SavedLiveSourcePartition.Chunk chunk, UUID entityId,
+                        String providerId, WclOwnerEvidence.Decision ownerEvidence,
+                        Map<String, BigInteger> slotValues) {
+            this(chunk, entityId, providerId, ownerEvidence, slotValues, Set.of());
+        }
         public Selected {
             Objects.requireNonNull(chunk, "verified LIVE chunk");
             Objects.requireNonNull(entityId, "WCL Entity UUID");
@@ -37,6 +44,8 @@ public final class WclHybridLiveOverlay {
                 throw new IllegalArgumentException("Missing WCL provider");
             Objects.requireNonNull(ownerEvidence, "WCL owner evidence");
             slotValues = Map.copyOf(Objects.requireNonNull(slotValues, "WCL slots"));
+            verifiedEquipmentMirrorSlots = Set.copyOf(
+                    Objects.requireNonNull(verifiedEquipmentMirrorSlots, "verified item proofs"));
             for (var value : slotValues.values()) {
                 if (value.signum() < 0)
                     throw new IllegalArgumentException("Negative WCL monetary amount");
@@ -46,10 +55,20 @@ public final class WclHybridLiveOverlay {
 
     /** The original LIVE sources with verified extra WCL values, not a new source. */
     public record Overlay(List<HybridLiveSourceStage.Source> sources,
-                          Map<String, WclOwnerEvidence.Decision> wclOwners) {
+                          Map<String, WclOwnerEvidence.Decision> wclOwners,
+                          Set<String> mirroredPhysicalKeys) {
+        /** Retain legacy fixtures without claimed proof. */
+        public Overlay(List<HybridLiveSourceStage.Source> sources,
+                       Map<String, WclOwnerEvidence.Decision> wclOwners) {
+            this(sources, wclOwners, Set.of());
+        }
         public Overlay {
             sources = List.copyOf(Objects.requireNonNull(sources));
             wclOwners = Map.copyOf(Objects.requireNonNull(wclOwners));
+            mirroredPhysicalKeys = Set.copyOf(Objects.requireNonNull(
+                    mirroredPhysicalKeys, "native equipment mirrors"));
+            if (!wclOwners.keySet().containsAll(mirroredPhysicalKeys))
+                throw new IllegalArgumentException("Unclassified WCL equipment mirror");
         }
 
         /** A local overlay never proves whole-world source closure. */
@@ -89,6 +108,7 @@ public final class WclHybridLiveOverlay {
         Set<UUID> seenEntities = new HashSet<>();
         Map<SavedLiveSourcePartition.Chunk, List<HybridLiveSourceStage.Value>> added = new HashMap<>();
         Map<String, WclOwnerEvidence.Decision> ownership = new LinkedHashMap<>();
+        Set<String> nativeMirrors = new HashSet<>();
         for (Selected candidate : candidates) {
             if (candidate == null)
                 throw new IOException("Null selected WCL holder");
@@ -103,17 +123,39 @@ public final class WclHybridLiveOverlay {
 
             Map<String, String> aliases = WclPhysicalSlotIdentity.keys(
                     candidate.entityId(), candidate.providerId(), candidate.slotValues().keySet());
+            for (String slot : candidate.verifiedEquipmentMirrorSlots()) {
+                String alias = aliases.get(slot);
+                BigInteger amount = candidate.slotValues().get(slot);
+                if (alias == null || amount == null || amount.signum() <= 0
+                        || !(alias.endsWith("/equipment/mainhand")
+                                || alias.endsWith("/equipment/head")))
+                    throw new IOException("Unbound or non-positive WCL equipment proof: " + slot);
+            }
+            var selectedChunk = chunks.get(candidate.chunk());
             for (var entry : candidate.slotValues().entrySet()) {
                 String alias = aliases.get(entry.getKey());
                 String physical = "world/" + candidate.chunk().world() + "/" + alias;
+                boolean equipment = alias.endsWith("/equipment/mainhand")
+                        || alias.endsWith("/equipment/head");
+                if (candidate.verifiedEquipmentMirrorSlots().contains(entry.getKey())) {
+                    // The Paper caller has already proven full ItemStack NBT
+                    // equality from original/current LIVE equipment and the
+                    // one-read WCL payload. Still require exact native amount
+                    // in this SAME selected chunk source.
+                    boolean sameNative = selectedChunk.values().stream().anyMatch(value ->
+                            physical.equals(value.physicalKey())
+                                    && entry.getValue().equals(value.amount()));
+                    if (!sameNative || !physicalKeys.contains(physical)
+                            || !nativeMirrors.add(physical))
+                        throw new IOException("WCL mirror missing same-amount captured LIVE equipment: "
+                                + physical);
+                    if (ownership.putIfAbsent(physical, candidate.ownerEvidence()) != null)
+                        throw new IOException("Repeated WCL equipment owner proof: " + physical);
+                    continue; // the original native money is already present
+                }
                 if (!physicalKeys.add(physical))
                     throw new IOException("WCL/vanilla alias or duplicate physical slot: " + physical);
-                // The following two slots can mirror independent vanilla
-                // equipment even if the ordinary scan found zero currency.
-                // Without item-identity evidence a positive amount is HOLD.
-                if (entry.getValue().signum() > 0 &&
-                        (alias.endsWith("/equipment/mainhand")
-                                || alias.endsWith("/equipment/head")))
+                if (entry.getValue().signum() > 0 && equipment)
                     throw new IOException("Unproven WCL equipment mirror: " + physical);
                 if (entry.getValue().signum() == 0)
                     continue;
@@ -138,6 +180,6 @@ public final class WclHybridLiveOverlay {
                 }
             } else staged.add(source);
         }
-        return new Overlay(staged, ownership);
+        return new Overlay(staged, ownership, nativeMirrors);
     }
 }
