@@ -451,6 +451,12 @@ public final class WclServicesProbe extends JavaPlugin {
      */
     private void verifyWwcDisplayProxyCollision(
             Map<String, WonderfulStorageReader> providers, World world) throws IOException {
+        // This CI world need not hold spawn-chunk tickets. An Entity spawned
+        // into an unloaded Chunk can be returned with valid=false and no
+        // Bukkit UUID lookup. Load the disposable fixture Chunk FIRST.
+        Chunk fixtureChunk = world.getChunkAt(0, 0);
+        if (!fixtureChunk.isLoaded())
+            throw new IOException("WWC display probe fixture Chunk did not load");
         Chicken owner = world.spawn(new Location(world, 8.5, 120, 8.5), Chicken.class);
         ArmorStand stand = null;
         try {
