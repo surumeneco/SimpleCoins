@@ -95,4 +95,19 @@ class LiveWclPhysicalAliasTest {
         assertThrows(IllegalStateException.class, staged::commit);
     }
 
+
+    @Test void anEphemeralWwcDisplayMustCollideWithItsRealShulkerHolder() throws Exception {
+        String original = WclPhysicalSlotIdentity.keys(WOLF, "wwc", Set.of("shulker")).get("shulker");
+        String projected = "world/" + WORLD + "/" +
+                WclPhysicalSlotIdentity.wwcDisplayKey(WOLF, "SHULKER_BOX");
+        var staged = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()),
+                Set.of("visual", "wcl"));
+        staged.accept(observed("wcl", original, WORLD, 10000));
+        assertThrows(IllegalArgumentException.class,
+                () -> staged.accept(observed("visual", projected, WORLD, 10000)));
+        staged.completeSource("visual");
+        staged.completeSource("wcl");
+        assertThrows(IllegalStateException.class, staged::commit);
+    }
+
 }

@@ -10,6 +10,9 @@ import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
+import co.surumene.simplecoins.paper.PaperLoadedChunkAssets;
+import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
+import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
@@ -37,6 +40,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
 import org.bukkit.entity.Chicken;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Wolf;
 import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -109,6 +113,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
                 verifyShippedWwcThreeSlotReadback(selected, world);
+                verifyWwcDisplayProxyCollision(selected, world);
                 verifySerializedWclValuationBoundaries(world);
                 verifyCrossProviderWalletIdentity(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
@@ -436,6 +441,128 @@ public final class WclServicesProbe extends JavaPlugin {
                 || !(entity + "/equipment/head").equals(keys.get("head")))
             throw new IOException("Shipped WWC head/carpet/shulker physical aliases incomplete");
         getLogger().info("PAPER_A05_REAL_WWC_THREE_SLOTS_HEAD_ALIAS_PASSED total=15000");
+    }
+
+    /**
+     * Isolated Paper 26.2: a stand carrying the exact shipped WWC
+     * display_owner/display_role marker pair visually mirrors a real Chicken's
+     * provider-readable money shulker. This is not a game-managed display
+     * lifecycle test or a globally frozen accounting epoch.
+     */
+    private void verifyWwcDisplayProxyCollision(
+            Map<String, WonderfulStorageReader> providers, World world) throws IOException {
+        // This CI world need not hold spawn-chunk tickets. An Entity spawned
+        // into an unloaded Chunk can be returned with valid=false and no
+        // Bukkit UUID lookup. Load the disposable fixture Chunk FIRST.
+        Chunk fixtureChunk = world.getChunkAt(0, 0);
+        if (!fixtureChunk.isLoaded())
+            throw new IOException("WWC display probe fixture Chunk did not load");
+        Chicken owner = world.spawn(new Location(world, 8.5, 120, 8.5), Chicken.class);
+        ArmorStand stand = null;
+        try {
+            byte[] moneyShulker = createMoneyShulker();
+            seedChickenStorage(owner.getPersistentDataContainer(),
+                    PERSISTENCE_FOLLOW, moneyShulker);
+            // A synthetically tagged, newly spawned Chicken is not yet a
+            // WWC-managed loaded individual. Use the shipped saved-PDC reader
+            // rather than assuming readLoaded will register a game individual.
+            var wcl = success(providers.get("wwc").readStored(owner.getUniqueId(),
+                    world.getUID(), Optional.empty(), owner.getPersistentDataContainer()),
+                    "WWC display original stored-PDC source");
+            if (wcl.items().size() != 1 || !"shulker".equals(wcl.items().getFirst().slot()))
+                throw new IOException("WWC display parent shulker source missing");
+            var original = PaperWonderfulLoadedEvidence.readStored(this,
+                    owner.getUniqueId(), world.getUID(), "wwc",
+                    owner.getPersistentDataContainer());
+            if (original.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS)
+                throw new IOException("Product WCL could not read stored display parent shulker");
+            var values = PaperWonderfulSnapshotAssets.slotValues(
+                    original.snapshot().orElseThrow(), 2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!BigInteger.valueOf(10000).equals(values.get("shulker")))
+                throw new IOException("WWC display parent monetary source changed");
+            stand = world.spawn(new Location(world, 9.0, 120, 9.0), ArmorStand.class);
+            stand.setInvisible(true);
+            stand.setMarker(true);
+            stand.setSmall(true);
+            stand.setGravity(false);
+            stand.setPersistent(false);
+            stand.setInvulnerable(true);
+            stand.setSilent(true);
+            stand.getPersistentDataContainer().set(
+                    new NamespacedKey("whatawonderfulchicken", "display_owner"),
+                    PersistentDataType.STRING, owner.getUniqueId().toString());
+            stand.getPersistentDataContainer().set(
+                    new NamespacedKey("whatawonderfulchicken", "display_role"),
+                    PersistentDataType.STRING, "SHULKER_BOX");
+            stand.getEquipment().setHelmet(ItemStack.deserializeBytes(moneyShulker));
+            String expected = "world/" + world.getName() + "/entity/" + owner.getUniqueId()
+                    + "/wcl/wwc/shulker";
+            var registryEntity = Bukkit.getEntity(owner.getUniqueId());
+            getLogger().info("PAPER_A05_WWC_DISPLAY_PARENT_DIAGNOSTIC"
+                    + " ownerValid=" + owner.isValid()
+                    + " registryFound=" + (registryEntity != null)
+                    + " registryChicken=" + (registryEntity instanceof Chicken)
+                    + " registryWorldSame=" + (registryEntity != null
+                            && registryEntity.getWorld() == stand.getWorld())
+                    + " registryValid=" + (registryEntity != null && registryEntity.isValid())
+                    + " pdcType=" + owner.getPersistentDataContainer().get(
+                            new NamespacedKey("whatawonderfulchicken", "type"),
+                            PersistentDataType.STRING)
+                    + " standValid=" + stand.isValid()
+                    + " standPersistent=" + stand.isPersistent()
+                    + " standMarker=" + stand.isMarker()
+                    + " standInvisible=" + stand.isInvisible()
+                    + " standInvulnerable=" + stand.isInvulnerable());
+            String physical = PaperWwcDisplayPhysicalAlias.verifiedPhysicalKey(
+                    stand, "head", world.getName());
+            if (!expected.equals(physical))
+                throw new IOException("WWC display mirrored inventory physical identity mismatch");
+            var chunk = stand.getLocation().getChunk();
+            var source = PaperLoadedChunkAssets.scan(chunk, 10000, 10000,
+                    20000, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            long hits = source.entries().stream().filter(e ->
+                    expected.equals(e.physicalKey())
+                            && BigInteger.valueOf(10000).equals(e.amount())).count();
+            if (hits != 1)
+                throw new IOException("Paper live scanner ignored or duplicated WWC display alias");
+            var candidate = new SettlementAccumulator(
+                    new WorldScope(true, Set.of(), Set.of()), Set.of("wcl", "visual"));
+            candidate.accept(new SettlementAccumulator.Asset("wcl",
+                    "entity/" + owner.getUniqueId() + "/wcl/wwc/shulker",
+                    world.getName(), null, false, false, false,
+                    BigInteger.valueOf(10000), "wwc-original"));
+            try {
+                candidate.accept(new SettlementAccumulator.Asset("visual", expected,
+                        world.getName(), null, false, false, false,
+                        BigInteger.valueOf(10000), "wwc-projection"));
+                throw new IOException("Visual proxy illegally doubled a WWC stored asset");
+            } catch (IllegalArgumentException rejected) {
+                // Expected collision; partial candidate must never be committed.
+            }
+            candidate.completeSource("wcl");
+            candidate.completeSource("visual");
+            try {
+                candidate.commit();
+                throw new IOException("Rejected WWC proxy still allowed settlement commit");
+            } catch (IllegalStateException blocked) {
+                // Fail-closed.
+            }
+            stand.getPersistentDataContainer().set(
+                    new NamespacedKey("whatawonderfulchicken", "display_role"),
+                    PersistentDataType.STRING, "UNKNOWN_ROLE");
+            try {
+                PaperWwcDisplayPhysicalAlias.verifiedPhysicalKey(
+                        stand, "head", world.getName());
+                throw new IOException("Unknown WWC visual projection role was accepted");
+            } catch (IOException negative) {
+                if (!negative.getMessage().startsWith("Unknown WWC display role:"))
+                    throw negative;
+            }
+            getLogger().info("PAPER_A05_WWC_DISPLAY_PROXY_COLLISION_PASSED value=10000");
+        } finally {
+            if (stand != null) stand.remove();
+            owner.remove();
+        }
     }
 
     private static void seedChickenStorage(PersistentDataContainer pdc,
