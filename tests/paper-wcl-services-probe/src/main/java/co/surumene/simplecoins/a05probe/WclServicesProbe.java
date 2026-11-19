@@ -491,6 +491,22 @@ public final class WclServicesProbe extends JavaPlugin {
             stand.getEquipment().setHelmet(ItemStack.deserializeBytes(moneyShulker));
             String expected = "world/" + world.getName() + "/entity/" + owner.getUniqueId()
                     + "/wcl/wwc/shulker";
+            var registryEntity = Bukkit.getEntity(owner.getUniqueId());
+            getLogger().info("PAPER_A05_WWC_DISPLAY_PARENT_DIAGNOSTIC"
+                    + " ownerValid=" + owner.isValid()
+                    + " registryFound=" + (registryEntity != null)
+                    + " registryChicken=" + (registryEntity instanceof Chicken)
+                    + " registryWorldSame=" + (registryEntity != null
+                            && registryEntity.getWorld() == stand.getWorld())
+                    + " registryValid=" + (registryEntity != null && registryEntity.isValid())
+                    + " pdcType=" + owner.getPersistentDataContainer().get(
+                            new NamespacedKey("whatawonderfulchicken", "type"),
+                            PersistentDataType.STRING)
+                    + " standValid=" + stand.isValid()
+                    + " standPersistent=" + stand.isPersistent()
+                    + " standMarker=" + stand.isMarker()
+                    + " standInvisible=" + stand.isInvisible()
+                    + " standInvulnerable=" + stand.isInvulnerable());
             String physical = PaperWwcDisplayPhysicalAlias.verifiedPhysicalKey(
                     stand, "head", world.getName());
             if (!expected.equals(physical))
