@@ -5,6 +5,7 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WorldSourceIdentitySnapshot;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
+import co.surumene.simplecoins.domain.WorldRegistryTransitionWitness;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -22,6 +23,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.server.ServerLoadEvent;
+import org.bukkit.event.world.WorldLoadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -48,6 +51,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     private final AtomicReference<WorldStorageDiscovery.Manifest> observed =
             new AtomicReference<>();
     private final AtomicReference<Throwable> failure = new AtomicReference<>();
+    private final WorldRegistryTransitionWitness worldTransitions =
+            new WorldRegistryTransitionWitness();
 
     public PaperSavedSourceDiscovery(JavaPlugin plugin, WorldScope scope,
                                      int maxSourceEntries, Runnable safeStop) {
@@ -69,7 +74,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
 
     private record WorldRoots(Map<String, Path> immutableRoots,
                               Set<Path> immutablePlayerRoots,
-                              WorldSourceIdentitySnapshot capturedIdentities) {}
+                              WorldSourceIdentitySnapshot capturedIdentities,
+                              WorldRegistryTransitionWitness.Snapshot lifecycleVersion) {}
 
     public void start() {
         if (!Bukkit.isPrimaryThread())
@@ -84,6 +90,16 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         // AFTER ServerLoadEvent, on the next server tick. The manifest and
         // content verification are unchanged; no money is published here.
         Bukkit.getPluginManager().registerEvents(new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void onWorldLoaded(WorldLoadEvent event) {
+                worldRegistryTransition("loaded", event.getWorld());
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            public void onWorldUnloaded(WorldUnloadEvent event) {
+                worldRegistryTransition("unloaded", event.getWorld());
+            }
+
             @EventHandler(priority = EventPriority.MONITOR)
             public void onServerReady(ServerLoadEvent event) {
                 if (closed.get() || !launched.compareAndSet(false, true)) return;
@@ -114,6 +130,26 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
             plugin.getLogger().log(Level.SEVERE, "SIMPLECOINS_SAVED_DISCOVERY_FAILED", timeout);
             safeStop.run();
         }, DISCOVERY_TIMEOUT_TICKS);
+    }
+
+    /**
+     * WorldLoad/Unload is a registration identity change even when a World
+     * with the exact same name, UUID and folder reappears. Reject both ABA
+     * changes during the async walk and later reuse of a stale observed
+     * Manifest. This does not observe item, Chunk or region-file writers.
+     */
+    private void worldRegistryTransition(String kind, World world) {
+        if (closed.get()) return;
+        worldTransitions.observeTransition();
+        if (observed.getAndSet(null) != null) {
+            IOException stale = new IOException(
+                    "Paper World " + kind + " after source discovery: "
+                    + (world == null ? "<unknown>" : world.getName()));
+            failure.compareAndSet(null, stale);
+            plugin.getLogger().log(Level.SEVERE,
+                    "SIMPLECOINS_SAVED_DISCOVERY_FAILED", stale);
+            safeStop.run(); // invoked only on Bukkit's synchronous event thread
+        }
     }
 
     /** Run only on the primary thread after Paper has finished startup load. */
@@ -147,7 +183,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         if (worldRoots.isEmpty())
             throw new IllegalStateException("No loaded worlds for source inventory");
         return new WorldRoots(Map.copyOf(worldRoots), Set.copyOf(sharedPlayerRoots),
-                WorldSourceIdentitySnapshot.capture(identities));
+                WorldSourceIdentitySnapshot.capture(identities),
+                worldTransitions.snapshot());
 
     }
 
@@ -156,6 +193,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
         Map<String, Path> immutableRoots = roots.immutableRoots();
         Set<Path> immutablePlayerRoots = roots.immutablePlayerRoots();
         WorldSourceIdentitySnapshot capturedIdentities = roots.capturedIdentities();
+        WorldRegistryTransitionWitness.Snapshot capturedLifecycle =
+                roots.lifecycleVersion();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 var manifest = WorldStorageDiscovery.discover(
@@ -187,6 +226,9 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                             + " awaitingAcknowledgement=" + report.awaitingAcknowledgement()
                             + " (OBSERVATION ONLY; admission remains blocked)");
                 }
+                // A World may unload then reload with the exact same UUID
+                // and folder, evading a before/after identity-set comparison.
+                worldTransitions.requireUnchanged(capturedLifecycle);
                 // Do not expose a discovered Manifest on the async worker.
                 // The registered Bukkit universe may have changed during the
                 // file walk and receipt audit without changing disk names.
@@ -196,6 +238,7 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                     if (closed.get() || finished.get()) return;
                     try {
                         WorldRoots current = captureWorldRoots(); // main thread
+                        worldTransitions.requireUnchanged(capturedLifecycle);
                         capturedIdentities.requireSameRegisteredWorlds(
                                 current.capturedIdentities());
                         if (!immutablePlayerRoots.equals(current.immutablePlayerRoots()))
@@ -208,6 +251,10 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                                 "SIMPLECOINS_SAVED_WORLD_SOURCE_IDENTITY_VERIFIED"
                                 + " worlds=" + capturedIdentities.worldIds().size()
                                 + " (ONE-SHOT PRECONDITION ONLY; no world writer freeze)");
+                        plugin.getLogger().info(
+                                "SIMPLECOINS_SAVED_WORLD_LIFECYCLE_STABLE"
+                                + " (NO WorldLoad/Unload since registered capture;"
+                                + " not a writer freeze)");
                         plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_OBSERVED"
                                 + " worldRoots=" + immutableRoots.size()
                                 + " authoritativeFiles=" + manifest.worldFiles().size()

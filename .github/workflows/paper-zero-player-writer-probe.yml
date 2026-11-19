@@ -9,6 +9,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.real-paper-live-saved-divergence.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-live-captured-value-drift.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-hybrid-staged-stale-live.md'
+      - 'Lifecycle/Works/simplecoins.a01.world-registry-transition-veto.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperSavedSourceDiscovery.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/WorldRegistryTransitionWitness.java'
 
 jobs:
   zero-player-external-writer:
@@ -41,6 +44,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a01.paper-live-captured-value-drift.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.paper-hybrid-staged-stale-live.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.world-registry-transition-veto.md
       - name: Build production and isolated probe without packaging it in product
         shell: bash
         run: |
@@ -133,6 +138,36 @@ jobs:
             fi
           done
           echo 'PAPER_A01_ZERO_PLAYER_UNCONTROLLED_WRITER_COUNTEREXAMPLE_PASSED'
+      - name: Actual Paper WorldLoad after saved OBSERVED must revoke and self-stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          # Isolated fourth JVM: do NOT start a second baseline scan or alter
+          # product code. The CI-only probe creates an actual new Bukkit World
+          # only after the product's observed() is nonempty.
+          set +e
+          timeout --signal=TERM --kill-after=8s 160s \
+            java -Da01.probe.phase=registry-veto -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a01-registry-veto.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "World transition fail-stop fixture exit=$status" >&2
+            tail -140 paper-a01-registry-veto.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A01_ZERO_PLAYER_PROBE_FAILED' paper-a01-registry-veto.log; then
+            tail -140 paper-a01-registry-veto.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_SAVED_DISCOVERY_OBSERVED' paper-a01-registry-veto.log
+          grep -F 'PAPER_A01_WORLD_REGISTRY_VETO_PRECONDITION_OBSERVED' paper-a01-registry-veto.log
+          grep -F 'SIMPLECOINS_SAVED_DISCOVERY_FAILED' paper-a01-registry-veto.log
+          grep -F 'Paper World loaded after source discovery: a01-actual-dynamic-world' paper-a01-registry-veto.log
+          grep -F 'PAPER_A01_WORLD_REGISTRY_VETO_FAIL_STOP_PASSED' paper-a01-registry-veto.log
+          echo 'PAPER_A01_REAL_WORLD_LOAD_REVOKED_STALE_SAVED_MANIFEST'
+
       - name: Preserve only diagnostic logs and region checksums
         if: always()
         uses: actions/upload-artifact@v4
