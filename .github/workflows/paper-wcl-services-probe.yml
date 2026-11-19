@@ -343,7 +343,7 @@ jobs:
                 grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_STORED_WWC_WWW_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
-            grep -F 'PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=wwc' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=www' "paper-a05-$phase.log"
