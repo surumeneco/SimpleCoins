@@ -15,6 +15,11 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
       - 'Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md'
       - 'Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md'
+      - 'Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperCapturedHybridSettlement.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/WclHybridLiveOverlay.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WclHybridLiveOverlayTest.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/PaperCapturedHybridSettlementWclTest.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java'
       - 'src/test/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidateTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java'
@@ -124,6 +129,14 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md --kind model
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
             --work Lifecycle/Works/simplecoins.a05.single-read-live-wcl-candidate.md --kind model-conformance
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md --kind process-closure
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile \
+            --work Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md --kind model
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md --kind model-conformance
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
