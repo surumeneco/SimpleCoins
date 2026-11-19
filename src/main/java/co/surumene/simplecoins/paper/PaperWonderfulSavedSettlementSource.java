@@ -6,6 +6,7 @@ import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
 import co.surumene.simplecoins.domain.WclSavedSlotSupplement;
+import co.surumene.simplecoins.domain.WclSavedEquipmentMirrorProof;
 import co.surumene.simplecoins.domain.WclOwnerEvidence;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import java.io.IOException;
@@ -118,10 +119,33 @@ public final class PaperWonderfulSavedSettlementSource
                     (banSources != null
                             ? banSources.currentlyBanned(uuid)
                             : banned.contains(uuid)) ? Set.of(uuid) : Set.of();
+            // Verified provider StoredItem and its monetary value came from
+            // the SAME readStored Success. A positive equipment mirror can
+            // only reuse an already staged matching vanilla Entity item.
+            // Unknown/altered content, missing equipment or missing native
+            // accounting Asset is HOLD, never a new second currency source.
+            Set<String> provenEquipmentMirrors = new HashSet<>();
+            for (var slot : candidate.slotValues().entrySet()) {
+                boolean mirror = ("www".equals(candidate.providerId())
+                        && "weapon".equals(slot.getKey()))
+                        || ("wwc".equals(candidate.providerId())
+                        && "head".equals(slot.getKey()));
+                if (!mirror || slot.getValue().signum() == 0)
+                    continue;
+                var stored = candidate.sourceItems().get(slot.getKey());
+                if (stored == null)
+                    throw new IOException("No same-read WCL equipment bytes for mirror");
+                WclSavedEquipmentMirrorProof.prove(
+                        chunk.nbt(), candidate.entityId(), candidate.providerId(),
+                        slot.getKey(), stored.bytes(), maxSerialized, maxInflated,
+                        Bukkit.getUnsafe().getDataVersion());
+                provenEquipmentMirrors.add(slot.getKey());
+            }
             WclSavedSlotSupplement.stage(
                     pending, sourceId, source.world(), candidate.entityId(),
                     candidate.providerId(), candidate.slotValues(), owner,
-                    ownerBanned, manifest.playerDataFiles().keySet());
+                    ownerBanned, manifest.playerDataFiles().keySet(),
+                    provenEquipmentMirrors);
         }
         worldWitness.requireUnchanged();
     }

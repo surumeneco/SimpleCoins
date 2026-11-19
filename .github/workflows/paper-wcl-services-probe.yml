@@ -19,6 +19,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.loaded-wcl-entity-discovery.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-wcl-source-stage.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-world-metadata-identity.md'
+      - 'Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WclSavedEquipmentMirrorProof.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WclSavedEquipmentMirrorProofTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperSavedWorldMetadataWitness.java'
       - 'src/test/java/co/surumene/simplecoins/domain/PaperSavedWorldMetadataWitnessTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WclSavedSlotSupplement.java'
@@ -174,6 +177,14 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.saved-world-metadata-identity.md --kind model
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
             --work Lifecycle/Works/simplecoins.a05.saved-world-metadata-identity.md --kind model-conformance
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md --kind process-closure
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile \
+            --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md --kind model
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md --kind model-conformance
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -356,6 +367,7 @@ jobs:
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_SAVED_WORLD_PAPER_METADATA_IDENTITY_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_SAVED_WCL_NATIVE_WWW_MIRROR_ONCE_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=wwc' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED provider=www' "paper-a05-$phase.log"

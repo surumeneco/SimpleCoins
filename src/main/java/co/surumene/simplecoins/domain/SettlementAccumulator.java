@@ -40,7 +40,7 @@ public final class SettlementAccumulator {
     private final Set<String> required;
     private final Set<String> completed = new HashSet<>();
     private final Map<String, String> failures = new HashMap<>();
-    private final Set<String> occupiedSlots = new HashSet<>();
+    private final Map<String, Asset> occupiedSlots = new HashMap<>();
     private final Map<UUID, BigInteger> personal = new HashMap<>();
     private final List<DeadLocation> deadLocations = new ArrayList<>();
     private BigInteger free = BigInteger.ZERO;
@@ -97,7 +97,7 @@ public final class SettlementAccumulator {
                 throw new IllegalStateException("Source is no longer accepting assets: " + asset.source());
             // Reject the same physical slot even when exposed by multiple memory/disk adapters.
             String collisionKey = collisionKey(asset);
-            if (!occupiedSlots.add(collisionKey))
+            if (occupiedSlots.putIfAbsent(collisionKey, asset) != null)
                 throw new IllegalArgumentException("Duplicate physical asset slot: " + collisionKey);
             if (!worldScope.includes(asset.world())) return;
 
@@ -116,6 +116,36 @@ public final class SettlementAccumulator {
         } catch (RuntimeException failure) {
             rejectedInput = true;
             throw failure;
+        }
+    }
+
+    /**
+     * Require an already accepted asset for a second, fully proven view of
+     * the SAME physical item. No balance is added: a confirmed WCL equipment
+     * mirror must inherit the native Entity's identical amount, owner/BAN/
+     * playerdata classification, location and source. Unproven duplicates
+     * must still call accept() and fail rather than using this method.
+     *
+     * The caller, not this accumulator, must prove serialized ItemStack NBT
+     * equality from the same selected SAVED Entity source before invocation.
+     */
+    public void requireExistingEquivalentAsset(Asset mirrored) {
+        checkOpen();
+        try {
+            Objects.requireNonNull(mirrored, "verified saved WCL mirror");
+            verifySource(mirrored.source());
+            if (completed.contains(mirrored.source())
+                    || failures.containsKey(mirrored.source())
+                    || !worldScope.includes(mirrored.world()))
+                throw new IllegalStateException("Unstageable WCL mirrored source");
+            String key = collisionKey(mirrored);
+            Asset existing = occupiedSlots.get(key);
+            if (existing == null || !existing.equals(mirrored))
+                throw new IllegalArgumentException(
+                        "WCL mirrored item differs from native physical asset: " + key);
+        } catch (RuntimeException invalid) {
+            rejectedInput = true;
+            throw invalid;
         }
     }
 
