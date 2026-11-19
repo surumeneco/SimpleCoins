@@ -139,6 +139,43 @@ jobs:
               assert receipt['verdict']=='passed' and receipt['observed_targets']=={'case.s'+str(i):'passed'}
           print('A05_CONFIRMED_EIGHT_CASE_SCRIPT_OWNED_QUEUE_GREEN_PASSED')
           PY
+      - name: Evaluate implementation obligations and record bounded CAT verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          ROOT=Lifecycle/Works/.cat-flow
+          python "$FLOW" obligations --work "$WORK" > "$ROOT/a05-obligations-result.json"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance > "$ROOT/a05-implementation-verdict.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('Lifecycle/Works/.cat-flow')
+          result=json.loads((root/'a05-implementation-verdict.json').read_text())
+          assert result.get('gate')=='implementation-conformance',result
+          assert result.get('status') in ('passed','inconclusive'),result
+          obligations=json.loads((root/'cache/implementation-obligations-evaluated.json').read_text())
+          items=obligations.get('items')
+          assert isinstance(items,list) and items,obligations
+          assert all(item.get('status')!='failed' for item in items),items
+          print('A05_IMPLEMENTATION_CONFORMANCE_ACTUAL_STATUS='+result['status'])
+          print('A05_OBLIGATIONS_ACTUAL_COUNTS='+str({
+              status:sum(x.get('status')==status for x in items)
+              for status in ('passed','inconclusive','not-run','failed')}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a05-implementation-conformance-bounded
+          path: |
+            Lifecycle/Works/.cat-flow/a05-obligations-result.json
+            Lifecycle/Works/.cat-flow/a05-implementation-verdict.json
+            Lifecycle/Works/.cat-flow/conformance/implementation-conformance.json
+            Lifecycle/Works/.cat-flow/cache/a05-wcl-consumer-verdict-obligations.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+          if-no-files-found: warn
+          include-hidden-files: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
