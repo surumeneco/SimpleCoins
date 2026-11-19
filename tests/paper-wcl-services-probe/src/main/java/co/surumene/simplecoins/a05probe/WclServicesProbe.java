@@ -105,6 +105,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 }
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
+                verifySerializedWclValuationBoundaries(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
                 switch (phase) {
                     case "baseline" -> { }
@@ -149,6 +150,48 @@ public final class WclServicesProbe extends JavaPlugin {
                 Bukkit.shutdown();
             }
         }, 50L);
+    }
+
+    /**
+     * The value adapter must preserve an observed non-money zero but never
+     * reinterpret malformed or duplicate physical WCL slots as zero.
+     * These are detached snapshots, not a claim of source/generation proof.
+     */
+    private void verifySerializedWclValuationBoundaries(World world) throws IOException {
+        UUID entity = UUID.fromString("00000000-0000-0000-0000-00000000a05a");
+        var nonMoney = new PaperWonderfulLoadedEvidence.StoredItem(
+                "non-money", new ItemStack(Material.STONE).serializeAsBytes());
+        var base = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "wwc", Map.of(), List.of(nonMoney));
+        Map<String, BigInteger> observed = PaperWonderfulSnapshotAssets.slotValues(
+                base, 2 * 1024 * 1024, 16 * 1024 * 1024);
+        if (observed.size() != 1 || !BigInteger.ZERO.equals(observed.get("non-money")))
+            throw new IOException("Non-money WCL slot is not positively represented as zero");
+
+        var duplicate = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "wwc", Map.of(), List.of(nonMoney, nonMoney));
+        try {
+            PaperWonderfulSnapshotAssets.slotValues(
+                    duplicate, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            throw new IOException("Duplicate physical WCL slot was accepted");
+        } catch (IOException expected) {
+            if (!"Invalid or duplicate WCL source slot".equals(expected.getMessage()))
+                throw expected;
+        }
+
+        var bad = new PaperWonderfulLoadedEvidence.Snapshot(
+                entity, world.getUID(), "www", Map.of(),
+                List.of(new PaperWonderfulLoadedEvidence.StoredItem(
+                        "damaged", new byte[]{0, 0})));
+        try {
+            PaperWonderfulSnapshotAssets.slotValues(
+                    bad, 2 * 1024 * 1024, 16 * 1024 * 1024);
+            throw new IOException("Malformed serialized WCL item was accepted");
+        } catch (IOException expected) {
+            if ("Malformed serialized WCL item was accepted".equals(expected.getMessage()))
+                throw expected;
+        }
+        getLogger().info("PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED");
     }
 
     /**
