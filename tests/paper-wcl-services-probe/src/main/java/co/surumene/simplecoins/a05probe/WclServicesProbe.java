@@ -874,12 +874,24 @@ public final class WclServicesProbe extends JavaPlugin {
                         || !BigInteger.valueOf(5000).equals(candidate.slotValues().get("cargo:7")))
                     throw new IOException("Product saved WWW sourced candidate mismatch");
             } else throw new IOException("Unexpected product saved WCL provider");
+            var physicalSlots = candidate.physicalSlotKeys();
+            if (!physicalSlots.keySet().equals(candidate.slotValues().keySet()))
+                throw new IOException("Product saved WCL physical keys omitted monetary slots");
+            String prefix = "entity/" + candidate.entityId();
+            if ("www".equals(candidate.providerId())) {
+                if (!(prefix + "/equipment/mainhand").equals(physicalSlots.get("weapon"))
+                        || !(prefix + "/wcl/www/cargo:7").equals(physicalSlots.get("cargo:7")))
+                    throw new IOException("WWW rendered weapon was incorrectly counted independently");
+            } else if (!(prefix + "/wcl/wwc/shulker").equals(physicalSlots.get("shulker"))) {
+                throw new IOException("WWC shulker was incorrectly equated with vanilla equipment");
+            }
             for (BigInteger value : candidate.slotValues().values())
                 candidateValue = candidateValue.add(value);
         }
         if (!providerIds.equals(Set.of("wwc", "www"))
                 || !BigInteger.valueOf(25000).equals(candidateValue))
             throw new IOException("Product saved WCL source total did not conserve 25000C");
+        getLogger().info("PAPER_A05_SAVED_WCL_SLOT_ALIASES_MAPPED_PASSED");
         getLogger().info("PAPER_A05_PRODUCT_DISCOVERED_SAVED_WCL_CANDIDATES_25000_PASSED"
                 + " providers=" + providerIds.size() + " candidates=" + farCandidates.size());
         verifyProductSavedChunkCandidateNegatives(world, boundedManifest);
