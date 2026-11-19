@@ -1162,29 +1162,7 @@ public final class WclServicesProbe extends JavaPlugin {
                                     WclServicesProbe.this, Map.of(world.getName(), world.getUID()),
                                     boundedManifest, Set.of(), null, Set.of(),
                                     2 * 1024 * 1024, 16 * 1024 * 1024);
-                            try {
-                                allWcl.stage(source, saved, once, sharedWallets);
-                            } catch (IOException mismatch) {
-                                if (mismatch.getMessage().contains(
-                                        "WCL ItemStack contents differ from SAVED vanilla equipment")) {
-                                    var wclBytes = savedWww.sourceItems().get("weapon").bytes();
-                                    java.io.InputStream stream = new java.io.ByteArrayInputStream(wclBytes);
-                                    if (wclBytes[0] == (byte)0x1f && wclBytes[1] == (byte)0x8b)
-                                        stream = new java.util.zip.GZIPInputStream(stream);
-                                    Map<String,Object> fromWcl = co.surumene.simplecoins.domain.NbtReader.read(
-                                            stream, 16 * 1024 * 1024);
-                                    for (Object raw : (List<?>)saved.nbt().get("Entities")) {
-                                        if (raw instanceof Map<?,?> entity
-                                                && wwwUuid.equals(readSavedUuid(entity.get("UUID")))) {
-                                            var gear = (Map<?,?>)entity.get("equipment");
-                                            getLogger().severe("PAPER_A05_MIRROR_NBT_COMPARE"
-                                                    + " vanilla=" + gear.get("mainhand")
-                                                    + " wcl=" + fromWcl);
-                                        }
-                                    }
-                                }
-                                throw mismatch;
-                            }
+                            allWcl.stage(source, saved, once, sharedWallets);
                             once.completeSource(sourceId);
                             var onceResult = once.commit();
                             if (!BigInteger.valueOf(25000).equals(onceResult.dead())
