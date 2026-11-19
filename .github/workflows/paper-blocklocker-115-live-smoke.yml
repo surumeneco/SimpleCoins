@@ -112,6 +112,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
           grep -F 'PAPER_BLOCKLOCKER_115_OWNER_PASSED' paper.log
+          grep -F 'PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED phase=create privateDead=10000 everyoneFree=5000 unprotectedFree=1000 unknownHold=true originalValueUnchanged=true' paper.log
           printf 'stop\n' >&3
           exec 3>&-
           wait "$pid"
@@ -154,6 +155,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a04-reloaded.log
           grep -F 'PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED' paper-a04-reloaded.log
           grep -F 'PAPER_BLOCKLOCKER_115_RELOADED_PROTECTION_PASSED' paper-a04-reloaded.log
+          grep -F 'PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED phase=reload privateDead=10000 everyoneFree=5000 unprotectedFree=1000 unknownHold=true originalValueUnchanged=true' paper-a04-reloaded.log
           if grep -Fq 'PAPER_BLOCKLOCKER_115_RELOAD_FAILED' paper-a04-reloaded.log; then
             tail -140 paper-a04-reloaded.log
             exit 1
