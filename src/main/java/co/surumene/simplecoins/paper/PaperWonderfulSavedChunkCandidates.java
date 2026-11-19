@@ -3,6 +3,7 @@ package co.surumene.simplecoins.paper;
 import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WclPhysicalSlotIdentity;
+import co.surumene.simplecoins.domain.WclOwnerEvidence;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -55,6 +56,17 @@ public final class PaperWonderfulSavedChunkCandidates {
          */
         public Map<String, String> physicalSlotKeys() throws IOException {
             return WclPhysicalSlotIdentity.keys(entityId, providerId, slotValues.keySet());
+        }
+
+        /**
+         * Resolve only local relationship priority. The caller separately
+         * proves the complete WCL provider read and vanilla/tame owner evidence;
+         * this never decides BAN/playerdata, source generation or publication.
+         */
+        public WclOwnerEvidence.Decision ownerEvidence(
+                boolean providerReadVerified, WclOwnerEvidence.TameOwner tame)
+                throws IOException {
+            return WclOwnerEvidence.decide(providerReadVerified, providerId, relationships, tame);
         }
     }
 
