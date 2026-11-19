@@ -9,6 +9,11 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WclHybridLiveOverlay;
 import co.surumene.simplecoins.domain.WclOwnerEvidence;
+import co.surumene.simplecoins.domain.WclLiveEquipmentMirrorProof;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Wolf;
+import org.bukkit.entity.Chicken;
+import org.bukkit.inventory.ItemStack;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -39,6 +44,8 @@ public final class PaperCapturedHybridSettlement {
     private final PaperLiveUniverseAssets.Observed observed;
     private final Set<UUID> walletIds;
     private final Map<String, World> capturedWorlds;
+    /** Bytes from EXACT same initial scan as original positive equipment money. */
+    private final Map<String, byte[]> originalLiveEquipment;
     private final PaperLiveUniverseAssets.Budget captureBudget;
     private final AtomicBoolean consumed = new AtomicBoolean();
     private boolean autoEnumerationCompleted;
@@ -49,10 +56,15 @@ public final class PaperCapturedHybridSettlement {
     private PaperCapturedHybridSettlement(PaperLiveUniverseAssets.Observed observed,
                                          Set<UUID> walletIds,
                                          Map<String, World> capturedWorlds,
-                                         PaperLiveUniverseAssets.Budget captureBudget) {
+                                         PaperLiveUniverseAssets.Budget captureBudget,
+                                         Map<String, byte[]> scannedEquipment) {
         this.observed = Objects.requireNonNull(observed, "validated Paper source report");
         this.walletIds = new HashSet<>(Objects.requireNonNull(walletIds, "wallet UUIDs"));
         this.capturedWorlds = Map.copyOf(Objects.requireNonNull(capturedWorlds));
+        Map<String, byte[]> evidence = new java.util.HashMap<>();
+        Objects.requireNonNull(scannedEquipment, "same-source equipment bytes")
+                .forEach((key, bytes) -> evidence.put(key, bytes.clone()));
+        this.originalLiveEquipment = Map.copyOf(evidence);
         this.captureBudget = captureBudget; // null only for the test-only fromObserved seam
     }
 
@@ -65,21 +77,24 @@ public final class PaperCapturedHybridSettlement {
             PaperLiveUniverseAssets.Budget budget) throws IOException {
         List<World> selection = List.copyOf(Objects.requireNonNull(selectedWorlds));
         Set<UUID> liveWallets = new HashSet<>();
+        Map<String, byte[]> nativeEquipment = new java.util.HashMap<>();
         var snapshot = PaperLiveUniverseAssets.scanWithSources(
-                selection, budget, liveWallets);
+                selection, budget, liveWallets, nativeEquipment);
         Map<String, World> selected = new java.util.LinkedHashMap<>();
         for (World world : selection) {
             if (selected.putIfAbsent(world.getName(), world) != null)
                 throw new IOException("Duplicate Paper World identity during LIVE capture");
         }
-        return new PaperCapturedHybridSettlement(snapshot, liveWallets, selected, budget);
+        return new PaperCapturedHybridSettlement(
+                snapshot, liveWallets, selected, budget, nativeEquipment);
     }
 
     /** Test seam for genuine immutable `Observed` contracts without a mock server. */
     static PaperCapturedHybridSettlement fromObserved(
             PaperLiveUniverseAssets.Observed verifiedObserved,
             Set<UUID> liveWalletIds) {
-        return new PaperCapturedHybridSettlement(verifiedObserved, liveWalletIds, Map.of(), null);
+        return new PaperCapturedHybridSettlement(
+                verifiedObserved, liveWalletIds, Map.of(), null, Map.of());
     }
 
     /**
@@ -180,8 +195,46 @@ public final class PaperCapturedHybridSettlement {
                     || !candidate.worldName().equals(chunk.world())
                     || !candidate.entityId().equals(id))
                 throw new IOException("Selected WCL Entity moved or changed during read");
+            Set<String> sameItemMirrors = new HashSet<>();
+            for (var slot : candidate.slotValues().entrySet()) {
+                if (slot.getValue().signum() <= 0)
+                    continue;
+                String nativeSlot;
+                if ("www".equals(providerId) && "weapon".equals(slot.getKey())) {
+                    if (!(entity instanceof Wolf))
+                        throw new IOException("WWW mainhand mirror requires verified Wolf");
+                    nativeSlot = "mainhand";
+                } else if ("wwc".equals(providerId) && "head".equals(slot.getKey())) {
+                    if (!(entity instanceof Chicken))
+                        throw new IOException("WWC head mirror requires verified Chicken");
+                    nativeSlot = "head";
+                } else continue;
+                String physical = "world/" + chunk.world() + "/entity/" + id
+                        + "/equipment/" + nativeSlot;
+                byte[] originally = originalLiveEquipment.get(physical);
+                var stored = candidate.sourceItems().get(slot.getKey());
+                if (originally == null || stored == null
+                        || !(entity instanceof LivingEntity living)
+                        || living.getEquipment() == null)
+                    throw new IOException("WCL mirrored gear lacks original captured native source");
+                ItemStack current = "mainhand".equals(nativeSlot)
+                        ? living.getEquipment().getItemInMainHand()
+                        : living.getEquipment().getHelmet();
+                if (current == null || current.getType().isAir())
+                    throw new IOException("WCL mirrored gear disappeared since LIVE scan");
+                final byte[] now;
+                try {
+                    now = current.serializeAsBytes();
+                } catch (RuntimeException invalid) {
+                    throw new IOException("WCL current LIVE gear could not be serialized", invalid);
+                }
+                WclLiveEquipmentMirrorProof.prove(originally, now, stored.bytes(),
+                        maxSerializedBytes, maxInflatedBytes);
+                sameItemMirrors.add(slot.getKey());
+            }
             selectedWcl.add(new WclHybridLiveOverlay.Selected(chunk, candidate.entityId(),
-                    candidate.providerId(), candidate.ownerEvidence(), candidate.slotValues()));
+                    candidate.providerId(), candidate.ownerEvidence(), candidate.slotValues(),
+                    sameItemMirrors));
         } catch (IOException | RuntimeException invalid) {
             consumed.set(true); // discard the whole potentially mutated wallet generation
             throw invalid;
@@ -295,9 +348,10 @@ public final class PaperCapturedHybridSettlement {
                         "Paper monetary capture was already consumed; acquire a new generation");
             wclCandidates = List.copyOf(selectedWcl);
         }
-        // Add independently stored WCL slots into their already mandatory
-        // selected LIVE Chunk. Alias collisions remain HOLD; never double or
-        // silently discard mirrored vanilla equipment/display value.
+        // Attach WCL independent slots to the selected native LIVE Chunk.
+        // Positive equipment aliases may reuse the captured native Value only
+        // when full source-time/current/provider ItemStack equality was proven.
+        // No new source or global writer/settlement guarantee is introduced.
         WclHybridLiveOverlay.Overlay overlay =
                 WclHybridLiveOverlay.attach(observed.sources(), wclCandidates);
         Objects.requireNonNull(manifest, "saved manifest");
@@ -361,16 +415,31 @@ public final class PaperCapturedHybridSettlement {
         HybridLiveSourceStage.Classifier verifiedLive = (source, value) -> {
             WclOwnerEvidence.Decision wcl = overlay.wclOwners().get(value.physicalKey());
             if (wcl != null) {
-                // WCL OWNER and FREE are local verdicts. Resolve current BAN
-                // and real playerdata against the SAME saved selection.
                 UUID owner = wcl.owner();
                 boolean banned = owner != null && (banSources != null
                         ? banSources.currentlyBanned(owner)
                         : currentlyBanned.contains(owner));
+                boolean playerdata = owner != null
+                        && manifest.playerDataFiles().containsKey(owner);
+                if (overlay.mirroredPhysicalKeys().contains(value.physicalKey())) {
+                    // Native asset is authoritative and already present in
+                    // this source. WCL may not silently overwrite the separate
+                    // LIVE ownership classification, even for equal money.
+                    SettlementAccumulator.Asset nativeAsset =
+                            liveOwnership.classify(source, value);
+                    if (nativeAsset == null
+                            || !Objects.equals(owner, nativeAsset.owner())
+                            || nativeAsset.everyoneProtected()
+                            || nativeAsset.currentlyBanned() != banned
+                            || nativeAsset.hasPlayerdata() != playerdata)
+                        throw new IOException("Native/WCL LIVE equipment owner evidence differs: "
+                                + value.physicalKey());
+                    return nativeAsset; // checked by HybridLiveSourceStage
+                }
+                // WCL-independent cargo/shulker/slot ownership.
                 return new SettlementAccumulator.Asset(
                         source.id(), value.physicalKey(), value.world(), owner,
-                        false, banned,
-                        owner != null && manifest.playerDataFiles().containsKey(owner),
+                        false, banned, playerdata,
                         value.amount(), value.physicalKey());
             }
             SettlementAccumulator.Asset raw = liveOwnership.classify(source, value);
