@@ -13,6 +13,7 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedPdc.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
+      - 'Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperLiveItemValue.java'
       - 'Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md'
@@ -82,6 +83,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.saved-pdc-reconstruction.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
@@ -185,6 +188,7 @@ jobs:
           grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED' paper-a05.log
+          grep -F 'PAPER_A05_PRODUCT_CROSS_WCL_CLONED_WALLET_REJECTED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' paper-a05.log
           grep -F 'PAPER_A05_BOTH_STORED_SCHEMA_FAILURES_FAIL_CLOSED_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' paper-a05.log
@@ -214,6 +218,7 @@ jobs:
             grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED' "paper-a05-$phase.log"
+            grep -F 'PAPER_A05_PRODUCT_CROSS_WCL_CLONED_WALLET_REJECTED_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_WWW_STORED_OWNER_COMMANDER_CURRENCY_PASSED' "paper-a05-$phase.log"
             grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' "paper-a05-$phase.log"
             if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a05-$phase.log"; then
