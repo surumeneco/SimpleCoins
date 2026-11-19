@@ -34,9 +34,14 @@ public final class WclPhysicalSlotIdentity {
                 throw new IOException("Blank WCL storage slot");
             String physical;
             if ("wwc".equals(providerId) && "shulker".equals(slot)) {
-                // WCL's chicken inventory shulker is not proven equivalent
-                // to the chicken's separate rendered head equipment.
+                // Distinct carried item; never confuse it with chicken head.
                 physical = entity + "/wcl/wwc/shulker";
+            } else if ("wwc".equals(providerId) && "carpet".equals(slot)) {
+                physical = entity + "/wcl/wwc/carpet";
+            } else if ("wwc".equals(providerId) && "head".equals(slot)) {
+                // Shipped WWC syncs headItem into this Chicken's helmet.
+                // This is an alias detection key, not evidence of value equality.
+                physical = entity + "/equipment/head";
             } else if ("www".equals(providerId) && "weapon".equals(slot)) {
                 physical = entity + "/equipment/mainhand";
             } else if ("www".equals(providerId) && slot.startsWith("cargo:")) {
