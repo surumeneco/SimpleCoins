@@ -20,6 +20,14 @@ import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.ResolvedEntitySettlementImport;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
+import co.surumene.www.WhatAWonderfulWolfPlugin;
+import co.surumene.www.spawn.WonderfulWolfFactory;
+import co.surumene.www.spawn.WonderfulWolfCreationResult;
+import co.surumene.www.genome.WonderfulWolfGenomeProfile;
+import co.surumene.www.founder.FounderOrigin;
+import co.surumene.www.domain.Mode;
+import co.surumene.www.domain.ActionDistance;
+import co.surumene.www.individual.ItemStackSnapshot;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
@@ -270,24 +278,44 @@ public final class WclServicesProbe extends JavaPlugin {
         var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000a052");
         UUID commander = UUID.fromString("00000000-0000-0000-0000-00000000a053");
+        var www = (WhatAWonderfulWolfPlugin) Bukkit.getPluginManager().getPlugin("WhatAWonderfulWolf");
+        if (www == null || !www.isEnabled())
+            throw new IOException("Shipped WWW runtime plugin not enabled");
+        // WWW's public WCL readLoaded only observes registered, genotype-backed
+        // WonderfulWolfIndividuals. Seeding a vanilla Wolf's PDC alone is NOT
+        // a valid LIVE source (readLoaded would correctly return NotFound).
+        // Create an actual initialized founder with the shipped WWW/WGL engine.
+        var factory = new WonderfulWolfFactory(www.genomeLib().engine(),
+                () -> new WonderfulWolfGenomeProfile(
+                        www.currentConfig(), www.genomeLib().engine().geneSequenceCodec()));
+        var creation = factory.createFounder(FounderOrigin.NATURAL,
+                Optional.of(owner), 0L, 0xA05A05L);
+        if (!(creation instanceof WonderfulWolfCreationResult.Success made))
+            throw new IOException("Actual WWW/WGL founder synthesis failed: " + creation);
+        ItemStack nativeMoney = coins.create(CoinDenomination.TEN_THOUSAND, 1);
+        // The SHIPPED WWW weapon renderer sets the physical main-hand item
+        // unbreakable. Make the test source item already carry that same
+        // native item metadata rather than weakening the NBT equality rule.
+        var meta = nativeMoney.getItemMeta();
+        meta.setUnbreakable(true);
+        nativeMoney.setItemMeta(meta);
+        ItemStack cargo = coins.create(CoinDenomination.THOUSAND, 5);
         Wolf wolf = world.spawn(new Location(world, 35.5, 120, 35.5), Wolf.class);
         try {
             wolf.setOwner(Bukkit.getOfflinePlayer(owner));
-            ItemStack nativeMoney = coins.create(CoinDenomination.TEN_THOUSAND, 1);
-            wolf.getEquipment().setItemInMainHand(nativeMoney);
-            byte[] runtime = wolfRuntimeFixture(owner, commander,
-                    nativeMoney.serializeAsBytes(),
-                    coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
-            var data = wolf.getPersistentDataContainer();
-            data.set(new NamespacedKey("whatawonderfulwolf", "type"),
-                    PersistentDataType.STRING, "wonderful_wolf");
-            data.set(new NamespacedKey("whatawonderfulwolf", "schema_version"),
-                    PersistentDataType.INTEGER, 1);
-            data.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
-                    PersistentDataType.BYTE_ARRAY, runtime);
-
+            var individual = made.individual()
+                    .withTamedOwner(owner)
+                    .withCommandState(Mode.FOLLOW, Optional.of(commander),
+                            ActionDistance.NORMAL, Optional.empty())
+                    .withStorage(
+                            Optional.of(new ItemStackSnapshot(nativeMoney.serializeAsBytes())),
+                            Map.of(7, new ItemStackSnapshot(cargo.serializeAsBytes())));
+            www.loadedIndividuals().saveAndRegister(wolf, individual);
+            if (!www.loadedIndividuals().entity(wolf.getUniqueId()).filter(w -> w == wolf).isPresent())
+                throw new IOException("WWW real loaded registry does not contain created founder");
             if (!wolf.isValid() || Bukkit.getEntity(wolf.getUniqueId()) != wolf)
-                throw new IOException("Product LIVE mirror Wolf missing from actual Paper Entity index");
+                throw new IOException("Managed WWW Wolf is not the authoritative loaded Paper Entity");
+
             var candidate = PaperWonderfulLiveCandidates.collect(
                     this, wolf, "www", new java.util.HashSet<>(),
                     2 * 1024 * 1024, 16 * 1024 * 1024);
@@ -327,6 +355,7 @@ public final class WclServicesProbe extends JavaPlugin {
                         + " worldTotal=" + result.statistics().worldTotal());
             getLogger().info("PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED");
         } finally {
+            www.loadedIndividuals().unregister(wolf);
             wolf.remove();
         }
     }
