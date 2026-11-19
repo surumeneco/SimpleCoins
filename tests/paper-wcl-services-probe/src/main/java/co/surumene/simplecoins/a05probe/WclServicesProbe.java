@@ -9,6 +9,7 @@ import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
+import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
 import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
@@ -719,6 +720,9 @@ public final class WclServicesProbe extends JavaPlugin {
                         .count() != 1)
             throw new IOException("Paper WorldFolder discovery omitted or duplicated the far Entity MCA");
         int[] traversed = {0, 0};
+        java.util.List<PaperWonderfulSavedChunkCandidates.Candidate> candidates =
+                new java.util.ArrayList<>();
+        java.util.Set<UUID> seenCandidates = new java.util.HashSet<>();
         int[] visitedPlayers = {0};
         int[] visitedChunks = {0};
         var verifiedTraversal = WorldSnapshotTraversal.traverseVerified(
@@ -730,6 +734,11 @@ public final class WclServicesProbe extends JavaPlugin {
                         // All discovered saved region/terrain sources are
                         // visited and stamped, not only the chosen target.
                         if (source.kind() != WorldStorageDiscovery.Kind.ENTITY) return;
+                        if (!source.world().equals(world.getName()))
+                            throw new IOException("Cross-world saved Entity source");
+                        candidates.addAll(PaperWonderfulSavedChunkCandidates.collect(
+                                WclServicesProbe.this, source, world.getUID(), saved,
+                                seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024));
                         if (!(saved.nbt().get("Entities") instanceof List<?> entities))
                             throw new IOException("Traversed Entity Chunk missing saved Entities list");
                         for (Object raw : entities) {
@@ -768,6 +777,44 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IOException("Discovered Paper saved-source traversal was incomplete");
         if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
             throw new IOException("WorldSnapshotTraversal loaded the far world chunk");
+        var farCandidates = candidates.stream()
+                .filter(c -> c.chunkX() == FAR_CHUNK && c.chunkZ() == FAR_CHUNK)
+                .toList();
+        if (farCandidates.size() != 2)
+            throw new IOException("Product saved WCL scan must find exactly two far candidates: "
+                    + farCandidates.size());
+        BigInteger candidateValue = BigInteger.ZERO;
+        java.util.Set<String> providerIds = new java.util.HashSet<>();
+        for (var candidate : farCandidates) {
+            if (!candidate.worldId().equals(world.getUID())
+                    || !candidate.source().world().equals(world.getName())
+                    || !candidate.source().path().toAbsolutePath().normalize().equals(region)
+                    || !providerIds.add(candidate.providerId()))
+                throw new IOException("Product saved WCL source provenance/provider mismatch");
+            if ("wwc".equals(candidate.providerId())) {
+                if (!wwcUuid.equals(candidate.entityId())
+                        || !PERSISTENCE_FOLLOW.equals(
+                                candidate.relationships().get("follow_target"))
+                        || candidate.slotValues().size() != 1
+                        || !BigInteger.valueOf(10000).equals(candidate.slotValues().get("shulker")))
+                    throw new IOException("Product saved WWC sourced candidate mismatch");
+            } else if ("www".equals(candidate.providerId())) {
+                if (!wwwUuid.equals(candidate.entityId())
+                        || !WOLF_COMMANDER.equals(candidate.relationships().get("commander"))
+                        || !WOLF_OWNER.equals(candidate.relationships().get("owner"))
+                        || candidate.slotValues().size() != 2
+                        || !BigInteger.valueOf(10000).equals(candidate.slotValues().get("weapon"))
+                        || !BigInteger.valueOf(5000).equals(candidate.slotValues().get("cargo:7")))
+                    throw new IOException("Product saved WWW sourced candidate mismatch");
+            } else throw new IOException("Unexpected product saved WCL provider");
+            for (BigInteger value : candidate.slotValues().values())
+                candidateValue = candidateValue.add(value);
+        }
+        if (!providerIds.equals(Set.of("wwc", "www"))
+                || !BigInteger.valueOf(25000).equals(candidateValue))
+            throw new IOException("Product saved WCL source total did not conserve 25000C");
+        getLogger().info("PAPER_A05_PRODUCT_DISCOVERED_SAVED_WCL_CANDIDATES_25000_PASSED"
+                + " providers=" + providerIds.size() + " candidates=" + farCandidates.size());
         int[] recognized = {0, 0};
         CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         AnvilRegionReader.scan(region, 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
