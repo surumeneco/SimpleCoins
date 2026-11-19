@@ -1,5 +1,13 @@
 package co.surumene.simplecoins.paper;
 
+import co.surumene.simplecoins.domain.BanEvidence;
+import co.surumene.simplecoins.domain.BanSourceCoverage;
+import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.HybridLiveSourceStage;
+import co.surumene.simplecoins.domain.SavedLiveSourcePartition;
+import java.math.BigInteger;
+import java.util.Map;
+import java.util.Set;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -97,6 +105,8 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
             if (backOwner.owner() != null || !backOwner.everyoneProtected())
                 throw new IOException("BlockLocker sign back-side Everyone override was ignored");
 
+            verifyRealCapturedMoney(world, baseY, true);
+
             Files.createDirectories(getDataFolder().toPath());
             Files.writeString(testWitness(), world.getUID() + "\n" + baseY + "\n");
             getLogger().info("PAPER_BLOCKLOCKER_115_OWNER_PASSED: unprotected Free,"
@@ -108,6 +118,83 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
             Bukkit.shutdown();
             throw new IllegalStateException("BlockLocker live ownership probe failed", e);
         }
+    }
+
+    /**
+     * Real Paper Block inventories, real CoinItemCodec ItemStacks and real
+     * BlockLocker v1.15 sign protection; only the BAN source is an explicit
+     * isolated test observation, NOT proof of a real provider-complete epoch.
+     * On restart, never reconstruct the original physical money.
+     */
+    private void verifyRealCapturedMoney(World world, int y, boolean seed)
+            throws IOException {
+        var codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        int[] xs = {3, 6, 9, 12};
+        int[] denominations = {1000, 10000, 5000, 100};
+        if (seed) {
+            for (int i = 0; i < xs.length; i++) {
+                var state = world.getBlockAt(xs[i], y, 4).getState();
+                if (!(state instanceof org.bukkit.block.Chest chest))
+                    throw new IOException("Real BlockLocker fixture is not a chest");
+                chest.getBlockInventory().setItem(
+                        0, codec.create(CoinDenomination.fromValue(denominations[i]), 1));
+            }
+        }
+        var slice = PaperLoadedChunkAssets.scan(world.getChunkAt(0, 0),
+                1024, 16384, 100000, 8 * 1024 * 1024, 16 * 1024 * 1024);
+        var original = slice.entries().stream()
+                .map(entry -> new HybridLiveSourceStage.Value(
+                        entry.physicalKey(), entry.world(), entry.amount()))
+                .toList();
+        var source = new HybridLiveSourceStage.ChunkSource(
+                new SavedLiveSourcePartition.Chunk(world.getName(), 0, 0), original);
+        BanSourceCoverage declaredFixtureBans = BanSourceCoverage.capture(
+                Set.of("isolated-provider-observation"),
+                Map.of(OWNER, List.of(new BanEvidence.Source(
+                        "isolated-provider-observation", BanEvidence.Status.CLEAR))));
+        BigInteger[] values = {
+                BigInteger.valueOf(1000), BigInteger.valueOf(10000),
+                BigInteger.valueOf(5000), BigInteger.valueOf(100)};
+        for (int i = 0; i < xs.length; i++) {
+            String key = "world/" + world.getName() + "/" + xs[i] + "," + y + ",4:0";
+            var candidates = original.stream()
+                    .filter(value -> key.equals(value.physicalKey())).toList();
+            if (candidates.size() != 1 || !values[i].equals(candidates.getFirst().amount()))
+                throw new IOException("Original Paper monetary scan omitted real chest coin: " + key);
+            var v = candidates.getFirst();
+            if (i == 3) {
+                try {
+                    PaperBlockLockerLiveClassifier.classify(
+                            source, v, world, declaredFixtureBans, Set.of());
+                    throw new IOException("Unresolved BlockLocker owner became Free");
+                } catch (IOException rejected) {
+                    if (!rejected.getMessage().contains("no verified UUID"))
+                        throw rejected;
+                }
+                continue;
+            }
+            var asset = PaperBlockLockerLiveClassifier.classify(
+                    source, v, world, declaredFixtureBans, Set.of());
+            if (!source.id().equals(asset.source())
+                    || !key.equals(asset.physicalKey())
+                    || !values[i].equals(asset.value())
+                    || !world.getName().equals(asset.world())
+                    || asset.currentlyBanned() || asset.hasPlayerdata())
+                throw new IOException("Real original coin/source/owner status changed: " + key);
+            if (i == 1) {
+                // Owner exists, but no real playerdata was created in this
+                // isolated Paper test: this source is Dead, not Personal/Free.
+                if (!OWNER.equals(asset.owner()) || asset.everyoneProtected())
+                    throw new IOException("Known protected owner lost");
+            } else if (asset.owner() != null
+                    || asset.everyoneProtected() != (i == 2))
+                throw new IOException("Real Free/Everyone priority incorrect");
+        }
+        getLogger().info("PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED"
+                + " phase=" + (seed ? "create" : "reload")
+                + " privateDead=10000 everyoneFree=5000 unprotectedFree=1000"
+                + " unknownHold=true originalValueUnchanged=true"
+                + " (BAN observation is test-only; no G0 publication)");
     }
 
     private Path testWitness() {
@@ -160,6 +247,7 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
         var backEveryone = BlockLockerLiveEvidence.observe(world.getBlockAt(21, y, 4));
         if (backEveryone.owner() != null || !backEveryone.everyoneProtected())
             throw new IOException("Saved back-side Everyone was not restored");
+        verifyRealCapturedMoney(world, y, false);
         getLogger().info("PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED"
                 + " world=" + world.getUID() + " y=" + y);
     }

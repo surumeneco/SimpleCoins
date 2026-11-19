@@ -9,6 +9,11 @@ on:
       - 'tests/paper-blocklocker-smoke/**'
       - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md'
       - 'Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md'
+      - 'Lifecycle/Works/simplecoins.a04.live-blocklocker-owner-stage.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/LiveContainerPhysicalSlot.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/LiveContainerPhysicalSlotTest.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperBlockLockerLiveClassifier.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/PaperBlockLockerLiveClassifierTest.java'
       - 'build.gradle.kts'
       - '.github/workflows/paper-blocklocker-115-live-smoke.yml'
 jobs:
@@ -36,6 +41,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-sign-paper-source.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.live-blocklocker-owner-stage.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
@@ -105,6 +112,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
           grep -F 'PAPER_BLOCKLOCKER_115_OWNER_PASSED' paper.log
+          grep -F 'PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED phase=create privateDead=10000 everyoneFree=5000 unprotectedFree=1000 unknownHold=true originalValueUnchanged=true' paper.log
           printf 'stop\n' >&3
           exec 3>&-
           wait "$pid"
@@ -147,6 +155,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a04-reloaded.log
           grep -F 'PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED' paper-a04-reloaded.log
           grep -F 'PAPER_BLOCKLOCKER_115_RELOADED_PROTECTION_PASSED' paper-a04-reloaded.log
+          grep -F 'PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED phase=reload privateDead=10000 everyoneFree=5000 unprotectedFree=1000 unknownHold=true originalValueUnchanged=true' paper-a04-reloaded.log
           if grep -Fq 'PAPER_BLOCKLOCKER_115_RELOAD_FAILED' paper-a04-reloaded.log; then
             tail -140 paper-a04-reloaded.log
             exit 1
