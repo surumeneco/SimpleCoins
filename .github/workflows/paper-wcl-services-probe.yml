@@ -13,6 +13,10 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedPdc.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java'
       - 'Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md'
+      - 'Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WclLiveTameObservation.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveOwnerEvidence.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WclLiveTameObservationTest.java'
       - 'Lifecycle/Works/simplecoins.a05.wcl-shared-wallet-identities.md'
       - 'Lifecycle/Works/simplecoins.a05.wcl-physical-slot-collisions.md'
       - 'Lifecycle/Works/simplecoins.a05.wwc-complete-slots.md'
@@ -60,7 +64,7 @@ jobs:
           ref: 896cae8313a533a3c74073a8c3150daad314ff90
           path: cat-tdd-fixed
           persist-credentials: false
-      - name: Validate A05 issue-work structure only
+      - name: Validate A05 work and bounded Confirmed Process/Model gates
         run: |
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
@@ -100,6 +104,15 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.wwc-complete-slots.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wwc-display-proxy-collision.md
+          # The Confirmed source here is A05 s0-s7, not a global G0/G3 gate.
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md --kind process-closure
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile \
+            --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md --kind model
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-tame-owner-proof.md --kind model-conformance
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
