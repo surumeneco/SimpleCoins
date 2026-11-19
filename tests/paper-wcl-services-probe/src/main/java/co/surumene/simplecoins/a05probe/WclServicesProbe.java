@@ -18,6 +18,7 @@ import co.surumene.simplecoins.paper.PaperWonderfulSavedSettlementSource;
 import co.surumene.simplecoins.paper.PaperLoadedChunkAssets;
 import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
+import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
@@ -1043,6 +1044,25 @@ public final class WclServicesProbe extends JavaPlugin {
                                 && input.path().toAbsolutePath().normalize().equals(region))
                         .count() != 1)
             throw new IOException("Paper WorldFolder discovery omitted or duplicated the far Entity MCA");
+        // Paper 26.2 persists per-dimension UUID under data/paper/metadata.dat.
+        // A manually claimed Map must not become a trusted WCL saved source.
+        var metadata = PaperSavedWorldMetadataWitness.capture(
+                boundedManifest, Map.of(world.getName(), world.getUID()));
+        if (!metadata.worldIds().equals(Map.of(world.getName(), world.getUID())))
+            throw new IOException("Paper saved World metadata differs from actual Bukkit UUID");
+        metadata.requireUnchanged();
+        try {
+            UUID wrong = new UUID(world.getUID().getMostSignificantBits() ^ 1L,
+                    world.getUID().getLeastSignificantBits());
+            PaperSavedWorldMetadataWitness.capture(
+                    boundedManifest, Map.of(world.getName(), wrong));
+            throw new IOException("False Paper saved World UUID was accepted");
+        } catch (IOException expected) {
+            if (!expected.getMessage().startsWith(
+                    "Expected World UUID disagrees with Paper 26.2 metadata: "))
+                throw expected;
+        }
+        getLogger().info("PAPER_A05_SAVED_WORLD_PAPER_METADATA_IDENTITY_PASSED");
         int[] traversed = {0, 0};
         java.util.List<PaperWonderfulSavedChunkCandidates.Candidate> candidates =
                 new java.util.ArrayList<>();
