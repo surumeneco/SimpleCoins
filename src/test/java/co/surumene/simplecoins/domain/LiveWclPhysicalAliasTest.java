@@ -79,4 +79,20 @@ class LiveWclPhysicalAliasTest {
         assertEquals(raw, asset.physicalKey());
         assertEquals(BigInteger.valueOf(5000), staged.commit().statistics().worldTotal());
     }
+
+    @Test
+    void liveChickenHeadAndWclStoredHeadCannotDoubleCount() throws Exception {
+        var staged = new SettlementAccumulator(new WorldScope(true, Set.of(), Set.of()),
+                Set.of("live", "wcl"));
+        String head = WclPhysicalSlotIdentity.keys(WOLF, "wwc", Set.of("head")).get("head");
+        assertEquals("entity/" + WOLF + "/equipment/head", head);
+        String liveHead = "world/" + WORLD + "/entity/" + WOLF + "/equipment/head";
+        staged.accept(observed("live", liveHead, WORLD, 5000));
+        assertThrows(IllegalArgumentException.class,
+                () -> staged.accept(observed("wcl", head, WORLD, 5000)));
+        staged.completeSource("live");
+        staged.completeSource("wcl");
+        assertThrows(IllegalStateException.class, staged::commit);
+    }
+
 }
