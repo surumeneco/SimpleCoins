@@ -20,6 +20,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.saved-wcl-source-stage.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-world-metadata-identity.md'
       - 'Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md'
+      - 'Lifecycle/Works/simplecoins.a05.live-equipment-mirror-once.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WclLiveEquipmentMirrorProof.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/WclLiveEquipmentMirrorProofTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WclSavedEquipmentMirrorProof.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WclSavedEquipmentMirrorProofTest.java'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperSavedWorldMetadataWitness.java'
@@ -185,6 +188,14 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md --kind model
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
             --work Lifecycle/Works/simplecoins.a05.saved-equipment-mirror-coalescing.md --kind model-conformance
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a05.live-equipment-mirror-once.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-equipment-mirror-once.md --kind process-closure
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile \
+            --work Lifecycle/Works/simplecoins.a05.live-equipment-mirror-once.md --kind model
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance \
+            --work Lifecycle/Works/simplecoins.a05.live-equipment-mirror-once.md --kind model-conformance
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
