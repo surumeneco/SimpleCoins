@@ -229,6 +229,13 @@ public final class PaperLoadedChunkAssets {
                     if (equipmentValue.signum() > 0) {
                         String heldKey = "world/" + worldId + "/entity/" +
                                 entity.getUniqueId() + "/equipment/" + names[i];
+                        // Shipped WWC renders its shulker/carpet through a
+                        // temporary stand helmet. Preserve the observed amount
+                        // but make that projection collide with the original
+                        // WCL slot, never mint a second independent source.
+                        String projection = PaperWwcDisplayPhysicalAlias.verifiedPhysicalKey(
+                                entity, names[i], worldId);
+                        if (projection != null) heldKey = projection;
                         if (!keys.add(heldKey))
                             throw new IOException("Duplicate live equipment slot: " + heldKey);
                         found.add(new Entry(heldKey, worldId, equipmentValue));
