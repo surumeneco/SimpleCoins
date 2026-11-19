@@ -71,4 +71,14 @@ class WclPhysicalSlotIdentityTest {
                         List.of("head", "carpet", "shulker", "extra")));
     }
 
+
+    @Test void shippedWwcDisplayRolesPointToTheSameWclStorageSlots() throws Exception {
+        assertEquals("entity/" + WOLF + "/wcl/wwc/carpet",
+                WclPhysicalSlotIdentity.wwcDisplayKey(WOLF, "CARPET"));
+        assertEquals("entity/" + WOLF + "/wcl/wwc/shulker",
+                WclPhysicalSlotIdentity.wwcDisplayKey(WOLF, "SHULKER_BOX"));
+        assertThrows(IOException.class,
+                () -> WclPhysicalSlotIdentity.wwcDisplayKey(WOLF, "HEAD"));
+    }
+
 }
