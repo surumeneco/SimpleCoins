@@ -984,6 +984,68 @@ public final class WclServicesProbe extends JavaPlugin {
         }
         getLogger().info("PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED"
                 + " provider=" + providerId);
+        verifyVersionedPdcRestoration(world, id, providerId, actualEntity, expected);
+    }
+
+    /**
+     * Technical schema compatibility ONLY. This clones a real saved NBT
+     * compound and synthesizes current schema metadata; it is deliberately
+     * not represented as a naturally persisted v4/v2 genome source.
+     */
+    private void verifyVersionedPdcRestoration(
+            World world, UUID id, String providerId, Map<?, ?> source,
+            PaperWonderfulLoadedEvidence.Snapshot reference) throws IOException {
+        Map<String, Object> cloned = new HashMap<>();
+        for (var entry : source.entrySet()) {
+            if (!(entry.getKey() instanceof String key))
+                throw new IOException("Saved Entity contains a non-string NBT key");
+            cloned.put(key, entry.getValue());
+        }
+        if (!(cloned.get("BukkitValues") instanceof Map<?, ?> original))
+            throw new IOException("Missing original saved PDC map");
+        Map<String, Object> pdc = new HashMap<>();
+        for (var entry : original.entrySet()) {
+            if (!(entry.getKey() instanceof String key))
+                throw new IOException("Saved BukkitValues contains a non-string key");
+            pdc.put(key, entry.getValue());
+        }
+        String ns = "wwc".equals(providerId) ? "whatawonderfulchicken" : "whatawonderfulwolf";
+        String versionKey = ns + (providerId.equals("wwc") ? ":data_version" : ":schema_version");
+        pdc.put(versionKey, providerId.equals("wwc") ? 4 : 2);
+        String genomeKey = ns + ":genome_ref";
+        pdc.put(genomeKey, "00000000-0000-0000-0000-00000000a0f1");
+        cloned.put("BukkitValues", pdc);
+        PersistentDataContainer detached = PaperWonderfulSavedPdc.reconstruct(
+                id, providerId, cloned, 2 * 1024 * 1024);
+        var result = PaperWonderfulLoadedEvidence.readStored(
+                this, id, world.getUID(), providerId, detached);
+        if (result.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                || result.snapshot().isEmpty()
+                || !result.snapshot().orElseThrow().relationships().equals(reference.relationships())
+                || !PaperWonderfulSnapshotAssets.slotValues(
+                    result.snapshot().orElseThrow(), 2 * 1024 * 1024,
+                    16 * 1024 * 1024).equals(PaperWonderfulSnapshotAssets.slotValues(
+                    reference, 2 * 1024 * 1024, 16 * 1024 * 1024)))
+            throw new IOException("Synthetic v4/v2 WCL storage compatibility failed");
+
+        pdc.remove(genomeKey);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Missing external schema genome reference was accepted");
+        } catch (IOException expectedMissing) {
+            if (!expectedMissing.getMessage().startsWith("Missing saved WCL string: "))
+                throw expectedMissing;
+        }
+        pdc.put(genomeKey, "not-a-canonical-uuid");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Invalid external genome reference was accepted");
+        } catch (IOException expectedInvalid) {
+            if (!expectedInvalid.getMessage().startsWith("Invalid saved WCL UUID: "))
+                throw expectedInvalid;
+        }
+        getLogger().info("PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED"
+                + " provider=" + providerId);
     }
 
     private static UUID readSavedUuid(Object raw) throws IOException {
