@@ -48,7 +48,8 @@ class PaperBlockLockerLiveClassifierTest {
         for (var evidence : List.of(new BlockLockerLiveEvidence.Ownership(null, true),
                                     new BlockLockerLiveEvidence.Ownership(null, false))) {
             var asset = PaperBlockLockerLiveClassifier.classifyEvidence(
-                    source(), value(), evidence, bans(BanEvidence.Status.UNKNOWN),
+                    source(), value(), evidence,
+                    BanSourceCoverage.capture(Set.of("observed-provider"), Map.of()),
                     Set.of());
             assertNull(asset.owner());
             assertFalse(asset.currentlyBanned());
@@ -73,8 +74,6 @@ class PaperBlockLockerLiveClassifierTest {
         assertThrows(IOException.class, () -> PaperBlockLockerLiveClassifier.classifyEvidence(
                 source(), value(), new BlockLockerLiveEvidence.Ownership(OWNER, false),
                 missing, Set.of()));
-        assertThrows(IOException.class, () -> PaperBlockLockerLiveClassifier.classifyEvidence(
-                source(), value(), new BlockLockerLiveEvidence.Ownership(OWNER, false),
-                bans(BanEvidence.Status.UNKNOWN), Set.of(OWNER)));
+        assertThrows(IOException.class, () -> bans(BanEvidence.Status.UNKNOWN));
     }
 }
