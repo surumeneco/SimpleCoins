@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
+import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
 import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
@@ -844,6 +845,8 @@ public final class WclServicesProbe extends JavaPlugin {
                         throw new IOException("Product offline WWC shulker value mismatch: "
                                 + valueBySlot);
                     getLogger().info("PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED");
+                    assertProductSavedPdcReconstruction(world, entityId, "wwc", entity,
+                            productionStored.snapshot().orElseThrow());
                     var wrongSpecies = PaperWonderfulLoadedEvidence.readStored(
                             this, entityId, world.getUID(), "www", detached);
                     if (wrongSpecies.status() != PaperWonderfulLoadedEvidence.Status.NOT_FOUND
@@ -895,6 +898,8 @@ public final class WclServicesProbe extends JavaPlugin {
                         throw new IOException("Product offline WWW weapon/cargo values mismatch: "
                                 + valueBySlot);
                     getLogger().info("PAPER_A05_PRODUCT_SAVED_WWW_WEAPON_CARGO_VALUE_15000_PASSED");
+                    assertProductSavedPdcReconstruction(world, entityId, "www", entity,
+                            productionStored.snapshot().orElseThrow());
 
                 }
             }
@@ -923,6 +928,161 @@ public final class WclServicesProbe extends JavaPlugin {
                 + " source=entities/r.1.1.mca entities=2"
                 + " regionChunk=" + FAR_CHUNK + "," + FAR_CHUNK
                 + " totalCoins=25000");
+    }
+
+    /**
+     * Compare a typed product reconstruction of the actual Anvil compound with
+     * the independently seeded WCL PDC fixture from the same saved source.
+     * No Paper chunk/Entity API is used to load this saved object.
+     */
+    private void assertProductSavedPdcReconstruction(
+            World world, UUID id, String providerId, Map<?, ?> actualEntity,
+            PaperWonderfulLoadedEvidence.Snapshot expected) throws IOException {
+        PersistentDataContainer reconstructed = PaperWonderfulSavedPdc.reconstruct(
+                id, providerId, actualEntity, 2 * 1024 * 1024);
+        var read = PaperWonderfulLoadedEvidence.readStored(
+                this, id, world.getUID(), providerId, reconstructed);
+        if (read.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                || read.snapshot().isEmpty())
+            throw new IOException("Reconstructed saved WCL PDC reader failed: " + read);
+        var snapshot = read.snapshot().orElseThrow();
+        if (!snapshot.entityId().equals(expected.entityId())
+                || !snapshot.worldId().equals(expected.worldId())
+                || !snapshot.providerId().equals(expected.providerId())
+                || !snapshot.relationships().equals(expected.relationships())
+                || snapshot.items().size() != expected.items().size())
+            throw new IOException("Reconstructed saved WCL identities differ from verified source");
+        Map<String, byte[]> expectedBytes = new HashMap<>();
+        Map<String, byte[]> restoredBytes = new HashMap<>();
+        for (var item : expected.items()) {
+            if (expectedBytes.putIfAbsent(item.slot(), item.bytes()) != null)
+                throw new IOException("Duplicate reference WCL slot");
+        }
+        for (var item : snapshot.items()) {
+            if (restoredBytes.putIfAbsent(item.slot(), item.bytes()) != null)
+                throw new IOException("Duplicate reconstructed WCL slot");
+        }
+        if (!restoredBytes.keySet().equals(expectedBytes.keySet()))
+            throw new IOException("Reconstructed WCL slots missing or added");
+        for (String slot : expectedBytes.keySet())
+            if (!Arrays.equals(expectedBytes.get(slot), restoredBytes.get(slot)))
+                throw new IOException("WCL source bytes changed during PDC reconstruction");
+        if (!PaperWonderfulSnapshotAssets.slotValues(
+                snapshot, 2 * 1024 * 1024, 16 * 1024 * 1024).equals(
+                    PaperWonderfulSnapshotAssets.slotValues(
+                            expected, 2 * 1024 * 1024, 16 * 1024 * 1024)))
+            throw new IOException("Reconstructed WCL monetary values differ");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(
+                    UUID.fromString("00000000-0000-0000-0000-00000000a0f0"),
+                    providerId, actualEntity, 2 * 1024 * 1024);
+            throw new IOException("Wrong saved Entity UUID accepted by product PDC reader");
+        } catch (IOException expectedMismatch) {
+            if (!"Saved WCL Entity UUID disagrees with selected source"
+                    .equals(expectedMismatch.getMessage()))
+                throw expectedMismatch;
+        }
+        getLogger().info("PAPER_A05_PRODUCT_SAVED_ANVIL_PDC_RECONSTRUCTION_PASSED"
+                + " provider=" + providerId);
+        verifyVersionedPdcRestoration(world, id, providerId, actualEntity, expected);
+    }
+
+    /**
+     * Technical schema compatibility ONLY. This clones a real saved NBT
+     * compound and synthesizes current schema metadata; it is deliberately
+     * not represented as a naturally persisted v4/v2 genome source.
+     */
+    private void verifyVersionedPdcRestoration(
+            World world, UUID id, String providerId, Map<?, ?> source,
+            PaperWonderfulLoadedEvidence.Snapshot reference) throws IOException {
+        Map<String, Object> cloned = new HashMap<>();
+        for (var entry : source.entrySet()) {
+            if (!(entry.getKey() instanceof String key))
+                throw new IOException("Saved Entity contains a non-string NBT key");
+            cloned.put(key, entry.getValue());
+        }
+        if (!(cloned.get("BukkitValues") instanceof Map<?, ?> original))
+            throw new IOException("Missing original saved PDC map");
+        Map<String, Object> pdc = new HashMap<>();
+        for (var entry : original.entrySet()) {
+            if (!(entry.getKey() instanceof String key))
+                throw new IOException("Saved BukkitValues contains a non-string key");
+            pdc.put(key, entry.getValue());
+        }
+        String ns = "wwc".equals(providerId) ? "whatawonderfulchicken" : "whatawonderfulwolf";
+        String versionKey = ns + (providerId.equals("wwc") ? ":data_version" : ":schema_version");
+        pdc.put(versionKey, providerId.equals("wwc") ? 4 : 2);
+        String genomeKey = ns + ":genome_ref";
+        pdc.put(genomeKey, "00000000-0000-0000-0000-00000000a0f1");
+        cloned.put("BukkitValues", pdc);
+        PersistentDataContainer detached = PaperWonderfulSavedPdc.reconstruct(
+                id, providerId, cloned, 2 * 1024 * 1024);
+        var result = PaperWonderfulLoadedEvidence.readStored(
+                this, id, world.getUID(), providerId, detached);
+        if (result.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
+                || result.snapshot().isEmpty()
+                || !result.snapshot().orElseThrow().relationships().equals(reference.relationships())
+                || !PaperWonderfulSnapshotAssets.slotValues(
+                    result.snapshot().orElseThrow(), 2 * 1024 * 1024,
+                    16 * 1024 * 1024).equals(PaperWonderfulSnapshotAssets.slotValues(
+                    reference, 2 * 1024 * 1024, 16 * 1024 * 1024)))
+            throw new IOException("Synthetic v4/v2 WCL storage compatibility failed");
+
+        pdc.remove(genomeKey);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Missing external schema genome reference was accepted");
+        } catch (IOException expectedMissing) {
+            if (!expectedMissing.getMessage().startsWith("Missing saved WCL string: "))
+                throw expectedMissing;
+        }
+        pdc.put(genomeKey, "not-a-canonical-uuid");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Invalid external genome reference was accepted");
+        } catch (IOException expectedInvalid) {
+            if (!expectedInvalid.getMessage().startsWith("Invalid saved WCL UUID: "))
+                throw expectedInvalid;
+        }
+        pdc.put(genomeKey, "00000000-0000-0000-0000-00000000a0f1");
+        pdc.put(versionKey, 99);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Unsupported saved WCL schema was accepted");
+        } catch (IOException invalidSchema) {
+            if (!invalidSchema.getMessage().startsWith("Unsupported saved "))
+                throw invalidSchema;
+        }
+        pdc.put(versionKey, providerId.equals("wwc") ? 4 : 2);
+        String physicalKey = ns + (providerId.equals("wwc")
+                ? ":equipment_shulker_box" : ":runtime_state");
+        Object actualBytes = pdc.put(physicalKey, "not a byte array");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Wrong-type saved WCL inventory was accepted");
+        } catch (IOException badType) {
+            if (!badType.getMessage().startsWith("Malformed/oversized saved WCL bytes: "))
+                throw badType;
+        }
+        pdc.put(physicalKey, actualBytes);
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 1);
+            throw new IOException("Over-budget saved WCL inventory was accepted");
+        } catch (IOException overBudget) {
+            if (!overBudget.getMessage().startsWith("Malformed/oversized saved WCL bytes: "))
+                throw overBudget;
+        }
+        Object originalSpecies = cloned.put("id", "minecraft:cow");
+        try {
+            PaperWonderfulSavedPdc.reconstruct(id, providerId, cloned, 2 * 1024 * 1024);
+            throw new IOException("Wrong species of saved WCL Entity was accepted");
+        } catch (IOException badSpecies) {
+            if (!"Saved WCL Entity species/provider mismatch".equals(badSpecies.getMessage()))
+                throw badSpecies;
+        }
+        cloned.put("id", originalSpecies);
+        getLogger().info("PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED"
+                + " provider=" + providerId);
     }
 
     private static UUID readSavedUuid(Object raw) throws IOException {
