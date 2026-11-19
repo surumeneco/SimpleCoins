@@ -815,6 +815,7 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IOException("Product saved WCL source total did not conserve 25000C");
         getLogger().info("PAPER_A05_PRODUCT_DISCOVERED_SAVED_WCL_CANDIDATES_25000_PASSED"
                 + " providers=" + providerIds.size() + " candidates=" + farCandidates.size());
+        verifyProductSavedChunkCandidateNegatives(world, boundedManifest);
         int[] recognized = {0, 0};
         CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         AnvilRegionReader.scan(region, 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
@@ -1130,6 +1131,62 @@ public final class WclServicesProbe extends JavaPlugin {
         cloned.put("id", originalSpecies);
         getLogger().info("PAPER_A05_PRODUCT_SYNTHETIC_CURRENT_PDC_SCHEMA_PASSED"
                 + " provider=" + providerId);
+    }
+
+    /**
+     * This deliberately supplies isolated, unauthoritative NBT fragments to
+     * check the product collector's fail-closed target discriminator. Only the
+     * separately verified Anvil traversal above is a real source observation.
+     */
+    private void verifyProductSavedChunkCandidateNegatives(
+            World world, WorldStorageDiscovery.Manifest manifest) throws IOException {
+        WorldStorageDiscovery.SourceFile source = manifest.worldFiles().stream()
+                .filter(f -> f.kind() == WorldStorageDiscovery.Kind.ENTITY)
+                .findFirst().orElseThrow(() -> new IOException("No saved Entity source"));
+        Map<String, Object> ordinary = Map.of(
+                "id", "minecraft:chicken",
+                "BukkitValues", Map.of("unrelatedplugin:flag", Integer.valueOf(1)));
+        var vanillaChunk = new AnvilRegionReader.Chunk(61, 61,
+                Map.of("Entities", List.of(ordinary)));
+        if (!PaperWonderfulSavedChunkCandidates.collect(this, source, world.getUID(),
+                vanillaChunk, new java.util.HashSet<>(),
+                2 * 1024 * 1024, 16 * 1024 * 1024).isEmpty())
+            throw new IOException("Ordinary non-WCL chicken was counted as WCL storage");
+
+        Map<String, Object> orphan = Map.of(
+                "id", "minecraft:chicken",
+                "BukkitValues", Map.of("whatawonderfulchicken:equipment_shulker_box",
+                        new byte[]{1, 2, 3}));
+        expectSavedCandidateFailure(source, world, orphan,
+                "Saved WCL marker/species is incomplete or contradictory");
+        Map<String, Object> wrongSpecies = Map.of(
+                "id", "minecraft:cow",
+                "BukkitValues", Map.of("whatawonderfulwolf:type", "wonderful_wolf"));
+        expectSavedCandidateFailure(source, world, wrongSpecies,
+                "Saved WCL marker/species is incomplete or contradictory");
+        Map<String, Object> both = Map.of(
+                "id", "minecraft:wolf",
+                "BukkitValues", Map.of("whatawonderfulchicken:type", "wonderful_chicken",
+                        "whatawonderfulwolf:type", "wonderful_wolf"));
+        expectSavedCandidateFailure(source, world, both,
+                "Saved Entity contains contradictory WWC/WWW identities");
+        getLogger().info("PAPER_A05_PRODUCT_SAVED_WCL_UNKNOWN_OR_CONTRADICTORY_REJECTED_PASSED");
+    }
+
+    private void expectSavedCandidateFailure(
+            WorldStorageDiscovery.SourceFile source, World world,
+            Map<String, Object> entity, String reason) throws IOException {
+        var chunk = new AnvilRegionReader.Chunk(61, 61,
+                Map.of("Entities", List.of(entity)));
+        try {
+            PaperWonderfulSavedChunkCandidates.collect(this, source, world.getUID(),
+                    chunk, new java.util.HashSet<>(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            throw new IOException("Bad saved WCL candidate was accepted");
+        } catch (IOException expected) {
+            if (!reason.equals(expected.getMessage()))
+                throw expected;
+        }
     }
 
     private static UUID readSavedUuid(Object raw) throws IOException {
