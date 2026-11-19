@@ -21,7 +21,9 @@ import org.bukkit.plugin.Plugin;
  * The caller MUST independently prove all world/region discovery,
  * source-file provenance and saved-content witnesses, select SAVED rather
  * than a shadowing LIVE chunk, and maintain the same seenEntityIds set for
- * the whole selected saved-source traversal. This method does not establish
+ * the whole selected saved-source traversal. The exact same shared wallet
+ * identity set must be used for other selected saved/live monetary sources.
+ * This method does not establish
  * any such proof, freeze writers, resolve ownership/BAN, close global wallet
  * or item identities, stage an accounting source or publish/admit anyone.
  */
@@ -58,12 +60,13 @@ public final class PaperWonderfulSavedChunkCandidates {
     public static List<Candidate> collect(
             Plugin consumer, WorldStorageDiscovery.SourceFile source, UUID worldId,
             AnvilRegionReader.Chunk chunk, Set<UUID> seenEntityIds,
-            int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes) throws IOException {
         Objects.requireNonNull(consumer, "plugin");
         Objects.requireNonNull(source, "saved source");
         Objects.requireNonNull(worldId, "world UUID");
         Objects.requireNonNull(chunk, "saved Entity chunk");
         Objects.requireNonNull(seenEntityIds, "cross-source saved Entity identities");
+        Objects.requireNonNull(seenWalletIds, "shared physical wallet UUID identities");
         if (source.kind() != WorldStorageDiscovery.Kind.ENTITY)
             throw new IOException("WCL candidate scan requires saved ENTITY Anvil source");
         if (!Bukkit.isPrimaryThread())
@@ -116,7 +119,7 @@ public final class PaperWonderfulSavedChunkCandidates {
                         + " reason=" + result.reason());
             var snapshot = result.snapshot().orElseThrow();
             Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
-                    snapshot, maxSerializedBytes, maxInflatedBytes);
+                    snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
             candidates.add(new Candidate(source, worldId, chunk.x(), chunk.z(),
                     entityId, provider, snapshot.relationships(), values));
         }

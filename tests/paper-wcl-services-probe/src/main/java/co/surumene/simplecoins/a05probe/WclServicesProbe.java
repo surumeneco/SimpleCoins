@@ -10,6 +10,7 @@ import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
+import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.wcl.api.inventory.StorageReadResult;
 import co.surumene.wcl.api.inventory.StorageSnapshot;
 import co.surumene.wcl.plugin.inventory.WonderfulStorageReader;
@@ -108,6 +109,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 getLogger().info("PAPER_A05_BOTH_PACKAGED_STORAGE_READERS_EMPTY_ENTITY_PASSED");
                 verifyPhysicalStorage(selected, world);
                 verifySerializedWclValuationBoundaries(world);
+                verifyCrossProviderWalletIdentity(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
                 switch (phase) {
                     case "baseline" -> { }
@@ -194,6 +196,55 @@ public final class WclServicesProbe extends JavaPlugin {
                 throw expected;
         }
         getLogger().info("PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED");
+    }
+
+    /**
+     * Synthetic storage snapshots containing REAL Paper wallet bytes test
+     * the cross-WCL identity context. This is not a naturally persisted
+     * WWC/WWW wallet and not complete global source deduplication.
+     */
+    private void verifyCrossProviderWalletIdentity(World world) throws IOException {
+        UUID walletId = UUID.fromString("00000000-0000-0000-0000-00000000a065");
+        var codec = new WalletItemCodec(() -> walletId, "C");
+        ItemStack wallet = codec.withBalance(codec.create(), 7000);
+        byte[] bytes = wallet.serializeAsBytes();
+        var wwc = new PaperWonderfulLoadedEvidence.Snapshot(
+                UUID.fromString("00000000-0000-0000-0000-00000000a066"),
+                world.getUID(), "wwc", Map.of(),
+                List.of(new PaperWonderfulLoadedEvidence.StoredItem("head", bytes)));
+        var www = new PaperWonderfulLoadedEvidence.Snapshot(
+                UUID.fromString("00000000-0000-0000-0000-00000000a067"),
+                world.getUID(), "www", Map.of(),
+                List.of(new PaperWonderfulLoadedEvidence.StoredItem("weapon", bytes)));
+
+        java.util.Set<UUID> shared = new java.util.HashSet<>();
+        Map<String, BigInteger> first = PaperWonderfulSnapshotAssets.slotValues(
+                wwc, 2 * 1024 * 1024, 16 * 1024 * 1024, shared);
+        if (!BigInteger.valueOf(7000).equals(first.get("head"))
+                || !shared.equals(Set.of(walletId)))
+            throw new IOException("First WCL physical wallet was not valued 7000C");
+        try {
+            PaperWonderfulSnapshotAssets.slotValues(
+                    www, 2 * 1024 * 1024, 16 * 1024 * 1024, shared);
+            throw new IOException("Cross-provider cloned wallet UUID was counted twice");
+        } catch (IOException duplicated) {
+            if (!duplicated.getMessage().startsWith("Duplicate physical wallet UUID: "))
+                throw duplicated;
+        }
+
+        UUID distinctId = UUID.fromString("00000000-0000-0000-0000-00000000a068");
+        var otherCodec = new WalletItemCodec(() -> distinctId, "C");
+        byte[] distinct = otherCodec.withBalance(otherCodec.create(), 3000)
+                .serializeAsBytes();
+        var other = new PaperWonderfulLoadedEvidence.Snapshot(
+                www.entityId(), world.getUID(), "www", Map.of(),
+                List.of(new PaperWonderfulLoadedEvidence.StoredItem("weapon", distinct)));
+        Map<String, BigInteger> second = PaperWonderfulSnapshotAssets.slotValues(
+                other, 2 * 1024 * 1024, 16 * 1024 * 1024, shared);
+        if (!BigInteger.valueOf(3000).equals(second.get("weapon"))
+                || !shared.equals(Set.of(walletId, distinctId)))
+            throw new IOException("Independent WCL wallet identity was not preserved");
+        getLogger().info("PAPER_A05_PRODUCT_CROSS_WCL_CLONED_WALLET_REJECTED_PASSED");
     }
 
     /**
@@ -723,6 +774,7 @@ public final class WclServicesProbe extends JavaPlugin {
         java.util.List<PaperWonderfulSavedChunkCandidates.Candidate> candidates =
                 new java.util.ArrayList<>();
         java.util.Set<UUID> seenCandidates = new java.util.HashSet<>();
+        java.util.Set<UUID> seenWallets = new java.util.HashSet<>();
         int[] visitedPlayers = {0};
         int[] visitedChunks = {0};
         var verifiedTraversal = WorldSnapshotTraversal.traverseVerified(
@@ -738,14 +790,14 @@ public final class WclServicesProbe extends JavaPlugin {
                             throw new IOException("Cross-world saved Entity source");
                         var sourced = PaperWonderfulSavedChunkCandidates.collect(
                                 WclServicesProbe.this, source, world.getUID(), saved,
-                                seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024);
+                                seenCandidates, seenWallets, 2 * 1024 * 1024, 16 * 1024 * 1024);
                         candidates.addAll(sourced);
                         if (saved.x() == FAR_CHUNK && saved.z() == FAR_CHUNK
                                 && !sourced.isEmpty()) {
                             try {
                                 PaperWonderfulSavedChunkCandidates.collect(
                                         WclServicesProbe.this, source, world.getUID(), saved,
-                                        seenCandidates, 2 * 1024 * 1024, 16 * 1024 * 1024);
+                                        seenCandidates, seenWallets, 2 * 1024 * 1024, 16 * 1024 * 1024);
                                 throw new IOException("Duplicate saved WCL source was accepted");
                             } catch (IOException duplicate) {
                                 if (!duplicate.getMessage().startsWith(
@@ -1164,7 +1216,7 @@ public final class WclServicesProbe extends JavaPlugin {
         var vanillaChunk = new AnvilRegionReader.Chunk(61, 61,
                 Map.of("Entities", List.of(ordinary)));
         if (!PaperWonderfulSavedChunkCandidates.collect(this, source, world.getUID(),
-                vanillaChunk, new java.util.HashSet<>(),
+                vanillaChunk, new java.util.HashSet<>(), new java.util.HashSet<>(),
                 2 * 1024 * 1024, 16 * 1024 * 1024).isEmpty())
             throw new IOException("Ordinary non-WCL chicken was counted as WCL storage");
 
@@ -1195,7 +1247,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 Map.of("Entities", List.of(entity)));
         try {
             PaperWonderfulSavedChunkCandidates.collect(this, source, world.getUID(),
-                    chunk, new java.util.HashSet<>(),
+                    chunk, new java.util.HashSet<>(), new java.util.HashSet<>(),
                     2 * 1024 * 1024, 16 * 1024 * 1024);
             throw new IOException("Bad saved WCL candidate was accepted");
         } catch (IOException expected) {
