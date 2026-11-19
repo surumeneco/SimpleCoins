@@ -24,6 +24,50 @@ spec_status: confirmed
 
 # A05 — 保存済みEntityチャンクからWCL収納を未公開候補化
 
+## Evidence
+| URI |
+| --- |
+| https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view |
+| https://github.com/surumeneco/SimpleCoins/pull/539 |
+| https://github.com/surumeneco/SimpleCoins/pull/540 |
+| https://github.com/surumeneco/SimpleCoins/pull/541 |
+
+## Scope
+| Process IDs | Changed IDs | Preserved IDs |
+| --- | --- | --- |
+| simplecoins.external-storage-provider-integration | simplecoins.a05.saved-chunk-wcl-candidates | simplecoins.settlement;simplecoins.world-source-discovery |
+
+## Technologies
+| Technology |
+| --- |
+| Java |
+| Paper |
+| JUnit |
+
+## Repositories
+| Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
+| --- | --- | --- | --- | --- | --- | --- |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a05.saved-chunk-wcl-candidates.md;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/paper/PaperWonderfulSavedChunkCandidates.java | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
+
+## Checks
+| ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
+| --- | --- | --- | --- | --- | --- | --- | --- | ---: |
+
+## Gates
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| process-closure | not-run | — |
+| model-conformance | not-run | — |
+| implementation-conformance | not-run | — |
+| semantic-review | not-run | — |
+| test-oracle-review | not-run | — |
+| red-review | not-run | — |
+| pr-review | not-run | — |
+| ci | not-run | — |
+| merge | not-run | — |
+| deployment | not-run | — |
+| real-use | not-run | — |
+
 ## Scope and provenance
 
 - 02A/02Bと既存Confirmed A05 Process/PI/TCEの範囲で、実装済みの保存PDC再構成（#541）、実WCL読取（#537）、収納額評価（#540）を一つの**未公開・読取専用・保存チャンク局所**処理に結線する。
