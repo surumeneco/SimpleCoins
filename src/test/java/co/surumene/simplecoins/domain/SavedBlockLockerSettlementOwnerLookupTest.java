@@ -2,6 +2,11 @@ package co.surumene.simplecoins.domain;
 
 import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.util.zip.DeflaterOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -135,6 +140,73 @@ class SavedBlockLockerSettlementOwnerLookupTest {
                 ban(BanEvidence.Status.CLEAR)).sourceScoped();
         assertThrows(IOException.class,()->scoped.resolve(selected,physicalChunk(),"6,65,4"),
                 "A physically selected but incorrect Region cannot supply this Chunk");
+    }
+
+    @Test void actualSelectedAnvilChunkStagesOnlyItsProvenBoundedOwner() throws Exception {
+        // Real Anvil/NBT parsing + selected SourceFile traversal, with an
+        // intentionally synthetic *prior* BlockLocker index (not G0 proof).
+        Path world=directory.resolve("without-player");
+        Path file=world.resolve("region/r.0.0.mca");
+        Files.createDirectories(file.getParent());
+        var data=new ByteArrayOutputStream();
+        try (var out=new DataOutputStream(data)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(9); out.writeUTF("block_entities");
+            out.writeByte(10); out.writeInt(1);
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:chest");
+            out.writeByte(3); out.writeUTF("x"); out.writeInt(0);
+            out.writeByte(3); out.writeUTF("y"); out.writeInt(64);
+            out.writeByte(3); out.writeUTF("z"); out.writeInt(0);
+            out.writeByte(9); out.writeUTF("Items");
+            out.writeByte(10); out.writeInt(1);
+            out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
+            out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
+            out.writeByte(3); out.writeUTF("count"); out.writeInt(1);
+            out.writeByte(10); out.writeUTF("components");
+            out.writeByte(10); out.writeUTF("minecraft:custom_data");
+            out.writeByte(10); out.writeUTF("PublicBukkitValues");
+            out.writeByte(3); out.writeUTF("simplecoins:denomination"); out.writeInt(5000);
+            out.writeByte(0); // PublicBukkitValues
+            out.writeByte(0); // custom_data
+            out.writeByte(0); // components
+            out.writeByte(0); // ItemStack
+            out.writeByte(0); // Chest
+            out.writeByte(0); // Chunk root
+        }
+        var zbytes=new ByteArrayOutputStream();
+        try (var compressor=new DeflaterOutputStream(zbytes)) {
+            compressor.write(data.toByteArray());
+        }
+        byte[] payload=zbytes.toByteArray();
+        byte[] region=new byte[3*4096];
+        ByteBuffer.wrap(region).putInt(0,(2<<8)|1);
+        ByteBuffer.wrap(region).putInt(8192,payload.length+1);
+        region[8196]=2;
+        System.arraycopy(payload,0,region,8197,payload.length);
+        Files.write(file,region);
+        var scope=new WorldScope(true,Set.of(),Set.of());
+        var manifest=WorldStorageDiscovery.discover(Map.of("world",world),scope,100);
+
+        var indexBuilder=new SavedBlockLockerPhysicalOwnerIndex.Builder();
+        var observed=new SavedBlockLockerChestSigns.Observation(
+            List.of(new SavedBlockLockerChestSigns.Position(0,64,0)),
+            List.of(new SavedBlockLockerChestSigns.AttachedSign(
+                new SavedBlockLockerChestSigns.Position(0,64,1),
+                new BlockLockerSavedProfileResolution.SignProfiles(
+                    BlockLockerHeaderMatcher.Type.PRIVATE,Optional.of(OWNER),false,true))));
+        indexBuilder.accept("world",observed,COMPLETE);
+        var lookup=SavedBlockLockerSettlementOwnerLookup.fromIndex(
+            indexBuilder.finish(),manifest,ban(BanEvidence.Status.CLEAR));
+        var staged=SettlementScanRunner.stageWithBanCoverage(
+            manifest,scope,ban(BanEvidence.Status.CLEAR),lookup.sourceScoped(),
+            (selectedWorld, chunk)->Map.of(),4096,4096);
+        var accounting=staged.pending().commit();
+        assertEquals(BigInteger.valueOf(5000),accounting.dead());
+        assertEquals(BigInteger.ZERO,accounting.free());
+        assertTrue(accounting.personalBalances().isEmpty());
+        assertEquals(AssetOwner.DeadReason.MISSING_PLAYERDATA,
+            accounting.deadLocations().getFirst().reason());
+        assertNotNull(staged.savedContentWitness());
     }
 
     @Test void positivePhysicalOwnerUsesIndependentBanAndPlayerdataForSettlementStaging() throws Exception {
