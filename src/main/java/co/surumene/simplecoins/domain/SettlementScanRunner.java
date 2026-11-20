@@ -25,6 +25,26 @@ public final class SettlementScanRunner {
                 throws IOException;
     }
 
+    /**
+     * Optional physical SAVED REGION ownership interface. Unlike the legacy
+     * world/position callback, this receives the exact selected file and
+     * decoded Chunk from the verified traversal, before value staging.
+     * It does not imply global source/writer-epoch completeness.
+     */
+    @FunctionalInterface
+    public interface SourceBlockOwnerLookup extends BlockOwnerLookup {
+        BlockEntitySettlementImport.Ownership resolve(
+                WorldStorageDiscovery.SourceFile source,
+                AnvilRegionReader.Chunk chunk,
+                String blockPosition) throws IOException;
+
+        @Override
+        default BlockEntitySettlementImport.Ownership resolve(
+                String world, String blockPosition) throws IOException {
+            throw new IOException("Source-scoped SAVED owner lookup requires actual file and Chunk");
+        }
+    }
+
     @FunctionalInterface
     public interface EntityOwnerLookup {
         Map<String, ResolvedEntitySettlementImport.Ownership> resolve(
@@ -128,16 +148,15 @@ public final class SettlementScanRunner {
         // before any world data is read or any asset staged.
         Set<UUID> banned = banSources.bannedAmong(manifest.playerDataFiles().keySet());
         Set<UUID> existingPlayers = manifest.playerDataFiles().keySet();
-        BlockOwnerLookup validatedBlocks = (world, position) -> {
-            var owner = blockOwners.resolve(world, position);
-            if (owner == null) return null;
-            if (owner.owner() == null || owner.everyoneProtected())
-                return new BlockEntitySettlementImport.Ownership(
-                        owner.owner(), owner.everyoneProtected(), false, false);
-            return new BlockEntitySettlementImport.Ownership(
-                    owner.owner(), false, banSources.currentlyBanned(owner.owner()),
-                    existingPlayers.contains(owner.owner()));
-        };
+        // Preserve the original source-scoped capability through BAN validation.
+        // Wrapping it as an unqualified lambda would drop the actual saved
+        // Chunk and incorrectly invoke the fail-stop legacy overload.
+        BlockOwnerLookup validatedBlocks = blockOwners instanceof SourceBlockOwnerLookup scoped
+                ? (SourceBlockOwnerLookup) (source, chunk, position) ->
+                        validatedBlockOwner(scoped.resolve(source, chunk, position),
+                                banSources, existingPlayers)
+                : (world, position) -> validatedBlockOwner(
+                        blockOwners.resolve(world, position), banSources, existingPlayers);
         EntityOwnerLookup validatedEntities = (world, chunk) -> {
             var owners = entityOwners.resolve(world, chunk);
             if (owners == null)
@@ -160,6 +179,18 @@ public final class SettlementScanRunner {
         return stage(manifest, scope, banned, validatedBlocks, validatedEntities,
                 maximumCompressedBytes, maximumInflatedBytes, sharedWalletIds, partition,
                 savedSupplement);
+    }
+
+    private static BlockEntitySettlementImport.Ownership validatedBlockOwner(
+            BlockEntitySettlementImport.Ownership owner,
+            BanSourceCoverage banSources, Set<UUID> existingPlayers) throws IOException {
+        if (owner == null) return null;
+        if (owner.owner() == null || owner.everyoneProtected())
+            return new BlockEntitySettlementImport.Ownership(
+                    owner.owner(), owner.everyoneProtected(), false, false);
+        return new BlockEntitySettlementImport.Ownership(
+                owner.owner(), false, banSources.currentlyBanned(owner.owner()),
+                existingPlayers.contains(owner.owner()));
     }
 
     public static Staged stage(WorldStorageDiscovery.Manifest manifest,
@@ -279,7 +310,9 @@ public final class SettlementScanRunner {
                         if (source.kind() == WorldStorageDiscovery.Kind.REGION) {
                             BlockEntitySettlementImport.stageChunk(
                                     pending, id, source.world(), chunk.nbt(),
-                                    position -> blockOwners.resolve(source.world(), position),
+                                    position -> blockOwners instanceof SourceBlockOwnerLookup scoped
+                                            ? scoped.resolve(source, chunk, position)
+                                            : blockOwners.resolve(source.world(), position),
                                     seenSavedWallets);
                         } else {
                             FreeEntitySettlementImport.stageChunk(
