@@ -1,0 +1,28 @@
+name: Phase7 URI shape characterization JUnit
+on:
+  push:
+    branches:
+      - feature/phase7-resource-pack-uri-shape-characterization-20261105-queue-a
+  workflow_dispatch:
+jobs:
+  targeted-junit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Run exact URI shape JUnit
+        run: gradle --no-daemon clean test --tests 'co.surumene.simplecoins.domain.ResourcePackUrlUriShapeCharacterizationTest'
+      - name: Verify four non-skipped JUnit cases in fresh XML
+        run: >-
+          python3 -c 'import glob, xml.etree.ElementTree as ET;
+          p=glob.glob("build/test-results/test/TEST-*ResourcePackUrlUriShapeCharacterizationTest.xml");
+          assert len(p)==1, f"Expected one XML report, found {len(p)}";
+          tests=ET.parse(p[0]).getroot().findall(".//testcase");
+          assert len(tests)==4 and all(c.find("skipped") is None and c.find("failure") is None and c.find("error") is None for c in tests), "Expected four passing, executed JUnit cases";
+          print("Verified 4 executed, non-skipped JUnit cases")'
