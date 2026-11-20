@@ -40,7 +40,22 @@ jobs:
           python "$flow" conformance --work "$work" --kind model-conformance
           python "$flow" compile --work "$work" --kind vectors
           python "$flow" compile --work "$work" --kind queue
-          python "$flow" compile --work "$work" --kind tests
+          # cat_flow's generic compile facade defaults to Vitest and has no
+          # --framework switch. Use the canonical compiler's explicit JUnit
+          # contract, with the same script-owned model/vectors/current Queue.
+          root=product/Lifecycle/Works/.cat-flow/cache
+          python cat/.cat-system/scripts/cat_compile_v2.py tests \
+            "$root/a05-wcl-consumer-verdict-model.json" \
+            "$root/a05-wcl-consumer-verdict-vectors.json" \
+            product/tests/cat/a05-wcl-consumer-junit-binding.json \
+            --queue "$root/a05-wcl-consumer-verdict-queue.json" \
+            --framework junit \
+            --process product/docs/cat/confirmed/a05-wcl-consumer-process.md \
+            --pi product/docs/cat/confirmed/a05-wcl-consumer-pi.md \
+            --tce product/docs/cat/confirmed/a05-wcl-consumer-tce.md \
+            --allow-partial \
+            -o product/Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
+          grep -F 'GeneratedA05WclEvidence' product/Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
           find product/Lifecycle/Works/.cat-flow -type f | sort
       - name: Upload bounded diagnostics
         if: always()
