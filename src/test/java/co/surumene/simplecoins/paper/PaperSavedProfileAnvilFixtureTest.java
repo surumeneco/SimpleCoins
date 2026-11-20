@@ -130,12 +130,12 @@ class PaperSavedProfileAnvilFixtureTest {
         // All local saved chest groups are discovered from the actual REGION
         // manifest, not manually supplied positions/proof flags. The double
         // chest spans Chunks 0 and 1 but is observed exactly once.
-        Path worldRoot=Path.of(path).getParent().getParent();
-        var scope=new WorldScope(true,Set.of(),Set.of());
-        var discovered=WorldStorageDiscovery.discover(
-            Map.of("saved-fixture",worldRoot),scope,100000);
+        Path batchWorldRoot=Path.of(path).getParent().getParent();
+        var batchScope=new WorldScope(true,Set.of(),Set.of());
+        var batchDiscovered=WorldStorageDiscovery.discover(
+            Map.of("saved-fixture",batchWorldRoot),batchScope,100000);
         var batch=SavedBlockLockerTerrainObservations.capture(
-            discovered,scope,2*1024*1024,16*1024*1024,10000,
+            batchDiscovered,batchScope,2*1024*1024,16*1024*1024,10000,
             Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
             PaperSavedBlockLockerSignText.nativeText());
         assertEquals(6,batch.chests().size(),
@@ -148,7 +148,7 @@ class PaperSavedProfileAnvilFixtureTest {
         assertEquals(1,batch.chests().stream().filter(
             c->c.observation().storageMembers().size()==2).count());
         assertTrue(batch.chests().stream().allMatch(
-            c->c.sources().stream().allMatch(discovered.worldFiles()::contains)),
+            c->c.sources().stream().allMatch(batchDiscovered.worldFiles()::contains)),
             "No source may be synthesized outside the selected manifest");
         assertTrue(batch.chests().stream().anyMatch(c->
             c.observation().storageMembers().contains(
