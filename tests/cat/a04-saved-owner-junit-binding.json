@@ -1,7 +1,7 @@
 {
   "schema": "cat-junit-driver-binding/v1",
   "process": "simplecoins.blocklocker.saved-owner",
-  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_package": "co.surumene.simplecoins.a04.generated",
   "test_class": "GeneratedA04SavedOwnerTest",
   "driver_class": "co.surumene.simplecoins.domain.A04SavedOwnerEvidenceDriver",
   "capability_scope": {

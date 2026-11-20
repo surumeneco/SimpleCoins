@@ -45,7 +45,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md;tests/cat/a04-saved-owner-junit-binding.json;src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedOwnerVerdict.java;src/test/java/co/surumene/simplecoins/domain/A04SavedOwnerEvidenceDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;tools/run_cat_a04_junit.py;.github/workflows/a04-saved-owner-verdict.yml | src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedOwnerVerdict.java | src/test/java/co/surumene/simplecoins/domain/A04SavedOwnerEvidenceDriver.java;src/test/java/co/surumene/simplecoins/domain/generated/*;tools/run_cat_a04_junit.py;.github/workflows/a04-saved-owner-verdict.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md;tests/cat/a04-saved-owner-junit-binding.json;src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedOwnerVerdict.java;src/test/java/co/surumene/simplecoins/domain/A04SavedOwnerEvidenceDriver.java;src/test/java/co/surumene/simplecoins/a04/generated/*;tools/run_cat_a04_junit.py;.github/workflows/a04-saved-owner-verdict.yml | src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedOwnerVerdict.java | src/test/java/co/surumene/simplecoins/domain/A04SavedOwnerEvidenceDriver.java;src/test/java/co/surumene/simplecoins/a04/generated/*;tools/run_cat_a04_junit.py;.github/workflows/a04-saved-owner-verdict.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |

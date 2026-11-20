@@ -18,12 +18,12 @@ def main(args: list[str]) -> int:
     case_id = args[1]
     root = Path(__file__).resolve().parents[1]
     reports = root / 'build/test-results/test'
-    pattern = 'TEST-co.surumene.simplecoins.domain.generated.GeneratedA04SavedOwnerCase*Test.xml'
+    pattern = 'TEST-co.surumene.simplecoins.a04.generated.GeneratedA04SavedOwnerCase*Test.xml'
     for old in reports.glob(pattern):
         old.unlink()
     command = [
         'gradle', '--no-daemon', ':test',
-        '--tests', 'co.surumene.simplecoins.domain.generated.GeneratedA04SavedOwnerCase*Test',
+        '--tests', 'co.surumene.simplecoins.a04.generated.GeneratedA04SavedOwnerCase*Test',
     ]
     try:
         result = subprocess.run(command, cwd=root, capture_output=True, text=True,
