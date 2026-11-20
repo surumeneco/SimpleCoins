@@ -49,8 +49,50 @@ public final class SavedBlockLockerTerrainObservations {
 
     private record CapturedChunk(WorldStorageDiscovery.SourceFile source,
                                  AnvilRegionReader.Chunk chunk) {}
-    private record PhysicalChest(SavedBlockLockerChestSigns.Position position,
-                                 WorldStorageDiscovery.SourceFile source) {}
+    private record PhysicalChest(SavedBlockLockerChestSigns.Position position) {}
+
+    /**
+     * A chest ownership observation depends on EVERY selected Chunk inspected
+     * by SavedBlockLockerChestSigns.observe: storage members plus north/east/
+     * south/west/up. In particular, "no sign" is source-backed evidence about
+     * an adjacent Chunk, not only about the chest's own Region.
+     */
+    private static List<WorldStorageDiscovery.SourceFile> observedNeighborhoodSources(
+            SavedBlockLockerChestSigns.Observation observation,
+            Map<SavedBlockLockerChestSigns.ChunkPosition,
+                    WorldStorageDiscovery.SourceFile> sourceByChunk) throws IOException {
+        if (observation == null || observation.storageMembers().isEmpty())
+            throw new IOException("No physical chest members to provenance");
+        Set<WorldStorageDiscovery.SourceFile> dependencies = new HashSet<>();
+        for (var member : observation.storageMembers()) {
+            int x = member.x(), z = member.z();
+            try {
+                addObservedSource(dependencies, sourceByChunk, x, z);
+                addObservedSource(dependencies, sourceByChunk, x, Math.subtractExact(z, 1));
+                addObservedSource(dependencies, sourceByChunk, Math.addExact(x, 1), z);
+                addObservedSource(dependencies, sourceByChunk, x, Math.addExact(z, 1));
+                addObservedSource(dependencies, sourceByChunk, Math.subtractExact(x, 1), z);
+                Math.addExact(member.y(), 1); // up: same x/z Chunk
+            } catch (ArithmeticException overflow) {
+                throw new IOException("SAVED sign-neighborhood coordinate overflow", overflow);
+            }
+        }
+        return dependencies.stream()
+                .sorted(Comparator.comparing(s -> s.path().toString())).toList();
+    }
+
+    private static void addObservedSource(
+            Set<WorldStorageDiscovery.SourceFile> dependencies,
+            Map<SavedBlockLockerChestSigns.ChunkPosition,
+                    WorldStorageDiscovery.SourceFile> sourceByChunk,
+            int x, int z) throws IOException {
+        var chunk = new SavedBlockLockerChestSigns.ChunkPosition(
+                Math.floorDiv(x, 16), Math.floorDiv(z, 16));
+        var source = sourceByChunk.get(chunk);
+        if (source == null || source.kind() != WorldStorageDiscovery.Kind.REGION)
+            throw new IOException("Missing selected SAVED sign-neighborhood Region: " + chunk);
+        dependencies.add(source);
+    }
 
     private static final Comparator<SavedBlockLockerChestSigns.Position> POSITION_ORDER =
             Comparator.comparingInt(SavedBlockLockerChestSigns.Position::x)
@@ -116,11 +158,14 @@ public final class SavedBlockLockerTerrainObservations {
             String world = worldEntry.getKey();
             Map<SavedBlockLockerChestSigns.ChunkPosition, Map<String, Object>> terrain =
                     new HashMap<>();
+            Map<SavedBlockLockerChestSigns.ChunkPosition,
+                    WorldStorageDiscovery.SourceFile> sourceByChunk = new HashMap<>();
             Map<SavedBlockLockerChestSigns.Position, PhysicalChest> physical = new HashMap<>();
             for (var entry : worldEntry.getValue().entrySet()) {
                 var captured = entry.getValue();
                 var chunk = captured.chunk();
                 terrain.put(entry.getKey(), chunk.nbt());
+                sourceByChunk.put(entry.getKey(), captured.source());
                 Object rawEntities = chunk.nbt().get("block_entities");
                 if (rawEntities == null) continue;
                 if (!(rawEntities instanceof List<?> entities))
@@ -142,7 +187,7 @@ public final class SavedBlockLockerTerrainObservations {
                         throw new IOException("Saved chest BlockEntity disagrees with terrain state");
                     var position = new SavedBlockLockerChestSigns.Position(x, y, z);
                     if (physical.putIfAbsent(position,
-                            new PhysicalChest(position, captured.source())) != null)
+                            new PhysicalChest(position)) != null)
                         throw new IOException("Duplicate physical SAVED chest BlockEntity: " + position);
                 }
             }
@@ -151,14 +196,13 @@ public final class SavedBlockLockerTerrainObservations {
                 if (accounted.contains(position)) continue;
                 var observation = SavedBlockLockerChestSigns.observe(terrain, position,
                         privateHeaders, moreHeaders, everyoneAliases, decoder);
-                List<WorldStorageDiscovery.SourceFile> sources = new ArrayList<>();
                 for (var member : observation.storageMembers()) {
                     var located = physical.get(member);
                     if (located == null || !accounted.add(member))
                         throw new IOException("Unresolved or overlapping SAVED chest member: " + member);
-                    if (!sources.contains(located.source())) sources.add(located.source());
                 }
-                sources.sort(Comparator.comparing(s -> s.path().toString()));
+                // Include source evidence for negative sign observations too.
+                var sources = observedNeighborhoodSources(observation, sourceByChunk);
                 groups.add(new ObservedChest(world, sources, observation));
             }
             if (accounted.size() != physical.size())
