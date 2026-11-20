@@ -24,21 +24,22 @@ public final class PaperNativeSaveAgent {
     private PaperNativeSaveAgent() {}
 
     private static final ClassDesc HOOK_CLASS =
-            ClassDesc.of("co.surumene.simplecoins.a02agent.PaperNativeSaveAgent");
+            ClassDesc.of("co.surumene.simplecoins.a02agent.NativeSaveHook");
 
     public static void premain(String args, Instrumentation instrumentation) {
-        // Paper's plugin/server classloaders need not delegate to the loader
-        // that resolved premain. Make the hook visible from bootstrap so that
-        // instrumented CraftPlayer has a resolvable INVOKESTATIC target.
-        // This is test-only; no third-party JAR or Paper class is overwritten.
+        // Paper's child classloader cannot see the Agent's system-loader
+        // classes. Add ONLY a dedicated hook JAR, not this whole Agent JAR:
+        // the latter would bootstrap-load anonymous transformer classes and
+        // break their package-private linkage to the app-loaded premain class.
         try {
-            var source = PaperNativeSaveAgent.class.getProtectionDomain()
-                    .getCodeSource().getLocation().toURI();
+            String hookJar = System.getProperty("a02.nativeAgent.hookJar");
+            if (hookJar == null || hookJar.isBlank())
+                throw new IllegalStateException("Missing explicit isolated hook JAR path");
             instrumentation.appendToBootstrapClassLoaderSearch(
-                    new JarFile(Path.of(source).toFile()));
+                    new JarFile(Path.of(hookJar).toFile()));
         } catch (Exception invalid) {
             throw new IllegalStateException(
-                    "Cannot expose native save hook to Paper classloaders", invalid);
+                    "Cannot expose isolated save hook to Paper classloader", invalid);
         }
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override public byte[] transform(ClassLoader loader, String className,
@@ -77,12 +78,4 @@ public final class PaperNativeSaveAgent {
         System.out.println("PAPER_A02_NATIVE_AGENT_TEST_ONLY_INSTALLED");
     }
 
-    /** Refuse the selected entry before the method body reaches playerdata IO. */
-    public static void beforeNativeSave() {
-        if (Boolean.getBoolean("a02.nativeAgent.closed")) {
-            System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED");
-            throw new IllegalStateException(
-                    "A02 test-only Paper native save rejected during closed proof interval");
-        }
-    }
 }
