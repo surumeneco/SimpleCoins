@@ -11,6 +11,11 @@ import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
 import co.surumene.simplecoins.domain.SavedBlockLockerSignSummary;
 import co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate;
 import co.surumene.simplecoins.domain.SavedBlockLockerPhysicalOwnerIndex;
+import co.surumene.simplecoins.domain.SavedBlockLockerSettlementOwnerLookup;
+import co.surumene.simplecoins.domain.BanEvidence;
+import co.surumene.simplecoins.domain.BanSourceCoverage;
+import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.BlockLockerSavedOwnerVerdict;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -179,6 +184,51 @@ class PaperSavedProfileAnvilFixtureTest {
             unprotected,SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
         assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,unverifiedBlank.verdict(),
             "No physical protection signs in a local fixture is not global non-protection proof");
+
+        // Real Paper 26.2 stopped-world Anvil bytes, selected by a fresh
+        // discovery rather than inventing the SourceFile or decoded Chunk.
+        // The four positive proof booleans below are TEST-ONLY classification
+        // inputs; they do not constitute the all-writer G0 generation barrier.
+        Path worldRoot=Path.of(path);
+        for (int i=0;i<5;i++) worldRoot=worldRoot.getParent();
+        var discovered=WorldStorageDiscovery.discover(
+            Map.of("saved-fixture",worldRoot),new WorldScope(true,Set.of(),Set.of()),100);
+        final Path actualRegion=Path.of(path).toAbsolutePath().normalize();
+        var selectedRegion=discovered.worldFiles().stream()
+            .filter(file->file.kind()==WorldStorageDiscovery.Kind.REGION
+                && file.path().toAbsolutePath().normalize().equals(actualRegion))
+            .findFirst().orElseThrow(
+                ()->new IOException("Real Paper saved REGION missing from source discovery"));
+        var actualChest=SavedBlockLockerChestSigns.observe(observedChunks,
+            new SavedBlockLockerChestSigns.Position(6,fixtureY,4),
+            Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+            PaperSavedBlockLockerSignText.nativeText());
+        var localIndex=new SavedBlockLockerPhysicalOwnerIndex.Builder();
+        localIndex.accept("saved-fixture",actualChest,
+            new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,false));
+        var banRows=new HashMap<UUID,List<BanEvidence.Source>>();
+        for (UUID player : discovered.playerDataFiles().keySet())
+            banRows.put(player,List.of(new BanEvidence.Source(
+                "paper-profile",BanEvidence.Status.CLEAR)));
+        banRows.put(OWNER,List.of(new BanEvidence.Source(
+            "paper-profile",BanEvidence.Status.CLEAR)));
+        var coveredBan=BanSourceCoverage.capture(Set.of("paper-profile"),banRows);
+        var sourceScoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(
+            localIndex.finish(),discovered,coveredBan).sourceScoped();
+        String physicalBlock="6,"+fixtureY+",4";
+        var actualOwner=sourceScoped.resolve(selectedRegion,
+            new AnvilRegionReader.Chunk(0,0,terrain.get(0)),physicalBlock);
+        assertEquals(OWNER,actualOwner.owner(),
+            "Real Anvil physical chest must agree with its saved owner index");
+        var orphaned=new HashMap<String,Object>(terrain.get(0));
+        orphaned.put("sections",List.of(Map.of("Y",Math.floorDiv(fixtureY,16),
+            "block_states",Map.of("palette",List.of(Map.of("Name","minecraft:stone"))))));
+        assertThrows(IOException.class,()->sourceScoped.resolve(selectedRegion,
+            new AnvilRegionReader.Chunk(0,0,orphaned),physicalBlock),
+            "A chest BlockEntity left behind in stone must not inherit a principal");
+        System.out.println("PAPER_A04_REAL_SOURCE_CHEST_PALETTE_OWNER_PASSED"
+            + " actualRegionSelected=true orphanedTileRejected=true"
+            + " (test-only local proof flags; no G0 writer/epoch authorization)");
         System.out.println("PAPER_A04_SAVED_PHYSICAL_OWNER_INDEX_HOLD_PASSED"
             + " savedProtectedHolds=5 (no independent generation evidence)");
         System.out.println("PAPER_A04_SAVED_UNPUBLISHED_VERDICT_GATE_PASSED"
