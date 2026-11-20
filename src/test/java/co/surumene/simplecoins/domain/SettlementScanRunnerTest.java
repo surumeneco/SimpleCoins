@@ -164,6 +164,60 @@ class SettlementScanRunnerTest {
         assertEquals(BigInteger.ZERO, staged.pending().commit().free());
     }
 
+    @Test void scopedBlockOwnerMustUseIndependentBanCoverageNotSubmittedOwnerFlags()
+            throws Exception {
+        Path saved = region(true);
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope, 100);
+        UUID principal = UUID.fromString("00000000-0000-0000-0000-000000000064");
+        var completeBan = BanSourceCoverage.capture(Set.of("paper-profile"),
+                Map.of(principal, List.of(
+                        new BanEvidence.Source("paper-profile", BanEvidence.Status.BANNED))));
+        var called = new java.util.concurrent.atomic.AtomicInteger();
+        SettlementScanRunner.SourceBlockOwnerLookup sourceOwner = (source, chunk, position) -> {
+            assertEquals(saved.toAbsolutePath().normalize(), source.path().toAbsolutePath().normalize());
+            called.incrementAndGet();
+            return new BlockEntitySettlementImport.Ownership(
+                    principal, false, false, true); // Deliberately false untrusted owner flags
+        };
+        var stage = SettlementScanRunner.stageWithBanCoverage(
+                manifest, scope, completeBan, sourceOwner,
+                (world, chunk) -> Map.of(), 4096, 4096);
+        assertEquals(1, called.get());
+        var result = stage.pending().commit();
+        assertFalse(result.personalBalances().containsKey(principal),
+                "An independently BANNED owner must not be registered as PERSONAL");
+
+        var missingBan = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of());
+        assertThrows(IOException.class, () -> SettlementScanRunner.stageWithBanCoverage(
+                manifest, scope, missingBan, sourceOwner,
+                (world, chunk) -> Map.of(), 4096, 4096),
+                "No BAN observation for SAVED owner may become CLEAR by default");
+    }
+
+    @Test void shadowedSavedRegionDoesNotCallScopedBlockOwner() throws Exception {
+        region(true);
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope, 100);
+        var loaded = new SavedLiveSourcePartition.Chunk("world", 0, 0);
+        var partition = new SavedLiveSourcePartition(List.of(loaded), List.of());
+        partition.liveChunk(loaded);
+        var called = new java.util.concurrent.atomic.AtomicInteger();
+        SettlementScanRunner.SourceBlockOwnerLookup sourceOwner = (source, chunk, position) -> {
+            called.incrementAndGet();
+            throw new IOException("Shadowed SAVED chunk must not resolve a disk BlockLocker owner");
+        };
+        var stage = SettlementScanRunner.stageWithBanCoverage(
+                manifest, scope, BanSourceCoverage.capture(Set.of("paper-profile"), Map.of()),
+                sourceOwner, (world, chunk) -> Map.of(), 4096, 4096,
+                new java.util.HashSet<>(), partition);
+        assertEquals(0, called.get());
+        assertThrows(IllegalStateException.class, stage.pending()::commit,
+                "A selected LIVE chunk remains an unfulfilled monetary source");
+    }
+
     @Test void ownedEntityEquipmentRequiresExplicitResolvedOwnership() throws Exception {
         UUID entityId = UUID.randomUUID(), owner = UUID.randomUUID();
         Path file = equippedEntityRegion(entityId);
