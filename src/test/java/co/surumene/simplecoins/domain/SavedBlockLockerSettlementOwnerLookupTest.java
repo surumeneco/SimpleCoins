@@ -142,6 +142,20 @@ class SavedBlockLockerSettlementOwnerLookupTest {
                 "A physically selected but incorrect Region cannot supply this Chunk");
     }
 
+    @Test void orphanChestBlockEntityWithStonePaletteCannotClaimSavedBlockLockerOwner() throws Exception {
+        var selected=selectedRegion(false);
+        var scoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(index(),
+            selected.manifest(),ban(BanEvidence.Status.CLEAR)).sourceScoped();
+        var terrain=new java.util.HashMap<String,Object>(physicalChunk().nbt());
+        terrain.put("xPos",0);
+        terrain.put("zPos",0);
+        terrain.put("sections",List.of(Map.of("Y",4,"block_states",
+            Map.of("palette",List.of(Map.of("Name","minecraft:stone"))))));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),
+            new AnvilRegionReader.Chunk(0,0,terrain),"6,65,4"),
+            "A chest BlockEntity without an actual chest block state is orphaned evidence");
+    }
+
     @Test void actualSelectedAnvilChunkStagesOnlyItsProvenBoundedOwner() throws Exception {
         // Real Anvil/NBT parsing + selected SourceFile traversal, with an
         // intentionally synthetic *prior* BlockLocker index (not G0 proof).
