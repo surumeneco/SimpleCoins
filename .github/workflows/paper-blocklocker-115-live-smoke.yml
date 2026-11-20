@@ -150,7 +150,7 @@ jobs:
           saved="$PWD/smoke/world/dimensions/minecraft/overworld/region/r.0.0.mca"
           test -s "$saved"
           JAVA_TOOL_OPTIONS="-Da04.saved.fixture=$saved" \
-            gradle --no-daemon test --tests \
+            gradle --no-daemon :test --tests \
             'co.surumene.simplecoins.paper.PaperSavedProfileAnvilFixtureTest'
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
