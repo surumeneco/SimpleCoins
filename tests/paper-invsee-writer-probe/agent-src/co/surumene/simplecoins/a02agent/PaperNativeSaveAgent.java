@@ -44,19 +44,30 @@ public final class PaperNativeSaveAgent {
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override public byte[] transform(ClassLoader loader, String className,
                     Class<?> redefining, ProtectionDomain protection, byte[] source) {
-                if (!"org/bukkit/craftbukkit/entity/CraftPlayer".equals(className))
-                    return null;
+                boolean craft = "org/bukkit/craftbukkit/entity/CraftPlayer".equals(className);
+                boolean nms = "net/minecraft/world/level/storage/PlayerDataStorage".equals(className);
+                if (!craft && !nms) return null;
+                boolean transformNms = nms
+                        && Boolean.getBoolean("a02.nativeAgent.instrumentNmsSave");
                 var api = ClassFile.of();
                 AtomicInteger modified = new AtomicInteger();
                 byte[] result = api.transformClass(api.parse(source), (builder, element) -> {
                     if (element instanceof MethodModel method
-                            && method.methodName().stringValue().equals("saveData")
-                            && method.methodTypeSymbol().descriptorString().equals("()V")) {
+                            && ((craft && method.methodName().stringValue().equals("saveData")
+                                        && method.methodTypeSymbol().descriptorString().equals("()V"))
+                                || (nms && method.methodName().stringValue().equals("save")
+                                        && method.methodTypeSymbol().descriptorString().startsWith(
+                                            "(Lnet/minecraft/server/level/ServerPlayer;)")))) {
                         modified.incrementAndGet();
+                        if (nms && !transformNms) {
+                            builder.with(element);
+                            return;
+                        }
                         builder.transformMethod(method, MethodTransform.transformingCode(
                                 new CodeTransform() {
                                     @Override public void atStart(CodeBuilder code) {
-                                        code.invokestatic(HOOK_CLASS, "beforeNativeSave",
+                                        code.invokestatic(HOOK_CLASS,
+                                                nms ? "beforeNmsSave" : "beforeNativeSave",
                                                 MethodTypeDesc.ofDescriptor("()V"));
                                     }
 
@@ -70,7 +81,15 @@ public final class PaperNativeSaveAgent {
                 });
                 if (modified.get() != 1)
                     throw new IllegalStateException(
-                            "Unexpected Paper CraftPlayer.saveData method count " + modified.get());
+                            "Unexpected Paper " + (nms ? "NMS PlayerDataStorage.save"
+                                    : "CraftPlayer.saveData")
+                                    + " method count " + modified.get());
+                if (nms) {
+                    System.out.println("PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_FOUND");
+                    if (transformNms) System.out.println(
+                            "PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_INSTRUMENTED");
+                    return transformNms ? result : null;
+                }
                 System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED");
                 return result;
             }
