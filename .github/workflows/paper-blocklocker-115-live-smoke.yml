@@ -133,6 +133,8 @@ jobs:
             | tee paper-blocklocker-115-saved-signs.log
           grep -F 'PAPER_A04_FIVE_REAL_SAVED_BLOCKLOCKER_SIGNS_ACROSS_CHUNKS_PASSED' \
             paper-blocklocker-115-saved-signs.log
+          grep -F 'PAPER_A04_REAL_SAVED_SIGN_CHEST_TOPOLOGY_PASSED' \
+            paper-blocklocker-115-saved-signs.log
           test "$(grep -c '^PAPER_A04_SAVED_SIGN_RAW_SOURCE_VALIDATED' \
             paper-blocklocker-115-saved-signs.log)" -eq 5
       - name: Restart actual Paper world and verify BlockLocker recovers the same protections
