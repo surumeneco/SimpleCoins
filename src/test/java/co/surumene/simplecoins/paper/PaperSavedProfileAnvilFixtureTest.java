@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
 import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
 import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
+import co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations;
 import co.surumene.simplecoins.domain.SavedBlockLockerSignSummary;
 import co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate;
 import co.surumene.simplecoins.domain.SavedBlockLockerPhysicalOwnerIndex;
@@ -126,6 +127,38 @@ class PaperSavedProfileAnvilFixtureTest {
         var observedChunks=Map.of(
             new SavedBlockLockerChestSigns.ChunkPosition(0,0),terrain.get(0),
             new SavedBlockLockerChestSigns.ChunkPosition(1,0),terrain.get(1));
+        // All local saved chest groups are discovered from the actual REGION
+        // manifest, not manually supplied positions/proof flags. The double
+        // chest spans Chunks 0 and 1 but is observed exactly once.
+        Path worldRoot=Path.of(path).getParent().getParent();
+        var scope=new WorldScope(true,Set.of(),Set.of());
+        var discovered=WorldStorageDiscovery.discover(
+            Map.of("saved-fixture",worldRoot),scope,100000);
+        var batch=SavedBlockLockerTerrainObservations.capture(
+            discovered,scope,2*1024*1024,16*1024*1024,10000,
+            Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+            PaperSavedBlockLockerSignText.nativeText());
+        assertEquals(6,batch.chests().size(),
+            "Five protected chests and one unprotected chest, double chest counted once");
+        assertEquals(7,batch.chests().stream().mapToInt(
+            c->c.observation().storageMembers().size()).sum(),
+            "Seven physical saved chest blocks must be retained");
+        assertEquals(5,batch.chests().stream().filter(
+            c->!c.observation().attachedSigns().isEmpty()).count());
+        assertEquals(1,batch.chests().stream().filter(
+            c->c.observation().storageMembers().size()==2).count());
+        assertTrue(batch.chests().stream().allMatch(
+            c->c.sources().stream().allMatch(discovered.worldFiles()::contains)),
+            "No source may be synthesized outside the selected manifest");
+        assertTrue(batch.chests().stream().anyMatch(c->
+            c.observation().storageMembers().contains(
+                new SavedBlockLockerChestSigns.Position(15,fixtureY,4))
+            && c.observation().storageMembers().contains(
+                new SavedBlockLockerChestSigns.Position(16,fixtureY,4))));
+        batch.witness().requireUnchanged();
+        System.out.println("PAPER_A04_SAVED_TERRAIN_FULL_SOURCE_OBSERVATIONS_PASSED"
+            + " groups=6 physical=7 protected=5 double=1"
+            + " (read-only; no all-writer epoch or owner-index authorization)");
         for (int x : EXPECTED) {
             var chestObservation=SavedBlockLockerChestSigns.observe(
                 observedChunks,new SavedBlockLockerChestSigns.Position(x,fixtureY,4),
