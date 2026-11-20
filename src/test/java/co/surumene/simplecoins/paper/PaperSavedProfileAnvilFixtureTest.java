@@ -155,6 +155,18 @@ class PaperSavedProfileAnvilFixtureTest {
                 new SavedBlockLockerChestSigns.Position(15,fixtureY,4))
             && c.observation().storageMembers().contains(
                 new SavedBlockLockerChestSigns.Position(16,fixtureY,4))));
+        for (var group : batch.chests()) {
+            var hold=SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                group.observation(),SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
+            assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,hold.verdict(),
+                "Full saved terrain read is not proof of a G0 exclusive writer epoch");
+            assertTrue(hold.verifiedOwner().isEmpty());
+        }
+        assertThrows(IOException.class,()->SavedBlockLockerTerrainObservations.capture(
+            batchDiscovered,batchScope,2*1024*1024,16*1024*1024,1,
+            Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+            PaperSavedBlockLockerSignText.nativeText()),
+            "A resource cap cannot silently truncate the selected saved sources");
         batch.witness().requireUnchanged();
         System.out.println("PAPER_A04_SAVED_TERRAIN_FULL_SOURCE_OBSERVATIONS_PASSED"
             + " groups=6 physical=7 protected=5 double=1"
@@ -164,6 +176,13 @@ class PaperSavedProfileAnvilFixtureTest {
                 observedChunks,new SavedBlockLockerChestSigns.Position(x,fixtureY,4),
                 Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
                 PaperSavedBlockLockerSignText.nativeText());
+            var fromBatch=batch.chests().stream().filter(chest ->
+                chest.observation().storageMembers().contains(
+                    new SavedBlockLockerChestSigns.Position(x,fixtureY,4))).toList();
+            assertEquals(1,fromBatch.size(),
+                "Each real saved chest must belong to exactly one captured group");
+            assertEquals(chestObservation,fromBatch.getFirst().observation(),
+                "Full-source capture must retain the same attached signs as local read");
             assertEquals(1,chestObservation.attachedSigns().size(),
                 "The real saved chest must have precisely one applicable sign at x="+x);
             var candidate=chestObservation.attachedSigns().get(0);
