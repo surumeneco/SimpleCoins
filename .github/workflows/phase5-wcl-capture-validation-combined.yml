@@ -1,0 +1,15 @@
+name: Phase5 WCL combined capture validation Python
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-capture-validation-combined-20261105-chatboost
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check WCL capture strict JSON and timestamp regression
+        run: python -m unittest discover -s tests -p 'test_audit_wcl*.py' -v
