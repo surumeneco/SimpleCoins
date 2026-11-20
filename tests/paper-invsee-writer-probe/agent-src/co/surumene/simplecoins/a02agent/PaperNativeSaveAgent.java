@@ -1,66 +1,68 @@
 package co.surumene.simplecoins.a02agent;
 
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.CodeBuilder;
+import java.lang.classfile.CodeElement;
+import java.lang.classfile.CodeTransform;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.MethodTransform;
+import java.lang.constant.ClassDesc;
+import java.lang.constant.MethodTypeDesc;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.concurrent.atomic.AtomicInteger;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.ClassVisitor;
-import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.MethodVisitor;
-import jdk.internal.org.objectweb.asm.Opcodes;
 
 /**
- * Disposable proof of one Paper native save entrypoint, not a complete G3
- * writer fence. This Java agent is NOT packaged in the SimpleCoins plugin.
- *
- * It depends on a launch-time JVM flag and JDK-internal ASM access; real
- * deployment needs explicit architectural approval and all-writer coverage.
+ * Disposable proof of ONE Paper native save entrypoint, not a G3 writer fence.
+ * Uses the standard Java 25 Class-File API; no bundled external/ASM library.
+ * The test Agent is not present in the production SimpleCoins plugin JAR.
  */
 public final class PaperNativeSaveAgent {
     private PaperNativeSaveAgent() {}
 
+    private static final ClassDesc HOOK_CLASS =
+            ClassDesc.of("co.surumene.simplecoins.a02agent.PaperNativeSaveAgent");
+
     public static void premain(String args, Instrumentation instrumentation) {
         instrumentation.addTransformer(new ClassFileTransformer() {
-            @Override public byte[] transform(
-                    ClassLoader loader, String className, Class<?> redefining,
-                    ProtectionDomain protection, byte[] source) {
+            @Override public byte[] transform(ClassLoader loader, String className,
+                    Class<?> redefining, ProtectionDomain protection, byte[] source) {
                 if (!"org/bukkit/craftbukkit/entity/CraftPlayer".equals(className))
                     return null;
-                ClassReader reader = new ClassReader(source);
-                ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+                var api = ClassFile.of();
                 AtomicInteger modified = new AtomicInteger();
-                reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
-                    @Override public MethodVisitor visitMethod(
-                            int access, String name, String desc,
-                            String signature, String[] exceptions) {
-                        MethodVisitor original = super.visitMethod(
-                                access, name, desc, signature, exceptions);
-                        if (!"saveData".equals(name) || !"()V".equals(desc))
-                            return original;
+                byte[] result = api.transformClass(api.parse(source), (builder, element) -> {
+                    if (element instanceof MethodModel method
+                            && method.methodName().stringValue().equals("saveData")
+                            && method.methodTypeSymbol().descriptorString().equals("()V")) {
                         modified.incrementAndGet();
-                        return new MethodVisitor(Opcodes.ASM9, original) {
-                            @Override public void visitCode() {
-                                super.visitCode();
-                                super.visitMethodInsn(Opcodes.INVOKESTATIC,
-                                        "co/surumene/simplecoins/a02agent/PaperNativeSaveAgent",
-                                        "beforeNativeSave", "()V", false);
-                            }
-                        };
+                        builder.transformMethod(method, MethodTransform.transformingCode(
+                                new CodeTransform() {
+                                    @Override public void atStart(CodeBuilder code) {
+                                        code.invokestatic(HOOK_CLASS, "beforeNativeSave",
+                                                MethodTypeDesc.ofDescriptor("()V"));
+                                    }
+
+                                    @Override public void accept(CodeBuilder code, CodeElement element) {
+                                        code.with(element);
+                                    }
+                                }));
+                    } else {
+                        builder.with(element);
                     }
-                }, 0);
+                });
                 if (modified.get() != 1)
                     throw new IllegalStateException(
-                            "Unexpected Paper CraftPlayer.saveData method count "
-                                    + modified.get());
+                            "Unexpected Paper CraftPlayer.saveData method count " + modified.get());
                 System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED");
-                return writer.toByteArray();
+                return result;
             }
         });
         System.out.println("PAPER_A02_NATIVE_AGENT_TEST_ONLY_INSTALLED");
     }
 
-    /** Denies a call before CraftPlayer.saveData reaches its original body. */
+    /** Refuse the selected entry before the method body reaches playerdata IO. */
     public static void beforeNativeSave() {
         if (Boolean.getBoolean("a02.nativeAgent.closed")) {
             System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED");
