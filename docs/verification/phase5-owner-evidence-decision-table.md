@@ -61,3 +61,17 @@ OE-03の**検証済みUUID不在**は、単に上流の`PlayerProfile.getUniqueI
 現行Draft `BlockLockerSavedHints.read`（PR #8、blob `46148bd736d7ec61b82a73b5effb5a7b36ffcb12`）は、存在するUUID値の型・長さ不正を`IOException`で拒否する。一方、`Hints.firstProfileUuid().empty`だけでは、UUIDキーが正常に欠損したのか、主プロフィール自体がないのかを表現できない。したがって[PR #129](https://github.com/surumeneco/SimpleCoins/pull/129)のBL-LEGACY-01/02をGreenへ進める際は、**正常な旧形式・完全な物理的保護・本人照合成功によるUUID不在**を区別できる証拠経路をCATで決定する。raw PDC破損や読取失敗はOE-04として未完了を維持する。
 
 各OEベクトルは、正本CATの決定・Gate、外部プラグインの実機統合、決算公開制御の検証で対応付ける。表の記載だけでテスト成功・CAT Confirmed・Paper受入完了とは扱わない。
+
+## 現行 develop のソースとの出典対応（TASK004 / 2026-11-08）
+
+本節は正本仕様の再決定でも CAT Artifact の Confirmed 化でもなく、現在の製品コードが**どの証拠まで取得できるか**を限定する対応表である。コード基準は [`develop@f7ebdc33227eb279d44461e9d7e6bf2d86598b23`](https://github.com/surumeneco/SimpleCoins/tree/f7ebdc33227eb279d44461e9d7e6bf2d86598b23)。以下の「未接続」は、この基準の列挙された公開ドメイン API についての確認であり、配備中の Paper サーバーの断定ではない。
+
+| 確定した意味の根拠 | 同 HEAD のコード上の境界 | 現在の成立範囲／未達の接続 |
+| --- | --- | --- |
+| 02B「BlockLocker保存形式」看板 PDC・表示・PRIVATE第1プロフィール（[02B](https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view)） | `BlockLockerSavedHints.read` と `BlockLockerSavedSignCandidates.extractEvidence` は候補の座標、PDC hints、raw 表裏テキストを取得 | 本人確認・表示/PDC不一致の優先順位・実保護への適用はこの段階で決定しない |
+| 02B「BlockLocker保存形式」支持先・ダブルチェスト・境界チャンク | `BlockLockerSignAttachment.attaches` と `BlockLockerChestLinkage.signAttachedToPair` は、呼出側から渡された物理ブロック状態の幾何検査だけを行う | 保存/ロード両方にまたがる正本ブロック状態取得、符号化された向きからの変換、看板候補との結合は未証明 |
+| [02A](https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view)「所有者の定義」／02B「決算」：有効 `[Everyone]` はフリー、確認済み個人はBANとplayerdataでP/Dを判定 | `BlockEntitySettlementImport.stageChunk` は `OwnershipResolver.resolve` が返す結果を用いてゼロ残高マーカーとスロットをステージし、nullや例外時はソースを失敗扱いにする | `OwnershipResolver` の実装側で主所有者・Everyone・BAN/playerdataを証明するまで本クラスは所有権を推測しない |
+| 02A「BAN種類を限定しない」・02B「現時点の状態」 | `BanEvidence.combine` は宣言済み必須ソースについて欠損/UNKNOWNをCLEARに変えず、正のBANNED証拠があればBANNEDを保持する | 紙面上の必須BANソースの列挙と、IP/外部BANのUUIDへの対応付けおよび実行時読み出しは別途必要 |
+| 02A「WWC/WWW指揮者→飼い主→フリー」・02B「全対象の完全性」 | [WCL提供元契約](phase5-wcl-provider-contract.md)の `Success/NotFound/Failure` は相互に異なる証拠 | `NotFound` をオフライン不存在/空の資産とみなさず、配備版と全provider登録を検証して初めて正本照合できる |
+
+**CAT上の状態**：ゲーム仕様02A/02Bの確定意味は上記出典のとおり。各 Process/PI/TCE の出典差分と正式な承認・process-closure/model-conformance/implementation-conformance はこの対応表では成立しない（`not-run`）。次の本番実装に先立つ具体的な非重複対象は、`extractEvidence`・物理配置・保護適用を同じ検証済みコンテナに結び付け、`OwnershipResolver` へ fail-closed の判定を渡す境界である。従来の #271 / #276 テストや既存 #262 読取処理を再実装しない。
