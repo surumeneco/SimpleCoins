@@ -1,0 +1,52 @@
+name: A05 isolated CAT released-main read-only diagnostics
+on:
+  push:
+    branches: [infra/a05-cat-main-readonly-20261120]
+    paths: ['.github/workflows/a05-cat-main-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  source-derived-a05:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: acc7af23ed3d4c58f1a8d9215e5904a8364c6ff1
+          path: product
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: c56b1e1f46867dfe2e5ac655907a62ebbe86b74c
+          path: cat
+          persist-credentials: false
+      - name: Verify immutable source identity
+        run: |
+          test "$(git -C product rev-parse HEAD)" = 'acc7af23ed3d4c58f1a8d9215e5904a8364c6ff1'
+          test "$(git -C cat rev-parse HEAD)" = 'c56b1e1f46867dfe2e5ac655907a62ebbe86b74c'
+          python cat/.cat-system/scripts/cat_flow.py --help
+          python cat/.cat-system/scripts/cat_spec_test_sync.py --help
+      - name: Execute CAT A05 source closure and generated-test preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=product/Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          flow=cat/.cat-system/scripts/cat_flow.py
+          python "$flow" validate --work "$work"
+          python "$flow" conformance --work "$work" --kind process-closure
+          python "$flow" compile --work "$work" --kind model
+          python "$flow" conformance --work "$work" --kind model-conformance
+          python "$flow" compile --work "$work" --kind vectors
+          python "$flow" compile --work "$work" --kind queue
+          python "$flow" compile --work "$work" --kind tests
+          find product/Lifecycle/Works/.cat-flow -type f | sort
+      - name: Upload bounded diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a05-cat-main-readonly-diagnostics
+          path: product/Lifecycle/Works/.cat-flow/
+          retention-days: 1
+          if-no-files-found: ignore
