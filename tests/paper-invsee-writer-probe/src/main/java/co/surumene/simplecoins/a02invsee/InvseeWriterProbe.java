@@ -77,6 +77,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
     private final boolean durableRecoveryCheck = Boolean.getBoolean("a02.invsee.checkAfterHalt");
     private final boolean recoverPendingAfterHalt = Boolean.getBoolean("a02.invsee.recoverPendingAfterHalt");
     private final AtomicInteger vetoedSaveEvents = new AtomicInteger();
+    private final AtomicInteger observedUnvetoedInvseeSaveEvents = new AtomicInteger();
     private int startupDiscoveryWaitTicks;
     private final boolean testPastEventCheckpoint =
             Boolean.getBoolean("a02.invsee.probePastEventCheckpoint");
@@ -102,6 +103,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.nmsSaveBypassesCraftAgent");
     private final boolean testNmsSaveBlockedByAgent =
             Boolean.getBoolean("a02.invsee.nmsSaveBlockedByAgent");
+    private final boolean testBothNativeHooksVsInvsee =
+            Boolean.getBoolean("a02.invsee.bothNativeHooksVsInvsee");
+    private final boolean recoverInvseeBothNativeHooks =
+            Boolean.getBoolean("a02.invsee.checkInvseeBothNativeHooks");
     private final boolean recoverNmsBypassAfterHalt =
             Boolean.getBoolean("a02.invsee.checkNmsBypassAfterHalt");
     private final boolean recoverNativeAgentAfterHalt =
@@ -151,7 +156,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
             else if (recoverPaperDirectAfterHalt) verifyPaperDirectAfterHalt();
             else if (recoverNativeAgentAfterHalt) verifyNativeAgentAfterHalt();
-            else if (recoverNmsBypassAfterHalt) verifyPaperDirectAfterHalt();
+            else if (recoverNmsBypassAfterHalt || recoverInvseeBothNativeHooks)
+                verifyPaperDirectAfterHalt();
             else if (replayNativePostDrainFalseAck) verifyNativePostDrainFalseAckOnColdRestart();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
@@ -506,6 +512,19 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 }
             }, this);
         }
+        if (testBothNativeHooksVsInvsee) {
+            // A genuinely observed InvSee event. Unlike the prior cooperative
+            // control, do NOT cancel it: the question is whether the plugin's
+            // own writer can bypass both actual Paper-native method hooks.
+            Bukkit.getPluginManager().registerEvents(new Listener() {
+                @EventHandler(priority = EventPriority.LOWEST)
+                public void observeInvseeSave(SpectatorInventorySaveEvent event) {
+                    if (ID.equals(event.getInventory().getSpectatedPlayerId())) {
+                        observedUnvetoedInvseeSaveEvents.incrementAndGet();
+                    }
+                }
+            }, this);
+        }
         if (vetoInvsee || vetoAndDurableAck || testPaperDirectAfterInvseeVeto) {
             // Test-only cooperative barrier: InvSee++ notifies before the
             // fake CraftPlayer loads/commits another offline UUID.dat.
@@ -553,6 +572,22 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                 // The new POSITIVE control saves the exact
                                 // unmodified 5000C + unrelated STONE inventory.
                                 getLogger().info("PAPER_A02_INVSEE_REAL_OFFLINE_INVENTORY_CAPTURE_PASSED");
+                                if (testBothNativeHooksVsInvsee) {
+                                    if (ledger.pending(ID).size() != 1
+                                            || ledger.historySnapshot().getFirst().delivered()
+                                            || !BigInteger.valueOf(5000).equals(
+                                                SavedGrantDeliveryFileReadback.verify(
+                                                    discover(), ledger, ID, staged, priorRoot,
+                                                    MAX_COMPRESSED, MAX_INFLATED).matchedMonetaryValue()))
+                                        throw new IllegalStateException(
+                                                "No fresh authentic saved grant before InvSee write");
+                                    // Keep the hooks open for the InvSee fake-player
+                                    // LOAD. Close only after it is loaded but BEFORE
+                                    // its real asynchronous save begins.
+                                    System.setProperty("a02.nativeAgent.closed", "true");
+                                    getLogger().info(
+                                            "PAPER_A02_BOTH_NATIVE_HOOKS_CLOSED_BEFORE_INVSEE_SAVE");
+                                }
                                 api.saveInventory(inventory).whenComplete((saved, saveError) ->
                                         Bukkit.getScheduler().runTaskLater(this, () -> {
                                             if (saveError != null) {
@@ -566,6 +601,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                         throw new IllegalStateException(
                                                                 "Admitted preserving InvSee writer never completed");
                                                     verifyDrainedAdmittedWriterBeforeAck(api, inventory);
+                                                } else if (testBothNativeHooksVsInvsee) {
+                                                    verifyInvseeWriterAgainstBothClosedNativeHooks(saved);
                                                 } else if (testPastEventCheckpoint) {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
@@ -1138,7 +1175,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
     /** Cold Paper JVM must observe the same actual unACKed, coinless file. */
     private void verifyPaperDirectAfterHalt() throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
-                || (!recoverPaperDirectAfterHalt && !recoverNmsBypassAfterHalt))
+                || (!recoverPaperDirectAfterHalt && !recoverNmsBypassAfterHalt
+                    && !recoverInvseeBothNativeHooks))
             throw new IllegalStateException("Invalid native-save cold-recovery probe");
         GrantLedger reopened = actualProductLedger();
         if (reopened.pending(ID).size() != 1
@@ -1157,6 +1195,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
         getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_COLD_RESTART_COINLESS_RECEIPT_PENDING");
         if (recoverNmsBypassAfterHalt)
             getLogger().info("PAPER_A02_NMS_BYPASS_COLD_RESTART_COINLESS_PENDING");
+        if (recoverInvseeBothNativeHooks)
+            getLogger().info("PAPER_A02_INVSEE_BOTH_HOOKS_COLD_RESTART_COINLESS_PENDING");
         getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_GUARD_STILL_DEFAULT_DENY");
         Bukkit.shutdown();
     }
@@ -1312,6 +1352,55 @@ public final class InvseeWriterProbe extends JavaPlugin {
         // and one durable ACK despite this process losing shutdown hooks.
         Runtime.getRuntime().halt(139);
         throw new AssertionError("Protected ACK halt returned");
+    }
+
+    /**
+     * Actual InvSee++ offline writer after closing both REAL Paper-native
+     * hooks. Never deliver or acknowledge anything in this negative probe.
+     */
+    private void verifyInvseeWriterAgainstBothClosedNativeHooks(
+            com.janboerman.invsee.spigot.api.response.SaveResponse result) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testBothNativeHooksVsInvsee
+                || !Boolean.getBoolean("a02.nativeAgent.closed")
+                || observedUnvetoedInvseeSaveEvents.get() != 1
+                || vetoedSaveEvents.get() != 0
+                || result == null || !result.isSaved())
+            throw new IllegalStateException(
+                    "Actual InvSee++ save was not admitted under both closed native hooks");
+        Map<String, Object> disk = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(disk, ledger, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(disk))
+                || receipt.active() || receipt.completedSequence() != verifiedSequence
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException(
+                    "InvSee++ writer did not actually bypass both hooked native entrances");
+        if (!(disk.get("Inventory") instanceof java.util.List<?> retained)
+                || retained.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number slot
+                    && slot.intValue() == 0))
+            throw new IllegalStateException("InvSee++ removed unrelated STONE");
+        boolean rejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            rejected = true;
+        }
+        if (!rejected)
+            throw new IllegalStateException("Stale grant proof accepted after InvSee++ bypass");
+        getLogger().info(
+                "PAPER_A02_INVSEE_REAL_WRITER_BYPASSED_BOTH_NATIVE_HOOKS_ERASED_5000C");
+        getLogger().info("PAPER_A02_INVSEE_BOTH_HOOKS_STALE_PROOF_REJECTED_PENDING_NO_ACK");
+        forceActualPlayerdataAndContainingDirectory();
+        getLogger().info("PAPER_A02_INVSEE_BOTH_HOOKS_FSYNC_BEFORE_ABRUPT_HALT");
+        Runtime.getRuntime().halt(147);
+        throw new AssertionError("InvSee both-native-hooks crash probe returned");
     }
 
     private void verifyCompetingWriterAfterProof() throws Exception {
