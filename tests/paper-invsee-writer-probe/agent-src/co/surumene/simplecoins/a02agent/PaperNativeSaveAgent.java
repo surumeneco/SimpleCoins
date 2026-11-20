@@ -10,6 +10,8 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
+import java.nio.file.Path;
+import java.util.jar.JarFile;
 import java.security.ProtectionDomain;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -25,6 +27,19 @@ public final class PaperNativeSaveAgent {
             ClassDesc.of("co.surumene.simplecoins.a02agent.PaperNativeSaveAgent");
 
     public static void premain(String args, Instrumentation instrumentation) {
+        // Paper's plugin/server classloaders need not delegate to the loader
+        // that resolved premain. Make the hook visible from bootstrap so that
+        // instrumented CraftPlayer has a resolvable INVOKESTATIC target.
+        // This is test-only; no third-party JAR or Paper class is overwritten.
+        try {
+            var source = PaperNativeSaveAgent.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI();
+            instrumentation.appendToBootstrapClassLoaderSearch(
+                    new JarFile(Path.of(source).toFile()));
+        } catch (Exception invalid) {
+            throw new IllegalStateException(
+                    "Cannot expose native save hook to Paper classloaders", invalid);
+        }
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override public byte[] transform(ClassLoader loader, String className,
                     Class<?> redefining, ProtectionDomain protection, byte[] source) {
