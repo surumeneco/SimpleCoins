@@ -98,6 +98,12 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.checkPaperDirectAfterHalt");
     private final boolean testNativeAgentEntry =
             Boolean.getBoolean("a02.invsee.nativeAgentEntryTest");
+    private final boolean testNmsSaveBypassesCraftAgent =
+            Boolean.getBoolean("a02.invsee.nmsSaveBypassesCraftAgent");
+    private final boolean testNmsSaveBlockedByAgent =
+            Boolean.getBoolean("a02.invsee.nmsSaveBlockedByAgent");
+    private final boolean recoverNmsBypassAfterHalt =
+            Boolean.getBoolean("a02.invsee.checkNmsBypassAfterHalt");
     private final boolean recoverNativeAgentAfterHalt =
             Boolean.getBoolean("a02.invsee.checkNativeAgentAfterHalt");
     private Player originalDetachedPaperWriter;
@@ -145,6 +151,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
             else if (recoverPaperDirectAfterHalt) verifyPaperDirectAfterHalt();
             else if (recoverNativeAgentAfterHalt) verifyNativeAgentAfterHalt();
+            else if (recoverNmsBypassAfterHalt) verifyPaperDirectAfterHalt();
             else if (replayNativePostDrainFalseAck) verifyNativePostDrainFalseAckOnColdRestart();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
@@ -350,7 +357,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             throw new IllegalStateException("Probe requires a fresh player UUID.dat");
         ledger = actualProductLedger();
         Player player = detachedPlayer();
-        if (testPaperDirectAfterInvseeVeto || testNativePostDrainFalseAck)
+        if (testPaperDirectAfterInvseeVeto || testNativePostDrainFalseAck
+                || testNmsSaveBypassesCraftAgent || testNmsSaveBlockedByAgent)
             originalDetachedPaperWriter = player;
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
 
@@ -903,6 +911,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
         writer.getInventory().setItem(1, null);
+        if (testNmsSaveBypassesCraftAgent || testNmsSaveBlockedByAgent) {
+            verifyNmsInternalSaveIndependentOfCraftPlayer(writer);
+            throw new AssertionError("NMS save experiment halt returned");
+        }
         if (testNativeAgentEntry) {
             // A JVM startup agent, not an InvSee event, intercepts the actual
             // CraftPlayer.saveData() bytecode ENTRY. This test has a genuine
@@ -988,6 +1000,102 @@ public final class InvseeWriterProbe extends JavaPlugin {
     }
 
     /**
+     * The loaded Paper PlayerList's real NMS PlayerDataStorage is an independent
+     * save writer. Do not infer that blocking a Bukkit CraftPlayer wrapper
+     * interposes on this native call.
+     */
+    private void verifyNmsInternalSaveIndependentOfCraftPlayer(Player writer) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || writer != originalDetachedPaperWriter
+                || vetoedSaveEvents.get() != 1 || ledger.pending(ID).size() != 1)
+            throw new IllegalStateException("NMS save fixture not isolated");
+        Object server = getServer().getClass().getMethod("getServer").invoke(getServer());
+        Object list = server.getClass().getMethod("getPlayerList").invoke(server);
+        Class<?> storageType = Class.forName(
+                "net.minecraft.world.level.storage.PlayerDataStorage");
+        var fields = java.util.Arrays.stream(list.getClass().getDeclaredFields())
+                .filter(field -> storageType.isAssignableFrom(field.getType())).toList();
+        if (fields.size() != 1)
+            throw new IllegalStateException(
+                    "Real Paper PlayerList has " + fields.size() + " NMS playerdata stores");
+        Field field = fields.getFirst();
+        field.setAccessible(true);
+        Object storage = field.get(list);
+        if (!storageType.isInstance(storage))
+            throw new IllegalStateException("Paper NMS playerdata storage not available");
+        Object nmsPlayer = writer.getClass().getMethod("getHandle").invoke(writer);
+        var methods = java.util.Arrays.stream(storageType.getDeclaredMethods())
+                .filter(method -> method.getName().equals("save")
+                        && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0].isInstance(nmsPlayer)).toList();
+        if (methods.size() != 1)
+            throw new IllegalStateException(
+                    "Real Paper NMS save has " + methods.size() + " matching entrances");
+        java.lang.reflect.Method save = methods.getFirst();
+        save.setAccessible(true);
+        getLogger().info("PAPER_A02_NMS_PLAYERDATA_STORE_REAL_ENTRY_RESOLVED"
+                + " descriptor=" + save.toGenericString());
+        System.setProperty("a02.nativeAgent.closed", "true");
+        boolean denied = false;
+        try {
+            // No CraftPlayer.saveData() wrapper call; same real detached NMS
+            // ServerPlayer, same playerdata UUID.dat on the actual server.
+            Object outcome = save.invoke(storage, nmsPlayer);
+            if (outcome instanceof java.util.concurrent.CompletionStage<?> pending)
+                pending.toCompletableFuture().get(20, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.lang.reflect.InvocationTargetException thrown) {
+            Throwable cause = thrown.getCause();
+            denied = cause instanceof IllegalStateException
+                    && cause.getMessage() != null
+                    && cause.getMessage().contains("test-only NMS PlayerDataStorage save");
+            if (!denied) throw thrown;
+        }
+
+        if (testNmsSaveBlockedByAgent != denied)
+            throw new IllegalStateException(
+                    "NMS interception result disagrees with expected real scenario");
+        if (vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("NMS save unexpectedly invoked InvSee event");
+        Map<String, Object> disk = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(disk, ledger, ID);
+        BigInteger expectedMoney = testNmsSaveBlockedByAgent
+                ? BigInteger.valueOf(5000) : BigInteger.ZERO;
+        if (!expectedMoney.equals(totalSavedMoney(disk))
+                || receipt.active() || receipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("NMS saved file mismatches pending grant case");
+        if (!(disk.get("Inventory") instanceof java.util.List<?> retained)
+                || retained.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number index
+                    && index.intValue() == 0))
+            throw new IllegalStateException("NMS save damaged unrelated STONE");
+        if (testNmsSaveBlockedByAgent) {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+            getLogger().info("PAPER_A02_NMS_SAVE_ENTRY_DENIED_PRESERVED_5000C");
+        } else {
+            boolean obsoleteProofRejected = false;
+            try {
+                SavedGrantDeliveryFileReadback.verify(
+                        discover(), ledger, ID, staged, priorRoot,
+                        MAX_COMPRESSED, MAX_INFLATED);
+            } catch (java.io.IOException correct) {
+                obsoleteProofRejected = true;
+            }
+            if (!obsoleteProofRejected)
+                throw new IllegalStateException("NMS bypass left stale proof accepted");
+            getLogger().info("PAPER_A02_NMS_BYPASSED_CRAFT_ONLY_AGENT_ERASED_5000C");
+        }
+        forceActualPlayerdataAndContainingDirectory();
+        getLogger().info("PAPER_A02_NMS_SOURCE_FSYNC_AND_PENDING_BEFORE_HALT");
+        Runtime.getRuntime().halt(testNmsSaveBlockedByAgent ? 145 : 144);
+    }
+
+    /**
      * A new Paper JVM without the Agent must still see the original durable
      * 5000C coin, signed receipt and pending grant from the rejected write.
      */
@@ -1018,7 +1126,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
     /** Cold Paper JVM must observe the same actual unACKed, coinless file. */
     private void verifyPaperDirectAfterHalt() throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
-                || !recoverPaperDirectAfterHalt)
+                || (!recoverPaperDirectAfterHalt && !recoverNmsBypassAfterHalt))
             throw new IllegalStateException("Invalid native-save cold-recovery probe");
         GrantLedger reopened = actualProductLedger();
         if (reopened.pending(ID).size() != 1
@@ -1035,6 +1143,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
                     && "minecraft:stone".equals(stack.get("id"))))
             throw new IllegalStateException("Native Paper saved overwrite not replayed after cold restart");
         getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_COLD_RESTART_COINLESS_RECEIPT_PENDING");
+        if (recoverNmsBypassAfterHalt)
+            getLogger().info("PAPER_A02_NMS_BYPASS_COLD_RESTART_COINLESS_PENDING");
         getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_GUARD_STILL_DEFAULT_DENY");
         Bukkit.shutdown();
     }
