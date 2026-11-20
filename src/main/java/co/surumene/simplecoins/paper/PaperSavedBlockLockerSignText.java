@@ -2,30 +2,24 @@ package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.BlockLockerSavedProfileResolution;
 import java.io.IOException;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 /**
- * Read-only decoding of 26.2 saved SignText messages[] JSON to the visible
- * legacy text used by BlockLocker v1.15 SignParserImpl.
- * This does not observe attachment, owner, generation or a complete source.
+ * In Paper 26.2's stopped-world Anvil NBT, front_text/back_text.messages[]
+ * already contain the visible sign strings, not JSON component documents.
+ * Preserve the exact value: re-parsing a JSON-looking player string could
+ * incorrectly turn literal text into a BlockLocker permission.
+ * Does not attest source generation, attached geometry or the whole sign set.
  */
 public final class PaperSavedBlockLockerSignText {
     private PaperSavedBlockLockerSignText() {}
 
-    public static BlockLockerSavedProfileResolution.DisplayDecoder jsonComponent() {
+    public static BlockLockerSavedProfileResolution.DisplayDecoder nativeText() {
         return PaperSavedBlockLockerSignText::read;
     }
 
-    public static String read(String savedJson) throws IOException {
-        if (savedJson == null)
-            throw new IOException("Missing saved sign component");
-        try {
-            Component component = GsonComponentSerializer.gson().deserialize(savedJson);
-            return LegacyComponentSerializer.legacySection().serialize(component);
-        } catch (RuntimeException invalid) {
-            throw new IOException("Malformed saved sign JSON component", invalid);
-        }
+    public static String read(String savedLine) throws IOException {
+        if (savedLine == null)
+            throw new IOException("Saved Paper 26.2 sign display line is unavailable");
+        return savedLine;
     }
 }

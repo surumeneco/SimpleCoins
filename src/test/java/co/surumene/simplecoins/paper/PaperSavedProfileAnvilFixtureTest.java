@@ -48,7 +48,7 @@ class PaperSavedProfileAnvilFixtureTest {
                 Map<String,Object> sign = (Map<String,Object>) entity;
                 var resolved = BlockLockerSavedProfileResolution.read(
                         sign, Set.of("[Private]"), Set.of("[More Users]"), Set.of("Everyone"),
-                        PaperSavedBlockLockerSignText.jsonComponent())
+                        PaperSavedBlockLockerSignText.nativeText())
                         .orElseThrow(() -> new IOException("Actual BlockLocker protection header missing"));
                 assertEquals(BlockLockerHeaderMatcher.Type.PRIVATE, resolved.type());
                 if (result.putIfAbsent(x,resolved) != null)

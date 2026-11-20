@@ -10,24 +10,26 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class PaperSavedBlockLockerSignTextTest {
-    @Test void decodeActualSavedComponentJsonToDisplayedBlockLockerLines() throws Exception {
-        assertEquals("[Private]", PaperSavedBlockLockerSignText.read("{\"text\":\"[Private]\"}"));
-        assertEquals("Alice", PaperSavedBlockLockerSignText.read("{\"text\":\"Alice\"}"));
-        assertEquals("[Everyone]", PaperSavedBlockLockerSignText.read("{\"text\":\"[Everyone]\"}"));
+    @Test void readActualPaper262SavedTextWithoutReparsingIt() throws Exception {
+        assertEquals("[Private]", PaperSavedBlockLockerSignText.read("[Private]"));
+        assertEquals("Alice", PaperSavedBlockLockerSignText.read("Alice"));
+        assertEquals("[Everyone]", PaperSavedBlockLockerSignText.read("[Everyone]"));
     }
-    @Test void malformedJsonIsAnErrorNotUnprotectedEvidence() {
-        assertThrows(IOException.class, () -> PaperSavedBlockLockerSignText.read("{bad-json"));
+
+    @Test void jsonLookingLiteralIsNotAnImplicitPermission() throws Exception {
+        // Real 26.2 stores plain visible messages[] text. A player can write
+        // these exact characters; they must never become parsed permissions.
+        assertEquals("{\"text\":\"[Everyone]\"}",
+                PaperSavedBlockLockerSignText.read("{\"text\":\"[Everyone]\"}"));
+        assertEquals("{bad-json", PaperSavedBlockLockerSignText.read("{bad-json"));
         assertThrows(IOException.class, () -> PaperSavedBlockLockerSignText.read(null));
     }
-    @Test void savedPdcAndRealJsonWithBacksideEveryoneStayDistinct() throws Exception {
+
+    @Test void savedPdcAndNativeBacksideEveryoneStayDistinct() throws Exception {
         UUID uuid = UUID.fromString("11111111-1111-4111-8111-111111111111");
         var sign = Map.<String,Object>of(
-            "front_text", Map.of("messages",List.of(
-                "{\"text\":\"[Private]\"}", "{\"text\":\"Alice\"}",
-                "{\"text\":\"\"}", "{\"text\":\"\"}")),
-            "back_text", Map.of("messages",List.of(
-                "{\"text\":\"[More Users]\"}", "{\"text\":\"[Everyone]\"}",
-                "{\"text\":\"\"}", "{\"text\":\"\"}")),
+            "front_text", Map.of("messages",List.of("[Private]", "Alice", "", "")),
+            "back_text", Map.of("messages",List.of("[More Users]", "[Everyone]", "", "")),
             "PublicBukkitValues", Map.of(
                 "blocklocker:header","PRIVATE",
                 "blocklocker:profile_1",Map.of(
@@ -35,7 +37,7 @@ class PaperSavedBlockLockerSignTextTest {
                     "blocklocker:u",new long[]{uuid.getMostSignificantBits(),uuid.getLeastSignificantBits()})));
         var result=BlockLockerSavedProfileResolution.read(
             sign,Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
-            PaperSavedBlockLockerSignText.jsonComponent()).orElseThrow();
+            PaperSavedBlockLockerSignText.nativeText()).orElseThrow();
         assertEquals(uuid,result.primaryOwner().orElseThrow());
         assertTrue(result.everyoneEffective());
     }
