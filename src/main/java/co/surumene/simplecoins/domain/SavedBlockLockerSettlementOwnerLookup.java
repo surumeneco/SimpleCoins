@@ -102,6 +102,7 @@ public final class SavedBlockLockerSettlementOwnerLookup
                 || !(chunk.nbt().get("block_entities") instanceof List<?> entities))
             throw new IOException("Selected SAVED chunk has no BlockEntity inventory source");
         int matching = 0;
+        String tileType = null;
         for (Object raw : entities) {
             if (!(raw instanceof Map<?,?> value)
                     || !(value.get("x") instanceof Integer x)
@@ -115,9 +116,17 @@ public final class SavedBlockLockerSettlementOwnerLookup
                 throw new IOException("SAVED BlockEntity is not a supported chest");
             if (++matching>1)
                 throw new IOException("Duplicate SAVED physical chest BlockEntity");
+            tileType = id;
         }
         if (matching!=1)
             throw new IOException("No matching SAVED physical chest BlockEntity");
+        // A BlockEntity is not physical chest evidence on its own. Require
+        // the selected Chunk's actual terrain palette at this same location.
+        var physical = SavedTerrainBlockPalette.read(chunk.nbt(),
+                position[0], position[1], position[2]);
+        if (!tileType.equals(physical.name()))
+            throw new IOException("Orphan SAVED chest BlockEntity disagrees with terrain palette");
+
     }
 
     @Override
