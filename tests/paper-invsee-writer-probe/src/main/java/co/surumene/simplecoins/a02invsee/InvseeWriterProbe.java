@@ -602,7 +602,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
                                                                 "Admitted preserving InvSee writer never completed");
                                                     verifyDrainedAdmittedWriterBeforeAck(api, inventory);
                                                 } else if (testBothNativeHooksVsInvsee) {
-                                                    verifyInvseeWriterAgainstBothClosedNativeHooks(saved);
+                                                    verifyInvseeWriterAgainstBothClosedNativeHooks(saved != null && saved.isSaved());
                                                 } else if (testPastEventCheckpoint) {
                                                     if (saved == null || !saved.isSaved())
                                                         throw new IllegalStateException(
@@ -1358,14 +1358,13 @@ public final class InvseeWriterProbe extends JavaPlugin {
      * Actual InvSee++ offline writer after closing both REAL Paper-native
      * hooks. Never deliver or acknowledge anything in this negative probe.
      */
-    private void verifyInvseeWriterAgainstBothClosedNativeHooks(
-            com.janboerman.invsee.spigot.api.response.SaveResponse result) throws Exception {
+    private void verifyInvseeWriterAgainstBothClosedNativeHooks(boolean savedConfirmed) throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
                 || !testBothNativeHooksVsInvsee
                 || !Boolean.getBoolean("a02.nativeAgent.closed")
                 || observedUnvetoedInvseeSaveEvents.get() != 1
                 || vetoedSaveEvents.get() != 0
-                || result == null || !result.isSaved())
+                || !savedConfirmed)
             throw new IllegalStateException(
                     "Actual InvSee++ save was not admitted under both closed native hooks");
         Map<String, Object> disk = saved();
