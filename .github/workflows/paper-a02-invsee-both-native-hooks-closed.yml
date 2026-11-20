@@ -1,0 +1,165 @@
+name: A02 real InvSee++ asynchronous save versus two closed Paper native hooks
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a02.invsee-two-native-hooks-closed-replay.md'
+      - 'tests/paper-invsee-writer-probe/**'
+      - '.github/workflows/paper-a02-invsee-both-native-hooks-closed.yml'
+permissions:
+  contents: read
+jobs:
+  two-native-hooks-vs-invsee:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate existing issue Work structure, not a CAT Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.invsee-two-native-hooks-closed-replay.md
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: pinned-server
+          sparse-checkout: |
+            plugins/InvSee++.jar
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate actual pinned InvSee++ distribution SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          printf '%s  %s\n' \
+            '01f3e053a814f76d46513ebf65a38747df11df81c577d12bed108b353d7775f9' \
+            'pinned-server/plugins/InvSee++.jar' | sha256sum -c -
+      - name: Build actual SimpleCoins, independent deny guard and disposable Paper probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-invsee-writer-probe jar
+          python3 tools/simplecoins_preflight.py \
+            admission-guard/build/libs/admission-guard-1.0.0.jar \
+            build/libs/SimpleCoins-1.0.0.jar
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq InvseeWriterProbe.class; then
+            echo 'Test-only probe leaked into the production JAR' >&2
+            exit 1
+          fi
+      - name: Build disposable native save entrypoint instrumentation Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-agent-classes
+          javac --release 25 \
+            -d native-agent-classes \
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/PaperNativeSaveAgent.java \
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/NativeSaveHook.java
+          jar cf native-hook.jar -C native-agent-classes \
+            co/surumene/simplecoins/a02agent/NativeSaveHook.class
+          unzip -Z1 native-hook.jar | grep -F 'NativeSaveHook.class'
+          printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent\n\n' > native-agent.mf
+          jar cfm native-agent.jar native-agent.mf -C native-agent-classes .
+          unzip -p native-agent.jar META-INF/MANIFEST.MF | grep -F 'Premain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -F 'PaperNativeSaveAgent'; then
+            echo 'Test-only Agent was accidentally shipped in SimpleCoins production JAR' >&2
+            exit 1
+          fi
+      - name: Obtain exact SHA256-verified official Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-both/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A02-PaperNativeAgentProof/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' \
+            -o smoke-both/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke-both/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke-both/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke-both/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke-both/paper.jar
+          printf '%s  %s\n' "$sha" smoke-both/paper.jar | sha256sum -c -
+          cp build/libs/SimpleCoins-1.0.0.jar smoke-both/plugins/SimpleCoins.jar
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke-both/plugins/SimpleCoinsGuard.jar
+          cp pinned-server/plugins/InvSee++.jar smoke-both/plugins/InvSeePlusPlus.jar
+          cp tests/paper-invsee-writer-probe/build/libs/SimpleCoinsInvseeWriterProbe.jar smoke-both/plugins/InvseeProbe.jar
+          printf 'eula=true\n' > smoke-both/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25603\n' \
+            > smoke-both/server.properties
+      - name: Real InvSee++ async save must be rejected by closed CraftPlayer hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-both
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -javaagent:../native-agent.jar \
+              -Da02.nativeAgent.hookJar=../native-hook.jar \
+              -Da02.nativeAgent.instrumentNmsSave=true \
+              -Da02.invsee.bothNativeHooksVsInvsee=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > invsee-both-native-closed.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 148 ]; then
+            echo "InvSee save denial by actual CraftPlayer hook did not halt(148); actual exit $code" >&2
+            tail -200 invsee-both-native-closed.log
+            exit 1
+          fi
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' invsee-both-native-closed.log
+          ! grep -Fq 'PAPER_A02_NATIVE_AGENT_NMS_TRANSFORM_FAILED' invsee-both-native-closed.log
+          ! grep -Fq 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_DENIED' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED' invsee-both-native-closed.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_INSTRUMENTED' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_BOTH_NATIVE_HOOKS_CLOSED_BEFORE_INVSEE_SAVE' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_NATIVE_HOOKS_REJECTED_REAL_ASYNC_SAVE_PRESERVED_5000C' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_FRESH_PROOF_PENDING_NO_ACK' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_FSYNC_BEFORE_ABRUPT_HALT' invsee-both-native-closed.log
+      - name: Independent agent-free official Paper JVM confirms original 5000C and unACKed reservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-both
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.checkInvseeBothNativeHooks=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > invsee-both-native-restart.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "Expected controlled independent Paper JVM shutdown, got $code" >&2
+            tail -150 invsee-both-native-restart.log
+            exit 1
+          fi
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' invsee-both-native-restart.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_COLD_RESTART_PRESERVED_5000C_PENDING' invsee-both-native-restart.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' invsee-both-native-restart.log
+          echo 'A02_INVSEE_FAKE_PLAYER_WRITER_REJECTED_BY_REAL_CRAFTPLAYER_HOOK_NOT_GLOBAL_FENCE'
+      - name: Preserve both real Paper technical logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a02-invsee-both-native-hooks-real-paper-evidence
+          path: smoke-both/*.log
+          retention-days: 14
+          if-no-files-found: ignore
