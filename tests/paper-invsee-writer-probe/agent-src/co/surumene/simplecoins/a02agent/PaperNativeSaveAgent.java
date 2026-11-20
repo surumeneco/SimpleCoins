@@ -1,6 +1,7 @@
 package co.surumene.simplecoins.a02agent;
 
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassHierarchyResolver;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeTransform;
@@ -44,19 +45,42 @@ public final class PaperNativeSaveAgent {
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override public byte[] transform(ClassLoader loader, String className,
                     Class<?> redefining, ProtectionDomain protection, byte[] source) {
-                if (!"org/bukkit/craftbukkit/entity/CraftPlayer".equals(className))
-                    return null;
-                var api = ClassFile.of();
+                boolean craft = "org/bukkit/craftbukkit/entity/CraftPlayer".equals(className);
+                boolean nms = "net/minecraft/world/level/storage/PlayerDataStorage".equals(className);
+                if (!craft && !nms) return null;
+                boolean transformNms = nms
+                        && Boolean.getBoolean("a02.nativeAgent.instrumentNmsSave");
+                if (nms && transformNms)
+                    System.out.println("PAPER_A02_NATIVE_AGENT_NMS_TRANSFORM_ATTEMPTED");
+                try {
+                // Paper's NMS loader owns non-JDK types referenced by
+                // stack-map verification (e.g. ProblemReporter$ScopedCollector).
+                // The default ClassFile resolver uses only the *system* loader
+                // and silently makes Instrumentation drop this transformation.
+                // Parse the target loader's class resources, rather than
+                // loading partially initialized Paper types via reflection.
+                var hierarchy = ClassHierarchyResolver.ofResourceParsing(loader)
+                        .orElse(ClassHierarchyResolver.defaultResolver());
+                var api = ClassFile.of(
+                        ClassFile.ClassHierarchyResolverOption.of(hierarchy));
                 AtomicInteger modified = new AtomicInteger();
                 byte[] result = api.transformClass(api.parse(source), (builder, element) -> {
                     if (element instanceof MethodModel method
-                            && method.methodName().stringValue().equals("saveData")
-                            && method.methodTypeSymbol().descriptorString().equals("()V")) {
+                            && ((craft && method.methodName().stringValue().equals("saveData")
+                                        && method.methodTypeSymbol().descriptorString().equals("()V"))
+                                || (nms && method.methodName().stringValue().equals("save")
+                                        && method.methodTypeSymbol().descriptorString().startsWith(
+                                            "(Lnet/minecraft/world/entity/player/Player;)")))) {
                         modified.incrementAndGet();
+                        if (nms && !transformNms) {
+                            builder.with(element);
+                            return;
+                        }
                         builder.transformMethod(method, MethodTransform.transformingCode(
                                 new CodeTransform() {
                                     @Override public void atStart(CodeBuilder code) {
-                                        code.invokestatic(HOOK_CLASS, "beforeNativeSave",
+                                        code.invokestatic(HOOK_CLASS,
+                                                nms ? "beforeNmsSave" : "beforeNativeSave",
                                                 MethodTypeDesc.ofDescriptor("()V"));
                                     }
 
@@ -70,9 +94,26 @@ public final class PaperNativeSaveAgent {
                 });
                 if (modified.get() != 1)
                     throw new IllegalStateException(
-                            "Unexpected Paper CraftPlayer.saveData method count " + modified.get());
+                            "Unexpected Paper " + (nms ? "NMS PlayerDataStorage.save"
+                                    : "CraftPlayer.saveData")
+                                    + " method count " + modified.get());
+                if (nms) {
+                    System.out.println("PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_FOUND");
+                    if (transformNms) System.out.println(
+                            "PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_INSTRUMENTED");
+                    return transformNms ? result : null;
+                }
                 System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED");
                 return result;
+                } catch (Throwable transformedFailure) {
+                    System.err.println("PAPER_A02_NATIVE_AGENT_"
+                            + (nms ? "NMS" : "CRAFTPLAYER") + "_TRANSFORM_FAILED");
+                    transformedFailure.printStackTrace(System.err);
+                    // JDK instrumentation normally ignores a transformer
+                    // failure and loads the original class. Make this
+                    // observable and fail the real Paper CI, not false Green.
+                    return null;
+                }
             }
         });
         System.out.println("PAPER_A02_NATIVE_AGENT_TEST_ONLY_INSTALLED");

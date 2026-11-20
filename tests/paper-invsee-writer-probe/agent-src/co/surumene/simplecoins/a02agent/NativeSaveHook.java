@@ -15,4 +15,13 @@ public final class NativeSaveHook {
                     "A02 test-only Paper native save rejected during closed proof interval");
         }
     }
+
+    /** Separate NMS internal playerdata writer entry, not a universal IO fence. */
+    public static void beforeNmsSave() {
+        if (Boolean.getBoolean("a02.nativeAgent.closed")) {
+            System.out.println("PAPER_A02_NATIVE_AGENT_NMS_SAVE_DENIED");
+            throw new IllegalStateException(
+                    "A02 test-only NMS PlayerDataStorage save rejected during closed interval");
+        }
+    }
 }
