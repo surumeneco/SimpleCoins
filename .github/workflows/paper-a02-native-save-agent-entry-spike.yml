@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p native-agent-classes
-          javac --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED \
+          javac --release 25 \
             -d native-agent-classes \
             tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/PaperNativeSaveAgent.java
           printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent\n\n' > native-agent.mf
@@ -107,8 +107,7 @@ jobs:
           cd smoke-agent
           set +e
           timeout --signal=TERM --kill-after=10s 190s \
-            java --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED \
-              -javaagent:../native-agent.jar \
+            java -javaagent:../native-agent.jar \
               -Da02.invsee.paperSaveBypassesVeto=true \
               -Da02.invsee.nativeAgentEntryTest=true -Xms256M -Xmx1024M \
               -jar paper.jar nogui </dev/null > paper-a02-native-agent.log 2>&1
