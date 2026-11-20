@@ -71,8 +71,12 @@ class SavedBlockLockerSettlementOwnerLookupTest {
     }
 
     private static AnvilRegionReader.Chunk physicalChunk() {
-        return new AnvilRegionReader.Chunk(0,0,Map.of("block_entities",
-            List.of(Map.of("id","minecraft:chest","x",6,"y",65,"z",4))));
+        return new AnvilRegionReader.Chunk(0,0,Map.of(
+            "xPos",0,"zPos",0,
+            "sections",List.of(Map.of("Y",4,"block_states",Map.of("palette",
+                List.of(Map.of("Name","minecraft:chest",
+                    "Properties",Map.of("facing","north","type","single")))))),
+            "block_entities",List.of(Map.of("id","minecraft:chest","x",6,"y",65,"z",4))));
     }
 
     @Test void selectedSavedRegionAndChunkAreRequiredForIndexedOwner() throws Exception {
@@ -88,6 +92,19 @@ class SavedBlockLockerSettlementOwnerLookupTest {
             "Opt-in source-scoped ownership must never accept missing source/Chunk context");
         assertEquals(owner,lookup.resolve("world","6,65,4"),
             "Legacy already-verified direct lookup remains compatible");
+    }
+
+    @Test void matchingChestBlockEntityCannotOverrideAirPhysicalBlockState() throws Exception {
+        var selected=selectedRegion(false);
+        var scoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(index(),
+            selected.manifest(),ban(BanEvidence.Status.CLEAR)).sourceScoped();
+        var airChunk=new AnvilRegionReader.Chunk(0,0,Map.of(
+            "xPos",0,"zPos",0,
+            "sections",List.of(Map.of("Y",4,"block_states",Map.of("palette",
+                List.of(Map.of("Name","minecraft:air"))))),
+            "block_entities",physicalChunk().nbt().get("block_entities")));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),airChunk,"6,65,4"),
+            "A stale chest BlockEntity must not attribute money when the saved block is air");
     }
 
     @Test void selectedSavedSourceCannotBeSubstitutedOrReinterpreted() throws Exception {
@@ -151,6 +168,21 @@ class SavedBlockLockerSettlementOwnerLookupTest {
         var data=new ByteArrayOutputStream();
         try (var out=new DataOutputStream(data)) {
             out.writeByte(10); out.writeUTF("");
+            out.writeByte(3); out.writeUTF("xPos"); out.writeInt(0);
+            out.writeByte(3); out.writeUTF("zPos"); out.writeInt(0);
+            out.writeByte(9); out.writeUTF("sections");
+            out.writeByte(10); out.writeInt(1); // one Compound section
+            out.writeByte(3); out.writeUTF("Y"); out.writeInt(4);
+            out.writeByte(10); out.writeUTF("block_states");
+            out.writeByte(9); out.writeUTF("palette"); out.writeByte(10); out.writeInt(1);
+            out.writeByte(8); out.writeUTF("Name"); out.writeUTF("minecraft:chest");
+            out.writeByte(10); out.writeUTF("Properties");
+            out.writeByte(8); out.writeUTF("facing"); out.writeUTF("north");
+            out.writeByte(8); out.writeUTF("type"); out.writeUTF("single");
+            out.writeByte(0); // Properties
+            out.writeByte(0); // palette entry
+            out.writeByte(0); // block_states
+            out.writeByte(0); // section
             out.writeByte(9); out.writeUTF("block_entities");
             out.writeByte(10); out.writeInt(1);
             out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:chest");
