@@ -57,7 +57,7 @@ public final class PaperNativeSaveAgent {
                                         && method.methodTypeSymbol().descriptorString().equals("()V"))
                                 || (nms && method.methodName().stringValue().equals("save")
                                         && method.methodTypeSymbol().descriptorString().startsWith(
-                                            "(Lnet/minecraft/server/level/ServerPlayer;)")))) {
+                                            "(Lnet/minecraft/world/entity/player/Player;)")))) {
                         modified.incrementAndGet();
                         if (nms && !transformNms) {
                             builder.with(element);
