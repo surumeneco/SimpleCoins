@@ -1,0 +1,200 @@
+name: A02 NMS PlayerDataStorage direct writer bypass and two-entry interception on real Paper
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a02.nms-playerdata-entry-interception.md'
+      - 'tests/paper-invsee-writer-probe/**'
+      - '.github/workflows/paper-a02-nms-playerdata-entry-spike.yml'
+permissions:
+  contents: read
+jobs:
+  nms-playerdata-two-entry-experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Validate existing issue Work structure, not a CAT Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.nms-playerdata-entry-interception.md
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: pinned-server
+          sparse-checkout: |
+            plugins/InvSee++.jar
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate actual pinned InvSee++ distribution SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          printf '%s  %s\n' \
+            '01f3e053a814f76d46513ebf65a38747df11df81c577d12bed108b353d7775f9' \
+            'pinned-server/plugins/InvSee++.jar' | sha256sum -c -
+      - name: Build actual SimpleCoins, independent deny guard and disposable Paper probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-invsee-writer-probe jar
+          python3 tools/simplecoins_preflight.py \
+            admission-guard/build/libs/admission-guard-1.0.0.jar \
+            build/libs/SimpleCoins-1.0.0.jar
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq InvseeWriterProbe.class; then
+            echo 'Test-only probe leaked into the production JAR' >&2
+            exit 1
+          fi
+      - name: Build disposable native save entrypoint instrumentation Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-agent-classes
+          javac --release 25 \
+            -d native-agent-classes \
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/PaperNativeSaveAgent.java \
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/NativeSaveHook.java
+          jar cf native-hook.jar -C native-agent-classes \
+            co/surumene/simplecoins/a02agent/NativeSaveHook.class
+          unzip -Z1 native-hook.jar | grep -F 'NativeSaveHook.class'
+          printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent\n\n' > native-agent.mf
+          jar cfm native-agent.jar native-agent.mf -C native-agent-classes .
+          unzip -p native-agent.jar META-INF/MANIFEST.MF | grep -F 'Premain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -F 'PaperNativeSaveAgent'; then
+            echo 'Test-only Agent was accidentally shipped in SimpleCoins production JAR' >&2
+            exit 1
+          fi
+      - name: Obtain exact SHA256-verified official Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-nms-bypass/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A02-PaperNativeAgentProof/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' \
+            -o smoke-nms-bypass/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke-nms-bypass/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke-nms-bypass/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke-nms-bypass/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke-nms-bypass/paper.jar
+          printf '%s  %s\n' "$sha" smoke-nms-bypass/paper.jar | sha256sum -c -
+          cp build/libs/SimpleCoins-1.0.0.jar smoke-nms-bypass/plugins/SimpleCoins.jar
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke-nms-bypass/plugins/SimpleCoinsGuard.jar
+          cp pinned-server/plugins/InvSee++.jar smoke-nms-bypass/plugins/InvSeePlusPlus.jar
+          cp tests/paper-invsee-writer-probe/build/libs/SimpleCoinsInvseeWriterProbe.jar smoke-nms-bypass/plugins/InvseeProbe.jar
+          printf 'eula=true\n' > smoke-nms-bypass/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25600\n' \
+            > smoke-nms-bypass/server.properties
+      - name: Prepare an independent second-world NMS-gated experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-nms-closed
+          cp -a smoke-nms-bypass/paper.jar smoke-nms-closed/paper.jar
+          cp -a smoke-nms-bypass/plugins smoke-nms-closed/plugins
+          cp -a smoke-nms-bypass/eula.txt smoke-nms-closed/eula.txt
+          sed 's/server-port=25600/server-port=25601/' smoke-nms-bypass/server.properties > smoke-nms-closed/server.properties
+          test -s smoke-nms-closed/plugins/SimpleCoins.jar
+          test -s smoke-nms-closed/plugins/InvSeePlusPlus.jar
+      - name: NMS direct save must bypass CraftPlayer-only instrumentation and erase real saved coin
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-nms-bypass
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -javaagent:../native-agent.jar \
+              -Da02.nativeAgent.hookJar=../native-hook.jar \
+              -Da02.invsee.paperSaveBypassesVeto=true \
+              -Da02.invsee.nmsSaveBypassesCraftAgent=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > nms-bypass.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 144 ]; then
+            echo "Expected actual NMS bypass and JVM halt(144); got $code" >&2
+            tail -180 nms-bypass.log
+            exit 1
+          fi
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' nms-bypass.log
+          ! grep -Fq 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED' nms-bypass.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED' nms-bypass.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_FOUND' nms-bypass.log
+          grep -F 'PAPER_A02_NMS_PLAYERDATA_STORE_REAL_ENTRY_RESOLVED' nms-bypass.log
+          grep -F 'PAPER_A02_NMS_BYPASSED_CRAFT_ONLY_AGENT_ERASED_5000C' nms-bypass.log
+          grep -F 'PAPER_A02_NMS_SOURCE_FSYNC_AND_PENDING_BEFORE_HALT' nms-bypass.log
+      - name: Cold Paper restart confirms destructive NMS bypass left pending grant without ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-nms-bypass
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.checkNmsBypassAfterHalt=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > nms-bypass-restart.log 2>&1
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' nms-bypass-restart.log
+          grep -F 'PAPER_A02_NMS_BYPASS_COLD_RESTART_COINLESS_PENDING' nms-bypass-restart.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' nms-bypass-restart.log
+      - name: NMS PlayerDataStorage.save entry is intercepted while CraftPlayer-only hook stays closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-nms-closed
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -javaagent:../native-agent.jar \
+              -Da02.nativeAgent.hookJar=../native-hook.jar \
+              -Da02.nativeAgent.instrumentNmsSave=true \
+              -Da02.invsee.paperSaveBypassesVeto=true \
+              -Da02.invsee.nmsSaveBlockedByAgent=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > nms-closed.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 145 ]; then
+            echo "Expected real NMS agent rejection and JVM halt(145); got $code" >&2
+            tail -180 nms-closed.log
+            exit 1
+          fi
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' nms-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED' nms-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_INSTRUMENTED' nms-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_DENIED' nms-closed.log
+          grep -F 'PAPER_A02_NMS_SAVE_ENTRY_DENIED_PRESERVED_5000C' nms-closed.log
+          grep -F 'PAPER_A02_NMS_SOURCE_FSYNC_AND_PENDING_BEFORE_HALT' nms-closed.log
+      - name: Agent-free cold Paper restart preserves 5000C plus receipt and pending reservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-nms-closed
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Da02.invsee.checkNativeAgentAfterHalt=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > nms-closed-restart.log 2>&1
+          ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' nms-closed-restart.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_COLD_RESTART_COIN_RECEIPT_PENDING' nms-closed-restart.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' nms-closed-restart.log
+          echo 'A02_TWO_REAL_PAPER_SAVEDATA_ENTRYPOINTS_TEST_ONLY_NOT_ALL_WRITERS'
+      - name: Preserve both real Paper technical logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a02-test-only-nms-playerdata-entry-evidence
+          path: |\n            smoke-nms-bypass/*.log\n            smoke-nms-closed/*.log
+          retention-days: 14
+          if-no-files-found: ignore
