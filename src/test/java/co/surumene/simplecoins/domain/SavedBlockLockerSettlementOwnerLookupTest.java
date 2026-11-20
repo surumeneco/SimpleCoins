@@ -34,7 +34,7 @@ class SavedBlockLockerSettlementOwnerLookupTest {
         return b.finish();
     }
     private WorldStorageDiscovery.Manifest discover(boolean ownerHasPlayerdata) throws IOException {
-        Path world=directory.resolve("world");
+        Path world=directory.resolve(ownerHasPlayerdata ? "with-player" : "without-player");
         Files.createDirectories(world);
         if (ownerHasPlayerdata) {
             Path file=world.resolve("playerdata").resolve(OWNER+".dat");
