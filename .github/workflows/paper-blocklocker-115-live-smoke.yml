@@ -192,6 +192,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: paper-blocklocker-115-log
-          path: smoke/*.log
+          path: |
+            smoke/*.log
+            smoke/world/dimensions/minecraft/overworld/region/r.0.0.mca
+            build/test-results/test/TEST-co.surumene.simplecoins.paper.PaperSavedProfileAnvilFixtureTest.xml
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
