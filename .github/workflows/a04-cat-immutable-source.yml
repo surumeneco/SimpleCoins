@@ -1,0 +1,37 @@
+name: A04 CAT immutable source transfer
+on:
+  push:
+    branches: [infra/a04-confirmed-readonly-20261120]
+    paths: ['.github/workflows/a04-cat-immutable-source.yml']
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: 0783ccf3eb2c7ef69aa3a8df6f251ba221274187
+          persist-credentials: false
+      - name: Archive pinned original source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '0783ccf3eb2c7ef69aa3a8df6f251ba221274187'
+          test "$(git rev-parse HEAD^{tree})" = '615e8b7103ad3aad687c1e6145f069a2da67bb5a'
+          mkdir -p /tmp/a04-snapshot
+          git archive --format=tar HEAD | gzip -n > /tmp/a04-snapshot/source.tar.gz
+          python3 - <<'PY'
+          import json,hashlib,pathlib
+          p=pathlib.Path('/tmp/a04-snapshot/source.tar.gz')
+          data={'repository':'surumeneco/SimpleCoins','commit':'0783ccf3eb2c7ef69aa3a8df6f251ba221274187','tree':'615e8b7103ad3aad687c1e6145f069a2da67bb5a','archive_sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+          pathlib.Path('/tmp/a04-snapshot/manifest.json').write_text(json.dumps(data,sort_keys=True),encoding='utf-8')
+          print(data)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a04-cat-source-confirmed-0783cc
+          path: /tmp/a04-snapshot/
+          retention-days: 1
+          if-no-files-found: error
