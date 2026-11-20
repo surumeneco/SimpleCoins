@@ -21,6 +21,7 @@ on:
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerPhysicalOwnerIndex.java'
       - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerPhysicalOwnerIndexTest.java'
       - 'Lifecycle/Works/simplecoins.a04.saved-physical-owner-index.md'
+      - 'Lifecycle/Works/simplecoins.a04.real-paper-saved-palette-witness.md'
       - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerOwnerCandidateTest.java'
       - 'Lifecycle/Works/simplecoins.a04.saved-owner-candidate-bridge.md'
       - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerSignSummaryTest.java'
@@ -74,6 +75,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.saved-owner-candidate-bridge.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.saved-physical-owner-index.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.real-paper-saved-palette-witness.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
@@ -189,6 +192,7 @@ jobs:
           assert 'PAPER_A04_SAVED_ATTACHED_SIGN_SUMMARY_PASSED' in ET.tostring(root,encoding='unicode'), 'actual full sign-set summary proof missing'
           assert 'PAPER_A04_SAVED_UNPUBLISHED_VERDICT_GATE_PASSED' in ET.tostring(root,encoding='unicode'), 'unpublished proof gate marker missing'
           assert 'PAPER_A04_SAVED_PHYSICAL_OWNER_INDEX_HOLD_PASSED' in ET.tostring(root,encoding='unicode'), 'SAVED physical owner-index hold marker missing'
+          assert 'PAPER_A04_REAL_SOURCE_CHEST_PALETTE_OWNER_PASSED' in ET.tostring(root,encoding='unicode'), 'real selected Anvil chest/palette owner proof missing'
           print('PAPER_A04_REAL_SAVED_BLOCKLOCKER_EFFECTIVE_PROFILES_JUNIT_PASSED')
           PY
       - name: Restart actual Paper world and verify BlockLocker recovers the same protections
