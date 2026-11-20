@@ -1013,11 +1013,23 @@ public final class InvseeWriterProbe extends JavaPlugin {
         Object list = server.getClass().getMethod("getPlayerList").invoke(server);
         Class<?> storageType = Class.forName(
                 "net.minecraft.world.level.storage.PlayerDataStorage");
-        var fields = java.util.Arrays.stream(list.getClass().getDeclaredFields())
-                .filter(field -> storageType.isAssignableFrom(field.getType())).toList();
+        java.util.List<Field> fields = new java.util.ArrayList<>();
+        java.util.List<String> fieldTypes = new java.util.ArrayList<>();
+        // DedicatedPlayerList can subclass the actual PlayerList owner.
+        // getDeclaredFields() on ONLY the runtime subclass would miss it.
+        for (Class<?> type = list.getClass(); type != null && type != Object.class;
+                type = type.getSuperclass()) {
+            for (Field candidate : type.getDeclaredFields()) {
+                fieldTypes.add(type.getName() + "." + candidate.getName() + ":"
+                        + candidate.getType().getName());
+                if (storageType.isAssignableFrom(candidate.getType()))
+                    fields.add(candidate);
+            }
+        }
         if (fields.size() != 1)
             throw new IllegalStateException(
-                    "Real Paper PlayerList has " + fields.size() + " NMS playerdata stores");
+                    "Real Paper PlayerList hierarchy has " + fields.size()
+                            + " NMS playerdata stores; observed " + fieldTypes);
         Field field = fields.getFirst();
         field.setAccessible(true);
         Object storage = field.get(list);
