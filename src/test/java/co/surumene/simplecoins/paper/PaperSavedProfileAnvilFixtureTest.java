@@ -140,14 +140,14 @@ class PaperSavedProfileAnvilFixtureTest {
             assertEquals(x == 6 || x == 15 ? OWNER : null,
                 aggregated.verifiedMainOwner().orElse(null));
             assertFalse(aggregated.mainOwnerConflict());
-            var candidate=SavedBlockLockerOwnerCandidate.fromSavedChunks(
+            var unpublished=SavedBlockLockerOwnerCandidate.fromSavedChunks(
                 observedChunks,new SavedBlockLockerChestSigns.Position(x,fixtureY,4),
                 Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
                 PaperSavedBlockLockerSignText.nativeText(),
                 SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
-            assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,candidate.verdict(),
+            assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,unpublished.verdict(),
                 "A local real Anvil fixture is not a proof of G0 generation at x="+x);
-            assertTrue(candidate.verifiedOwner().isEmpty());
+            assertTrue(unpublished.verifiedOwner().isEmpty());
             assertEquals(x==15 ? 2 : 1,chestObservation.storageMembers().size(),
                 "The saved double chest must be one physical storage pair");
         }
