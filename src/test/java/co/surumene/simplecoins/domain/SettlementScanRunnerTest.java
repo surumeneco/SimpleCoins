@@ -135,6 +135,35 @@ class SettlementScanRunnerTest {
         return file;
     }
 
+    @Test void scopedBlockOwnerReceivesActualSelectedSourceAndDecodedChunkAfterBanCoverage()
+            throws Exception {
+        Path saved = region(true);
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", directory), scope, 100);
+        var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of());
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        SettlementScanRunner.SourceBlockOwnerLookup owners = (source, chunk, position) -> {
+            calls.incrementAndGet();
+            assertEquals("world", source.world());
+            assertEquals(WorldStorageDiscovery.Kind.REGION, source.kind());
+            assertEquals(saved.toAbsolutePath().normalize(), source.path().toAbsolutePath().normalize());
+            assertTrue(manifest.worldFiles().contains(source));
+            assertEquals(0, chunk.x());
+            assertEquals(0, chunk.z());
+            assertEquals("0,64,0", position);
+            assertEquals("minecraft:chest",
+                    ((Map<?, ?>)((List<?>)chunk.nbt().get("block_entities")).getFirst()).get("id"));
+            return new BlockEntitySettlementImport.Ownership(null, false, false, false);
+        };
+        var staged = SettlementScanRunner.stageWithBanCoverage(
+                manifest, scope, ban, owners,
+                (world, chunk) -> Map.of(), 4096, 4096);
+        assertEquals(1, calls.get());
+        assertNotNull(staged.savedContentWitness());
+        assertEquals(BigInteger.ZERO, staged.pending().commit().free());
+    }
+
     @Test void ownedEntityEquipmentRequiresExplicitResolvedOwnership() throws Exception {
         UUID entityId = UUID.randomUUID(), owner = UUID.randomUUID();
         Path file = equippedEntityRegion(entityId);
