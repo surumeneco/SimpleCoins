@@ -143,6 +143,11 @@ public final class SettlementScanRunner {
         Objects.requireNonNull(manifest, "saved manifest");
         Objects.requireNonNull(banSources, "complete BAN source observations");
         Objects.requireNonNull(blockOwners, "external block owner resolver");
+        // The saved BlockLocker adapter has a legacy coordinate-only method
+        // for local diagnostics. It is NOT an authenticated SAVED source
+        // resolver; settlement must use its explicit sourceScoped() adapter.
+        if (blockOwners instanceof SavedBlockLockerSettlementOwnerLookup)
+            throw new IOException("SAVED BlockLocker settlement needs sourceScoped() and selected Chunk");
         Objects.requireNonNull(entityOwners, "external entity owner resolver");
         // All discovered saved players must have complete BAN observations
         // before any world data is read or any asset staged.
@@ -272,6 +277,11 @@ public final class SettlementScanRunner {
             throw new IOException("Settlement WorldScope differs from saved discovery");
         Objects.requireNonNull(currentlyBanned);
         Objects.requireNonNull(blockOwners);
+        // The saved BlockLocker adapter has a legacy coordinate-only method
+        // for local diagnostics. It is NOT an authenticated SAVED source
+        // resolver; settlement must use its explicit sourceScoped() adapter.
+        if (blockOwners instanceof SavedBlockLockerSettlementOwnerLookup)
+            throw new IOException("SAVED BlockLocker settlement needs sourceScoped() and selected Chunk");
         Objects.requireNonNull(entityOwners);
         Set<UUID> banned = Set.copyOf(currentlyBanned);
         Set<String> savedSources = manifest.requiredSourceIds();
