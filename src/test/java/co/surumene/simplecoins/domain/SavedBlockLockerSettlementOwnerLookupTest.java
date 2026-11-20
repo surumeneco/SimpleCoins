@@ -71,8 +71,12 @@ class SavedBlockLockerSettlementOwnerLookupTest {
     }
 
     private static AnvilRegionReader.Chunk physicalChunk() {
-        return new AnvilRegionReader.Chunk(0,0,Map.of("block_entities",
-            List.of(Map.of("id","minecraft:chest","x",6,"y",65,"z",4))));
+        return new AnvilRegionReader.Chunk(0,0,Map.of(
+            "xPos",0,"zPos",0,
+            "sections",List.of(Map.of("Y",4,"block_states",
+                Map.of("palette",List.of(Map.of("Name","minecraft:chest"))))),
+            "block_entities",List.of(Map.of(
+                "id","minecraft:chest","x",6,"y",65,"z",4))));
     }
 
     @Test void selectedSavedRegionAndChunkAreRequiredForIndexedOwner() throws Exception {
@@ -165,6 +169,28 @@ class SavedBlockLockerSettlementOwnerLookupTest {
         var data=new ByteArrayOutputStream();
         try (var out=new DataOutputStream(data)) {
             out.writeByte(10); out.writeUTF("");
+            out.writeByte(3); out.writeUTF("xPos"); out.writeInt(0);
+            out.writeByte(3); out.writeUTF("zPos"); out.writeInt(0);
+            // Actual Anvil section: air by default, exactly block(0,64,0)
+            // uses palette index 1 (chest), in 4-bit nonspanning packing.
+            out.writeByte(9); out.writeUTF("sections");
+            out.writeByte(10); out.writeInt(1); // one TAG_Compound section
+            out.writeByte(1); out.writeUTF("Y"); out.writeByte(4);
+            out.writeByte(10); out.writeUTF("block_states");
+            out.writeByte(9); out.writeUTF("palette");
+            out.writeByte(10); out.writeInt(2);
+            out.writeByte(8); out.writeUTF("Name"); out.writeUTF("minecraft:air");
+            out.writeByte(0); // air palette entry
+            out.writeByte(8); out.writeUTF("Name"); out.writeUTF("minecraft:chest");
+            out.writeByte(10); out.writeUTF("Properties");
+            out.writeByte(8); out.writeUTF("facing"); out.writeUTF("north");
+            out.writeByte(8); out.writeUTF("type"); out.writeUTF("single");
+            out.writeByte(0); // Properties
+            out.writeByte(0); // chest palette entry
+            out.writeByte(12); out.writeUTF("data"); out.writeInt(256);
+            for (int word=0;word<256;word++) out.writeLong(word==0 ? 1L : 0L);
+            out.writeByte(0); // block_states
+            out.writeByte(0); // section compound
             out.writeByte(9); out.writeUTF("block_entities");
             out.writeByte(10); out.writeInt(1);
             out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:chest");
