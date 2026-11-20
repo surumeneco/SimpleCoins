@@ -1,0 +1,25 @@
+name: Task004 BAN evidence untrusted-input regression
+on:
+  push:
+    branches:
+      - test/task004-ban-evidence-untrusted-input-queue-a-20261107
+  workflow_dispatch:
+jobs:
+  ban-evidence-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile and execute actual repository regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/task004-ban-evidence
+          javac -d build/task004-ban-evidence \
+            src/main/java/co/surumene/simplecoins/domain/BanEvidence.java \
+            src/test/java/co/surumene/simplecoins/domain/BanEvidenceUntrustedInputRegression.java
+          java -cp build/task004-ban-evidence co.surumene.simplecoins.domain.BanEvidenceUntrustedInputRegression | tee build/task004-ban-evidence/result.txt
+          grep -Fx 'PASS BanEvidenceUntrustedInputRegression checks=7' build/task004-ban-evidence/result.txt
