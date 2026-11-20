@@ -21,7 +21,7 @@ project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4D
 spec_status: unknown
 ---
 
-# A02/G3 — 二つのPaper native保存入口を閉じてもInvSee++は同じplayerdataを書換可能か
+# A02/G3 — 実InvSee++非同期保存と閉鎖済みPaper native2入口の交差検証
 
 ## Evidence
 | URI |
@@ -66,13 +66,16 @@ spec_status: unknown
 | deployment | not-run | — |
 | real-use | not-run | — |
 
-## Experiment and stop criterion
-The exact real Paper `CraftPlayer.saveData()V` and `PlayerDataStorage.save(Player)` calls can each be intercepted in isolated real Paper tests. This says nothing about InvSee++'s own asynchronous `FakeCraftPlayer.saveData()` or direct file IO. Determine whether **the actual installed InvSee++ writer** is outside both intercepted entrances before expanding to more methods.
+## 実行条件・判定・反証（規範ではなく隔離技術検証）
 
-1. Run the existing disposable loopback Paper 26.2 + pinned InvSee++ fixture with the **same test-only agent** instrumenting both real Paper entrances. Never alter server/VPS, plugin production JAR, Admission or ACK.
-2. Retain the previously verified original 5000C coin + completed signed receipt + unrelated STONE + `GrantLedger` pending1 in actual UUID.dat. Let InvSee++'s actual API load its offline inventory **while the gate is open**. Then remove only the copied 5000C item from InvSee's fake inventory, assert a valid pending grant and fresh valid saved proof, close the `a02.nativeAgent.closed` gate **before** invoking the genuine `api.saveInventory`.
-3. Require both native Paper class-transform markers in the same JVM. If this third-party save succeeds, and the *actual file* becomes coinless while retaining receipt and STONE, confirm a genuinely reached uninstrumented writer path, force file and directory, halt abruptly, and check cold recovery in a separate official Paper JVM with the Agent **absent**. Keep pending grant unACKed and `AdmissionGuard` default-deny. If the save is rejected by either hook and file is unchanged, report that actual positive result instead; do not invent an external bypass.
-4. Distinguish a triggered native hook from general native-hook availability. Require the InvSee save event is actually observed and is **not** cancelled by a cooperative event-veto; otherwise this is not evidence about unconstrained plugin save.
-5. Preserve the existing positive two-entry Paper save interception [PR #581] and original InvSee veto and false-ACK negative tests. Run same-HEAD Domain/Phase6 and real Paper regression. Only a test fixture, workflow and verification Work are in scope, never production code.
+既存PR #580/#581で、公式Paper 26.2の `CraftPlayer.saveData()V` と `PlayerDataStorage.save(Player)` の2つの入口は、Java25 Class-File APIとbootstrapに公開したテスト専用フックで拒否できた。一方、これを他プラグインのwriterまで自動的に網羅したものと見なせないため、導入済みInvSee++ 0.31.22を使って独立検証する。
 
-**Stop criterion**: A single real writing route that bypasses both native hooks invalidates any proposal that these two hooks establish G3 writer closure. Do **not** synthesize a product writer proof from hook markers, static Java callrefs or finite readback. Even if both hooks block this one InvSee operation, the full 24-JAR/Paper G0/G3 writer set, in-flight drain, LIVE mutations and atomic publication are still unproved. This is issue-work verification, not a formal A02 Process/Model/Implementation conformance or authorization to change the approved business guarantee.
+1. 独立Paper＋実InvSee++をloopback・0人で起動し、真正の5000C紙貨幣、完了署名receipt、無関係STONE、未ACKの製品`GrantLedger`予約1件を同一playerdata`UUID.dat`へ保存し、現行のfresh readbackで検証する。
+2. 実InvSeeのoffline inventoryを**フック解放中に読み込み完了**させ、同インベントリの5000Cだけを除去する。保存イベントをcancelしない実観測者で入場回数を数える。両方のPaper保存入口のAgent変換マーカーを要求し、その後で`a02.nativeAgent.closed=true`にして実`api.saveInventory`を呼ぶ。
+3. **初回実験で確定した実経路**：[PR #582 初回CI #44772192101](https://github.com/surumeneco/SimpleCoins/actions/runs/44772192101)は、実InvSeeの保存が`CraftPlayer.saveData()`へ到達し、そこで`NativeSaveHook.beforeNativeSave`に拒否された。JVMは失敗安全停止し、元の「両入口を迂回して貨幣を消す」という仮説は**不成立**。実InvSee経路について正規の否定的反例が得られたので、テストをこの**観測済み経路**に一致する正例へ修正した。単純な別writer迂回の成功を捏造してはならない。
+4. 修正した検証の要求：保存要求開始前の閉鎖、**取消していないInvSee保存イベント1件**、実`CraftPlayer`拒否例外と`isSaved=false`、NMSフック自体の変換正常（呼出数を要求しない）、保存済み5000C＋receipt＋STONE・pending1・ACK0、fresh readback、file/dir強制同期、`Runtime.halt(148)`、Agentなしの独立Paper JVM再起動でも正規貨幣・receipt・pending1が残ること。InvSeeイベントが観測されない、例外が別の原因、元のファイルが変わった場合は合格しない。
+5. 既存のInvSee非協調writer・イベントvetoだけの反例、Paper native保存2入口の正例、既知Future後のfalse ACK反例を維持する。Domain/Phase6/実Paper回帰が成功して初めて本Workを統合対象とする。
+
+**境界**：この正例は**実InvSeeの特定の保存API一経路**がCraftPlayerフックを経由するという証拠にすぎない。全InvSeeオーバーライド、別の非同期保存・先行処理、直接ファイル書込み、他23 JAR、NMS残入口、ワールドLIVE/保存チャンク・全G0 writer、配布最終ACKまでの排出と原子性は依然未成立。追加のフックを運用VPSへ導入せず、製品JAR・入室・G0公開・ACK・mainを変更しない。CAT A01/A02のDraftはそのまま、正式Process/Model/Implementation Gateは別であり、ホストのWork構文検証を合格と同一視しない。
+
+**次の判断**：同一保存への実到達経路の列挙、非同期先行writerの排出、世代保持、全必要ソースの同時凍結が閉じられない場合は、単なる2入口の正例を製品ACK認証へ昇格させず、具体的な障害と必要な実サーバー構成変更をエスカレーションする。
