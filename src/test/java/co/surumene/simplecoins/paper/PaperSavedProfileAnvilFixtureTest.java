@@ -10,6 +10,7 @@ import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
 import co.surumene.simplecoins.domain.SavedBlockLockerSignSummary;
 import co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate;
+import co.surumene.simplecoins.domain.SavedBlockLockerPhysicalOwnerIndex;
 import co.surumene.simplecoins.domain.BlockLockerSavedOwnerVerdict;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -148,6 +149,12 @@ class PaperSavedProfileAnvilFixtureTest {
             assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,unpublished.verdict(),
                 "A local real Anvil fixture is not a proof of G0 generation at x="+x);
             assertTrue(unpublished.verifiedOwner().isEmpty());
+            var pendingOwnerIndex=new SavedBlockLockerPhysicalOwnerIndex.Builder();
+            assertThrows(IOException.class,()->pendingOwnerIndex.accept(
+                "saved-fixture",chestObservation,
+                SavedBlockLockerOwnerCandidate.ExternalProof.unknown()),
+                "A real stopped-world fixture is not proof of the complete writer generation");
+            assertThrows(IOException.class,pendingOwnerIndex::finish);
             assertEquals(x==15 ? 2 : 1,chestObservation.storageMembers().size(),
                 "The saved double chest must be one physical storage pair");
         }
@@ -172,6 +179,8 @@ class PaperSavedProfileAnvilFixtureTest {
             unprotected,SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
         assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,unverifiedBlank.verdict(),
             "No physical protection signs in a local fixture is not global non-protection proof");
+        System.out.println("PAPER_A04_SAVED_PHYSICAL_OWNER_INDEX_HOLD_PASSED"
+            + " savedProtectedHolds=5 (no independent generation evidence)");
         System.out.println("PAPER_A04_SAVED_UNPUBLISHED_VERDICT_GATE_PASSED"
             + " observedProtected=5 observedUnprotected=1 candidatesHold=6"
             + " (real Paper Anvil fixture; no independent writer-epoch witness)");
