@@ -2,20 +2,20 @@
 cat_version: '0.3'
 kind: process
 id: simplecoins.blocklocker.saved-owner
-status: draft
+status: confirmed
 process: simplecoins.blocklocker.saved-owner
 source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-20:A04-saved-BlockLocker-CAT-approved
 refs:
   - simplecoins.blocklocker.saved-owner.pi.classify
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# Process: SAVED BlockLocker収納の有効保護分類（Draft）
+# Process: SAVED BlockLocker収納の有効保護分類
 
 ## 契約
 閉世界: 真
@@ -57,4 +57,4 @@ language: ja
 
 PR #560はLIVEの公式BlockLocker 1.15 APIでowner/Everyoneを読取済み。PR #562は停止後のSAVED Anvilで看板5・チェスト7・2チャンクの物理対応だけを検証済みで、**有効なSAVED所有者をまだ復元していない**。ここで分類するのは選択済み保存元内の局所候補のみ。全world・全writer排他、BAN/playerdata同一世代、P/F/D最終集計、原子Snapshot公開、G3 ACK、Admissionを成立させない。
 
-この文書は承認前のDraft。本人のCAT規範承認、Process Closure、Model Conformance、Implementation Conformanceおよび実Paper受入の代用ではない。
+本Artifactの分類意味は2026-11-20の利用者承認によってConfirmedとした。Process Closure、Model Conformance、Implementation Conformanceおよび実Paper受入は独立した未実行の工程である。
