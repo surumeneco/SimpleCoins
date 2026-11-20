@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
 import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
 import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
+import co.surumene.simplecoins.domain.SavedBlockLockerSignSummary;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -129,6 +130,14 @@ class PaperSavedProfileAnvilFixtureTest {
                 candidate.position(),"Actual saved sign did not attach to its chest");
             assertEquals(result.get(x),candidate.profiles(),
                 "Physical attachment observer changed the saved profile at x="+x);
+            var aggregated=SavedBlockLockerSignSummary.summarize(chestObservation);
+            assertTrue(aggregated.protectionSignObserved());
+            assertEquals(x == 9 || x == 21,aggregated.everyoneEffective(),
+                "Saved Everyone aggregation mismatched at x="+x);
+            assertEquals(!(x == 9 || x == 21),aggregated.everyoneAbsent());
+            assertEquals(x == 6 || x == 15 ? OWNER : null,
+                aggregated.verifiedMainOwner().orElse(null));
+            assertFalse(aggregated.mainOwnerConflict());
             assertEquals(x==15 ? 2 : 1,chestObservation.storageMembers().size(),
                 "The saved double chest must be one physical storage pair");
         }
@@ -146,6 +155,12 @@ class PaperSavedProfileAnvilFixtureTest {
             PaperSavedBlockLockerSignText.nativeText());
         assertTrue(unprotected.attachedSigns().isEmpty(),
             "A chest with no applicable saved signs must have an empty local observation");
+        var noProtectionSummary=SavedBlockLockerSignSummary.summarize(unprotected);
+        assertFalse(noProtectionSummary.protectionSignObserved());
+        assertFalse(noProtectionSummary.everyoneAbsent());
+        System.out.println("PAPER_A04_SAVED_ATTACHED_SIGN_SUMMARY_PASSED"
+            + " owner=2 everyone=2 unresolved=1 unprotected=1"
+            + " (fixture-only; no full-source and writer proof)");
         System.out.println("PAPER_A04_SAVED_ATTACHED_CHEST_SIGNS_PASSED"
             + " protectedChests=5 unprotectedChests=1 reciprocalPair=1"
             + " chunks=2 (test fixture; not writer/global-source proof)");
