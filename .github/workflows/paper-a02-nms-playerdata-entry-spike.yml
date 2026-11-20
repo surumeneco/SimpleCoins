@@ -195,6 +195,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: a02-test-only-nms-playerdata-entry-evidence
-          path: |\n            smoke-nms-bypass/*.log\n            smoke-nms-closed/*.log
+          path: |
+            smoke-nms-bypass/*.log
+            smoke-nms-closed/*.log
           retention-days: 14
           if-no-files-found: ignore
