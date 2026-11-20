@@ -16,6 +16,10 @@ on:
       - 'src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedProfileResolution.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedTerrainBlockPalette.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerChestSigns.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java'
+      - 'Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md'
+      - 'Lifecycle/Works/simplecoins.a04.saved-neighborhood-source-provenance.md'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerSignSummary.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerOwnerCandidate.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerPhysicalOwnerIndex.java'
@@ -77,6 +81,10 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.saved-physical-owner-index.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.real-paper-saved-palette-witness.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.saved-neighborhood-source-provenance.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
