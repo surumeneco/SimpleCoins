@@ -22,6 +22,13 @@ jobs:
           ref: c56b1e1f46867dfe2e5ac655907a62ebbe86b74c
           path: cat
           persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
       - name: Verify immutable source identity
         run: |
           test "$(git -C product rev-parse HEAD)" = 'acc7af23ed3d4c58f1a8d9215e5904a8364c6ff1'
@@ -57,11 +64,27 @@ jobs:
             -o product/Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
           grep -F 'GeneratedA05WclEvidence' product/Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
           find product/Lifecycle/Works/.cat-flow -type f | sort
+      - name: Execute source-derived current-case JUnit on existing implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=product/Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java
+          class=$(grep -Eo 'final class GeneratedA05WclEvidenceCase[a-f0-9]+Test' "$source" | awk '{print $3}')
+          [[ "$class" =~ ^GeneratedA05WclEvidenceCase[a-f0-9]+Test$ ]]
+          target=product/src/test/java/co/surumene/simplecoins/domain/generated
+          mkdir -p "$target"
+          cp "$source" "$target/$class.java"
+          cd product
+          gradle --no-daemon :test --tests "co.surumene.simplecoins.domain.generated.$class"
+          find build/test-results/test -name "TEST-*GeneratedA05WclEvidenceCase*Test.xml" -print
       - name: Upload bounded diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: a05-cat-main-readonly-diagnostics
-          path: product/Lifecycle/Works/.cat-flow/
+          path: |
+            product/Lifecycle/Works/.cat-flow/
+            product/build/test-results/test/TEST-*GeneratedA05WclEvidenceCase*Test.xml
           retention-days: 1
+          include-hidden-files: true
           if-no-files-found: ignore
