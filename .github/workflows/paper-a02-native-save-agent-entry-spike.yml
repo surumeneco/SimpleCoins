@@ -70,7 +70,11 @@ jobs:
           mkdir -p native-agent-classes
           javac --release 25 \
             -d native-agent-classes \
-            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/PaperNativeSaveAgent.java
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/PaperNativeSaveAgent.java \
+            tests/paper-invsee-writer-probe/agent-src/co/surumene/simplecoins/a02agent/NativeSaveHook.java
+          jar cf native-hook.jar -C native-agent-classes \
+            co/surumene/simplecoins/a02agent/NativeSaveHook.class
+          unzip -Z1 native-hook.jar | grep -F 'NativeSaveHook.class'
           printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent\n\n' > native-agent.mf
           jar cfm native-agent.jar native-agent.mf -C native-agent-classes .
           unzip -p native-agent.jar META-INF/MANIFEST.MF | grep -F 'Premain-Class: co.surumene.simplecoins.a02agent.PaperNativeSaveAgent'
@@ -108,6 +112,7 @@ jobs:
           set +e
           timeout --signal=TERM --kill-after=10s 190s \
             java -javaagent:../native-agent.jar \
+              -Da02.nativeAgent.hookJar=../native-hook.jar \
               -Da02.invsee.paperSaveBypassesVeto=true \
               -Da02.invsee.nativeAgentEntryTest=true -Xms256M -Xmx1024M \
               -jar paper.jar nogui </dev/null > paper-a02-native-agent.log 2>&1
