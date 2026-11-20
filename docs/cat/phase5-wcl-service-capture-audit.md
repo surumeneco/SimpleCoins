@@ -31,6 +31,8 @@ language: ja
 | WCL-AUDIT-04 | providerの登録所有者が期待するWWC/WWWと一致しない、無効状態、または固定WCLサービス型と一致しない | incompleteを返す | owner |
 | WCL-AUDIT-05 | primary-thread/全登録取得を確認できない、またはJARハッシュが欠落する | incompleteを返す | provenance |
 | WCL-AUDIT-06 | 解析対象が不正・大容量・読込不能 | invalidとして機械可読な終了コードを返す | cli |
+| WCL-AUDIT-07 (Candidate) | 構造的に正しいcaptureのJSONにPython拡張定数NaN/Infinityが混入する | RFC 8259 JSONとして不正な入力をvalid扱いしない候補 | json-nonfinite |
+| WCL-AUDIT-08 (Candidate) | capture JSONの同一オブジェクトに重複プロパティ（例 schema_version/capture）が存在する | sourceが曖昧な証拠を拒否する候補（まだ規範未確定） | json-duplicate |
 
 ## Process / PI
 
@@ -41,5 +43,12 @@ Input: JSON evidence independently exported by an authorized Paper-side probe. T
 - Valid structural example, missing provider, missing plugin, disabled plugin, wrong owner, wrong service interface, duplicate provider.
 - Unverified primary thread, incomplete registration enumeration, missing SHA-256, malformed flags.
 - Timestamp ordering/timezone and CLI status/exit-code boundaries.
+- Candidate Red CLI vectors: otherwise valid capture plus `NaN` extension, duplicated `schema_version` property, and a valid baseline control. Expected return code 3 for malformed inputs, return code 0 for valid JSON.
+
+## Observation / Candidate / Question
+
+- **Observation (source-pinned)**: `tools/audit_wcl_service_capture.py` Git blob `d79c9318dc4572751e01def2cc0c2a8eb0895969` invokes Python's default `json.loads`. Direct Python 3 CLI reproduction with a structurally valid fixture returned `structurally_complete` (exit 0) even after adding `"untrusted_extension": NaN` or repeating a `schema_version` / `capture` key. The existing tool's scope remains structural and does not authenticate a real Paper probe.
+- **Candidate**: reject non-finite numeric tokens and duplicate JSON object names, reporting machine-readable `invalid` rather than accepting ambiguous/extension syntax. Preserve ordinary valid JSON and existing incomplete-vs-invalid distinctions.
+- **Question**: strict JSON lexical/canonical uniqueness is an additional unconfirmed acceptance rule. This Draft and its Red tests do not authorize production/source changes or prove live WCL completeness.
 
 Status: **Draft**. This is an independent offline diagnostic helper, not a Confirmed CAT specification or an approved owner-settlement contract. Formal process-closure, TestModel generation, model-conformance, vectors, Queue/current-item, implementation-conformance and actual Paper runtime Gates are **not-run**.
