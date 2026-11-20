@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.BlockLockerHeaderMatcher;
 import co.surumene.simplecoins.domain.BlockLockerSavedProfileResolution;
+import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
+import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
+import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -21,14 +24,18 @@ import org.junit.jupiter.api.Test;
 class PaperSavedProfileAnvilFixtureTest {
     private static final UUID OWNER = UUID.fromString("11111111-1111-4111-8111-111111111111");
     private static final Set<Integer> EXPECTED = Set.of(6,9,12,15,21);
+    private static final int Y = 65;
 
     @Test void savedBlockLockerProfilesMatchObservedLiveOwnerAndEveryoneAcrossBothChunks() throws Exception {
         String path = System.getProperty("a04.saved.fixture");
         Assumptions.assumeTrue(path != null && !path.isBlank(),
                 "Real stopped-Paper saved fixture not selected");
         Map<Integer, BlockLockerSavedProfileResolution.SignProfiles> result = new HashMap<>();
+        Map<Integer, Map<String, Object>> terrain = new HashMap<>();
         AnvilRegionReader.scan(Path.of(path), 2 * 1024 * 1024, 16 * 1024 * 1024, chunk -> {
             if (chunk.z() != 0 || (chunk.x() != 0 && chunk.x() != 1)) return;
+            if (terrain.putIfAbsent(chunk.x(),chunk.nbt()) != null)
+                throw new IOException("Duplicate saved fixture terrain Chunk");
             Object blocks = chunk.nbt().get("block_entities");
             if (!(blocks instanceof List<?> entities))
                 throw new IOException("Saved terrain lacks block entities");
@@ -42,6 +49,7 @@ class PaperSavedProfileAnvilFixtureTest {
                         || !(entity.get("y") instanceof Integer y))
                     throw new IOException("Malformed saved sign coordinate");
                 if (z != 5 || !EXPECTED.contains(x)) continue;
+                if (y != Y) throw new IOException("Saved fixture sign Y changed at X=" + x);
                 if (Math.floorDiv(x,16) != chunk.x())
                     throw new IOException("Saved sign located outside declared Chunk");
                 @SuppressWarnings("unchecked")
@@ -69,6 +77,40 @@ class PaperSavedProfileAnvilFixtureTest {
         assertTrue(result.get(12).primaryOwner().isEmpty(),
                 "Unresolved saved text owner cannot be guessed");
         assertTrue(result.get(12).everyoneAbsenceVerified());
+        assertEquals(Set.of(0,1),terrain.keySet(),"Selected real fixture Chunks incomplete");
+        for (int x : EXPECTED) {
+            var signState=SavedTerrainBlockPalette.read(terrain.get(Math.floorDiv(x,16)),x,Y,5);
+            assertEquals("minecraft:oak_wall_sign",signState.name(),"Missing actual saved sign x="+x);
+            assertEquals("south",signState.properties().get("facing"));
+            assertTrue(BlockLockerSignAttachment.attaches(
+                new BlockLockerSignAttachment.Position(x,Y,5),
+                BlockLockerSignAttachment.Mount.WALL_SOUTH,
+                new BlockLockerSignAttachment.Position(x,Y,4)),
+                "Sign not physically attached to saved chest at "+x);
+        }
+        for (int x : new int[]{3,6,9,12,15,16,21}) {
+            var chest=SavedTerrainBlockPalette.read(terrain.get(Math.floorDiv(x,16)),x,Y,4);
+            assertEquals("minecraft:chest",chest.name(),"Missing saved physical chest at "+x);
+        }
+        var first=SavedTerrainBlockPalette.read(terrain.get(0),15,Y,4);
+        var second=SavedTerrainBlockPalette.read(terrain.get(1),16,Y,4);
+        assertEquals("north",first.properties().get("facing"));
+        assertEquals("left",first.properties().get("type"));
+        assertEquals("north",second.properties().get("facing"));
+        assertEquals("right",second.properties().get("type"));
+        var left=new BlockLockerChestLinkage.Part(
+            new BlockLockerChestLinkage.Position(15,Y,4),BlockLockerChestLinkage.Facing.NORTH,
+            BlockLockerChestLinkage.Half.LEFT,BlockLockerChestLinkage.Kind.CHEST);
+        var right=new BlockLockerChestLinkage.Part(
+            new BlockLockerChestLinkage.Position(16,Y,4),BlockLockerChestLinkage.Facing.NORTH,
+            BlockLockerChestLinkage.Half.RIGHT,BlockLockerChestLinkage.Kind.CHEST);
+        assertTrue(BlockLockerChestLinkage.linked(left,right),
+                "Saved double-chest NBT states do not form a reciprocal pair");
+        assertTrue(BlockLockerChestLinkage.signAttachedToPair(
+            new BlockLockerSignAttachment.Position(15,Y,5),
+            BlockLockerSignAttachment.Mount.WALL_SOUTH,left,right));
+        System.out.println("PAPER_A04_PRODUCT_SAVED_TERRAIN_PALETTE_PASSED signs=5 chests=7"
+                + " chunks=2 doubleChest=true (fixture-only; G0 writer epoch unproved)");
         System.out.println("PAPER_A04_SAVED_EFFECTIVE_PROFILES_PASSED signs=5"
                 + " knownOwners=2 everyone=2 unresolved=1 chunks=2"
                 + " (fixture-only; no all-writer epoch or settlement publication)");
