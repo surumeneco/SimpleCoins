@@ -51,6 +51,40 @@ class SavedBlockLockerSettlementOwnerLookupTest {
                 new BanEvidence.Source("external",BanEvidence.Status.CLEAR))));
     }
 
+    private record ScopedFixture(
+            WorldStorageDiscovery.Manifest manifest,
+            WorldStorageDiscovery.SourceFile source) {}
+
+    private ScopedFixture selectedRegion(boolean ownerHasPlayerdata) throws IOException {
+        Path world=directory.resolve(ownerHasPlayerdata ? "with-player" : "without-player");
+        Path region=world.resolve("region/r.0.0.mca");
+        Files.createDirectories(region.getParent());
+        // This is an identity-scoping fixture, not an actual Anvil read.
+        Files.write(region,new byte[8192]);
+        var manifest=discover(ownerHasPlayerdata);
+        return new ScopedFixture(manifest,manifest.worldFiles().getFirst());
+    }
+
+    private static AnvilRegionReader.Chunk physicalChunk() {
+        return new AnvilRegionReader.Chunk(0,0,Map.of("block_entities",
+            List.of(Map.of("id","minecraft:chest","x",6,"y",65,"z",4))));
+    }
+
+    @Test void selectedSavedRegionAndChunkAreRequiredForIndexedOwner() throws Exception {
+        var selected=selectedRegion(true);
+        var lookup=SavedBlockLockerSettlementOwnerLookup.fromIndex(
+            index(),selected.manifest(),ban(BanEvidence.Status.CLEAR));
+        var scoped=lookup.sourceScoped();
+        var owner=scoped.resolve(selected.source(),physicalChunk(),"6,65,4");
+        assertEquals(OWNER,owner.owner());
+        assertTrue(owner.hasPlayerdata());
+        assertFalse(owner.currentlyBanned());
+        assertThrows(IOException.class,()->scoped.resolve("world","6,65,4"),
+            "Opt-in source-scoped ownership must never accept missing source/Chunk context");
+        assertEquals(owner,lookup.resolve("world","6,65,4"),
+            "Legacy already-verified direct lookup remains compatible");
+    }
+
     @Test void positivePhysicalOwnerUsesIndependentBanAndPlayerdataForSettlementStaging() throws Exception {
         var l=SavedBlockLockerSettlementOwnerLookup.fromIndex(
             index(),discover(true),ban(BanEvidence.Status.CLEAR));
