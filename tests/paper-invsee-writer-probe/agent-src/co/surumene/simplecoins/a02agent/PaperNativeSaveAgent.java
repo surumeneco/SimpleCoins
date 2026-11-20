@@ -1,6 +1,7 @@
 package co.surumene.simplecoins.a02agent;
 
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassHierarchyResolver;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeTransform;
@@ -52,7 +53,16 @@ public final class PaperNativeSaveAgent {
                 if (nms && transformNms)
                     System.out.println("PAPER_A02_NATIVE_AGENT_NMS_TRANSFORM_ATTEMPTED");
                 try {
-                var api = ClassFile.of();
+                // Paper's NMS loader owns non-JDK types referenced by
+                // stack-map verification (e.g. ProblemReporter$ScopedCollector).
+                // The default ClassFile resolver uses only the *system* loader
+                // and silently makes Instrumentation drop this transformation.
+                // Parse the target loader's class resources, rather than
+                // loading partially initialized Paper types via reflection.
+                var hierarchy = ClassHierarchyResolver.ofResourceParsing(loader)
+                        .orElse(ClassHierarchyResolver.defaultResolver());
+                var api = ClassFile.of(
+                        ClassFile.ClassHierarchyResolverOption.of(hierarchy));
                 AtomicInteger modified = new AtomicInteger();
                 byte[] result = api.transformClass(api.parse(source), (builder, element) -> {
                     if (element instanceof MethodModel method
