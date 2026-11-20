@@ -50,10 +50,6 @@ spec_status: confirmed
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a04-green-f0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.f0 | case.f0 | — | — | 300 |
-| a04-green-f1 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.f1 | case.f1 | — | — | 300 |
-| a04-green-o0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.o0 | case.o0 | — | — | 300 |
-| a04-green-h0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.h0 | case.h0 | — | — | 300 |
 
 ## Gates
 | Gate | Status | Evidence |
@@ -80,4 +76,4 @@ spec_status: confirmed
 - Move the existing test-only Paper 26.2 palette-indexed terrain block-state reader into a **read-only production domain observer**. The caller supplies the chosen saved terrain Chunk and a world position; the observer returns only verified block ID and block properties, never owner, valid protection, all-sign closure or a published settlement result.
 - Check selected chunk coordinates, section Y, palette entries, packed long array, offsets, property types and malformed/missing data. Abort on uncertainty rather than treat unknown storage as air or Free. World-source epoch and writer exclusion are proven elsewhere.
 - Test first: synthetic one-block palette and packed multi-palette states including x=15/16 cross-Chunk edge, malformed palette/indices/coordinates and unsupported missing sections. Use the real Paper 26.2 stopped Anvil in an independent JUnit to verify five protection wall signs and seven actual chest states at known positions, after the previous real-sign/profile checks. This is a bounded fixture, not an all-world production source set.
-- This Work reuses the approved A04 Process observation capability; formal Process/model semantics and existing ownership verdict are unchanged. CAT implementation conformance remains **inconclusive** until the whole observation/action and source-gathering path is proved. Admission and settlement remain blocked.
+- This Work reuses the approved A04 Process observation capability; formal Process/model semantics and existing ownership verdict are unchanged. No CAT-generated PI-only Queue item is claimed as this observer's own Green. All adapter/real-Paper tests are supplementary execution evidence; CAT implementation conformance remains **inconclusive** until the whole observation/action and source-gathering path is proved. Admission and settlement remain blocked.

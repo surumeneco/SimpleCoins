@@ -52,6 +52,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.blocklocker-saved-restart-evidence.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.live-blocklocker-owner-stage.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.saved-terrain-palette.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
