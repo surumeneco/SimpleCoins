@@ -2,6 +2,8 @@ name: Chat isolated exact SimpleCoins source snapshot 20261121
 on:
   push:
     branches: [infra/chat-a04-source-snapshot-20261121]
+  pull_request:
+    branches: [develop]
 permissions:
   contents: read
 jobs:
