@@ -237,6 +237,18 @@ class SavedBlockLockerSettlementOwnerLookupTest {
         indexBuilder.accept("world",observed,COMPLETE);
         var lookup=SavedBlockLockerSettlementOwnerLookup.fromIndex(
             indexBuilder.finish(),manifest,ban(BanEvidence.Status.CLEAR));
+        // A source-aware lookup exposes its legacy coordinate-only API for
+        // bounded diagnostics, but wiring that API directly to full SAVED
+        // settlement would bypass physical BlockEntity/palette verification.
+        // Neither BAN wrapper nor raw stage may silently downgrade it.
+        assertThrows(IOException.class, () -> SettlementScanRunner.stageWithBanCoverage(
+            manifest, scope, ban(BanEvidence.Status.CLEAR), lookup,
+            (selectedWorld, selectedChunk) -> Map.of(), 4096, 4096),
+            "Unscoped BlockLocker adapter must not enter SAVED settlement");
+        assertThrows(IOException.class, () -> SettlementScanRunner.stage(
+            manifest, scope, Set.of(), lookup,
+            (selectedWorld, selectedChunk) -> Map.of(), 4096, 4096),
+            "Raw SAVED settlement must also reject the unscoped adapter");
         var staged=SettlementScanRunner.stageWithBanCoverage(
             manifest,scope,ban(BanEvidence.Status.CLEAR),lookup.sourceScoped(),
             (selectedWorld, chunk)->Map.of(),4096,4096);
