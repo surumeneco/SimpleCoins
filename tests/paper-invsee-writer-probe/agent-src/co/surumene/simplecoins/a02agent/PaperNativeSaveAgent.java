@@ -49,6 +49,9 @@ public final class PaperNativeSaveAgent {
                 if (!craft && !nms) return null;
                 boolean transformNms = nms
                         && Boolean.getBoolean("a02.nativeAgent.instrumentNmsSave");
+                if (nms && transformNms)
+                    System.out.println("PAPER_A02_NATIVE_AGENT_NMS_TRANSFORM_ATTEMPTED");
+                try {
                 var api = ClassFile.of();
                 AtomicInteger modified = new AtomicInteger();
                 byte[] result = api.transformClass(api.parse(source), (builder, element) -> {
@@ -92,6 +95,15 @@ public final class PaperNativeSaveAgent {
                 }
                 System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED");
                 return result;
+                } catch (Throwable transformedFailure) {
+                    System.err.println("PAPER_A02_NATIVE_AGENT_"
+                            + (nms ? "NMS" : "CRAFTPLAYER") + "_TRANSFORM_FAILED");
+                    transformedFailure.printStackTrace(System.err);
+                    // JDK instrumentation normally ignores a transformer
+                    // failure and loads the original class. Make this
+                    // observable and fail the real Paper CI, not false Green.
+                    return null;
+                }
             }
         });
         System.out.println("PAPER_A02_NATIVE_AGENT_TEST_ONLY_INSTALLED");
