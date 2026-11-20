@@ -5,6 +5,7 @@ import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.BlockLockerHeaderMatcher;
 import co.surumene.simplecoins.domain.BlockLockerSavedProfileResolution;
 import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
+import co.surumene.simplecoins.domain.SavedBlockLockerAttachedProtection;
 import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
 import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import java.io.IOException;
@@ -113,6 +114,59 @@ class PaperSavedProfileAnvilFixtureTest {
         assertTrue(BlockLockerChestLinkage.signAttachedToPair(
             new BlockLockerSignAttachment.Position(15,fixtureY,5),
             BlockLockerSignAttachment.Mount.WALL_SOUTH,left,right));
+        var selected=Map.of(
+                new SavedBlockLockerAttachedProtection.ChunkKey(0,0),terrain.get(0),
+                new SavedBlockLockerAttachedProtection.ChunkKey(1,0),terrain.get(1));
+        var plain=SavedBlockLockerAttachedProtection.observe(
+                selected,3,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertFalse(plain.hasProtectionSign());
+        assertTrue(plain.primaryOwner().isEmpty());
+        assertFalse(plain.everyoneEffective());
+        assertEquals(1,plain.parts().size());
+
+        var personal=SavedBlockLockerAttachedProtection.observe(
+                selected,6,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertTrue(personal.hasProtectionSign());
+        assertEquals(OWNER,personal.primaryOwner().orElseThrow());
+        assertFalse(personal.everyoneEffective());
+        assertEquals(1,personal.appliedSigns().size());
+
+        var shared=SavedBlockLockerAttachedProtection.observe(
+                selected,9,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertTrue(shared.everyoneEffective());
+        assertTrue(shared.primaryOwner().isEmpty());
+
+        var unresolved=SavedBlockLockerAttachedProtection.observe(
+                selected,12,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertTrue(unresolved.hasProtectionSign());
+        assertTrue(unresolved.primaryOwner().isEmpty());
+        assertFalse(unresolved.everyoneEffective());
+
+        var leftPair=SavedBlockLockerAttachedProtection.observe(
+                selected,15,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        var rightPair=SavedBlockLockerAttachedProtection.observe(
+                selected,16,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertEquals(2,leftPair.parts().size());
+        assertEquals(leftPair.parts(),rightPair.parts());
+        assertEquals(leftPair.appliedSigns(),rightPair.appliedSigns());
+        assertEquals(OWNER,leftPair.primaryOwner().orElseThrow());
+        assertEquals(OWNER,rightPair.primaryOwner().orElseThrow());
+
+        var sharedBack=SavedBlockLockerAttachedProtection.observe(
+                selected,21,fixtureY,4,Set.of("[Private]"),Set.of("[More Users]"),
+                Set.of("Everyone"),PaperSavedBlockLockerSignText.nativeText());
+        assertTrue(sharedBack.everyoneEffective());
+        assertEquals(1,sharedBack.appliedSigns().size());
+        System.out.println("PAPER_A04_SAVED_PHYSICAL_ATTACHMENT_OBSERVED_PASSED"
+                + " parts=7 signs=5 groupCount=6 ownerGroups=2 everyoneGroups=2"
+                + " unresolvedGroups=1 unprotectedGroups=1 doubleChestReciprocal=true"
+                + " (fixture-only; all-world writer generation NOT verified)");
         System.out.println("PAPER_A04_PRODUCT_SAVED_TERRAIN_PALETTE_PASSED signs=5 chests=7"
                 + " chunks=2 doubleChest=true (fixture-only; G0 writer epoch unproved)");
         System.out.println("PAPER_A04_SAVED_EFFECTIVE_PROFILES_PASSED signs=5"
