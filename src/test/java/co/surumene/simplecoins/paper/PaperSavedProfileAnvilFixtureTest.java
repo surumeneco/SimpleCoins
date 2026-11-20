@@ -138,15 +138,25 @@ class PaperSavedProfileAnvilFixtureTest {
             batchDiscovered,batchScope,2*1024*1024,16*1024*1024,10000,
             Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
             PaperSavedBlockLockerSignText.nativeText());
-        assertEquals(6,batch.chests().size(),
-            "Five protected chests and one unprotected chest, double chest counted once");
-        assertEquals(7,batch.chests().stream().mapToInt(
-            c->c.observation().storageMembers().size()).sum(),
-            "Seven physical saved chest blocks must be retained");
-        assertEquals(5,batch.chests().stream().filter(
-            c->!c.observation().attachedSigns().isEmpty()).count());
-        assertEquals(1,batch.chests().stream().filter(
-            c->c.observation().storageMembers().size()==2).count());
+        // The genuine Paper world has additional BlockEntities unrelated to
+        // this six-group fixture. Full-source discovery MUST retain them rather
+        // than falsely assert that our fixture enumerates the whole world.
+        var fixturePositions=Set.of(3,6,9,12,15,16,21);
+        var fixtureGroups=batch.chests().stream().filter(chest->
+            chest.observation().storageMembers().stream().anyMatch(member ->
+                fixturePositions.contains(member.x())
+                && member.y()==fixtureY && member.z()==4)).toList();
+        assertEquals(6,fixtureGroups.size(),
+            "Five protected fixtures and one nonprotected, double chest once");
+        assertEquals(7,fixtureGroups.stream().mapToInt(
+            chest->chest.observation().storageMembers().size()).sum(),
+            "All seven actual fixture chest blocks must be retained");
+        assertEquals(5,fixtureGroups.stream().filter(
+            chest->!chest.observation().attachedSigns().isEmpty()).count());
+        assertEquals(1,fixtureGroups.stream().filter(
+            chest->chest.observation().storageMembers().size()==2).count());
+        assertTrue(batch.chests().size()>=fixtureGroups.size(),
+            "Other real saved world chests must not be hidden by a fixture whitelist");
         assertTrue(batch.chests().stream().allMatch(
             c->c.sources().stream().allMatch(batchDiscovered.worldFiles()::contains)),
             "No source may be synthesized outside the selected manifest");
@@ -169,7 +179,8 @@ class PaperSavedProfileAnvilFixtureTest {
             "A resource cap cannot silently truncate the selected saved sources");
         batch.witness().requireUnchanged();
         System.out.println("PAPER_A04_SAVED_TERRAIN_FULL_SOURCE_OBSERVATIONS_PASSED"
-            + " groups=6 physical=7 protected=5 double=1"
+            + " fixtureGroups=6 fixturePhysical=7 fixtureProtected=5 fixtureDouble=1"
+            + " actualSourceGroups=" + batch.chests().size()
             + " (read-only; no all-writer epoch or owner-index authorization)");
         for (int x : EXPECTED) {
             var chestObservation=SavedBlockLockerChestSigns.observe(
