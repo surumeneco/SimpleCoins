@@ -7,6 +7,7 @@ import co.surumene.simplecoins.domain.BlockLockerSavedProfileResolution;
 import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
 import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
 import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
+import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -113,6 +114,41 @@ class PaperSavedProfileAnvilFixtureTest {
         assertTrue(BlockLockerChestLinkage.signAttachedToPair(
             new BlockLockerSignAttachment.Position(15,fixtureY,5),
             BlockLockerSignAttachment.Mount.WALL_SOUTH,left,right));
+        var observedChunks=Map.of(
+            new SavedBlockLockerChestSigns.ChunkPosition(0,0),terrain.get(0),
+            new SavedBlockLockerChestSigns.ChunkPosition(1,0),terrain.get(1));
+        for (int x : EXPECTED) {
+            var chestObservation=SavedBlockLockerChestSigns.observe(
+                observedChunks,new SavedBlockLockerChestSigns.Position(x,fixtureY,4),
+                Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+                PaperSavedBlockLockerSignText.nativeText());
+            assertEquals(1,chestObservation.attachedSigns().size(),
+                "The real saved chest must have precisely one applicable sign at x="+x);
+            var candidate=chestObservation.attachedSigns().get(0);
+            assertEquals(new SavedBlockLockerChestSigns.Position(x,fixtureY,5),
+                candidate.position(),"Actual saved sign did not attach to its chest");
+            assertEquals(result.get(x),candidate.profiles(),
+                "Physical attachment observer changed the saved profile at x="+x);
+            assertEquals(x==15 ? 2 : 1,chestObservation.storageMembers().size(),
+                "The saved double chest must be one physical storage pair");
+        }
+        var reversePair=SavedBlockLockerChestSigns.observe(observedChunks,
+            new SavedBlockLockerChestSigns.Position(16,fixtureY,4),
+            Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+            PaperSavedBlockLockerSignText.nativeText());
+        assertEquals(2,reversePair.storageMembers().size());
+        assertEquals(1,reversePair.attachedSigns().size());
+        assertEquals(new SavedBlockLockerChestSigns.Position(15,fixtureY,5),
+            reversePair.attachedSigns().get(0).position());
+        var unprotected=SavedBlockLockerChestSigns.observe(observedChunks,
+            new SavedBlockLockerChestSigns.Position(3,fixtureY,4),
+            Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+            PaperSavedBlockLockerSignText.nativeText());
+        assertTrue(unprotected.attachedSigns().isEmpty(),
+            "A chest with no applicable saved signs must have an empty local observation");
+        System.out.println("PAPER_A04_SAVED_ATTACHED_CHEST_SIGNS_PASSED"
+            + " protectedChests=5 unprotectedChests=1 reciprocalPair=1"
+            + " chunks=2 (test fixture; not writer/global-source proof)");
         System.out.println("PAPER_A04_PRODUCT_SAVED_TERRAIN_PALETTE_PASSED signs=5 chests=7"
                 + " chunks=2 doubleChest=true (fixture-only; G0 writer epoch unproved)");
         System.out.println("PAPER_A04_SAVED_EFFECTIVE_PROFILES_PASSED signs=5"
