@@ -96,6 +96,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.paperSaveBypassesVeto");
     private final boolean recoverPaperDirectAfterHalt =
             Boolean.getBoolean("a02.invsee.checkPaperDirectAfterHalt");
+    private final boolean testNativeAgentEntry =
+            Boolean.getBoolean("a02.invsee.nativeAgentEntryTest");
+    private final boolean recoverNativeAgentAfterHalt =
+            Boolean.getBoolean("a02.invsee.checkNativeAgentAfterHalt");
     private Player originalDetachedPaperWriter;
     private final AtomicBoolean lateFenceClosed = new AtomicBoolean();
     private final AtomicInteger alreadyAdmittedSaveEvents = new AtomicInteger();
@@ -140,6 +144,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             if (durableRecoveryCheck) verifyForcedSyncAfterAbruptRestart();
             else if (recoverPendingAfterHalt) verifyPendingAfterForcedSyncCrash();
             else if (recoverPaperDirectAfterHalt) verifyPaperDirectAfterHalt();
+            else if (recoverNativeAgentAfterHalt) verifyNativeAgentAfterHalt();
             else if (replayNativePostDrainFalseAck) verifyNativePostDrainFalseAckOnColdRestart();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
@@ -898,7 +903,48 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
         writer.getInventory().setItem(1, null);
-        // Real Paper's direct save path, NOT an InvSee API request.
+        if (testNativeAgentEntry) {
+            // A JVM startup agent, not an InvSee event, intercepts the actual
+            // CraftPlayer.saveData() bytecode ENTRY. This test has a genuine
+            // before-save file and one detached Paper player; no product ACK.
+            System.setProperty("a02.nativeAgent.closed", "true");
+            boolean denied = false;
+            try {
+                writer.saveData();
+            } catch (IllegalStateException expected) {
+                denied = expected.getMessage() != null
+                        && expected.getMessage().contains("test-only Paper native save");
+            }
+            if (!denied)
+                throw new IllegalStateException("Paper native save entry not intercepted");
+            if (vetoedSaveEvents.get() != 1)
+                throw new IllegalStateException("Native entry rejection entered InvSee event path");
+            Map<String, Object> still = saved();
+            var receipt = SavedGrantReceiptNbt.readAndVerify(still, ledger, ID);
+            if (!BigInteger.valueOf(5000).equals(totalSavedMoney(still))
+                    || receipt.active()
+                    || receipt.completedSequence() != grant.sequence()
+                    || ledger.pending(ID).size() != 1
+                    || ledger.historySnapshot().getFirst().delivered())
+                throw new IllegalStateException(
+                        "Real playerdata or original pending grant changed under agent gate");
+            if (!(still.get("Inventory") instanceof java.util.List<?> retained)
+                    || retained.stream().noneMatch(item ->
+                        item instanceof Map<?, ?> stack
+                        && "minecraft:stone".equals(stack.get("id"))
+                        && stack.get("Slot") instanceof Number index
+                        && index.intValue() == 0))
+                throw new IllegalStateException("Native entry gate lost unrelated STONE");
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+            getLogger().info("PAPER_A02_AGENT_REAL_NATIVE_SAVEDATA_REJECTED_UNCHANGED_COIN");
+            forceActualPlayerdataAndContainingDirectory();
+            getLogger().info("PAPER_A02_AGENT_REAL_NATIVE_SAVEDATA_FSYNC_BEFORE_ABRUPT_HALT");
+            Runtime.getRuntime().halt(143);
+            throw new AssertionError("Native agent proof halt returned");
+        }
+        // Original negative baseline: native save bypasses InvSee veto.
         writer.saveData();
         if (vetoedSaveEvents.get() != 1)
             throw new IllegalStateException("Paper.saveData unexpectedly fired InvSee save event");
@@ -939,6 +985,34 @@ public final class InvseeWriterProbe extends JavaPlugin {
         getLogger().info("PAPER_A02_NATIVE_SAVE_BYPASS_FSYNC_COMPLETE_ABRUPT_HALT");
         Runtime.getRuntime().halt(141);
         throw new AssertionError("Paper direct save halt returned");
+    }
+
+    /**
+     * A new Paper JVM without the Agent must still see the original durable
+     * 5000C coin, signed receipt and pending grant from the rejected write.
+     */
+    private void verifyNativeAgentAfterHalt() throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !recoverNativeAgentAfterHalt)
+            throw new IllegalStateException("Native agent restart probe not isolated");
+        GrantLedger journal = actualProductLedger();
+        Map<String, Object> disk = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(disk, journal, ID);
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(disk))
+                || receipt.active() || receipt.completedSequence() != 1
+                || journal.pending(ID).size() != 1
+                || journal.historySnapshot().size() != 1
+                || journal.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Native agent cold restart changed saved grant");
+        if (!(disk.get("Inventory") instanceof java.util.List<?> retained)
+                || retained.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number index
+                    && index.intValue() == 0))
+            throw new IllegalStateException("Native agent cold restart lost STONE");
+        getLogger().info("PAPER_A02_NATIVE_AGENT_COLD_RESTART_COIN_RECEIPT_PENDING");
+        Bukkit.shutdown();
     }
 
     /** Cold Paper JVM must observe the same actual unACKed, coinless file. */
