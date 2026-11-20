@@ -104,7 +104,7 @@ jobs:
           printf 'eula=true\n' > smoke-both/eula.txt
           printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25603\n' \
             > smoke-both/server.properties
-      - name: Real InvSee++ save tests bypass of both closed native save entrances
+      - name: Real InvSee++ async save must be rejected by closed CraftPlayer hook
         shell: bash
         run: |
           set -euo pipefail
@@ -118,24 +118,24 @@ jobs:
               -jar paper.jar nogui </dev/null > invsee-both-native-closed.log 2>&1
           code=$?
           set -e
-          if [ "$code" -ne 147 ]; then
-            echo "InvSee two-hook bypass did not halt(147); actual exit $code" >&2
+          if [ "$code" -ne 148 ]; then
+            echo "InvSee save denial by actual CraftPlayer hook did not halt(148); actual exit $code" >&2
             tail -200 invsee-both-native-closed.log
             exit 1
           fi
           ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' invsee-both-native-closed.log
           ! grep -Fq 'PAPER_A02_NATIVE_AGENT_NMS_TRANSFORM_FAILED' invsee-both-native-closed.log
           ! grep -Fq 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_DENIED' invsee-both-native-closed.log
-          ! grep -Fq 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED' invsee-both-native-closed.log
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' invsee-both-native-closed.log
           grep -F 'PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_ENTRY_INSTRUMENTED' invsee-both-native-closed.log
           grep -F 'PAPER_A02_NATIVE_AGENT_NMS_SAVE_ENTRY_INSTRUMENTED' invsee-both-native-closed.log
           grep -F 'PAPER_A02_INVSEE_REAL_SAVED_COIN_RECEIPT_PROOF_PASSED' invsee-both-native-closed.log
           grep -F 'PAPER_A02_BOTH_NATIVE_HOOKS_CLOSED_BEFORE_INVSEE_SAVE' invsee-both-native-closed.log
-          grep -F 'PAPER_A02_INVSEE_REAL_WRITER_BYPASSED_BOTH_NATIVE_HOOKS_ERASED_5000C' invsee-both-native-closed.log
-          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_STALE_PROOF_REJECTED_PENDING_NO_ACK' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_NATIVE_HOOKS_REJECTED_REAL_ASYNC_SAVE_PRESERVED_5000C' invsee-both-native-closed.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_FRESH_PROOF_PENDING_NO_ACK' invsee-both-native-closed.log
           grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_FSYNC_BEFORE_ABRUPT_HALT' invsee-both-native-closed.log
-      - name: Independent agent-free official Paper JVM confirms actual lost coin and unACKed reservation
+      - name: Independent agent-free official Paper JVM confirms original 5000C and unACKed reservation
         shell: bash
         run: |
           set -euo pipefail
@@ -152,9 +152,9 @@ jobs:
             exit 1
           fi
           ! grep -Fq 'PAPER_A02_INVSEE_PROBE_FAILED' invsee-both-native-restart.log
-          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_COLD_RESTART_COINLESS_PENDING' invsee-both-native-restart.log
+          grep -F 'PAPER_A02_INVSEE_BOTH_HOOKS_COLD_RESTART_PRESERVED_5000C_PENDING' invsee-both-native-restart.log
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' invsee-both-native-restart.log
-          echo 'A02_TWO_NATIVE_HOOKS_NOT_GLOBAL_INVSEE_WRITER_FENCE'
+          echo 'A02_INVSEE_FAKE_PLAYER_WRITER_REJECTED_BY_REAL_CRAFTPLAYER_HOOK_NOT_GLOBAL_FENCE'
       - name: Preserve both real Paper technical logs
         if: always()
         uses: actions/upload-artifact@v4
