@@ -8,7 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-20:A04-saved-BlockLocker-CAT-approved
 refs: []
 entry: issue
 mode: shadow
@@ -18,7 +18,7 @@ parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
 project_entry_ref: https://drive.google.com/file/d/1oyuQJfvjho_RsWIrlPI_XCmLlc4Df0dl/view
-spec_status: unknown
+spec_status: confirmed
 ---
 
 # A04/G1 — SAVED BlockLocker実保護帰属のDraft
@@ -71,4 +71,4 @@ spec_status: unknown
 
 実地形の全関連看板・保護対象・BlockLocker 1.15の表示/PDC・表裏・locale・物理接続・選択済み保存源を読取り、(a)検証済み非保護Free、(b)適用されるEveryone有効Free、(c)PRIVATE主所有者UUID検証済み、(d)未知/矛盾HOLDを区別する。所有者候補はBAN/playerdataと同一世代の上位決算へ渡し、未確認のrawテキストやPDCを根拠にするFREE昇格を禁止する。
 
-Process/PI/TCEは規範承認前のDraft。10 Boolean入力1024ケースの排他分割、構文lint、Work validateは**正式CAT Gateや承認を意味しない**。Product implementationは利用者の正当なCAT ConfirmedとProcess/Model Gate以降に限定し、G0/G3/入室公開は別に証明する。独立して可能な読取専用実Paper証拠・既存WCL照合・writer閉包の調査は続ける。
+Process/PI/TCEは2026-11-20に利用者が規範承認したConfirmed仕様。10 Boolean入力1024ケースの排他分割、構文lint、Work validateは**正式CAT Gateや承認を意味しない**。Product implementationは正式なProcess/Model Gate以降に限定し、G0/G3/入室公開は別に証明する。独立して可能な読取専用実Paper証拠・既存WCL照合・writer閉包の調査は続ける。

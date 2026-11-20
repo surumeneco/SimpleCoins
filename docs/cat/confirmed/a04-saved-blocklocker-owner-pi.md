@@ -2,19 +2,19 @@
 cat_version: '0.3'
 kind: pi
 id: simplecoins.blocklocker.saved-owner.pi.classify
-status: draft
+status: confirmed
 process: simplecoins.blocklocker.saved-owner
 source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-20:A04-saved-BlockLocker-CAT-approved
 refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# PI: SAVED収納の保護帰属候補（Draft）
+# PI: SAVED収納の保護帰属候補
 
 ## 境界
 | 相手Process | 方向 |

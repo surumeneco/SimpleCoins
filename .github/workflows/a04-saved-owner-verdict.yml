@@ -1,0 +1,112 @@
+name: A04 confirmed SAVED owner CAT JUnit queue
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/confirmed/a04-saved-blocklocker-owner-*.md'
+      - 'Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/BlockLockerSavedOwnerVerdict.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/A04SavedOwnerEvidenceDriver.java'
+      - 'src/test/java/co/surumene/simplecoins/a04/generated/**'
+      - 'tests/cat/a04-saved-owner-junit-binding.json'
+      - 'tools/run_cat_a04_junit.py'
+      - '.github/workflows/a04-saved-owner-verdict.yml'
+permissions:
+  contents: read
+jobs:
+  generated-cat-junit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: c56b1e1f46867dfe2e5ac655907a62ebbe86b74c
+          path: cat-tdd-fixed
+          persist-credentials: false
+      - name: Confirm A04 CAT normative source and generate execution Queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md
+          python "$FLOW" validate --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind process-closure
+          python "$FLOW" compile --work "$WORK" --kind model
+          python "$FLOW" conformance --work "$WORK" --kind model-conformance
+          python "$FLOW" compile --work "$WORK" --kind vectors
+          python "$FLOW" compile --work "$WORK" --kind queue
+      - name: Generate and execute every current CAT JUnit case with actual Queue receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          COMPILER=cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py
+          WORK=Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md
+          CACHE=Lifecycle/Works/.cat-flow/cache
+          OUT=Lifecycle/Works/.cat-flow/generated/A04SavedOwnerGeneratedTest.java
+          TARGET=src/test/java/co/surumene/simplecoins/a04/generated
+          mkdir -p "$TARGET" "$(dirname "$OUT")"
+          for rule in f0 f1 o0 h0; do
+            python "$COMPILER" tests "$CACHE/a04-saved-owner-model.json" "$CACHE/a04-saved-owner-vectors.json" \
+              tests/cat/a04-saved-owner-junit-binding.json \
+              --queue "$CACHE/a04-saved-owner-queue.json" --framework junit \
+              --process docs/cat/confirmed/a04-saved-blocklocker-owner-process.md \
+              --pi docs/cat/confirmed/a04-saved-blocklocker-owner-pi.md \
+              --tce docs/cat/confirmed/a04-saved-blocklocker-owner-tce.md \
+              --allow-partial -o "$OUT"
+            cls="$(grep -Eo 'final class GeneratedA04SavedOwnerCase[a-f0-9]+Test' "$OUT" | awk '{print $3}')"
+            [[ "$cls" =~ ^GeneratedA04SavedOwnerCase[a-f0-9]+Test$ ]]
+            rm -f "$TARGET"/GeneratedA04SavedOwnerCase*Test.java
+            cp "$OUT" "$TARGET/$cls.java"
+            python "$FLOW" run --work "$WORK" --id "a04-green-$rule" --execute
+            python "$FLOW" queue-state --work "$WORK" \
+              --evidence "Lifecycle/Works/.cat-flow/evidence/a04-green-$rule.json"
+          done
+          python3 - <<'PY'
+          import json,pathlib
+          q=json.loads(pathlib.Path('Lifecycle/Works/.cat-flow/cache/a04-saved-owner-queue.json').read_text())
+          assert [x['id'] for x in q['items']]==['case.f0','case.f1','case.o0','case.h0']
+          assert all(x['status']=='done' and x['evidence_ref'] for x in q['items'])
+          for x in q['items']:
+              ev=json.loads(pathlib.Path(x['evidence_ref']).read_text())
+              assert ev['stage']=='green' and ev['verdict']=='passed'
+              assert ev['queue_context']['current_item_id']==x['id']
+          print('A04_CAT_FOUR_GENERATED_JUNIT_GREEN_WITH_CANONICAL_QUEUE_RECEIPTS_PASSED')
+          PY
+      - name: Report implementation obligations without promoting inconclusive
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a04.saved-owner-verdict-implementation.md
+          python "$FLOW" obligations --work "$WORK"
+          python "$FLOW" conformance --work "$WORK" --kind implementation-conformance
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('Lifecycle/Works/.cat-flow/conformance/implementation-conformance.json')
+          r=json.loads(p.read_text())
+          assert r['verdict'] in ('passed','inconclusive'),r
+          print('A04_CAT_IMPLEMENTATION_CONFORMANCE',r['verdict'])
+          PY
+      - name: Retain real CAT/Gradle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a04-saved-owner-cat-evidence
+          path: |
+            Lifecycle/Works/.cat-flow/cache/a04-saved-owner-*.json
+            Lifecycle/Works/.cat-flow/cache/implementation-obligations-evaluated.json
+            Lifecycle/Works/.cat-flow/conformance/*.json
+            Lifecycle/Works/.cat-flow/evidence/a04-green-*.json
+            Lifecycle/Works/.cat-flow/reports/a04-green-*.xml
+          if-no-files-found: ignore
+          retention-days: 7

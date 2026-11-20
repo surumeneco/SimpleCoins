@@ -1,0 +1,21 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.blocklocker.saved-owner",
+  "test_package": "co.surumene.simplecoins.a04.generated",
+  "test_class": "GeneratedA04SavedOwnerTest",
+  "driver_class": "co.surumene.simplecoins.domain.A04SavedOwnerEvidenceDriver",
+  "capability_scope": {
+    "kind": "pi-only-unverified",
+    "observations": [
+      "観測.保存元と地形接続",
+      "観測.有効保護判定",
+      "観測.主所有者とEveryone",
+      "観測.重複と世代整合"
+    ],
+    "actions": [
+      "作用.所有者候補",
+      "作用.フリー候補",
+      "作用.保留"
+    ]
+  }
+}
