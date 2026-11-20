@@ -9,6 +9,8 @@ import co.surumene.simplecoins.domain.BlockLockerSignAttachment;
 import co.surumene.simplecoins.domain.BlockLockerChestLinkage;
 import co.surumene.simplecoins.domain.SavedBlockLockerChestSigns;
 import co.surumene.simplecoins.domain.SavedBlockLockerSignSummary;
+import co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate;
+import co.surumene.simplecoins.domain.BlockLockerSavedOwnerVerdict;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -138,6 +140,14 @@ class PaperSavedProfileAnvilFixtureTest {
             assertEquals(x == 6 || x == 15 ? OWNER : null,
                 aggregated.verifiedMainOwner().orElse(null));
             assertFalse(aggregated.mainOwnerConflict());
+            var candidate=SavedBlockLockerOwnerCandidate.fromSavedChunks(
+                observedChunks,new SavedBlockLockerChestSigns.Position(x,fixtureY,4),
+                Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),
+                PaperSavedBlockLockerSignText.nativeText(),
+                SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
+            assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,candidate.verdict(),
+                "A local real Anvil fixture is not a proof of G0 generation at x="+x);
+            assertTrue(candidate.verifiedOwner().isEmpty());
             assertEquals(x==15 ? 2 : 1,chestObservation.storageMembers().size(),
                 "The saved double chest must be one physical storage pair");
         }
@@ -158,6 +168,13 @@ class PaperSavedProfileAnvilFixtureTest {
         var noProtectionSummary=SavedBlockLockerSignSummary.summarize(unprotected);
         assertFalse(noProtectionSummary.protectionSignObserved());
         assertFalse(noProtectionSummary.everyoneAbsent());
+        var unverifiedBlank=SavedBlockLockerOwnerCandidate.fromObservedSigns(
+            unprotected,SavedBlockLockerOwnerCandidate.ExternalProof.unknown());
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,unverifiedBlank.verdict(),
+            "No physical protection signs in a local fixture is not global non-protection proof");
+        System.out.println("PAPER_A04_SAVED_UNPUBLISHED_VERDICT_GATE_PASSED"
+            + " observedProtected=5 observedUnprotected=1 candidatesHold=6"
+            + " (real Paper Anvil fixture; no independent writer-epoch witness)");
         System.out.println("PAPER_A04_SAVED_ATTACHED_SIGN_SUMMARY_PASSED"
             + " owner=2 everyone=2 unresolved=1 unprotected=1"
             + " (fixture-only; no full-source and writer proof)");

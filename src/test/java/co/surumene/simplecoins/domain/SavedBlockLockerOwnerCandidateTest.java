@@ -39,4 +39,59 @@ class SavedBlockLockerOwnerCandidateTest {
                 "One missing independent proof must block promotion at predicate "+missing);
         }
     }
+
+    @Test void effectiveEveryoneOutranksKnownAndUnknownMainOwnerWithoutReturningUuid() throws Exception {
+        var proof=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,false);
+        for (UUID owner : new UUID[]{OWNER,null}) {
+            var c=SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                observed(BlockLockerHeaderMatcher.Type.PRIVATE,owner,true),proof);
+            assertEquals(BlockLockerSavedOwnerVerdict.Verdict.FREE_UNPUBLISHED,c.verdict());
+            assertTrue(c.verifiedOwner().isEmpty());
+        }
+    }
+
+    @Test void noApplicableSignsAreHoldUntilNonProtectionIsPositivelyProven() throws Exception {
+        var blank=observed(null,null,false);
+        var sourceOnly=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,false);
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,
+            SavedBlockLockerOwnerCandidate.fromObservedSigns(blank,sourceOnly).verdict());
+        var provedFree=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,true);
+        var c=SavedBlockLockerOwnerCandidate.fromObservedSigns(blank,provedFree);
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.FREE_UNPUBLISHED,c.verdict());
+        assertTrue(c.verifiedOwner().isEmpty());
+    }
+
+    @Test void contradictoryProtectionOrUnresolvedOwnerCanNeverClaimOwner() throws Exception {
+        var proof=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,false);
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,
+            SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                observed(BlockLockerHeaderMatcher.Type.PRIVATE,null,false),proof).verdict());
+
+        var contradictory=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,true);
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,
+            SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                observed(BlockLockerHeaderMatcher.Type.PRIVATE,OWNER,true),contradictory).verdict());
+
+        var differentOwner=UUID.fromString("22222222-2222-4222-8222-222222222222");
+        var signs=List.of(
+            new SavedBlockLockerChestSigns.AttachedSign(
+                new SavedBlockLockerChestSigns.Position(6,65,5),
+                new BlockLockerSavedProfileResolution.SignProfiles(
+                    BlockLockerHeaderMatcher.Type.PRIVATE,Optional.of(OWNER),true,false)),
+            new SavedBlockLockerChestSigns.AttachedSign(
+                new SavedBlockLockerChestSigns.Position(7,65,5),
+                new BlockLockerSavedProfileResolution.SignProfiles(
+                    BlockLockerHeaderMatcher.Type.PRIVATE,Optional.of(differentOwner),false,true)));
+        var conflicted=new SavedBlockLockerChestSigns.Observation(
+            List.of(new SavedBlockLockerChestSigns.Position(6,65,4)),signs);
+        var held=SavedBlockLockerOwnerCandidate.fromObservedSigns(conflicted,proof);
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,held.verdict());
+        assertTrue(held.verifiedOwner().isEmpty());
+    }
+
+    @Test void missingExternalEvidenceIsNotAValidSourceWitness() {
+        assertThrows(java.io.IOException.class,
+            ()->SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                observed(BlockLockerHeaderMatcher.Type.PRIVATE,OWNER,false),null));
+    }
 }
