@@ -85,6 +85,58 @@ class SavedBlockLockerSettlementOwnerLookupTest {
             "Legacy already-verified direct lookup remains compatible");
     }
 
+    @Test void selectedSavedSourceCannotBeSubstitutedOrReinterpreted() throws Exception {
+        var selected=selectedRegion(false);
+        var scoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(index(),
+            selected.manifest(),ban(BanEvidence.Status.CLEAR)).sourceScoped();
+        assertThrows(IOException.class,()->scoped.resolve(
+            new WorldStorageDiscovery.SourceFile("world",directory.resolve("elsewhere/r.0.0.mca"),
+                WorldStorageDiscovery.Kind.REGION),physicalChunk(),"6,65,4"));
+        assertThrows(IOException.class,()->scoped.resolve(
+            new WorldStorageDiscovery.SourceFile("other-world",selected.source().path(),
+                WorldStorageDiscovery.Kind.REGION),physicalChunk(),"6,65,4"));
+        assertThrows(IOException.class,()->scoped.resolve(
+            new WorldStorageDiscovery.SourceFile("world",selected.source().path(),
+                WorldStorageDiscovery.Kind.ENTITY),physicalChunk(),"6,65,4"));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),
+            new AnvilRegionReader.Chunk(1,0,physicalChunk().nbt()),"6,65,4"));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),physicalChunk(),"06,65,4"));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),physicalChunk(),"6,65"));
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),physicalChunk(),"22,65,4"));
+    }
+
+    @Test void malformedMissingOrRepeatedSavedChestNeverInheritsIndexedOwner() throws Exception {
+        var selected=selectedRegion(false);
+        var scoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(index(),
+            selected.manifest(),ban(BanEvidence.Status.CLEAR)).sourceScoped();
+        var chest=Map.<String,Object>of("id","minecraft:chest","x",6,"y",65,"z",4);
+        var notChest=Map.<String,Object>of("id","minecraft:barrel","x",6,"y",65,"z",4);
+        var wrongPos=Map.<String,Object>of("id","minecraft:chest","x",7,"y",65,"z",4);
+        for (var entities : List.<List<Map<String,Object>>>of(
+                List.of(),List.of(notChest),List.of(wrongPos),List.of(chest,chest),
+                List.of(Map.<String,Object>of("id","minecraft:chest","x",6,"y",65)))) {
+            var chunk=new AnvilRegionReader.Chunk(0,0,Map.of("block_entities",entities));
+            assertThrows(IOException.class,()->scoped.resolve(selected.source(),chunk,"6,65,4"),
+                "Only an exact, unique physical saved chest BlockEntity may receive ownership");
+        }
+        assertThrows(IOException.class,()->scoped.resolve(selected.source(),
+            new AnvilRegionReader.Chunk(0,0,Map.of()),"6,65,4"));
+    }
+
+    @Test void selectedRegionFilenameMustMatchDecodedChunkCoordinates() throws Exception {
+        Path world=directory.resolve("without-player");
+        Path region=world.resolve("region/r.1.0.mca");
+        Files.createDirectories(region.getParent());
+        Files.write(region,new byte[8192]);
+        var manifest=discover(false);
+        var selected=manifest.worldFiles().getFirst();
+        assertEquals("r.1.0.mca",selected.path().getFileName().toString());
+        var scoped=SavedBlockLockerSettlementOwnerLookup.fromIndex(index(),manifest,
+                ban(BanEvidence.Status.CLEAR)).sourceScoped();
+        assertThrows(IOException.class,()->scoped.resolve(selected,physicalChunk(),"6,65,4"),
+                "A physically selected but incorrect Region cannot supply this Chunk");
+    }
+
     @Test void positivePhysicalOwnerUsesIndependentBanAndPlayerdataForSettlementStaging() throws Exception {
         var l=SavedBlockLockerSettlementOwnerLookup.fromIndex(
             index(),discover(true),ban(BanEvidence.Status.CLEAR));
