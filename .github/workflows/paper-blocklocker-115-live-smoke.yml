@@ -17,6 +17,9 @@ on:
       - 'src/main/java/co/surumene/simplecoins/domain/SavedTerrainBlockPalette.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerChestSigns.java'
       - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerSignSummary.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerOwnerCandidate.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerOwnerCandidateTest.java'
+      - 'Lifecycle/Works/simplecoins.a04.saved-owner-candidate-bridge.md'
       - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerSignSummaryTest.java'
       - 'Lifecycle/Works/simplecoins.a04.saved-sign-aggregate.md'
       - 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerChestSignsTest.java'
@@ -64,6 +67,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.saved-attached-chest-signs.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.saved-sign-aggregate.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.saved-owner-candidate-bridge.md
       - name: Test JUnit and build three disjoint plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar paperBlockLockerLiveProbeJar
@@ -177,6 +182,7 @@ jobs:
           assert 'PAPER_A04_PRODUCT_SAVED_TERRAIN_PALETTE_PASSED' in ET.tostring(root,encoding='unicode'), 'actual block-state palette proof missing'
           assert 'PAPER_A04_SAVED_ATTACHED_CHEST_SIGNS_PASSED' in ET.tostring(root,encoding='unicode'), 'actual chest/sign binding proof missing'
           assert 'PAPER_A04_SAVED_ATTACHED_SIGN_SUMMARY_PASSED' in ET.tostring(root,encoding='unicode'), 'actual full sign-set summary proof missing'
+          assert 'PAPER_A04_SAVED_UNPUBLISHED_VERDICT_GATE_PASSED' in ET.tostring(root,encoding='unicode'), 'unpublished proof gate marker missing'
           print('PAPER_A04_REAL_SAVED_BLOCKLOCKER_EFFECTIVE_PROFILES_JUNIT_PASSED')
           PY
       - name: Restart actual Paper world and verify BlockLocker recovers the same protections
