@@ -1397,15 +1397,23 @@ public final class WclServicesProbe extends JavaPlugin {
                             localWcl.stage(source, wwcOnly, wwcStaged, new java.util.HashSet<>());
                             wwcStaged.completeSource(sourceId);
                             var localResult = wwcStaged.commit();
-                            // The isolated Paper fixture has no corresponding
-                            // playerdata for this commander. Confirmed 02A
-                            // therefore requires DEAD rather than PERSONAL.
-                            if (!BigInteger.valueOf(10000).equals(localResult.dead())
-                                    || !BigInteger.ZERO.equals(localResult.statistics().worldTotal())
-                                    || localResult.deadLocations().stream().noneMatch(loc ->
-                                            PERSISTENCE_FOLLOW.equals(loc.owner())
-                                            && BigInteger.valueOf(10000).equals(loc.value())))
-                                throw new IOException("SAVED WWC real 10000C not staged as DEAD"
+                            // The actual manifest determines whether a
+                            // profile-CLEAR WWC owner has playerdata. This
+                            // local saved-only stage still does not prove an
+                            // all-provider BAN epoch or publish any balance.
+                            boolean hasClearOwnerData = withBlockLocker();
+                            if (hasClearOwnerData
+                                    ? !BigInteger.ZERO.equals(localResult.dead())
+                                        || !BigInteger.valueOf(10000).equals(
+                                                localResult.statistics().worldTotal())
+                                        || !localResult.personalBalances().equals(
+                                                Map.of(PERSISTENCE_FOLLOW, BigInteger.valueOf(10000)))
+                                    : !BigInteger.valueOf(10000).equals(localResult.dead())
+                                        || !BigInteger.ZERO.equals(localResult.statistics().worldTotal())
+                                        || localResult.deadLocations().stream().noneMatch(loc ->
+                                                PERSISTENCE_FOLLOW.equals(loc.owner())
+                                                && BigInteger.valueOf(10000).equals(loc.value())))
+                                throw new IOException("SAVED WWC local ownership contradicts real playerdata"
                                         + " dead=" + localResult.dead()
                                         + " personal=" + localResult.personalBalances()
                                         + " worldTotal=" + localResult.statistics().worldTotal());
@@ -1429,19 +1437,25 @@ public final class WclServicesProbe extends JavaPlugin {
                                     once, sourceId, source.world(), saved.nbt(),
                                     Map.of(wwwUuid.toString(),
                                             new ResolvedEntitySettlementImport.Ownership(
-                                                    WOLF_COMMANDER, false, false)),
+                                                    WOLF_COMMANDER, withBlockLocker(),
+                                                    withBlockLocker())),
                                     sharedWallets);
                             var allWcl = new PaperWonderfulSavedSettlementSource(
                                     WclServicesProbe.this, Map.of(world.getName(), world.getUID()),
-                                    boundedManifest, Set.of(), null, Set.of(),
+                                    boundedManifest,
+                                    withBlockLocker() ? Set.of(WOLF_COMMANDER) : Set.of(),
+                                    null, Set.of(),
                                     2 * 1024 * 1024, 16 * 1024 * 1024);
                             allWcl.stage(source, saved, once, sharedWallets);
                             once.completeSource(sourceId);
                             var onceResult = once.commit();
-                            if (!BigInteger.valueOf(25000).equals(onceResult.dead())
-                                    || !BigInteger.ZERO.equals(onceResult.statistics().worldTotal()))
+                            if (!BigInteger.valueOf(withBlockLocker() ? 15000 : 25000)
+                                        .equals(onceResult.dead())
+                                    || !BigInteger.valueOf(withBlockLocker() ? 10000 : 0)
+                                        .equals(onceResult.statistics().worldTotal()))
                                 throw new IOException("Real SAVED WWW 10000C mirror counted incorrectly"
                                         + " dead=" + onceResult.dead()
+                                        + " personal=" + onceResult.personalBalances()
                                         + " total=" + onceResult.statistics().worldTotal());
                             getLogger().info("PAPER_A05_SAVED_WCL_NATIVE_WWW_MIRROR_ONCE_PASSED");
                             // Negative owner test: remove only the independent
