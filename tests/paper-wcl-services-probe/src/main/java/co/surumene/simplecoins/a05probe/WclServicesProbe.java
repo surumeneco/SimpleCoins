@@ -181,8 +181,26 @@ public final class WclServicesProbe extends JavaPlugin {
                         return;
                     }
                     case "reload" -> {
+                        // The complete saved-source monetary candidate
+                        // traversal and the genuine near-Entity Paper reload
+                        // proof are both required, but need not compete within
+                        // ONE server tick. Keeping both in the original tick
+                        // caused the actual Paper watchdog to terminate the
+                        // constrained CI JVM *after* all 55,000C proof markers.
+                        // Do not raise Paper's watchdog timeout or skip either
+                        // proof; give the runtime one fresh main-thread tick.
                         verifyFarUnloadedStoredItems(world, selected);
-                        reloadChickenEntity(world, selected);
+                        Bukkit.getScheduler().runTask(this, () -> {
+                            try {
+                                reloadChickenEntity(world, selected);
+                            } catch (Throwable failure) {
+                                getLogger().log(Level.SEVERE,
+                                        "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                            } finally {
+                                Bukkit.shutdown();
+                            }
+                        });
+                        return;
                     }
                     default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
                 }
