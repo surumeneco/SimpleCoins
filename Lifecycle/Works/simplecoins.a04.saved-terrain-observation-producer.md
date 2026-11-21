@@ -94,6 +94,13 @@ spec_status: confirmed
 - A new candidate with UNKNOWN chest proof must fail closed; separately missing one known WCL owner BAN source must fail the entire candidate, not silently downgrade the protected/free or WCL monetary value. All original 3-JVM WCL regression, source provenance, actual saved CURRENCY PDC, and admission-guard checks remain mandatory.
 - Exact fixture BAN/provider and no-BlockLocker assumption are only isolated CI inputs; this Work establishes **neither the full deployed BlockLocker/JAR configuration, all writer exclusion, full IP/external BAN coverage, valid CAT Implementation Conformance, nor G0/G3 publication or release**. No main or server deployment.
 
+### 実配布BlockLocker 1.15とWCLの同一Paper世代検証
+
+- 既存のWCL+WWC+WWW+Paper26.2三段階CIの実保存fixtureを流用しつつ、**別の独立隔離ワールド**を真正なBlockLocker 1.15 JARと共に起動する。5,000C入りPRIVATE chestを保存済みの同じ未ロード遠方Chunkに置き、さらに1,000C入り[Everyone] chestを置く。単独A04/JUnitテストや単独A05の成功を合成せず、同じ実Paperの保存ManifestでWCLと両保護チェストを一括走査・原資産候補化する。
+- PRIVATEは実導入版BlockLockerのLIVEプロファイルによる正しいUUID所有者を保存前に検査し、SAVEDでは地形/看板表裏・同一Region・物理位置・有効プロフィール・主所有者を独立照合。Everyoneは不明主所有者でも適用される有効な表示・保存ルールに従ってFreeとする。BAN/providerの完全性はテスト限定の宣言であり、本番の収集を偽装しない。
+- 当該試験の期待集計はSAVED WWC/WWW全4個体=Dead 50,000C、PRIVATE胸=Dead 5,000C、Everyone胸=Free 1,000Cで、合計56,000C。未ロード維持、元データの再読込、その他自然生成収納の漏れ・重複がないことを既存全件候補経路で検証。PRIVATE保護証拠欠損、Everyone表示矛盾、該当所有者BAN証拠欠損については採用せずHOLD。
+- 既存のBlockLocker未導入3段階・55,000C経路と実BlockLocker個別再起動回帰を維持する。G0全writer捕捉・G3永続ACK・全外部BAN・Pluginの未知な非協調writer・グローバル公開・入室許可の証明には昇格させない。CATのConfirmed規範本文を変更せず、既存Workの境界内に限る。
+
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
