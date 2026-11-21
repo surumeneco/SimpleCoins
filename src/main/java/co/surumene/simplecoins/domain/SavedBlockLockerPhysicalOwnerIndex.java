@@ -132,9 +132,14 @@ public final class SavedBlockLockerPhysicalOwnerIndex {
             }
         }
 
+        /**
+         * A completed, genuinely selected world may contain zero chests.
+         * An empty index still rejects every unknown physical coordinate;
+         * the index alone does not certify a complete world traversal.
+         */
         public SavedBlockLockerPhysicalOwnerIndex finish() throws IOException {
-            if (failed || finished || pending.isEmpty())
-                throw new IOException("Incomplete, failed or already committed saved owner index");
+            if (failed || finished)
+                throw new IOException("Failed or already committed saved owner index");
             finished = true;
             return new SavedBlockLockerPhysicalOwnerIndex(pending);
         }
