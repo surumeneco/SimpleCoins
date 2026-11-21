@@ -101,6 +101,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.nativeAgentEntryTest");
     private final boolean testNativeInFlightAfterClose =
             Boolean.getBoolean("a02.invsee.nativeInFlightAfterClose");
+    private final boolean testNativeDrainAccounting =
+            Boolean.getBoolean("a02.invsee.nativeDrainAccounting");
     private final boolean testNmsSaveBypassesCraftAgent =
             Boolean.getBoolean("a02.invsee.nmsSaveBypassesCraftAgent");
     private final boolean testNmsSaveBlockedByAgent =
@@ -958,6 +960,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
         writer.getInventory().setItem(1, null);
+        if (testNativeDrainAccounting) {
+            verifyNativeTrackedDrainAfterClosure(writer);
+            throw new AssertionError("Native tracked drain test halt returned");
+        }
         if (testNativeInFlightAfterClose) {
             verifyNativeInFlightWriterAfterClosure(writer);
             throw new AssertionError("Native already-admitted save probe halt returned");
@@ -1248,6 +1254,129 @@ public final class InvseeWriterProbe extends JavaPlugin {
         forceActualPlayerdataAndContainingDirectory();
         getLogger().info("PAPER_A02_NATIVE_INFLIGHT_FSYNC_BEFORE_ABRUPT_HALT");
         Runtime.getRuntime().halt(149);
+    }
+
+    /**
+     * A bounded positive test of REAL Paper entry/normal-return accounting.
+     * An independent controller must NOT infer completion from release of
+     * the test hold: only the transformed method's actual normal return
+     * can decrement the active counter. This does not cover async work.
+     */
+    private void verifyNativeTrackedDrainAfterClosure(Player writer) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testNativeDrainAccounting || !testPaperDirectAfterInvseeVeto
+                || writer != originalDetachedPaperWriter
+                || vetoedSaveEvents.get() != 1
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Native tracking fixture is not isolated");
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a02agent.NativeSaveHook");
+        var awaitEntry = hook.getMethod("awaitCraftSaveEntry", long.class);
+        var release = hook.getMethod("releaseHeldCraftSave");
+        var inFlight = hook.getMethod("trackedCraftInFlight");
+        var normalReturns = hook.getMethod("trackedCraftNormalReturns");
+        var close = hook.getMethod("closeTrackedCraftAdmissions");
+        var awaitDrain = hook.getMethod("awaitTrackedCraftDrain", long.class);
+        byte[] originalFile = Files.readAllBytes(dataFile());
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+            throw new IllegalStateException("Missing original genuine saved coin");
+
+        System.setProperty("a02.nativeAgent.trackCraftDrain", "true");
+        System.setProperty("a02.nativeAgent.holdInsideCraft", "true");
+        var controllerError = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread controller = new Thread(() -> {
+            boolean released = false;
+            try {
+                if (!Boolean.TRUE.equals(awaitEntry.invoke(null, 10000L)))
+                    throw new IllegalStateException("Actual Paper method never entered hold");
+                if (((Number) inFlight.invoke(null)).intValue() != 1
+                        || ((Number) normalReturns.invoke(null)).intValue() != 0)
+                    throw new IllegalStateException("Open entry was not tracked exactly once");
+                if (!Arrays.equals(originalFile, Files.readAllBytes(dataFile())))
+                    throw new IllegalStateException("Save wrote before drain gate closed");
+                getLogger().info("PAPER_A02_TRACKED_NATIVE_INFLIGHT_ONE_BEFORE_CLOSE");
+                close.invoke(null);
+                if (((Number) inFlight.invoke(null)).intValue() != 1)
+                    throw new IllegalStateException("Close did not preserve admitted count");
+                if (Boolean.TRUE.equals(awaitDrain.invoke(null, 150L)))
+                    throw new IllegalStateException(
+                            "Drain reported zero while actual Paper save was still held");
+                getLogger().info("PAPER_A02_TRACKED_NATIVE_PREMATURE_DRAIN_REJECTED");
+                release.invoke(null);
+                released = true;
+                if (!Boolean.TRUE.equals(awaitDrain.invoke(null, 10000L)))
+                    throw new IllegalStateException("Actual native normal-return drain timed out");
+                if (((Number) inFlight.invoke(null)).intValue() != 0
+                        || ((Number) normalReturns.invoke(null)).intValue() != 1)
+                    throw new IllegalStateException(
+                            "Drain completion was not bound to one actual normal return");
+                getLogger().info("PAPER_A02_TRACKED_NATIVE_ZERO_AFTER_ACTUAL_NORMAL_RETURN");
+            } catch (Throwable failure) {
+                controllerError.set(failure);
+            } finally {
+                if (!released) {
+                    try { release.invoke(null); }
+                    catch (Throwable ignored) { /* original failure remains authoritative */ }
+                }
+            }
+        }, "a02-tracked-native-drain-controller");
+        controller.setDaemon(true);
+        controller.start();
+
+        // Real Paper method is blocked in its transformed entry until the
+        // control thread closes entry admission and releases the hold.
+        writer.saveData();
+        controller.join(18000L);
+        if (controller.isAlive() || controllerError.get() != null)
+            throw new IllegalStateException(
+                    "Paper native tracked-drain controller failed", controllerError.get());
+        if (vetoedSaveEvents.get() != 1 || !Boolean.getBoolean("a02.nativeAgent.closed"))
+            throw new IllegalStateException("Cooperative veto or native closure changed");
+
+        byte[] persistedAfterDrain = Files.readAllBytes(dataFile());
+        if (Arrays.equals(originalFile, persistedAfterDrain))
+            throw new IllegalStateException("Already-admitted Paper save did not persist");
+        Map<String, Object> after = saved();
+        var receipt = SavedGrantReceiptNbt.readAndVerify(after, ledger, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after))
+                || receipt.active()
+                || receipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered()
+                || !(after.get("Inventory") instanceof java.util.List<?> inventory)
+                || inventory.stream().noneMatch(item ->
+                        item instanceof Map<?, ?> stack
+                        && "minecraft:stone".equals(stack.get("id"))
+                        && stack.get("Slot") instanceof Number slot && slot.intValue() == 0))
+            throw new IllegalStateException("Tracked save damaged independent receipt or STONE");
+        boolean rejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException stale) {
+            rejected = true;
+        }
+        if (!rejected)
+            throw new IllegalStateException("Readback accepted physically missing 5000C");
+        getLogger().info("PAPER_A02_TRACKED_NATIVE_SAVED_COINLESS_PENDING_NO_ACK");
+
+        boolean denied = false;
+        try {
+            writer.saveData(); // a NEW actual native method entry after drain
+        } catch (IllegalStateException expected) {
+            denied = expected.getMessage() != null
+                    && expected.getMessage().contains("test-only Paper native save");
+        }
+        if (!denied || !Arrays.equals(persistedAfterDrain, Files.readAllBytes(dataFile()))
+                || ((Number) inFlight.invoke(null)).intValue() != 0
+                || ((Number) normalReturns.invoke(null)).intValue() != 1)
+            throw new IllegalStateException("Closed gate allowed a new Paper save");
+        getLogger().info("PAPER_A02_TRACKED_NATIVE_POST_DRAIN_NEW_ENTRY_DENIED");
+        forceActualPlayerdataAndContainingDirectory();
+        getLogger().info("PAPER_A02_TRACKED_NATIVE_FSYNC_BEFORE_ABRUPT_HALT");
+        Runtime.getRuntime().halt(150);
     }
 
     /**
