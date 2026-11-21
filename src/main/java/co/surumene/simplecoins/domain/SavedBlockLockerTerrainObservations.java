@@ -326,44 +326,64 @@ public final class SavedBlockLockerTerrainObservations {
             needed.put(world, Set.copyOf(targets));
         }
 
-        // Pass 2 is another WHOLE-source traversal: only the needed Chunk NBT
-        // remains retained after its callback. A second incomplete or drifted
-        // set can never silently drop a chest/neighbor into verified FREE.
+        // Pass 2 needs to decode only the Region files containing verified
+        // chest/sign-neighborhood Chunks. Pass 1 already fully parsed EVERY
+        // selected source, and its content witness rechecks the entire source
+        // universe (including sidecars and playerdata) after these reads.
+        // Repeating the complete full-world NBT decode would otherwise add a
+        // costly server-tick pause to a memory-saving refactor.
         Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition, CapturedChunk>> byWorld =
                 new TreeMap<>();
-        Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition,
-                WorldStorageDiscovery.SourceFile>> checkedAgain = new TreeMap<>();
-        var second = WorldSnapshotTraversal.traverseVerified(
-                manifest, maximumCompressedBytes, maximumInflatedBytes,
-                new WorldSnapshotTraversal.Visitor() {
-                    @Override
-                    public void chunk(WorldStorageDiscovery.SourceFile source,
-                                      AnvilRegionReader.Chunk chunk) throws IOException {
-                        if (source.kind() != WorldStorageDiscovery.Kind.REGION
-                                || !scope.includes(source.world())) return;
-                        var key = new SavedBlockLockerChestSigns.ChunkPosition(chunk.x(), chunk.z());
-                        var observed = checkedAgain.computeIfAbsent(
-                                source.world(), ignored -> new HashMap<>());
-                        if (observed.putIfAbsent(key, source) != null)
-                            throw new IOException("Duplicate SAVED Chunk on second capture: "
-                                    + source.world() + "/" + key);
-                        if (needed.getOrDefault(source.world(), Set.of()).contains(key)) {
-                            if (chunk.nbt() == null)
-                                throw new IOException("Missing saved sign-neighborhood terrain NBT");
-                            byWorld.computeIfAbsent(source.world(), ignored -> new HashMap<>())
-                                    .put(key, new CapturedChunk(source, chunk));
-                        }
-                    }
-
-                    @Override
-                    public void player(java.util.UUID player, Map<String, Object> data) {
-                        // No playerdata value is interpreted as chest protection.
-                    }
-                }, null);
-        if (!selectedChunks.equals(checkedAgain) || !first.report().equals(second.report()))
-            throw new IOException("SAVED terrain Chunk universe changed between sparse passes");
+        for (var worldEntry : needed.entrySet()) {
+            String world = worldEntry.getKey();
+            Map<SavedBlockLockerChestSigns.ChunkPosition,
+                    WorldStorageDiscovery.SourceFile> selected = selectedChunks.get(world);
+            Map<WorldStorageDiscovery.SourceFile,
+                    Set<SavedBlockLockerChestSigns.ChunkPosition>> selectedRegions = new HashMap<>();
+            for (var key : worldEntry.getValue()) {
+                var source = selected.get(key);
+                if (source == null || source.kind() != WorldStorageDiscovery.Kind.REGION)
+                    throw new IOException("Missing selected SAVED sign-neighborhood Region: "
+                            + world + "/" + key);
+                selectedRegions.computeIfAbsent(source, ignored -> new HashSet<>()).add(key);
+            }
+            for (var sourceEntry : selectedRegions.entrySet().stream()
+                    .sorted(Comparator.comparing(e -> e.getKey().path().toString())).toList()) {
+                var source = sourceEntry.getKey();
+                var required = sourceEntry.getValue();
+                Set<SavedBlockLockerChestSigns.ChunkPosition> seen = new HashSet<>();
+                // The canonical Anvil scanner validates the complete allocation
+                // table and NBT in every SELECTED Region, not only positive
+                // chest entries; a changed/foreign source cannot be accepted.
+                AnvilRegionReader.scan(source.path(), maximumCompressedBytes,
+                        maximumInflatedBytes, chunk -> {
+                            var key = new SavedBlockLockerChestSigns.ChunkPosition(
+                                    chunk.x(), chunk.z());
+                            if (!source.equals(selected.get(key)) || !seen.add(key))
+                                throw new IOException("SAVED selected Region/Chunk identity drift: "
+                                        + world + "/" + key);
+                            if (required.contains(key)) {
+                                if (chunk.nbt() == null)
+                                    throw new IOException("Missing saved sign-neighborhood terrain NBT");
+                                var prior = byWorld.computeIfAbsent(
+                                        world, ignored -> new HashMap<>())
+                                        .putIfAbsent(key, new CapturedChunk(source, chunk));
+                                if (prior != null)
+                                    throw new IOException("Duplicate required SAVED terrain Chunk: "
+                                            + world + "/" + key);
+                            }
+                        });
+                Set<SavedBlockLockerChestSigns.ChunkPosition> expected = new HashSet<>();
+                for (var candidate : selected.entrySet()) {
+                    if (source.equals(candidate.getValue())) expected.add(candidate.getKey());
+                }
+                if (!seen.equals(expected))
+                    throw new IOException("SAVED selected Region Chunk set changed: " + source.path());
+            }
+            if (byWorld.getOrDefault(world, Map.of()).size() != worldEntry.getValue().size())
+                throw new IOException("Incomplete SAVED sign-neighborhood Chunk capture: " + world);
+        }
         first.witness().requireUnchanged();
-        second.witness().requireUnchanged();
 
         List<ObservedChest> groups = new ArrayList<>();
         for (var worldEntry : byWorld.entrySet()) {
@@ -402,7 +422,6 @@ public final class SavedBlockLockerTerrainObservations {
         }
         // A bounded final stamp cannot substitute for an exclusive writer epoch.
         first.witness().requireUnchanged();
-        second.witness().requireUnchanged();
         return new Snapshot(groups, first.witness(), first.report());
     }
 }
