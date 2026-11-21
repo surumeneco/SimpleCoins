@@ -216,10 +216,17 @@ public final class SavedBlockLockerTerrainObservations {
                 || decoder == null)
             throw new IOException("Missing actual BlockLocker sign configuration/decoder");
 
-        Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition, CapturedChunk>> byWorld =
+        // Pass 1 deliberately retains only the physical chest positions and
+        // the identity of EVERY selected terrain Chunk. Inflated NBT for an
+        // unrelated Chunk must not remain reachable just because this world
+        // contains one BlockLocker-protected chest. Every input still goes
+        // through the canonical full-file/content-verified SAVED traversal.
+        Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition,
+                WorldStorageDiscovery.SourceFile>> selectedChunks = new TreeMap<>();
+        Map<String, Map<SavedBlockLockerChestSigns.Position, PhysicalChest>> physicalByWorld =
                 new TreeMap<>();
         int[] visited = {0};
-        var verified = WorldSnapshotTraversal.traverseVerified(
+        var first = WorldSnapshotTraversal.traverseVerified(
                 manifest, maximumCompressedBytes, maximumInflatedBytes,
                 new WorldSnapshotTraversal.Visitor() {
                     @Override
@@ -231,19 +238,132 @@ public final class SavedBlockLockerTerrainObservations {
                             throw new IOException("SAVED terrain observation Chunk budget exhausted");
                         if (chunk.nbt() == null)
                             throw new IOException("Missing selected SAVED terrain NBT");
-                        var chunks = byWorld.computeIfAbsent(source.world(), ignored -> new HashMap<>());
-                        var key = new SavedBlockLockerChestSigns.ChunkPosition(chunk.x(), chunk.z());
-                        if (chunks.putIfAbsent(key, new CapturedChunk(source, chunk)) != null)
+                        var chunks = selectedChunks.computeIfAbsent(
+                                source.world(), ignored -> new HashMap<>());
+                        var key = new SavedBlockLockerChestSigns.ChunkPosition(
+                                chunk.x(), chunk.z());
+                        if (chunks.putIfAbsent(key, source) != null)
                             throw new IOException("Duplicate selected SAVED terrain Chunk: "
                                     + source.world() + "/" + key);
+                        Object rawEntities = chunk.nbt().get("block_entities");
+                        if (rawEntities == null) return;
+                        if (!(rawEntities instanceof List<?> entities))
+                            throw new IOException("Invalid saved block_entities list");
+                        for (Object raw : entities) {
+                            if (!(raw instanceof Map<?, ?> block))
+                                throw new IOException("Invalid saved BlockEntity entry");
+                            Object rawId = block.get("id");
+                            if (!"minecraft:chest".equals(rawId)
+                                    && !"minecraft:trapped_chest".equals(rawId)) continue;
+                            if (!(block.get("x") instanceof Integer x)
+                                    || !(block.get("y") instanceof Integer y)
+                                    || !(block.get("z") instanceof Integer z)
+                                    || Math.floorDiv(x, 16) != chunk.x()
+                                    || Math.floorDiv(z, 16) != chunk.z())
+                                throw new IOException("Saved chest BlockEntity outside selected Chunk");
+                            var state = SavedTerrainBlockPalette.read(chunk.nbt(), x, y, z);
+                            if (!rawId.equals(state.name()))
+                                throw new IOException("Saved chest BlockEntity disagrees with terrain state");
+                            var position = new SavedBlockLockerChestSigns.Position(x, y, z);
+                            var physical = physicalByWorld.computeIfAbsent(
+                                    source.world(), ignored -> new HashMap<>());
+                            if (physical.putIfAbsent(position, new PhysicalChest(position)) != null)
+                                throw new IOException("Duplicate physical SAVED chest BlockEntity: "
+                                        + position);
+                        }
                     }
 
                     @Override
                     public void player(java.util.UUID player, Map<String, Object> data) {
-                        // Source traversal verifies and content-stamps this input;
-                        // it is not BlockLocker terrain and cannot assign ownership.
+                        // All selected playerdata are still checked by the
+                        // full-file visitor; they cannot assert chest ownership.
                     }
                 }, null);
+
+        // There is no BlockLocker neighborhood to resolve if the complete
+        // selected SAVED terrain has no physical chests. No second NBT pass
+        // is needed; this does not prove that Paper's live state is frozen.
+        if (physicalByWorld.isEmpty()) {
+            first.witness().requireUnchanged();
+            return new Snapshot(List.of(), first.witness(), first.report());
+        }
+
+        // A chest's one-block N/E/S/W/up neighborhood and its possible
+        // double-chest partner all lie within these 5 horizontal positions.
+        // An ABSENT sign requires the neighboring Chunk itself as evidence.
+        Map<String, Set<SavedBlockLockerChestSigns.ChunkPosition>> needed =
+                new TreeMap<>();
+        for (var worldEntry : physicalByWorld.entrySet()) {
+            var world = worldEntry.getKey();
+            var selected = selectedChunks.get(world);
+            if (selected == null)
+                throw new IOException("Missing discovered SAVED chest World");
+            Set<SavedBlockLockerChestSigns.ChunkPosition> targets = new HashSet<>();
+            for (var chest : worldEntry.getValue().keySet()) {
+                int x = chest.x(), z = chest.z();
+                try {
+                    Math.addExact(chest.y(), 1);
+                    for (var key : List.of(
+                            new SavedBlockLockerChestSigns.ChunkPosition(
+                                    Math.floorDiv(x, 16), Math.floorDiv(z, 16)),
+                            new SavedBlockLockerChestSigns.ChunkPosition(
+                                    Math.floorDiv(x, 16), Math.floorDiv(Math.subtractExact(z, 1), 16)),
+                            new SavedBlockLockerChestSigns.ChunkPosition(
+                                    Math.floorDiv(Math.addExact(x, 1), 16), Math.floorDiv(z, 16)),
+                            new SavedBlockLockerChestSigns.ChunkPosition(
+                                    Math.floorDiv(x, 16), Math.floorDiv(Math.addExact(z, 1), 16)),
+                            new SavedBlockLockerChestSigns.ChunkPosition(
+                                    Math.floorDiv(Math.subtractExact(x, 1), 16), Math.floorDiv(z, 16)))) {
+                        if (!selected.containsKey(key))
+                            throw new IOException("Missing selected SAVED sign-neighborhood Chunk: "
+                                    + world + "/" + key);
+                        targets.add(key);
+                    }
+                } catch (ArithmeticException overflow) {
+                    throw new IOException("SAVED sign-neighborhood coordinate overflow", overflow);
+                }
+            }
+            needed.put(world, Set.copyOf(targets));
+        }
+
+        // Pass 2 is another WHOLE-source traversal: only the needed Chunk NBT
+        // remains retained after its callback. A second incomplete or drifted
+        // set can never silently drop a chest/neighbor into verified FREE.
+        Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition, CapturedChunk>> byWorld =
+                new TreeMap<>();
+        Map<String, Map<SavedBlockLockerChestSigns.ChunkPosition,
+                WorldStorageDiscovery.SourceFile>> checkedAgain = new TreeMap<>();
+        var second = WorldSnapshotTraversal.traverseVerified(
+                manifest, maximumCompressedBytes, maximumInflatedBytes,
+                new WorldSnapshotTraversal.Visitor() {
+                    @Override
+                    public void chunk(WorldStorageDiscovery.SourceFile source,
+                                      AnvilRegionReader.Chunk chunk) throws IOException {
+                        if (source.kind() != WorldStorageDiscovery.Kind.REGION
+                                || !scope.includes(source.world())) return;
+                        var key = new SavedBlockLockerChestSigns.ChunkPosition(chunk.x(), chunk.z());
+                        var observed = checkedAgain.computeIfAbsent(
+                                source.world(), ignored -> new HashMap<>());
+                        if (observed.putIfAbsent(key, source) != null)
+                            throw new IOException("Duplicate SAVED Chunk on second capture: "
+                                    + source.world() + "/" + key);
+                        if (needed.getOrDefault(source.world(), Set.of()).contains(key)) {
+                            if (chunk.nbt() == null)
+                                throw new IOException("Missing saved sign-neighborhood terrain NBT");
+                            byWorld.computeIfAbsent(source.world(), ignored -> new HashMap<>())
+                                    .put(key, new CapturedChunk(source, chunk));
+                        }
+                    }
+
+                    @Override
+                    public void player(java.util.UUID player, Map<String, Object> data) {
+                        // No playerdata value is interpreted as chest protection.
+                    }
+                }, null);
+        if (!selectedChunks.equals(checkedAgain) || !first.report().equals(second.report()))
+            throw new IOException("SAVED terrain Chunk universe changed between sparse passes");
+        first.witness().requireUnchanged();
+        second.witness().requireUnchanged();
 
         List<ObservedChest> groups = new ArrayList<>();
         for (var worldEntry : byWorld.entrySet()) {
@@ -252,36 +372,16 @@ public final class SavedBlockLockerTerrainObservations {
                     new HashMap<>();
             Map<SavedBlockLockerChestSigns.ChunkPosition,
                     WorldStorageDiscovery.SourceFile> sourceByChunk = new HashMap<>();
-            Map<SavedBlockLockerChestSigns.Position, PhysicalChest> physical = new HashMap<>();
+            Map<SavedBlockLockerChestSigns.Position, PhysicalChest> physical =
+                    physicalByWorld.get(world);
+            if (physical == null || physical.isEmpty())
+                throw new IOException("SAVED terrain chest selection lost its physical source");
             for (var entry : worldEntry.getValue().entrySet()) {
                 var captured = entry.getValue();
                 var chunk = captured.chunk();
                 terrain.put(entry.getKey(), chunk.nbt());
                 sourceByChunk.put(entry.getKey(), captured.source());
-                Object rawEntities = chunk.nbt().get("block_entities");
-                if (rawEntities == null) continue;
-                if (!(rawEntities instanceof List<?> entities))
-                    throw new IOException("Invalid saved block_entities list");
-                for (Object raw : entities) {
-                    if (!(raw instanceof Map<?, ?> block))
-                        throw new IOException("Invalid saved BlockEntity entry");
-                    Object rawId = block.get("id");
-                    if (!"minecraft:chest".equals(rawId)
-                            && !"minecraft:trapped_chest".equals(rawId)) continue;
-                    if (!(block.get("x") instanceof Integer x)
-                            || !(block.get("y") instanceof Integer y)
-                            || !(block.get("z") instanceof Integer z)
-                            || Math.floorDiv(x, 16) != chunk.x()
-                            || Math.floorDiv(z, 16) != chunk.z())
-                        throw new IOException("Saved chest BlockEntity outside selected Chunk");
-                    var state = SavedTerrainBlockPalette.read(chunk.nbt(), x, y, z);
-                    if (!rawId.equals(state.name()))
-                        throw new IOException("Saved chest BlockEntity disagrees with terrain state");
-                    var position = new SavedBlockLockerChestSigns.Position(x, y, z);
-                    if (physical.putIfAbsent(position,
-                            new PhysicalChest(position)) != null)
-                        throw new IOException("Duplicate physical SAVED chest BlockEntity: " + position);
-                }
+
             }
             Set<SavedBlockLockerChestSigns.Position> accounted = new HashSet<>();
             for (var position : physical.keySet().stream().sorted(POSITION_ORDER).toList()) {
@@ -301,7 +401,8 @@ public final class SavedBlockLockerTerrainObservations {
                 throw new IOException("Incomplete SAVED physical chest observation");
         }
         // A bounded final stamp cannot substitute for an exclusive writer epoch.
-        verified.witness().requireUnchanged();
-        return new Snapshot(groups, verified.witness(), verified.report());
+        first.witness().requireUnchanged();
+        second.witness().requireUnchanged();
+        return new Snapshot(groups, first.witness(), first.report());
     }
 }
