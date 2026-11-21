@@ -27,6 +27,108 @@ public final class NativeSaveHook {
         HELD_CRAFT_RELEASE.countDown();
     }
 
+
+    // Shared, test-only gate for the exact synchronous CraftPlayer -> NMS
+    // method nesting. Thread-local ancestry is NOT an async handoff token.
+    private static final Object FAMILY_LOCK = new Object();
+    private static final ThreadLocal<java.util.ArrayDeque<String>> FAMILY_STACK =
+            ThreadLocal.withInitial(java.util.ArrayDeque::new);
+    private static int familyActive;
+    private static int familyCraftReturns;
+    private static int familyNmsReturns;
+    private static int familyNestedNms;
+    private static int familyIndependentDenials;
+    private static boolean familyClosed;
+
+    public static int familyInFlight() {
+        synchronized (FAMILY_LOCK) { return familyActive; }
+    }
+
+    public static int familyCraftNormalReturns() {
+        synchronized (FAMILY_LOCK) { return familyCraftReturns; }
+    }
+
+    public static int familyNmsNormalReturns() {
+        synchronized (FAMILY_LOCK) { return familyNmsReturns; }
+    }
+
+    public static int familyNestedNmsAdmissions() {
+        synchronized (FAMILY_LOCK) { return familyNestedNms; }
+    }
+
+    public static int familyIndependentNmsDenials() {
+        synchronized (FAMILY_LOCK) { return familyIndependentDenials; }
+    }
+
+    public static void closeNativeFamilyAdmissions() {
+        synchronized (FAMILY_LOCK) {
+            if (!Boolean.getBoolean("a02.nativeAgent.trackNativeFamily") || familyClosed)
+                throw new IllegalStateException("Native test family gate was not open");
+            familyClosed = true;
+            System.setProperty("a02.nativeAgent.closed", "true");
+            System.out.println("PAPER_A02_NATIVE_FAMILY_CLOSED_ACTIVE_" + familyActive);
+        }
+    }
+
+    public static boolean awaitNativeFamilyDrain(long millis) throws InterruptedException {
+        if (millis < 1 || millis > 30000)
+            throw new IllegalArgumentException("Invalid native family drain timeout");
+        long deadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis);
+        synchronized (FAMILY_LOCK) {
+            if (!familyClosed)
+                throw new IllegalStateException("Native family must be closed before drain");
+            while (familyActive != 0) {
+                long remain = deadline - System.nanoTime();
+                if (remain <= 0) return false;
+                FAMILY_LOCK.wait(Math.max(1L,
+                        java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(remain)));
+            }
+            return true;
+        }
+    }
+
+    private static void enterNativeFamily(String method) {
+        synchronized (FAMILY_LOCK) {
+            java.util.ArrayDeque<String> callStack = FAMILY_STACK.get();
+            boolean nestedNms = "NMS".equals(method)
+                    && callStack.size() == 1 && "CRAFT".equals(callStack.peekLast());
+            boolean independent = callStack.isEmpty();
+            if (!independent && !nestedNms)
+                throw new IllegalStateException("Unrecognized native save recursion/ancestry");
+            // After closing, only the NMS child of an already counted
+            // Craft invocation on THE SAME thread inherits admission.
+            if (familyClosed || Boolean.getBoolean("a02.nativeAgent.closed")) {
+                if (!nestedNms) {
+                    if ("NMS".equals(method)) familyIndependentDenials++;
+                    System.out.println("PAPER_A02_NATIVE_FAMILY_NEW_" + method + "_DENIED");
+                    throw new IllegalStateException("A02 native family closed to new root writers");
+                }
+            }
+            callStack.addLast(method);
+            familyActive++;
+            if (nestedNms) {
+                familyNestedNms++;
+                System.out.println("PAPER_A02_NATIVE_FAMILY_ACTUAL_NMS_NESTED_ADMITTED_CLOSED_"
+                        + familyClosed);
+            }
+        }
+    }
+
+    private static void exitNativeFamily(String method) {
+        synchronized (FAMILY_LOCK) {
+            java.util.ArrayDeque<String> stack = FAMILY_STACK.get();
+            if (familyActive < 1 || !method.equals(stack.peekLast()))
+                throw new IllegalStateException("Unmatched native family normal-return scope");
+            stack.removeLast();
+            if (stack.isEmpty()) FAMILY_STACK.remove();
+            familyActive--;
+            if ("CRAFT".equals(method)) familyCraftReturns++;
+            else familyNmsReturns++;
+            FAMILY_LOCK.notifyAll();
+        }
+    }
+
     // Active entry accounting for exactly ONE instrumented method.
     // The gate lock makes close-vs-enter a single linearizable decision.
     // This is a throwaway proof, not a deployed Paper writer coordinator.
@@ -80,6 +182,10 @@ public final class NativeSaveHook {
     }
 
     public static void afterNativeSave() {
+        if (Boolean.getBoolean("a02.nativeAgent.trackNativeFamily")) {
+            exitNativeFamily("CRAFT");
+            return;
+        }
         // Injected by the JVM Agent ONLY at the actual normal-return opcode,
         // not when the original method body was merely released to run.
         if (!Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")) return;
@@ -94,7 +200,9 @@ public final class NativeSaveHook {
     }
 
     public static void beforeNativeSave() {
-        if (Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")) {
+        if (Boolean.getBoolean("a02.nativeAgent.trackNativeFamily")) {
+            enterNativeFamily("CRAFT");
+        } else if (Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")) {
             synchronized (CRAFT_DRAIN_LOCK) {
                 if (trackedAdmissionsClosed || Boolean.getBoolean("a02.nativeAgent.closed")) {
                     System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED");
@@ -132,10 +240,20 @@ public final class NativeSaveHook {
 
     /** Separate NMS internal playerdata writer entry, not a universal IO fence. */
     public static void beforeNmsSave() {
+        if (Boolean.getBoolean("a02.nativeAgent.trackNativeFamily")) {
+            enterNativeFamily("NMS");
+            return;
+        }
         if (Boolean.getBoolean("a02.nativeAgent.closed")) {
             System.out.println("PAPER_A02_NATIVE_AGENT_NMS_SAVE_DENIED");
             throw new IllegalStateException(
                     "A02 test-only NMS PlayerDataStorage save rejected during closed interval");
         }
+    }
+
+    /** Invoked ONLY at the actual normal return of the instrumented NMS save. */
+    public static void afterNmsSave() {
+        if (Boolean.getBoolean("a02.nativeAgent.trackNativeFamily"))
+            exitNativeFamily("NMS");
     }
 }

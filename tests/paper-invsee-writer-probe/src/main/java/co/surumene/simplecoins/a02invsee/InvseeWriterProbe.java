@@ -103,6 +103,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.nativeInFlightAfterClose");
     private final boolean testNativeDrainAccounting =
             Boolean.getBoolean("a02.invsee.nativeDrainAccounting");
+    private final boolean testNativeFamilyNested =
+            Boolean.getBoolean("a02.invsee.nativeFamilyNested");
     private final boolean testNmsSaveBypassesCraftAgent =
             Boolean.getBoolean("a02.invsee.nmsSaveBypassesCraftAgent");
     private final boolean testNmsSaveBlockedByAgent =
@@ -960,6 +962,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
         writer.getInventory().setItem(1, null);
+        if (testNativeFamilyNested) {
+            verifyNestedNativeFamilyDrainAfterClosure(writer);
+            throw new AssertionError("Native family drain test halt returned");
+        }
         if (testNativeDrainAccounting) {
             verifyNativeTrackedDrainAfterClosure(writer);
             throw new AssertionError("Native tracked drain test halt returned");
@@ -1254,6 +1260,178 @@ public final class InvseeWriterProbe extends JavaPlugin {
         forceActualPlayerdataAndContainingDirectory();
         getLogger().info("PAPER_A02_NATIVE_INFLIGHT_FSYNC_BEFORE_ABRUPT_HALT");
         Runtime.getRuntime().halt(149);
+    }
+
+    /**
+     * Isolated proof that an admitted CraftPlayer root can enter a same-thread
+     * NMS child after closure, while a fresh independent NMS root cannot.
+     * This is not a writer fence for other plugin/async/fs writers.
+     */
+    private void verifyNestedNativeFamilyDrainAfterClosure(Player writer) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testNativeFamilyNested || !testPaperDirectAfterInvseeVeto
+                || writer != originalDetachedPaperWriter
+                || vetoedSaveEvents.get() != 1 || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Nested native save probe not isolated");
+
+        Class<?> hook = Class.forName("co.surumene.simplecoins.a02agent.NativeSaveHook");
+        var awaitEntry = hook.getMethod("awaitCraftSaveEntry", long.class);
+        var release = hook.getMethod("releaseHeldCraftSave");
+        var active = hook.getMethod("familyInFlight");
+        var craftReturns = hook.getMethod("familyCraftNormalReturns");
+        var nmsReturns = hook.getMethod("familyNmsNormalReturns");
+        var nestedAdmissions = hook.getMethod("familyNestedNmsAdmissions");
+        var nmsDenials = hook.getMethod("familyIndependentNmsDenials");
+        var close = hook.getMethod("closeNativeFamilyAdmissions");
+        var awaitDrain = hook.getMethod("awaitNativeFamilyDrain", long.class);
+
+        byte[] originalFile = Files.readAllBytes(dataFile());
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+            throw new IllegalStateException("Authentic playerdata did not contain 5000C");
+        if (((Number) active.invoke(null)).intValue() != 0)
+            throw new IllegalStateException("Native family was not empty before admission");
+        System.setProperty("a02.nativeAgent.trackNativeFamily", "true");
+        System.setProperty("a02.nativeAgent.holdInsideCraft", "true");
+        var controllerError = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread controller = new Thread(() -> {
+            boolean released = false;
+            try {
+                if (!Boolean.TRUE.equals(awaitEntry.invoke(null, 10000L)))
+                    throw new IllegalStateException("Real CraftPlayer entry was not held");
+                if (((Number) active.invoke(null)).intValue() != 1
+                        || ((Number) craftReturns.invoke(null)).intValue() != 0
+                        || ((Number) nmsReturns.invoke(null)).intValue() != 0
+                        || ((Number) nestedAdmissions.invoke(null)).intValue() != 0
+                        || !Arrays.equals(originalFile, Files.readAllBytes(dataFile())))
+                    throw new IllegalStateException("Real Craft root was not single open entry");
+                getLogger().info("PAPER_A02_NATIVE_FAMILY_SINGLE_CRAFT_ROOT_HELD");
+                close.invoke(null);
+                if (((Number) active.invoke(null)).intValue() != 1
+                        || Boolean.TRUE.equals(awaitDrain.invoke(null, 150L)))
+                    throw new IllegalStateException("Nested family drained before held root resumed");
+                getLogger().info("PAPER_A02_NATIVE_FAMILY_PREMATURE_ZERO_REJECTED");
+                release.invoke(null);
+                released = true;
+                if (!Boolean.TRUE.equals(awaitDrain.invoke(null, 10000L)))
+                    throw new IllegalStateException("Real Craft/NMS native family did not drain");
+                if (((Number) active.invoke(null)).intValue() != 0
+                        || ((Number) craftReturns.invoke(null)).intValue() != 1
+                        || ((Number) nmsReturns.invoke(null)).intValue() != 1
+                        || ((Number) nestedAdmissions.invoke(null)).intValue() != 1)
+                    throw new IllegalStateException(
+                            "Actual Paper Craft->NMS nesting was not exactly 1+1");
+                getLogger().info("PAPER_A02_NATIVE_FAMILY_CRAFT_NMS_BOTH_RETURNED_DRAIN_ZERO");
+            } catch (Throwable failure) {
+                controllerError.set(failure);
+            } finally {
+                if (!released) {
+                    try { release.invoke(null); }
+                    catch (Throwable releaseFailure) {
+                        controllerError.compareAndSet(null, releaseFailure);
+                    }
+                }
+            }
+        }, "a02-native-family-close-controller");
+        controller.setDaemon(true);
+        controller.start();
+        // The actual Paper main-thread method must cross the already closed
+        // gate to invoke its nested NMS persistence on the SAME thread.
+        writer.saveData();
+        controller.join(18000L);
+        if (controller.isAlive() || controllerError.get() != null)
+            throw new IllegalStateException("Nested Paper writer did not drain",
+                    controllerError.get());
+        if (!Boolean.getBoolean("a02.nativeAgent.closed")
+                || vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("Native family closure or InvSee veto lost");
+
+        byte[] persisted = Files.readAllBytes(dataFile());
+        Map<String, Object> disk = saved();
+        var receipt = SavedGrantReceiptNbt.readAndVerify(disk, ledger, ID);
+        if (Arrays.equals(originalFile, persisted)
+                || !BigInteger.ZERO.equals(totalSavedMoney(disk))
+                || receipt.active()
+                || receipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered()
+                || !(disk.get("Inventory") instanceof java.util.List<?> inventory)
+                || inventory.stream().noneMatch(item -> item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number slot && slot.intValue() == 0))
+            throw new IllegalStateException("Nested save changed grant receipt or STONE");
+        boolean rejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            rejected = true;
+        }
+        if (!rejected)
+            throw new IllegalStateException("Nested save loss passed fresh grant proof");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_NESTED_COMMITTED_COINLESS_PENDING");
+
+        boolean craftDenied = false;
+        try {
+            writer.saveData();
+        } catch (IllegalStateException expected) {
+            craftDenied = expected.getMessage() != null
+                    && expected.getMessage().contains("native family closed to new root writers");
+        }
+        if (!craftDenied)
+            throw new IllegalStateException("Fresh CraftPlayer save bypassed family closure");
+
+        // Resolve NMS storage by its actual runtime class, just like the
+        // independent native entry experiment: no Craft wrapper involved.
+        Object server = getServer().getClass().getMethod("getServer").invoke(getServer());
+        Object list = server.getClass().getMethod("getPlayerList").invoke(server);
+        Class<?> storageType = Class.forName(
+                "net.minecraft.world.level.storage.PlayerDataStorage");
+        java.util.List<Field> storages = new java.util.ArrayList<>();
+        for (Class<?> type = list.getClass(); type != null && type != Object.class;
+                type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                if (storageType.isAssignableFrom(field.getType()))
+                    storages.add(field);
+            }
+        }
+        if (storages.size() != 1)
+            throw new IllegalStateException("Cannot resolve the unique real NMS save storage");
+        storages.getFirst().setAccessible(true);
+        Object storage = storages.getFirst().get(list);
+        Object nmsPlayer = writer.getClass().getMethod("getHandle").invoke(writer);
+        var methods = Arrays.stream(storageType.getDeclaredMethods())
+                .filter(method -> method.getName().equals("save")
+                        && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0].isInstance(nmsPlayer)).toList();
+        if (methods.size() != 1)
+            throw new IllegalStateException("Cannot resolve the unique real NMS save method");
+        var nmsSave = methods.getFirst();
+        nmsSave.setAccessible(true);
+        boolean nmsDenied = false;
+        try {
+            nmsSave.invoke(storage, nmsPlayer);
+        } catch (java.lang.reflect.InvocationTargetException thrown) {
+            Throwable cause = thrown.getCause();
+            nmsDenied = cause instanceof IllegalStateException
+                    && cause.getMessage() != null
+                    && cause.getMessage().contains("native family closed to new root writers");
+            if (!nmsDenied) throw thrown;
+        }
+        if (!nmsDenied
+                || ((Number) nmsDenials.invoke(null)).intValue() != 1
+                || ((Number) active.invoke(null)).intValue() != 0
+                || ((Number) craftReturns.invoke(null)).intValue() != 1
+                || ((Number) nmsReturns.invoke(null)).intValue() != 1
+                || ((Number) nestedAdmissions.invoke(null)).intValue() != 1
+                || !Arrays.equals(persisted, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException(
+                    "New independent Craft/NMS root was not denied after drain");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_BOTH_NEW_ROOTS_DENIED_SAVED_UNCHANGED");
+        forceActualPlayerdataAndContainingDirectory();
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_FSYNC_BEFORE_ABRUPT_HALT");
+        Runtime.getRuntime().halt(151);
     }
 
     /**
