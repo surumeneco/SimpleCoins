@@ -1,0 +1,38 @@
+name: Temporary read-only A04 project snapshot transport
+on:
+  push:
+    branches: ["feature/a04-saved-terrain-sparse-two-pass-20261121"]
+    paths:
+      - ".github/workflows/zz-chat-a04-readonly-snapshot.yml"
+permissions:
+  contents: read
+jobs:
+  archive-fixed-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/SimpleCoins
+          ref: df3a93b98b6687f49307f3a3909246888345b420
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Archive exactly verified feature source without running code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'df3a93b98b6687f49307f3a3909246888345b420'
+          git rev-parse HEAD > SNAPSHOT_COMMIT
+          git rev-parse HEAD^{tree} > SNAPSHOT_TREE
+          git archive --format=tar HEAD | gzip -n -9 > project.tar.gz
+          sha256sum project.tar.gz > SNAPSHOT_SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a04-readonly-fixed-project-snapshot
+          path: |
+            project.tar.gz
+            SNAPSHOT_COMMIT
+            SNAPSHOT_TREE
+            SNAPSHOT_SHA256
+          if-no-files-found: error
+          retention-days: 1
