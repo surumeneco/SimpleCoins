@@ -54,6 +54,10 @@ import org.bukkit.Chunk;
 import org.bukkit.entity.Entity;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
+import org.bukkit.block.Sign;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.sign.Side;
+import org.bukkit.block.data.type.WallSign;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Wolf;
@@ -71,6 +75,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Never reads an actual monetary owner or grants admission.
  */
 public final class WclServicesProbe extends JavaPlugin {
+    private static boolean withBlockLocker() {
+        return Boolean.getBoolean("a05.probe.blocklocker");
+    }
+
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(Bukkit.getServer().getIp())
                 || !Bukkit.getOnlinePlayers().isEmpty()) {
@@ -86,6 +94,15 @@ public final class WclServicesProbe extends JavaPlugin {
                     Plugin plugin = Bukkit.getPluginManager().getPlugin(pluginName);
                     if (plugin == null || !plugin.isEnabled())
                         throw new IllegalStateException("Expected active provider dependency: " + pluginName);
+                }
+                if (withBlockLocker()) {
+                    Plugin plugin = Bukkit.getPluginManager().getPlugin("BlockLocker");
+                    if (plugin == null || !plugin.isEnabled())
+                        throw new IOException("Real BlockLocker 1.15 plugin is required for this mode");
+                    if (!plugin.getDescription().getVersion().equals("1.15"))
+                        throw new IOException("Incorrect real BlockLocker fixture version");
+                } else if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null) {
+                    throw new IOException("Legacy isolated WCL fixture must not load BlockLocker");
                 }
                 var registrations = Bukkit.getServicesManager()
                         .getRegistrations(WonderfulStorageReader.class);
@@ -1136,6 +1153,34 @@ public final class WclServicesProbe extends JavaPlugin {
         if (!(chestBlock.getState() instanceof org.bukkit.block.Chest persistedChest)
                 || persistedChest.getBlockInventory().getItem(0) == null)
             throw new IOException("Far physical 5000C chest was not filled");
+        if (withBlockLocker()) {
+            int x = (int) anchor, z = (int) anchor;
+            // Real distributed BlockLocker is enabled during the first
+            // physical Paper world write. Same FAR saved terrain as both
+            // actual WWC and WWW entities, and never loaded in process B.
+            attachBlockLockerSign(world, x + 5, 121, z + 5,
+                    "FixtureOwner#" + PERSISTENCE_FOLLOW, null);
+            var privateEvidence = co.surumene.simplecoins.paper.BlockLockerLiveEvidence
+                    .observe(chestBlock);
+            if (!PERSISTENCE_FOLLOW.equals(privateEvidence.owner())
+                    || privateEvidence.everyoneProtected())
+                throw new IOException("Real BlockLocker PRIVATE source did not own 5000C chest");
+            var freeBlock = world.getBlockAt(x + 13, 121, z + 5);
+            freeBlock.setType(Material.CHEST);
+            if (!(freeBlock.getState() instanceof org.bukkit.block.Chest freeChest))
+                throw new IOException("Failed to initialize real Everyone money chest");
+            freeChest.getSnapshotInventory().setItem(0,
+                    coins.create(CoinDenomination.THOUSAND, 1));
+            if (!freeChest.update(true, false))
+                throw new IOException("Failed to persist real Everyone money chest");
+            attachBlockLockerSign(world, x + 13, 121, z + 5,
+                    "UnresolvedOwner", "[Everyone]");
+            var freeEvidence = co.surumene.simplecoins.paper.BlockLockerLiveEvidence
+                    .observe(freeBlock);
+            if (freeEvidence.owner() != null || !freeEvidence.everyoneProtected())
+                throw new IOException("Real BlockLocker Everyone source was not effective");
+            getLogger().info("PAPER_A04_A05_REAL_BLOCKLOCKER_BOTH_PHYSICAL_SIGNS_SEEDED_PASSED");
+        }
         Files.writeString(farWitness("wwc-uuid.txt"), chicken.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("www-uuid.txt"), wolf.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("wwc-shulker.b64"),
@@ -1144,6 +1189,25 @@ public final class WclServicesProbe extends JavaPlugin {
                 Base64.getEncoder().encodeToString(runtime) + "\n");
         getLogger().info("PAPER_A05_FAR_TWO_STORED_PROVIDER_FIXTURES_SAVED_PASSED"
                 + " chunk=" + FAR_CHUNK + "," + FAR_CHUNK);
+    }
+
+    /** Genuine v1.15 wall-sign fixture, not an artificial saved owner index. */
+    private static void attachBlockLockerSign(
+            World world, int x, int y, int z,
+            String mainProfile, String secondary) throws IOException {
+        var block = world.getBlockAt(x, y, z + 1);
+        block.setType(Material.OAK_WALL_SIGN);
+        WallSign direction = (WallSign) block.getBlockData();
+        direction.setFacing(BlockFace.SOUTH);
+        block.setBlockData(direction);
+        if (!(block.getState() instanceof Sign sign))
+            throw new IOException("Real BlockLocker wall-sign fixture did not initialize");
+        sign.getSide(Side.FRONT).setLine(0, "[Private]");
+        sign.getSide(Side.FRONT).setLine(1, mainProfile);
+        if (secondary != null)
+            sign.getSide(Side.FRONT).setLine(2, secondary);
+        if (!sign.update(true, false))
+            throw new IOException("Real BlockLocker wall-sign was not persisted");
     }
 
     /**
