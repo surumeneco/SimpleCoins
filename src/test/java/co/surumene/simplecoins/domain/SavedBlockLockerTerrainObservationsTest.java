@@ -288,4 +288,45 @@ class SavedBlockLockerTerrainObservationsTest {
         assertThrows(IOException.class, () -> wrongWorld.assembleOwnerIndex(
                 f.manifest(), candidate -> syntheticComplete(true)));
     }
+
+    @Test void forgedEveryoneSignCannotBorrowGenuineWitness() throws Exception {
+        Fixture f = fixture(false);
+        var genuine = capture(f);
+        var trueChest = genuine.chests().getFirst();
+        // Before the fix the publicly constructible Snapshot lets a caller
+        // attach fabricated positive BlockLocker signs to genuine saved bytes.
+        var fakeSign = new SavedBlockLockerChestSigns.AttachedSign(
+                new SavedBlockLockerChestSigns.Position(CHEST_X, Y, Z + 1),
+                new BlockLockerSavedProfileResolution.SignProfiles(
+                        BlockLockerHeaderMatcher.Type.PRIVATE,
+                        java.util.Optional.empty(), true, false));
+        var forged = new SavedBlockLockerTerrainObservations.Snapshot(
+                List.of(new SavedBlockLockerTerrainObservations.ObservedChest(
+                        trueChest.world(), trueChest.sources(),
+                        new SavedBlockLockerChestSigns.Observation(
+                                trueChest.observation().storageMembers(),
+                                List.of(fakeSign)))),
+                genuine.witness(), genuine.report());
+        assertThrows(IOException.class, () -> forged.assembleOwnerIndex(
+                f.manifest(), chest -> syntheticComplete(false)),
+                "A caller-manufactured Snapshot must not accept invented Everyone signage");
+    }
+
+    @Test void completeGenuinelyEmptySavedDiscoveryHasAnEmptyUnpublishedOwnerIndex()
+            throws Exception {
+        Path world = directory.resolve("empty-world");
+        Files.createDirectories(world);
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(Map.of("world", world), scope, 100);
+        var saved = SavedBlockLockerTerrainObservations.capture(
+                manifest, scope, 1024 * 1024, 4 * 1024 * 1024, 4,
+                Set.of("[Private]"), Set.of("[More Users]"), Set.of("Everyone"),
+                raw -> raw);
+        assertTrue(saved.chests().isEmpty());
+        var index = saved.assembleOwnerIndex(manifest,
+                chest -> { throw new AssertionError("No physical chest may request owner proof"); });
+        assertThrows(IOException.class, () -> index.lookup("world", "0,65,0"),
+                "An empty genuine index cannot infer unprotected ownership");
+        saved.witness().requireUnchanged();
+    }
 }
