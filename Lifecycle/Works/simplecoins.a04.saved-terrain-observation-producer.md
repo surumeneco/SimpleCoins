@@ -44,7 +44,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md;src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java;src/test/java/co/surumene/simplecoins/paper/PaperSavedProfileAnvilFixtureTest.java;src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java | src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java | src/test/java/co/surumene/simplecoins/paper/PaperSavedProfileAnvilFixtureTest.java;src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md;src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java;src/main/java/co/surumene/simplecoins/domain/WorldSnapshotTraversal.java;src/test/java/co/surumene/simplecoins/paper/PaperSavedProfileAnvilFixtureTest.java;src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java | src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java;src/main/java/co/surumene/simplecoins/domain/WorldSnapshotTraversal.java | src/test/java/co/surumene/simplecoins/paper/PaperSavedProfileAnvilFixtureTest.java;src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
@@ -72,6 +72,11 @@ spec_status: confirmed
 - Use the existing real Paper 26.2+BlockLocker 1.15 stopped-world fixture: expected five protected chests + one nonprotected chest, seven physical chest blocks, double chest across two chunks, and no synthesized protected UUID when proof is unknown. The saved producer must report the same effective attached sign profiles as the single-chest observer. Preserve all existing JUnit/Domain/Phase6 regression and real Paper fixture markers.
 - Memory bound: the initial producer has an explicit `maxSavedTerrainChunks` cap; exceeding it stops the entire candidate rather than spilling/inventing completeness. This bounded staging unit is **not** a production-scale G0 integration. A future windowed/streaming design must be selected with actual data volume and writer-freeze evidence.
 - The normative A04 Process/PI/TCE remain unchanged. Formal CAT status, Green/Red, feature integration, and G0 global writer-epoch state must be reported distinctly.
+
+## Same-source local owner-index assembly (still unpublished)
+- Bind an actually completed `SavedBlockLockerTerrainObservations.Snapshot` to its **identical discovered Manifest**, using the stored `WorldSnapshotTraversal.ContentWitness`; reject a different/hand-created source Manifest, unselected or duplicate physical Region provenance, and stale on-disk bytes before and after assembling the index.
+- For every saved chest observation, call the existing `SavedBlockLockerPhysicalOwnerIndex.Builder.accept` exactly once with a **per-observation proof provided by the caller**. This stage must never synthesize positive `SavedBlockLockerOwnerCandidate.ExternalProof` flags; unknown proof, conflicting signs, duplicate storage members and partial failure leave no constructed index.
+- A test-only independently supplied positive proof can validate local OWNER/FREE representation after authentic compressed Anvil read; it is not a G0 writer epoch or production authorization. Preserve the existing global admission, snapshot publisher, G3 ACK and real-VPS settings unchanged.
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
