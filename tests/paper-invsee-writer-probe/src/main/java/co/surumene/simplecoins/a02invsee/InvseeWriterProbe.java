@@ -99,6 +99,8 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.checkPaperDirectAfterHalt");
     private final boolean testNativeAgentEntry =
             Boolean.getBoolean("a02.invsee.nativeAgentEntryTest");
+    private final boolean testNativeInFlightAfterClose =
+            Boolean.getBoolean("a02.invsee.nativeInFlightAfterClose");
     private final boolean testNmsSaveBypassesCraftAgent =
             Boolean.getBoolean("a02.invsee.nmsSaveBypassesCraftAgent");
     private final boolean testNmsSaveBlockedByAgent =
@@ -956,6 +958,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
         writer.getInventory().setItem(1, null);
+        if (testNativeInFlightAfterClose) {
+            verifyNativeInFlightWriterAfterClosure(writer);
+            throw new AssertionError("Native already-admitted save probe halt returned");
+        }
         if (testNmsSaveBypassesCraftAgent || testNmsSaveBlockedByAgent) {
             verifyNmsInternalSaveIndependentOfCraftPlayer(writer);
             throw new AssertionError("NMS save experiment halt returned");
@@ -1150,6 +1156,98 @@ public final class InvseeWriterProbe extends JavaPlugin {
         forceActualPlayerdataAndContainingDirectory();
         getLogger().info("PAPER_A02_NMS_SOURCE_FSYNC_AND_PENDING_BEFORE_HALT");
         Runtime.getRuntime().halt(testNmsSaveBlockedByAgent ? 145 : 144);
+    }
+
+    /**
+     * Negative in-flight example: an actual Paper save already admitted through
+     * the entry hook runs after the control thread closes NEW admissions.
+     * This is a disposable startup-Agent test only, not G0/G3 or a safe fence.
+     */
+    private void verifyNativeInFlightWriterAfterClosure(Player writer) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !testNativeInFlightAfterClose
+                || !testPaperDirectAfterInvseeVeto
+                || vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("Native in-flight probe not isolated");
+
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a02agent.NativeSaveHook");
+        var await = hook.getMethod("awaitCraftSaveEntry", long.class);
+        var release = hook.getMethod("releaseHeldCraftSave");
+        byte[] before = Files.readAllBytes(dataFile());
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(saved())))
+            throw new IllegalStateException("Missing authentic coin before held native entry");
+
+        var controlFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        System.setProperty("a02.nativeAgent.holdInsideCraft", "true");
+        Thread closer = new Thread(() -> {
+            try {
+                if (!Boolean.TRUE.equals(await.invoke(null, 10000L)))
+                    throw new IllegalStateException("Real Paper CraftPlayer entry was never held");
+                // The writer has passed the entry check but has NOT yet run
+                // the original Paper method body; check actual UUID.dat bytes.
+                if (!Arrays.equals(before, Files.readAllBytes(dataFile())))
+                    throw new IllegalStateException(
+                            "Native save already changed playerdata before closure");
+                System.out.println("PAPER_A02_NATIVE_INFLIGHT_ORIGINAL_FILE_UNCHANGED_BEFORE_CLOSE");
+                System.setProperty("a02.nativeAgent.closed", "true");
+                System.out.println("PAPER_A02_NATIVE_NEW_ADMISSION_CLOSED_WITH_WRITER_INFLIGHT");
+            } catch (Throwable error) {
+                controlFailure.set(error);
+            } finally {
+                try { release.invoke(null); }
+                catch (Throwable releaseFailure) {
+                    controlFailure.compareAndSet(null, releaseFailure);
+                }
+            }
+        }, "a02-native-inflight-close-control");
+        closer.setDaemon(true);
+        closer.start();
+
+        // The real main-thread Paper save blocks inside the instrumented
+        // method until the independent thread closes only NEW admissions.
+        writer.saveData();
+        closer.join(18000L);
+        if (closer.isAlive() || controlFailure.get() != null)
+            throw new IllegalStateException(
+                    "Already-admitted Paper writer control did not finish",
+                    controlFailure.get());
+        if (!Boolean.getBoolean("a02.nativeAgent.closed")
+                || vetoedSaveEvents.get() != 1)
+            throw new IllegalStateException("Admission closure or InvSee veto count changed");
+        if (Arrays.equals(before, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("Already-admitted native writer did not persist");
+
+        Map<String, Object> after = saved();
+        var receipt = SavedGrantReceiptNbt.readAndVerify(after, ledger, ID);
+        if (!BigInteger.ZERO.equals(totalSavedMoney(after))
+                || receipt.active()
+                || receipt.completedSequence() != grant.sequence()
+                || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered()
+                || !(after.get("Inventory") instanceof java.util.List<?> inventory)
+                || inventory.stream().noneMatch(item ->
+                    item instanceof Map<?, ?> stack
+                    && "minecraft:stone".equals(stack.get("id"))
+                    && stack.get("Slot") instanceof Number slot
+                    && slot.intValue() == 0))
+            throw new IllegalStateException(
+                    "Physical post-close save did not preserve signed receipt/STONE/pending");
+        boolean staleRejected = false;
+        try {
+            SavedGrantDeliveryFileReadback.verify(
+                    discover(), ledger, ID, staged, priorRoot,
+                    MAX_COMPRESSED, MAX_INFLATED);
+        } catch (java.io.IOException expected) {
+            staleRejected = true;
+        }
+        if (!staleRejected)
+            throw new IllegalStateException("Stale post-close grant proof was still accepted");
+        getLogger().info("PAPER_A02_NATIVE_ALREADY_ADMITTED_SAVE_ERASED_5000C_AFTER_CLOSE");
+        getLogger().info("PAPER_A02_NATIVE_INFLIGHT_FRESH_PROOF_REJECTED_PENDING_NO_ACK");
+        forceActualPlayerdataAndContainingDirectory();
+        getLogger().info("PAPER_A02_NATIVE_INFLIGHT_FSYNC_BEFORE_ABRUPT_HALT");
+        Runtime.getRuntime().halt(149);
     }
 
     /**
