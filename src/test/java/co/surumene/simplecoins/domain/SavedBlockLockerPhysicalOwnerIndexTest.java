@@ -105,4 +105,15 @@ class SavedBlockLockerPhysicalOwnerIndexTest {
         assertThrows(java.io.IOException.class,()->pending.accept("world",protectedChest(6),COMPLETE),
             "A failed transaction must not be resurrected");
     }
+
+    @Test void emptyIndexDoesNotInferUnprotectedChestsOrPermitReuse() throws Exception {
+        var builder = new SavedBlockLockerPhysicalOwnerIndex.Builder();
+        var empty = builder.finish();
+        assertThrows(java.io.IOException.class,
+                () -> empty.lookup("world", "0,65,0"),
+                "Unknown physical chest cannot become Free from an empty index");
+        assertThrows(java.io.IOException.class,
+                () -> builder.accept("world", protectedChest(6), COMPLETE));
+        assertThrows(java.io.IOException.class, builder::finish);
+    }
 }
