@@ -116,6 +116,8 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.wcl-serialized-currency.md
@@ -397,7 +399,9 @@ jobs:
                 grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED' "paper-a05-$phase.log"
-                grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' "paper-a05-$phase.log" ;;
+                grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' "paper-a05-$phase.log" ;;
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'

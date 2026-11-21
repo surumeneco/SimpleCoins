@@ -4,6 +4,9 @@ import co.surumene.simplecoins.domain.BanSourceCoverage;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SavedLiveSourcePartition;
+import co.surumene.simplecoins.domain.SavedBlockLockerSettlementOwnerLookup;
+import co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations;
+import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
@@ -328,6 +331,129 @@ public final class PaperCapturedHybridSettlement {
                 Objects.requireNonNull(banSources), blockOwners, entityOwners,
                 maximumCompressedBytes, maximumInflatedBytes, liveOwnership,
                 Objects.requireNonNull(consumer), Map.copyOf(verifiedWorldIds));
+    }
+
+    /**
+     * One-shot, source-scoped and still UNPUBLISHED composition of the
+     * independently captured SAVED terrain owner observation with the
+     * existing genuine WCL, BAN and LIVE/SAVED hybrid stage.
+     *
+     * Only the caller can supply independent per-chest protection proofs.
+     * A saved-content witness is not evidence that Paper/other writers are
+     * stopped. Never grant G0 publication, G3 ACK or player admission here.
+     */
+    public SettlementScanRunner.Staged
+            stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope,
+            BanSourceCoverage banSources,
+            SavedBlockLockerTerrainObservations.Snapshot savedTerrain,
+            SavedBlockLockerTerrainObservations.Snapshot.IndependentProofs independentProofs,
+            SettlementScanRunner.SourceBlockOwnerLookup otherBlockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes, int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        boolean finished = false;
+        try {
+            if (consumed.get())
+                throw new IllegalStateException(
+                        "Paper monetary capture was already consumed; acquire a new generation");
+            // fromCaptured validates the original Manifest and both source
+            // witnesses and refuses missing/contradictory independently
+            // supplied BlockLocker proof. No coordinate-only fallback.
+            var physical = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                    savedTerrain, manifest, banSources, independentProofs);
+            var chestOwners = physical.sourceScoped();
+            var otherOwners = Objects.requireNonNull(
+                    otherBlockOwners, "independently verified non-chest ownership");
+            // The A04 confirmed classification is chest-only. The complete
+            // SAVED source universe also includes e.g. furnaces/barrels.
+            // Never classify those unknown owners as FREE or reject them as
+            // if they were malformed chests: require a separately provided
+            // SOURCE-SCOPED ownership resolver. Identify every tile from
+            // the selected Chunk and its actual terrain palette first.
+            SettlementScanRunner.SourceBlockOwnerLookup allBlocks =
+                    (source, chunk, position) -> {
+                        String type = verifiedSavedBlockType(manifest, source, chunk, position);
+                        if ("minecraft:chest".equals(type)
+                                || "minecraft:trapped_chest".equals(type))
+                            return chestOwners.resolve(source, chunk, position);
+                        return otherOwners.resolve(source, chunk, position);
+                    };
+            var staged = stageCandidateWithSavedWclAndBanCoverage(
+                    consumer, verifiedWorldIds, manifest, scope, banSources,
+                    allBlocks, entityOwners,
+                    maximumCompressedBytes, maximumInflatedBytes, liveOwnership);
+            // Independent local source checks only, not whole-world quiescence.
+            savedTerrain.witness().requireUnchanged();
+            if (staged.savedContentWitness() == null)
+                throw new IOException("Missing completed SAVED generation witness");
+            staged.savedContentWitness().requireUnchanged();
+            manifest.requireUnchangedDiscovery();
+            finished = true;
+            return staged;
+        } finally {
+            // Even an exception before stageCandidateInternal starts must
+            // invalidate this capture. Never retry UNKNOWN/changed owner
+            // evidence by substituting weaker ownership into the same scan.
+            if (!finished) consumed.set(true);
+        }
+    }
+
+    /**
+     * One physical saved BlockEntity identity from the exact selected REGION
+     * and Chunk; a caller cannot route an orphan tile or a hand-authored type
+     * assertion around the confirmed A04 chest source-scoped protection check.
+     * This local check is not an immutable writer epoch proof.
+     */
+    private static String verifiedSavedBlockType(
+            WorldStorageDiscovery.Manifest selected,
+            WorldStorageDiscovery.SourceFile source,
+            co.surumene.simplecoins.domain.AnvilRegionReader.Chunk chunk,
+            String position) throws IOException {
+        if (selected == null || source == null || chunk == null
+                || source.kind() != WorldStorageDiscovery.Kind.REGION
+                || !selected.worldFiles().contains(source) || position == null)
+            throw new IOException("Unselected or untyped SAVED BlockEntity source");
+        String[] parts = position.split(",", -1);
+        if (parts.length != 3)
+            throw new IOException("Noncanonical SAVED BlockEntity coordinate");
+        int[] xyz = new int[3];
+        for (int i = 0; i < 3; i++) {
+            try {
+                xyz[i] = Integer.parseInt(parts[i]);
+            } catch (NumberFormatException malformed) {
+                throw new IOException("Invalid SAVED BlockEntity coordinate", malformed);
+            }
+            if (!Integer.toString(xyz[i]).equals(parts[i]))
+                throw new IOException("Noncanonical SAVED BlockEntity coordinate");
+        }
+        if (Math.floorDiv(xyz[0], 16) != chunk.x()
+                || Math.floorDiv(xyz[2], 16) != chunk.z())
+            throw new IOException("SAVED BlockEntity is outside its selected Chunk");
+        if (chunk.nbt() == null
+                || !(chunk.nbt().get("block_entities") instanceof List<?> tiles))
+            throw new IOException("Selected SAVED Chunk has no BlockEntity source");
+        String type = null;
+        for (Object raw : tiles) {
+            if (!(raw instanceof Map<?, ?> tile)
+                    || !(tile.get("x") instanceof Integer x)
+                    || !(tile.get("y") instanceof Integer y)
+                    || !(tile.get("z") instanceof Integer z)
+                    || !(tile.get("id") instanceof String id))
+                throw new IOException("Malformed SAVED BlockEntity");
+            if (x == xyz[0] && y == xyz[1] && z == xyz[2]) {
+                if (type != null)
+                    throw new IOException("Duplicate selected SAVED physical BlockEntity");
+                type = id;
+            }
+        }
+        if (type == null)
+            throw new IOException("No selected SAVED BlockEntity at requested coordinate");
+        if (!type.equals(SavedTerrainBlockPalette.read(
+                chunk.nbt(), xyz[0], xyz[1], xyz[2]).name()))
+            throw new IOException("SAVED BlockEntity differs from physical terrain palette");
+        return type;
     }
 
     private SettlementScanRunner.Staged stageCandidateInternal(
