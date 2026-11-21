@@ -44,7 +44,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../../../.. | develop | feature/* | Lifecycle/Works/InProgress/simplecoins.a04.sparse-terrain-capture-refactor/Work.md;src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java | src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java | — |
+| SimpleCoins | ../../../.. | develop | feature/* | Lifecycle/Works/InProgress/simplecoins.a04.sparse-terrain-capture-refactor/Work.md;src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java | — |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
