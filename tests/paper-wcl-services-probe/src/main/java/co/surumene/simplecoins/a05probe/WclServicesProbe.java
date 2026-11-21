@@ -5,6 +5,8 @@ import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldSnapshotTraversal;
+import co.surumene.simplecoins.domain.PlayerDataReader;
+import co.surumene.simplecoins.domain.SavedPlayerAssets;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperWonderfulLoadedEvidence;
 import co.surumene.simplecoins.paper.PaperWonderfulLiveOwnerEvidence;
@@ -62,6 +64,7 @@ import org.bukkit.block.data.type.WallSign;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Wolf;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.World;
@@ -986,6 +989,13 @@ public final class WclServicesProbe extends JavaPlugin {
         Files.writeString(persistedWolfRuntimeFile(),
                 Base64.getEncoder().encodeToString(runtime) + "\n");
         persistFarUnloadedFixtures(world, providers, coins);
+        // The older no-BlockLocker 55,000C fixture deliberately remains
+        // without playerdata. The REAL protected-world branch must distinguish
+        // a profile-CLEAR, present player from a profile-BANNED, present player.
+        if (withBlockLocker()) {
+            persistDetachedEmptyOwner(PERSISTENCE_FOLLOW, "A06ClearOwner");
+            persistDetachedEmptyOwner(WOLF_COMMANDER, "A06BannedCmdr");
+        }
         world.save();
         getLogger().info("PAPER_A05_WWW_ENTITY_PERSISTED_BEFORE_RESTART_PASSED"
                 + " entity=" + wolf.getUniqueId() + " world=" + world.getUID());
@@ -993,6 +1003,46 @@ public final class WclServicesProbe extends JavaPlugin {
                 + " entity=" + chicken.getUniqueId()
                 + " chunk=4,4 world=" + world.getUID());
         // Do not remove fixture before shutdown: the next JVM must load it from the real region.
+    }
+
+    /**
+     * Genuine Paper 26.2 native save of a detached offline ServerPlayer.
+     * This fixture never connects/logs in; the file is created by the real
+     * CraftPlayer.saveData -> NMS PlayerDataStorage.save path. It is not
+     * synthetically authored NBT or a counterfeit discovery Manifest.
+     */
+    private void persistDetachedEmptyOwner(UUID id, String name) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IOException("Detached owner source needs an isolated Paper primary thread");
+        Path file = getServer().getWorldContainer().toPath().toAbsolutePath().normalize()
+                .resolve("world/players/data/" + id + ".dat");
+        if (Files.exists(file))
+            throw new IOException("Detached owner fixture file already existed: " + file);
+        Object server = getServer().getClass().getMethod("getServer").invoke(getServer());
+        Class<?> serverType = Class.forName("net.minecraft.server.MinecraftServer");
+        Object nativeWorld = serverType.getMethod("overworld").invoke(server);
+        Class<?> worldType = Class.forName("net.minecraft.server.level.ServerLevel");
+        Class<?> profileType = Class.forName("com.mojang.authlib.GameProfile");
+        Object profile = profileType.getConstructor(UUID.class, String.class)
+                .newInstance(id, name);
+        Class<?> infoType = Class.forName("net.minecraft.server.level.ClientInformation");
+        Object info = infoType.getMethod("createDefault").invoke(null);
+        Class<?> playerType = Class.forName("net.minecraft.server.level.ServerPlayer");
+        Object nativePlayer = playerType.getConstructor(
+                serverType, worldType, profileType, infoType)
+                .newInstance(server, nativeWorld, profile, info);
+        Object wrapped = playerType.getMethod("getBukkitEntity").invoke(nativePlayer);
+        if (!(wrapped instanceof Player player) || player.isOnline()
+                || !id.equals(player.getUniqueId()) || !player.getInventory().isEmpty())
+            throw new IOException("Detached offline player was not an empty, isolated Paper subject");
+        player.saveData();
+        if (!Files.isRegularFile(file))
+            throw new IOException("Paper native save did not persist canonical offline UUID.dat");
+        var nbt = PlayerDataReader.read(file, 2 * 1024 * 1024, 16 * 1024 * 1024);
+        if (!SavedPlayerAssets.extract(nbt).isEmpty())
+            throw new IOException("Unexpected money in the actual saved offline playerdata");
+        getLogger().info("PAPER_A06_ACTUAL_PAPER_OFFLINE_OWNERDATA_SAVED_PASSED"
+                + " id=" + id + " world=world");
     }
 
     /** Phase two: no fixture reconstruction; read the actual Paper entity saved by phase one. */
@@ -1681,8 +1731,23 @@ public final class WclServicesProbe extends JavaPlugin {
         if (Set.of(chickenId, wolfId, nearChickenId, nearWolfId).size() != 4)
             throw new IOException("The full saved source fixture must contain four distinct WCL holders");
         if (!Bukkit.isPrimaryThread() || world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK)
-                || manifest.origin() == null || !manifest.playerDataFiles().isEmpty())
-            throw new IOException("Whole WCL integration requires actual empty-player SAVED fixture");
+                || manifest.origin() == null)
+            throw new IOException("Whole WCL integration requires authentic SAVED source discovery");
+        if (withBlockLocker()) {
+            if (!manifest.playerDataFiles().keySet().equals(
+                    Set.of(PERSISTENCE_FOLLOW, WOLF_COMMANDER)))
+                throw new IOException("Real protected Paper fixture must discover both owner UUID.dat");
+            for (UUID id : Set.of(PERSISTENCE_FOLLOW, WOLF_COMMANDER)) {
+                Path source = manifest.playerDataFiles().get(id);
+                if (source == null || !Files.isRegularFile(source)
+                        || !SavedPlayerAssets.extract(
+                                PlayerDataReader.read(source, 2 * 1024 * 1024, 16 * 1024 * 1024))
+                                .isEmpty())
+                    throw new IOException("Paper ownerdata absent or contains unexpected money: " + id);
+            }
+        } else if (!manifest.playerDataFiles().isEmpty()) {
+            throw new IOException("Baseline fixture unexpectedly acquired a playerdata source");
+        }
         var scope = new WorldScope(true, Set.of(), Set.of());
         if (!manifest.origin().scope().equals(scope))
             throw new IOException("Whole WCL fixture changed source discovery scope");
@@ -1885,13 +1950,15 @@ public final class WclServicesProbe extends JavaPlugin {
         verifyCompleteUnpublishedWclCandidate(selected, manifest,
                 chickenId, wolfId, nearChickenId, nearWolfId, protectedMode);
         getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
-        getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
-        if (protectedMode)
+        if (protectedMode) {
+            getLogger().info("PAPER_A06_REAL_PLAYERDATA_BAN_P25000_D30000_F1000_PASSED");
             getLogger().info(
                     "PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000"
-                    + "_PRIVATE_DEAD_EVERYONE_FREE_PASSED");
-        else
+                    + "_PRIVATE_PERSONAL_EVERYONE_FREE_PASSED");
+        } else {
+            getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
             getLogger().info("PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED");
+        }
 
         // 3. Missing BAN evidence for the actual WCL commander cannot be
         //    treated as CLEAR, even though the chest is verified FREE.
@@ -1960,24 +2027,31 @@ public final class WclServicesProbe extends JavaPlugin {
                 || selected.report().playerFiles() != manifest.playerDataFiles().size())
             throw new IOException("Whole hybrid did not retain all required saved sources");
         var result = selected.pending().commit(); // local-only, never publish
-        BigInteger expectedDead = BigInteger.valueOf(protectedMode ? 55000 : 50000);
+        BigInteger expectedDead = BigInteger.valueOf(protectedMode ? 30000 : 50000);
         BigInteger expectedFree = BigInteger.valueOf(protectedMode ? 1000 : 5000);
+        BigInteger expectedPersonal = BigInteger.valueOf(protectedMode ? 25000 : 0);
+        BigInteger expectedWorld = expectedPersonal.add(expectedFree);
         if (!expectedDead.equals(result.dead())
                 || !expectedFree.equals(result.free())
-                || !expectedFree.equals(result.statistics().worldTotal())
-                || result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0)
-                || result.deadLocations().stream().noneMatch(e ->
+                || !expectedWorld.equals(result.statistics().worldTotal())
+                || !expectedPersonal.equals(result.statistics().personal())
+                || result.statistics().registeredPlayers() != (protectedMode ? 1 : 0)
+                || (protectedMode
+                    ? !result.personalBalances().equals(
+                            Map.of(PERSISTENCE_FOLLOW, BigInteger.valueOf(25000)))
+                    : result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0))
+                || (!protectedMode && result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(chickenId.toString())
-                        && e.value().equals(BigInteger.valueOf(10000)))
+                        && e.value().equals(BigInteger.valueOf(10000))))
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(wolfId.toString())
                         && e.value().equals(BigInteger.valueOf(10000)))
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(wolfId.toString())
                         && e.value().equals(BigInteger.valueOf(5000)))
-                || result.deadLocations().stream().noneMatch(e ->
+                || (!protectedMode && result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(nearChickenId.toString())
-                        && e.value().equals(BigInteger.valueOf(10000)))
+                        && e.value().equals(BigInteger.valueOf(10000))))
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(nearWolfId.toString())
                         && e.value().equals(BigInteger.valueOf(10000)))
