@@ -318,7 +318,7 @@ jobs:
         run: |
           set -euo pipefail
           cd smoke
-          for phase in persist reload; do
+          for phase in persist reload-saved reload; do
             set +e
             timeout --signal=TERM --kill-after=5s 180s \
               java -Da05.probe.phase="$phase" -Xms256M -Xmx1024M -jar paper.jar nogui \
@@ -378,9 +378,7 @@ jobs:
                 grep -F 'PAPER_A05_OFFLINE_MCA_WWW_MONEY_OWNER_PHYSICAL_SOURCE_PASSED' paper-a05-offline-mca.log
                 grep -F 'PAPER_A05_OFFLINE_MCA_TWO_PROVIDERS_DISTINCT_SOURCES_PASSED' paper-a05-offline-mca.log
                 grep -F 'PAPER_A05_OFFLINE_MCA_SCAN_NO_CHUNK_LOAD_PASSED' paper-a05-offline-mca.log ;;
-              reload)
-                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
-                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log"
+              reload-saved)
                 grep -F 'PAPER_A05_PRODUCT_STORED_WWC_WWW_SOURCE_PROOF_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_PRODUCT_SAVED_WWC_SHULKER_VALUE_10000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_SAVED_WCL_STAGE_UNPUBLISHED_WWC_10000_PASSED' "paper-a05-$phase.log"
@@ -405,6 +403,9 @@ jobs:
                 grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' "paper-a05-$phase.log" ;;
+              reload)
+                grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log" ;;
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
@@ -455,7 +456,7 @@ jobs:
           ]
           BANNED_IP
           cd smoke-blocklocker
-          for phase in persist reload; do
+          for phase in persist reload-saved reload; do
             set +e
             timeout --signal=TERM --kill-after=5s 180s \
               java -Da05.probe.phase="$phase" -Da05.probe.blocklocker=true \
@@ -483,7 +484,7 @@ jobs:
                 "paper-a04-a05-$phase.log"
               test -s world/dimensions/minecraft/overworld/region/r.1.1.mca
               test -s world/dimensions/minecraft/overworld/entities/r.1.1.mca
-            else
+            elif [ "$phase" = reload-saved ]; then
               grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' \
@@ -497,6 +498,11 @@ jobs:
               grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' \
+                "paper-a04-a05-$phase.log"
+            else
+              grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' \
                 "paper-a04-a05-$phase.log"
             fi
           done
