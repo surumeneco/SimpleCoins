@@ -92,8 +92,9 @@ public final class PaperNativeSaveAgent {
                                         // merely when a test controller releases a hold.
                                         // Exceptional completion stays conservatively
                                         // in-flight (fail-closed) in this bounded PoC.
-                                        if (craft && element instanceof ReturnInstruction) {
-                                            code.invokestatic(HOOK_CLASS, "afterNativeSave",
+                                        if (element instanceof ReturnInstruction) {
+                                            code.invokestatic(HOOK_CLASS,
+                                                    nms ? "afterNmsSave" : "afterNativeSave",
                                                     MethodTypeDesc.ofDescriptor("()V"));
                                         }
                                         code.with(element);
