@@ -1301,16 +1301,23 @@ public final class WclServicesProbe extends JavaPlugin {
         // Derive this root from the ACTUAL Paper world and require it to
         // match the selected world name. Supplying no shared roots would
         // silently omit real UUID.dat sources while scanning all Anvil files.
-        Path sharedLevelRoot = world.getWorldFolder().toPath().toAbsolutePath()
-                .normalize();
-        if (!world.getName().equals(sharedLevelRoot.getFileName().toString())
+        Path observedWorldFolder = world.getWorldFolder().toPath().toAbsolutePath().normalize();
+        Path sharedLevelRoot = getServer().getWorldContainer().toPath()
+                .toAbsolutePath().normalize().resolve(world.getName());
+        if (!observedWorldFolder.startsWith(sharedLevelRoot)
                 || (withBlockLocker()
                     && !Files.isDirectory(sharedLevelRoot.resolve("players/data"))))
-            throw new IOException("Paper 26.2 shared playerdata root does not match actual WorldFolder");
+            throw new IOException("Paper 26.2 actual world and shared playerdata root disagree:"
+                    + " worldFolder=" + observedWorldFolder + " levelRoot=" + sharedLevelRoot);
+        // When WorldFolder is itself the level root its walk already includes
+        // players/data. Only add the same root separately when Paper exposes a
+        // per-dimension folder; otherwise doing both duplicates one UUID.dat.
+        Set<Path> extraSharedRoots = observedWorldFolder.equals(sharedLevelRoot)
+                ? Set.of() : Set.of(sharedLevelRoot);
         WorldStorageDiscovery.Manifest boundedManifest = WorldStorageDiscovery.discover(
-                Map.of(world.getName(), world.getWorldFolder().toPath()),
+                Map.of(world.getName(), observedWorldFolder),
                 new WorldScope(true, Set.of(), Set.of()), 100000,
-                Set.of(sharedLevelRoot));
+                extraSharedRoots);
         if (boundedManifest.origin() == null ||
                 boundedManifest.worldFiles().stream()
                         .filter(input -> input.kind() == WorldStorageDiscovery.Kind.ENTITY
