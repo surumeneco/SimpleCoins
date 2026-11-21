@@ -4,6 +4,8 @@ import co.surumene.simplecoins.domain.BanSourceCoverage;
 import co.surumene.simplecoins.domain.HybridLiveSourceStage;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SavedLiveSourcePartition;
+import co.surumene.simplecoins.domain.SavedBlockLockerSettlementOwnerLookup;
+import co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
@@ -328,6 +330,55 @@ public final class PaperCapturedHybridSettlement {
                 Objects.requireNonNull(banSources), blockOwners, entityOwners,
                 maximumCompressedBytes, maximumInflatedBytes, liveOwnership,
                 Objects.requireNonNull(consumer), Map.copyOf(verifiedWorldIds));
+    }
+
+    /**
+     * One-shot, source-scoped and still UNPUBLISHED composition of the
+     * independently captured SAVED terrain owner observation with the
+     * existing genuine WCL, BAN and LIVE/SAVED hybrid stage.
+     *
+     * Only the caller can supply independent per-chest protection proofs.
+     * A saved-content witness is not evidence that Paper/other writers are
+     * stopped. Never grant G0 publication, G3 ACK or player admission here.
+     */
+    public SettlementScanRunner.Staged
+            stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope,
+            BanSourceCoverage banSources,
+            SavedBlockLockerTerrainObservations.Snapshot savedTerrain,
+            SavedBlockLockerTerrainObservations.Snapshot.IndependentProofs independentProofs,
+            SettlementScanRunner.EntityOwnerLookup entityOwners,
+            int maximumCompressedBytes, int maximumInflatedBytes,
+            HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        boolean finished = false;
+        try {
+            if (consumed.get())
+                throw new IllegalStateException(
+                        "Paper monetary capture was already consumed; acquire a new generation");
+            // fromCaptured validates the original Manifest and both source
+            // witnesses and refuses missing/contradictory independently
+            // supplied BlockLocker proof. No coordinate-only fallback.
+            var physical = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                    savedTerrain, manifest, banSources, independentProofs);
+            var staged = stageCandidateWithSavedWclAndBanCoverage(
+                    consumer, verifiedWorldIds, manifest, scope, banSources,
+                    physical.sourceScoped(), entityOwners,
+                    maximumCompressedBytes, maximumInflatedBytes, liveOwnership);
+            // Independent local source checks only, not whole-world quiescence.
+            savedTerrain.witness().requireUnchanged();
+            if (staged.savedContentWitness() == null)
+                throw new IOException("Missing completed SAVED generation witness");
+            staged.savedContentWitness().requireUnchanged();
+            manifest.requireUnchangedDiscovery();
+            finished = true;
+            return staged;
+        } finally {
+            // Even an exception before stageCandidateInternal starts must
+            // invalidate this capture. Never retry UNKNOWN/changed owner
+            // evidence by substituting weaker ownership into the same scan.
+            if (!finished) consumed.set(true);
+        }
     }
 
     private SettlementScanRunner.Staged stageCandidateInternal(
