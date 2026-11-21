@@ -7,6 +7,7 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeTransform;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.MethodTransform;
+import java.lang.classfile.instruction.ReturnInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.lang.instrument.ClassFileTransformer;
@@ -85,6 +86,16 @@ public final class PaperNativeSaveAgent {
                                     }
 
                                     @Override public void accept(CodeBuilder code, CodeElement element) {
+                                        // A void Paper method can have more than one
+                                        // normal-return opcode. Emit the after hook at
+                                        // EACH real normal return, never at entry or
+                                        // merely when a test controller releases a hold.
+                                        // Exceptional completion stays conservatively
+                                        // in-flight (fail-closed) in this bounded PoC.
+                                        if (craft && element instanceof ReturnInstruction) {
+                                            code.invokestatic(HOOK_CLASS, "afterNativeSave",
+                                                    MethodTypeDesc.ofDescriptor("()V"));
+                                        }
                                         code.with(element);
                                     }
                                 }));
