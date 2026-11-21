@@ -484,7 +484,7 @@ jobs:
                 "paper-a04-a05-$phase.log"
               test -s world/dimensions/minecraft/overworld/region/r.1.1.mca
               test -s world/dimensions/minecraft/overworld/entities/r.1.1.mca
-              for uuid in 00000000-0000-0000-0000-00000000a051 00000000-0000-0000-0000-00000000a053; do
+              for uuid in 00000000-0000-0000-0000-00000000a055 00000000-0000-0000-0000-00000000a053; do
                 test -s "world/players/data/${uuid}.dat"
                 grep -F 'PAPER_A06_ACTUAL_PAPER_OFFLINE_OWNERDATA_SAVED_PASSED id=' "paper-a04-a05-$phase.log" | grep -F "$uuid"
               done
