@@ -45,6 +45,77 @@ public final class SavedBlockLockerTerrainObservations {
             Objects.requireNonNull(witness);
             Objects.requireNonNull(report);
         }
+
+        @FunctionalInterface
+        public interface IndependentProofs {
+            SavedBlockLockerOwnerCandidate.ExternalProof forChest(ObservedChest chest)
+                    throws IOException;
+        }
+
+        /**
+         * Compose selected observations with the existing fail-closed local
+         * physical owner index. The independent proof provider never gains
+         * affirmative flags from SAVED NBT or a merely successful readback.
+         * No unpublished index is returned on failed or changed source input.
+         * This does not freeze Paper memory or establish G0 writer closure.
+         */
+        public SavedBlockLockerPhysicalOwnerIndex assembleOwnerIndex(
+                WorldStorageDiscovery.Manifest selected,
+                IndependentProofs independentProofs) throws IOException {
+            if (independentProofs == null)
+                throw new IOException("Independent BlockLocker proof provider is missing");
+            witness.requireOriginalManifest(selected);
+            witness.requireUnchanged();
+            var validRegions = Set.copyOf(selected.worldFiles());
+            var builder = new SavedBlockLockerPhysicalOwnerIndex.Builder();
+            for (ObservedChest chest : chests) {
+                if (chest == null || !selected.origin().scope().includes(chest.world()))
+                    throw new IOException("Observed chest world is outside the selected source scope");
+                var identities = new HashSet<WorldStorageDiscovery.SourceFile>();
+                for (WorldStorageDiscovery.SourceFile source : chest.sources()) {
+                    if (source == null || source.kind() != WorldStorageDiscovery.Kind.REGION
+                            || !source.world().equals(chest.world())
+                            || !validRegions.contains(source) || !identities.add(source))
+                        throw new IOException("Unselected or duplicate SAVED chest provenance");
+                }
+                // Both actual signs and SIGN ABSENCE were read in the five
+                // adjacent blocks for each physical chest half. A candidate's
+                // local evidence must contain exactly those selected Regions.
+                Set<String> requiredRegionNames = new HashSet<>();
+                for (var member : chest.observation().storageMembers()) {
+                    try {
+                        requireRegionName(requiredRegionNames, member.x(), member.z());
+                        requireRegionName(requiredRegionNames, member.x(),
+                                Math.subtractExact(member.z(), 1));
+                        requireRegionName(requiredRegionNames,
+                                Math.addExact(member.x(), 1), member.z());
+                        requireRegionName(requiredRegionNames, member.x(),
+                                Math.addExact(member.z(), 1));
+                        requireRegionName(requiredRegionNames,
+                                Math.subtractExact(member.x(), 1), member.z());
+                        Math.addExact(member.y(), 1); // up has the same Region
+                    } catch (ArithmeticException overflow) {
+                        throw new IOException("Invalid SAVED chest sign-neighborhood coordinates",
+                                overflow);
+                    }
+                }
+                Set<String> observedNames = new HashSet<>();
+                for (var source : identities)
+                    observedNames.add(source.path().getFileName().toString());
+                if (!requiredRegionNames.equals(observedNames))
+                    throw new IOException("Incomplete or foreign SAVED sign-neighborhood Region provenance");
+                builder.accept(chest.world(), chest.observation(),
+                        independentProofs.forChest(chest));
+            }
+            var index = builder.finish();
+            witness.requireUnchanged();
+            return index;
+        }
+    }
+
+    private static void requireRegionName(Set<String> output, int x, int z) {
+        output.add("r." + Math.floorDiv(x, 512) + "."
+                + Math.floorDiv(z, 512) + ".mca");
     }
 
     private record CapturedChunk(WorldStorageDiscovery.SourceFile source,
