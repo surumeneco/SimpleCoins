@@ -1,0 +1,35 @@
+name: One-shot A04 scoped test patch application
+on:
+  push:
+    branches: [feature/a04-saved-owner-pd-regression-20261121]
+    paths: ['.github/workflows/a04-apply-scoped-patch-temp.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore(infra): stage scoped A04 test patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify baseline and apply exact reviewed patch to test-only path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "006279c8e30e4241909fe396c4122a3a609a68cc"
+          test "$(git rev-parse 'HEAD^:src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java')" = "95977efe93bfe10bbcc9db72dd78f88a9c5e0896"
+          cat >/tmp/patch.b64 <<'B64'
+          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
+          B64
+          base64 -d /tmp/patch.b64 | gzip -d >/tmp/a04.patch
+          echo '4f7747d7d96698c162b340cfe405c1dd799ce8a539a51cbbda0132967aea879f  /tmp/a04.patch' | sha256sum -c -
+          git apply --check /tmp/a04.patch
+          git apply /tmp/a04.patch
+          git diff --check
+          test "$(git diff --name-only)" = 'src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/test/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservationsTest.java
+          git commit -m 'test(a04): verify saved private chest P/D by BAN and playerdata'
+          git push origin HEAD:refs/heads/feature/a04-saved-owner-pd-regression-20261121
