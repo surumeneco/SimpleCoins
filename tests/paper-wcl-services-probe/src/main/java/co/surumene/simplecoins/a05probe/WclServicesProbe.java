@@ -1126,9 +1126,15 @@ public final class WclServicesProbe extends JavaPlugin {
         chestBlock.setType(Material.CHEST);
         if (!(chestBlock.getState() instanceof org.bukkit.block.Chest chest))
             throw new IOException("Far physical chest failed to initialize");
-        chest.getBlockInventory().setItem(0, coins.create(CoinDenomination.FIVE_THOUSAND, 1));
-        chest.update(true, false);
-        if (chest.getBlockInventory().getItem(0) == null)
+        // Modify the captured TileState inventory, then commit the exact
+        // same snapshot once. Editing the live inventory before update()
+        // would be overwritten by the stale captured (empty) BlockState.
+        chest.getSnapshotInventory().setItem(0,
+                coins.create(CoinDenomination.FIVE_THOUSAND, 1));
+        if (!chest.update(true, false))
+            throw new IOException("Far physical chest BlockState update failed");
+        if (!(chestBlock.getState() instanceof org.bukkit.block.Chest persistedChest)
+                || persistedChest.getBlockInventory().getItem(0) == null)
             throw new IOException("Far physical 5000C chest was not filled");
         Files.writeString(farWitness("wwc-uuid.txt"), chicken.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("www-uuid.txt"), wolf.getUniqueId().toString() + "\n");
