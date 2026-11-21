@@ -36,6 +36,8 @@ on:
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveEntityDiscovery.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WclLiveMarkerTest.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperCapturedHybridSettlement.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/SavedBlockLockerTerrainObservations.java'
+      - 'Lifecycle/Works/InProgress/simplecoins.a04.sparse-terrain-capture-refactor/Work.md'
       - 'src/main/java/co/surumene/simplecoins/domain/WclHybridLiveOverlay.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WclHybridLiveOverlayTest.java'
       - 'src/test/java/co/surumene/simplecoins/paper/PaperCapturedHybridSettlementWclTest.java'
