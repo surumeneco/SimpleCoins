@@ -181,26 +181,22 @@ public final class WclServicesProbe extends JavaPlugin {
                                         }));
                         return;
                     }
-                    case "reload" -> {
-                        // The complete saved-source monetary candidate
-                        // traversal and the genuine near-Entity Paper reload
-                        // proof are both required, but need not compete within
-                        // ONE server tick. Keeping both in the original tick
-                        // caused the actual Paper watchdog to terminate the
-                        // constrained CI JVM *after* all 55,000C proof markers.
-                        // Do not raise Paper's watchdog timeout or skip either
-                        // proof; give the runtime one fresh main-thread tick.
+                    case "reload-saved" -> {
+                        // This JVM handles the entire authentic SAVED-source
+                        // candidate + source/witness validations. No near
+                        // Entity chunk load is allowed in the same process:
+                        // that triggers WWC's legacy genome migration while
+                        // other expensive fixture checks are in flight.
                         verifyFarUnloadedStoredItems(world, selected);
-                        Bukkit.getScheduler().runTask(this, () -> {
-                            try {
-                                reloadChickenEntity(world, selected);
-                            } catch (Throwable failure) {
-                                getLogger().log(Level.SEVERE,
-                                        "PAPER_A05_SERVICES_PROBE_FAILED", failure);
-                            } finally {
-                                Bukkit.shutdown();
-                            }
-                        });
+                        Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        return;
+                    }
+                    case "reload" -> {
+                        // A second *independent* Paper JVM recovers the same
+                        // persisted near WWC/WWW entities. Do not skip either
+                        // proof or raise Paper's watchdog to mask interference.
+                        reloadChickenEntity(world, selected);
+                        Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
                         return;
                     }
                     default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
