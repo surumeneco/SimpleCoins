@@ -104,7 +104,7 @@ jobs:
           printf 'eula=true\n' > smoke-agent/eula.txt
           printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25599\n' \
             > smoke-agent/server.properties
-      - name: JVM Agent blocks the actual Paper Player.saveData entry after signed readback
+      - name: Hold actual admitted Paper save, close new entries, then prove post-close file overwrite
         shell: bash
         run: |
           set -euo pipefail
@@ -140,7 +140,7 @@ jobs:
           grep -F 'PAPER_A02_NATIVE_ALREADY_ADMITTED_SAVE_ERASED_5000C_AFTER_CLOSE' paper-a02-native-agent.log
           grep -F 'PAPER_A02_NATIVE_INFLIGHT_FRESH_PROOF_REJECTED_PENDING_NO_ACK' paper-a02-native-agent.log
           grep -F 'PAPER_A02_NATIVE_INFLIGHT_FSYNC_BEFORE_ABRUPT_HALT' paper-a02-native-agent.log
-      - name: Cold official Paper JVM proves rejected native save preserved original 5000C and pending reservation
+      - name: Agent-free cold Paper JVM confirms post-close coin loss and pending unACKed reservation
         shell: bash
         run: |
           set -euo pipefail
