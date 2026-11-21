@@ -69,6 +69,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.unloaded-stored-provider-readback.md'
       - 'Lifecycle/Works/simplecoins.a05.wcl-verified-traversal-paper.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md'
+      - 'Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md'
 permissions:
   contents: read
 
@@ -117,6 +118,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
@@ -425,6 +428,32 @@ jobs:
           printf 'eula=true\n' > smoke-blocklocker/eula.txt
           printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25596\n' \
             > smoke-blocklocker/server.properties
+          # This is the independent BlockLocker+WCL world ONLY. The old
+          # 55,000C fixture remains without a synthetic BANNED account.
+          # Persist genuine Paper profile and IP ban lists before both JVMs.
+          cat > smoke-blocklocker/banned-players.json <<'BANNED_PROFILE'
+          [
+            {
+              "uuid": "00000000-0000-0000-0000-00000000a053",
+              "name": "A06WolfCommander",
+              "created": "2026-11-14 00:00:00 +0000",
+              "source": "SimpleCoins isolated A06 Paper fixture",
+              "expires": "forever",
+              "reason": "Real Paper profile BAN evidence in unpublished saved candidate"
+            }
+          ]
+          BANNED_PROFILE
+          cat > smoke-blocklocker/banned-ips.json <<'BANNED_IP'
+          [
+            {
+              "ip": "203.0.113.42",
+              "created": "2026-11-14 00:00:00 +0000",
+              "source": "SimpleCoins isolated A06 Paper fixture",
+              "expires": "forever",
+              "reason": "IP-only BAN with no authenticated UUID association"
+            }
+          ]
+          BANNED_IP
           cd smoke-blocklocker
           for phase in persist reload; do
             set +e
@@ -458,6 +487,10 @@ jobs:
               grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A06_REAL_PROFILE_BANNED_AND_CLEAR_OWNERS_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A06_REAL_IP_BAN_UNKNOWN_UUID_MAPPING_HOLD_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000_PRIVATE_DEAD_EVERYONE_FREE_PASSED' \
                 "paper-a04-a05-$phase.log"
