@@ -56,6 +56,11 @@ class SavedBlockLockerTerrainObservationsTest {
 
     private static byte[] chunk(int chunkX, boolean chest, boolean sign)
             throws IOException {
+        return chunk(chunkX, chest, sign, false);
+    }
+
+    private static byte[] chunk(int chunkX, boolean chest, boolean sign,
+                                boolean withMonetaryItem) throws IOException {
         int x = chest ? CHEST_X : NEIGHBOR_X;
         var bytes = new ByteArrayOutputStream();
         try (var out = new DataOutputStream(bytes)) {
@@ -113,6 +118,22 @@ class SavedBlockLockerTerrainObservationsTest {
                     textFace(out, "front_text", "[Private]", "Alice");
                     textFace(out, "back_text", "", "");
                 }
+                if (chest && withMonetaryItem) {
+                    // Real modern NBT ItemStack, not a mocked currency value.
+                    out.writeByte(9); out.writeUTF("Items");
+                    out.writeByte(10); out.writeInt(1);
+                    out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
+                    string(out, "id", "minecraft:paper");
+                    integer(out, "count", 1);
+                    out.writeByte(10); out.writeUTF("components");
+                    out.writeByte(10); out.writeUTF("minecraft:custom_data");
+                    out.writeByte(10); out.writeUTF("PublicBukkitValues");
+                    integer(out, "simplecoins:denomination", 5000);
+                    out.writeByte(0); // Bukkit PDC
+                    out.writeByte(0); // custom_data
+                    out.writeByte(0); // components
+                    out.writeByte(0); // item
+                }
                 out.writeByte(0); // block entity
             }
             out.writeByte(0); // chunk root
@@ -145,9 +166,14 @@ class SavedBlockLockerTerrainObservationsTest {
             WorldStorageDiscovery.Manifest manifest) {}
 
     private Fixture fixture(boolean sign) throws IOException {
-        Path root = directory.resolve(sign ? "with-sign" : "no-sign");
+        return fixture(sign, false);
+    }
+
+    private Fixture fixture(boolean sign, boolean withMonetaryItem) throws IOException {
+        Path root = directory.resolve((sign ? "with-sign" : "no-sign")
+                + (withMonetaryItem ? "-money" : ""));
         Path saved = root.resolve("region");
-        Path a = region(saved, 0, chunk(31, true, false));
+        Path a = region(saved, 0, chunk(31, true, false, withMonetaryItem));
         Path b = region(saved, 1, chunk(32, false, sign));
         WorldScope scope = new WorldScope(true, Set.of(), Set.of());
         var discovered = WorldStorageDiscovery.discover(Map.of("world", root), scope, 1000);
@@ -307,5 +333,48 @@ class SavedBlockLockerTerrainObservationsTest {
         assertThrows(IOException.class, () -> index.lookup("world", "0,65,0"),
                 "An empty genuine index cannot infer unprotected ownership");
         saved.witness().requireUnchanged();
+    }
+
+    @Test void genuineTwoRegionCaptureStagesPhysicalCoinThroughBanAwareSourceLookup()
+            throws Exception {
+        Fixture f = fixture(false, true);
+        var snapshot = capture(f);
+        var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of());
+        var ownerLookup = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                snapshot, f.manifest(), ban, chest -> syntheticComplete(true));
+        assertThrows(IOException.class, () -> SettlementScanRunner.stageWithBanCoverage(
+                f.manifest(), f.scope(), ban, ownerLookup,
+                (world, chunk) -> Map.of(), 1024 * 1024, 4 * 1024 * 1024),
+                "Unsafe coordinate-only callback cannot enter source-backed settlement");
+        var staged = SettlementScanRunner.stageWithBanCoverage(
+                f.manifest(), f.scope(), ban, ownerLookup.sourceScoped(),
+                (world, chunk) -> Map.of(), 1024 * 1024, 4 * 1024 * 1024);
+        var unpublished = staged.pending().commit();
+        assertEquals(java.math.BigInteger.valueOf(5000), unpublished.free());
+        assertEquals(java.math.BigInteger.ZERO, unpublished.dead());
+        assertTrue(unpublished.personalBalances().isEmpty());
+        assertEquals(2, staged.report().regionFiles());
+        assertNotNull(staged.savedContentWitness());
+        snapshot.witness().requireUnchanged();
+        staged.savedContentWitness().requireUnchanged();
+    }
+
+    @Test void genuineCaptureHandoffRejectsUnknownOwnerProofOrChangedSavedFile()
+            throws Exception {
+        Fixture f = fixture(false, true);
+        var snapshot = capture(f);
+        var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of());
+        assertThrows(IOException.class, () -> SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                snapshot, f.manifest(), ban,
+                chest -> SavedBlockLockerOwnerCandidate.ExternalProof.unknown()));
+        var rediscovered = WorldStorageDiscovery.discover(
+                Map.of("world", f.region0().getParent().getParent()), f.scope(), 1000);
+        assertThrows(IOException.class, () -> SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                snapshot, rediscovered, ban, chest -> syntheticComplete(true)));
+        byte[] region = Files.readAllBytes(f.region1());
+        region[region.length - 1] ^= 1;
+        Files.write(f.region1(), region);
+        assertThrows(IOException.class, () -> SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                snapshot, f.manifest(), ban, chest -> syntheticComplete(true)));
     }
 }
