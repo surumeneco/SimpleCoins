@@ -266,50 +266,29 @@ class SavedBlockLockerTerrainObservationsTest {
                 f.manifest(), candidate -> syntheticComplete(true)));
     }
 
-    @Test void forgedIncompleteNegativeSourceOrDuplicatePhysicalChestFailsAtomically()
+    @Test void onlyCapturedSnapshotsMayBeUsedAsOwnerEvidence() throws Exception {
+        // A Java caller must not be able to graft hand-authored protection
+        // observations onto a genuine saved-content witness.
+        assertEquals(0, SavedBlockLockerTerrainObservations.Snapshot.class
+                .getConstructors().length,
+                "No public Snapshot constructor may mint owner-eligible observations");
+        assertTrue(java.lang.reflect.Modifier.isFinal(
+                SavedBlockLockerTerrainObservations.Snapshot.class.getModifiers()));
+    }
+
+    @Test void capturedObservationsCannotBeRewrittenAfterVerifiedTraversal()
             throws Exception {
         Fixture f = fixture(false);
         var observed = capture(f);
-        var original = observed.chests().getFirst();
-        var incomplete = new SavedBlockLockerTerrainObservations.ObservedChest(
-                original.world(), List.of(original.sources().getFirst()), original.observation());
-        var forged = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(incomplete), observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> forged.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
-        var repeated = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(original, original), observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> repeated.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
-        var wrongWorld = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(new SavedBlockLockerTerrainObservations.ObservedChest(
-                        "other-world", original.sources(), original.observation())),
-                observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> wrongWorld.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
-    }
-
-    @Test void forgedEveryoneSignCannotBorrowGenuineWitness() throws Exception {
-        Fixture f = fixture(false);
-        var genuine = capture(f);
-        var trueChest = genuine.chests().getFirst();
-        // Before the fix the publicly constructible Snapshot lets a caller
-        // attach fabricated positive BlockLocker signs to genuine saved bytes.
-        var fakeSign = new SavedBlockLockerChestSigns.AttachedSign(
-                new SavedBlockLockerChestSigns.Position(CHEST_X, Y, Z + 1),
-                new BlockLockerSavedProfileResolution.SignProfiles(
-                        BlockLockerHeaderMatcher.Type.PRIVATE,
-                        java.util.Optional.empty(), true, false));
-        var forged = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(new SavedBlockLockerTerrainObservations.ObservedChest(
-                        trueChest.world(), trueChest.sources(),
-                        new SavedBlockLockerChestSigns.Observation(
-                                trueChest.observation().storageMembers(),
-                                List.of(fakeSign)))),
-                genuine.witness(), genuine.report());
-        assertThrows(IOException.class, () -> forged.assembleOwnerIndex(
-                f.manifest(), chest -> syntheticComplete(false)),
-                "A caller-manufactured Snapshot must not accept invented Everyone signage");
+        var chest = observed.chests().getFirst();
+        assertThrows(UnsupportedOperationException.class, () -> observed.chests().clear());
+        assertThrows(UnsupportedOperationException.class, () -> chest.sources().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> chest.observation().storageMembers().clear());
+        assertEquals(1, observed.assembleOwnerIndex(f.manifest(),
+                candidate -> syntheticComplete(true))
+                .lookup("world", CHEST_X + "," + Y + "," + Z)
+                .verifiedNonProtection() ? 1 : 0);
     }
 
     @Test void completeGenuinelyEmptySavedDiscoveryHasAnEmptyUnpublishedOwnerIndex()
