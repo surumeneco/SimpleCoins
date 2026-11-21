@@ -23,16 +23,21 @@ public final class SavedBlockLockerSettlementOwnerLookup
     private final BanSourceCoverage bans;
     private final Set<UUID> playerData;
     private final WorldStorageDiscovery.Manifest selectedManifest;
+    // Only authentic fromCaptured handoffs carry an original saved-content
+    // receipt. fromIndex remains an intentionally bounded diagnostic seam.
+    private final WorldSnapshotTraversal.ContentWitness capturedOwnerWitness;
 
     private SavedBlockLockerSettlementOwnerLookup(
             SavedBlockLockerPhysicalOwnerIndex ownerIndex,
             BanSourceCoverage bans,
             Set<UUID> playerData,
-            WorldStorageDiscovery.Manifest selectedManifest) {
+            WorldStorageDiscovery.Manifest selectedManifest,
+            WorldSnapshotTraversal.ContentWitness capturedOwnerWitness) {
         this.ownerIndex = ownerIndex;
         this.bans = bans;
         this.playerData = Set.copyOf(playerData);
         this.selectedManifest = Objects.requireNonNull(selectedManifest);
+        this.capturedOwnerWitness = capturedOwnerWitness;
     }
 
     public static SavedBlockLockerSettlementOwnerLookup fromIndex(
@@ -48,7 +53,8 @@ public final class SavedBlockLockerSettlementOwnerLookup
         discovered.requireUnchangedDiscovery();
         Set<UUID> playerIds = discovered.playerDataFiles().keySet();
         banEvidence.bannedAmong(playerIds);
-        return new SavedBlockLockerSettlementOwnerLookup(index,banEvidence,playerIds,discovered);
+        return new SavedBlockLockerSettlementOwnerLookup(
+                index, banEvidence, playerIds, discovered, null);
     }
 
     /**
@@ -75,7 +81,9 @@ public final class SavedBlockLockerSettlementOwnerLookup
         var index = observed.assembleOwnerIndex(discovered, independentProofs);
         var lookup = fromIndex(index, discovered, banEvidence);
         observed.witness().requireUnchanged();
-        return lookup;
+        return new SavedBlockLockerSettlementOwnerLookup(
+                lookup.ownerIndex, lookup.bans, lookup.playerData,
+                lookup.selectedManifest, observed.witness());
     }
 
     /**
@@ -85,7 +93,21 @@ public final class SavedBlockLockerSettlementOwnerLookup
      * outside this bounded identity check; no snapshot may be published here.
      */
     public SettlementScanRunner.SourceBlockOwnerLookup sourceScoped() {
+        // One check per source-scoped staging adapter. A complete file witness
+        // hashes every selected source, so rehashing for each chest is both
+        // unnecessary and potentially quadratic. This only closes a bounded
+        // capture-to-first-use stale-owner handoff, NOT the global writer epoch.
+        final var checked = new java.util.concurrent.atomic.AtomicBoolean();
         return (source, chunk, blockPosition) -> {
+            if (capturedOwnerWitness != null && !checked.get()) {
+                synchronized (checked) {
+                    if (!checked.get()) {
+                        capturedOwnerWitness.requireUnchanged();
+                        selectedManifest.requireUnchangedDiscovery();
+                        checked.set(true);
+                    }
+                }
+            }
             if (source == null || chunk == null
                     || source.kind() != WorldStorageDiscovery.Kind.REGION
                     || !selectedManifest.worldFiles().contains(source))

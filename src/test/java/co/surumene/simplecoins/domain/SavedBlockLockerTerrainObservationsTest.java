@@ -455,6 +455,28 @@ class SavedBlockLockerTerrainObservationsTest {
                 "An observed protected owner absent from BAN proof must not silently become CLEAR");
     }
 
+    @Test void changedAuthenticSignAfterOwnerCaptureBeforeStageMustRejectStaleOwner()
+            throws Exception {
+        // A real valid Anvil Region is rewritten AFTER fromCaptured returned.
+        // The new saved scan sees a now-unprotected 5000C chest, but the
+        // old independent owner index still remembers PRIVATE ownership.
+        // No global epoch is claimed; this bounded handoff must fail closed.
+        Fixture f = fixture(true, true, VERIFIED_OWNER, true);
+        var observed = capture(f);
+        var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of(
+                VERIFIED_OWNER, List.of(new BanEvidence.Source(
+                        "paper-profile", BanEvidence.Status.CLEAR))));
+        var lookup = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                observed, f.manifest(), ban, chest -> syntheticComplete(false));
+        // Same discovered physical r.1.0.mca, with a valid empty-neighbor
+        // chunk in place of the earlier adjacent protected SIGN.
+        region(f.region1().getParent(), 1, chunk(32, false, false));
+        assertThrows(IOException.class, () -> SettlementScanRunner.stageWithBanCoverage(
+                f.manifest(), f.scope(), ban, lookup.sourceScoped(),
+                (world, chunk) -> Map.of(), 1024 * 1024, 4 * 1024 * 1024),
+                "Changed SAVED BlockLocker ownership must not inherit a stale protected owner");
+    }
+
     @Test void genuineCaptureHandoffRejectsUnknownOwnerProofOrChangedSavedFile()
             throws Exception {
         Fixture f = fixture(false, true);
