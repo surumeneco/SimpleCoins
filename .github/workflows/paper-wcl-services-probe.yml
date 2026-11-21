@@ -484,6 +484,10 @@ jobs:
                 "paper-a04-a05-$phase.log"
               test -s world/dimensions/minecraft/overworld/region/r.1.1.mca
               test -s world/dimensions/minecraft/overworld/entities/r.1.1.mca
+              for uuid in 00000000-0000-0000-0000-00000000a055 00000000-0000-0000-0000-00000000a053; do
+                test -s "world/players/data/${uuid}.dat"
+                grep -F 'PAPER_A06_ACTUAL_PAPER_OFFLINE_OWNERDATA_SAVED_PASSED id=' "paper-a04-a05-$phase.log" | grep -F "$uuid"
+              done
             elif [ "$phase" = reload-saved ]; then
               grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' \
                 "paper-a04-a05-$phase.log"
@@ -493,7 +497,9 @@ jobs:
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A06_REAL_IP_BAN_UNKNOWN_UUID_MAPPING_HOLD_PASSED' \
                 "paper-a04-a05-$phase.log"
-              grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000_PRIVATE_DEAD_EVERYONE_FREE_PASSED' \
+              grep -F 'PAPER_A06_REAL_PLAYERDATA_BAN_P25000_D30000_F1000_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000_PRIVATE_PERSONAL_EVERYONE_FREE_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' \
                 "paper-a04-a05-$phase.log"
