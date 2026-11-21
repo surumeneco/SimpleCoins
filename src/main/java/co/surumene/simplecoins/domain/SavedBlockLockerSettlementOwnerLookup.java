@@ -52,6 +52,33 @@ public final class SavedBlockLockerSettlementOwnerLookup
     }
 
     /**
+     * Product handoff from one genuine completed terrain capture into the
+     * existing BAN/playerdata-classifying, physical source-scoped owner lookup.
+     *
+     * Caller-provided proof must be independently established PER CHEST;
+     * this method never treats the saved-file witness as a writer-exclusion
+     * proof and does not manufacture positive ExternalProof flags. The source
+     * witness is rechecked after BAN/index validation as well. Any failure
+     * prevents returning even a local unpublished owner adapter.
+     *
+     * The resulting adapter is accepted by SettlementScanRunner only through
+     * sourceScoped(), never via its legacy coordinate-only callback.
+     */
+    public static SavedBlockLockerSettlementOwnerLookup fromCaptured(
+            SavedBlockLockerTerrainObservations.Snapshot observed,
+            WorldStorageDiscovery.Manifest discovered,
+            BanSourceCoverage banEvidence,
+            SavedBlockLockerTerrainObservations.Snapshot.IndependentProofs independentProofs)
+            throws IOException {
+        if (observed == null)
+            throw new IOException("A genuine completed SAVED terrain observation is required");
+        var index = observed.assembleOwnerIndex(discovered, independentProofs);
+        var lookup = fromIndex(index, discovered, banEvidence);
+        observed.witness().requireUnchanged();
+        return lookup;
+    }
+
+    /**
      * Explicit opt-in for saved traversal that keeps the selected Region file
      * and decoded Chunk attached to every physical ownership lookup.
      * Callers must still establish the complete source/writer generation
