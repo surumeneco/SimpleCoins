@@ -54,6 +54,10 @@ import org.bukkit.Chunk;
 import org.bukkit.entity.Entity;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
+import org.bukkit.block.Sign;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.sign.Side;
+import org.bukkit.block.data.type.WallSign;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Wolf;
@@ -71,6 +75,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Never reads an actual monetary owner or grants admission.
  */
 public final class WclServicesProbe extends JavaPlugin {
+    private static boolean withBlockLocker() {
+        return Boolean.getBoolean("a05.probe.blocklocker");
+    }
+
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(Bukkit.getServer().getIp())
                 || !Bukkit.getOnlinePlayers().isEmpty()) {
@@ -86,6 +94,15 @@ public final class WclServicesProbe extends JavaPlugin {
                     Plugin plugin = Bukkit.getPluginManager().getPlugin(pluginName);
                     if (plugin == null || !plugin.isEnabled())
                         throw new IllegalStateException("Expected active provider dependency: " + pluginName);
+                }
+                if (withBlockLocker()) {
+                    Plugin plugin = Bukkit.getPluginManager().getPlugin("BlockLocker");
+                    if (plugin == null || !plugin.isEnabled())
+                        throw new IOException("Real BlockLocker 1.15 plugin is required for this mode");
+                    if (!plugin.getDescription().getVersion().equals("1.15"))
+                        throw new IOException("Incorrect real BlockLocker fixture version");
+                } else if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null) {
+                    throw new IOException("Legacy isolated WCL fixture must not load BlockLocker");
                 }
                 var registrations = Bukkit.getServicesManager()
                         .getRegistrations(WonderfulStorageReader.class);
@@ -164,8 +181,26 @@ public final class WclServicesProbe extends JavaPlugin {
                         return;
                     }
                     case "reload" -> {
+                        // The complete saved-source monetary candidate
+                        // traversal and the genuine near-Entity Paper reload
+                        // proof are both required, but need not compete within
+                        // ONE server tick. Keeping both in the original tick
+                        // caused the actual Paper watchdog to terminate the
+                        // constrained CI JVM *after* all 55,000C proof markers.
+                        // Do not raise Paper's watchdog timeout or skip either
+                        // proof; give the runtime one fresh main-thread tick.
                         verifyFarUnloadedStoredItems(world, selected);
-                        reloadChickenEntity(world, selected);
+                        Bukkit.getScheduler().runTask(this, () -> {
+                            try {
+                                reloadChickenEntity(world, selected);
+                            } catch (Throwable failure) {
+                                getLogger().log(Level.SEVERE,
+                                        "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                            } finally {
+                                Bukkit.shutdown();
+                            }
+                        });
+                        return;
                     }
                     default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
                 }
@@ -1136,6 +1171,34 @@ public final class WclServicesProbe extends JavaPlugin {
         if (!(chestBlock.getState() instanceof org.bukkit.block.Chest persistedChest)
                 || persistedChest.getBlockInventory().getItem(0) == null)
             throw new IOException("Far physical 5000C chest was not filled");
+        if (withBlockLocker()) {
+            int x = (int) anchor, z = (int) anchor;
+            // Real distributed BlockLocker is enabled during the first
+            // physical Paper world write. Same FAR saved terrain as both
+            // actual WWC and WWW entities, and never loaded in process B.
+            attachBlockLockerSign(world, x + 5, 121, z + 5,
+                    "FixtureOwner#" + PERSISTENCE_FOLLOW, null);
+            var privateEvidence = co.surumene.simplecoins.paper.BlockLockerLiveEvidence
+                    .observe(chestBlock);
+            if (!PERSISTENCE_FOLLOW.equals(privateEvidence.owner())
+                    || privateEvidence.everyoneProtected())
+                throw new IOException("Real BlockLocker PRIVATE source did not own 5000C chest");
+            var freeBlock = world.getBlockAt(x + 13, 121, z + 5);
+            freeBlock.setType(Material.CHEST);
+            if (!(freeBlock.getState() instanceof org.bukkit.block.Chest freeChest))
+                throw new IOException("Failed to initialize real Everyone money chest");
+            freeChest.getSnapshotInventory().setItem(0,
+                    coins.create(CoinDenomination.THOUSAND, 1));
+            if (!freeChest.update(true, false))
+                throw new IOException("Failed to persist real Everyone money chest");
+            attachBlockLockerSign(world, x + 13, 121, z + 5,
+                    "UnresolvedOwner", "[Everyone]");
+            var freeEvidence = co.surumene.simplecoins.paper.BlockLockerLiveEvidence
+                    .observe(freeBlock);
+            if (freeEvidence.owner() != null || !freeEvidence.everyoneProtected())
+                throw new IOException("Real BlockLocker Everyone source was not effective");
+            getLogger().info("PAPER_A04_A05_REAL_BLOCKLOCKER_BOTH_PHYSICAL_SIGNS_SEEDED_PASSED");
+        }
         Files.writeString(farWitness("wwc-uuid.txt"), chicken.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("www-uuid.txt"), wolf.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("wwc-shulker.b64"),
@@ -1144,6 +1207,25 @@ public final class WclServicesProbe extends JavaPlugin {
                 Base64.getEncoder().encodeToString(runtime) + "\n");
         getLogger().info("PAPER_A05_FAR_TWO_STORED_PROVIDER_FIXTURES_SAVED_PASSED"
                 + " chunk=" + FAR_CHUNK + "," + FAR_CHUNK);
+    }
+
+    /** Genuine v1.15 wall-sign fixture, not an artificial saved owner index. */
+    private static void attachBlockLockerSign(
+            World world, int x, int y, int z,
+            String mainProfile, String secondary) throws IOException {
+        var block = world.getBlockAt(x, y, z + 1);
+        block.setType(Material.OAK_WALL_SIGN);
+        WallSign direction = (WallSign) block.getBlockData();
+        direction.setFacing(BlockFace.SOUTH);
+        block.setBlockData(direction);
+        if (!(block.getState() instanceof Sign sign))
+            throw new IOException("Real BlockLocker wall-sign fixture did not initialize");
+        sign.getSide(Side.FRONT).setLine(0, "[Private]");
+        sign.getSide(Side.FRONT).setLine(1, mainProfile);
+        if (secondary != null)
+            sign.getSide(Side.FRONT).setLine(2, secondary);
+        if (!sign.update(true, false))
+            throw new IOException("Real BlockLocker wall-sign was not persisted");
     }
 
     /**
@@ -1642,12 +1724,13 @@ public final class WclServicesProbe extends JavaPlugin {
                 2 * 1024 * 1024, 16 * 1024 * 1024);
         int chestX = FAR_CHUNK * 16 + 5;
         int chestZ = FAR_CHUNK * 16 + 5;
-        // One real PAPER chest tile+palette+5,000C stored by first Paper
-        // process. BlockLocker is intentionally ABSENT from this fixture.
-        // These explicit positive ExternalProof flags model the isolated
-        // test assumption only; no actual deployed whole-writer epoch.
-        if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null)
-            throw new IOException("Expected isolated no-BlockLocker fixture");
+        int everyoneX = FAR_CHUNK * 16 + 13;
+        boolean protectedMode = withBlockLocker();
+        // In protected mode these two real physical chests were signed while
+        // the actual BlockLocker 1.15 JAR was loaded during Paper process A.
+        // A saved sign source still cannot establish a global writer epoch.
+        if (protectedMode != (Bukkit.getPluginManager().getPlugin("BlockLocker") != null))
+            throw new IOException("BlockLocker installed population disagrees with fixture mode");
         var terrain = co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations.capture(
                 manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
                 4096, Set.of("[Private]"), Set.of("[More Users]"),
@@ -1666,11 +1749,48 @@ public final class WclServicesProbe extends JavaPlugin {
                     + " actualChestGroups=" + terrain.chests().size()
                     + " observed=" + terrain.chests().stream().limit(12)
                         .map(e -> e.observation().storageMembers().toString()).toList());
+        if (protectedMode) {
+            long expectedEveryone = terrain.chests().stream().filter(observed ->
+                    observed.world().equals(world.getName())
+                    && observed.observation().storageMembers().stream().anyMatch(p ->
+                            p.x() == everyoneX && p.y() == 121 && p.z() == chestZ)).count();
+            if (expectedEveryone != 1)
+                throw new IOException("Missing or ambiguous real SAVED Everyone money chest");
+        }
+        // ExternalProof flags here mean only the isolated, physically
+        // observed Paper fixture: verified source, all attached signs,
+        // deduplicated chest, and a bounded stable file witness. No promise
+        // about the production deployment's writer or BAN closure.
         var knownNonProtection =
                 (co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations
-                        .Snapshot.IndependentProofs) observed -> new
-                        co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
-                        .ExternalProof(true, true, true, true, true);
+                        .Snapshot.IndependentProofs) observed -> {
+                    var signs = co.surumene.simplecoins.domain
+                            .SavedBlockLockerSignSummary.summarize(observed.observation());
+                    boolean isPrivate = observed.observation().storageMembers().stream()
+                            .anyMatch(p -> p.x() == chestX && p.y() == 121 && p.z() == chestZ);
+                    boolean isEveryone = observed.observation().storageMembers().stream()
+                            .anyMatch(p -> p.x() == everyoneX && p.y() == 121 && p.z() == chestZ);
+                    if (protectedMode && isPrivate) {
+                        if (!signs.protectionSignObserved() || signs.mainOwnerConflict()
+                                || !signs.verifiedMainOwner().equals(Optional.of(PERSISTENCE_FOLLOW))
+                                || signs.everyoneEffective() || !signs.everyoneAbsent())
+                            throw new IOException("Real saved BlockLocker PRIVATE owner differs");
+                        return new co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
+                                .ExternalProof(true, true, true, true, false);
+                    }
+                    if (protectedMode && isEveryone) {
+                        if (!signs.protectionSignObserved() || signs.mainOwnerConflict()
+                                || !signs.everyoneEffective() || signs.everyoneAbsent()
+                                || signs.verifiedMainOwner().isPresent())
+                            throw new IOException("Real saved BlockLocker Everyone is not effective");
+                        return new co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
+                                .ExternalProof(true, true, true, true, false);
+                    }
+                    if (signs.protectionSignObserved())
+                        throw new IOException("Unexpected protected saved BlockLocker chest");
+                    return new co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
+                            .ExternalProof(true, true, true, true, true);
+                };
         var unknownProtection =
                 (co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations
                         .Snapshot.IndependentProofs) observed ->
@@ -1692,7 +1812,8 @@ public final class WclServicesProbe extends JavaPlugin {
         var nonChestOwners =
                 (co.surumene.simplecoins.domain.SettlementScanRunner.SourceBlockOwnerLookup)
                 (source, chunk, position) -> {
-                    if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null
+                    if ((Bukkit.getPluginManager().getPlugin("BlockLocker") != null)
+                            != protectedMode
                             || source.kind() != WorldStorageDiscovery.Kind.REGION
                             || !manifest.worldFiles().contains(source)
                             || !source.world().equals(world.getName()))
@@ -1717,10 +1838,15 @@ public final class WclServicesProbe extends JavaPlugin {
                 covered, terrain, knownNonProtection, nonChestOwners, owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         verifyCompleteUnpublishedWclCandidate(selected, manifest,
-                chickenId, wolfId, nearChickenId, nearWolfId);
+                chickenId, wolfId, nearChickenId, nearWolfId, protectedMode);
         getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
         getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
-        getLogger().info("PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED");
+        if (protectedMode)
+            getLogger().info(
+                    "PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000"
+                    + "_PRIVATE_DEAD_EVERYONE_FREE_PASSED");
+        else
+            getLogger().info("PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED");
 
         // 3. Missing BAN evidence for the actual WCL commander cannot be
         //    treated as CLEAR, even though the chest is verified FREE.
@@ -1781,17 +1907,19 @@ public final class WclServicesProbe extends JavaPlugin {
     private static void verifyCompleteUnpublishedWclCandidate(
             co.surumene.simplecoins.domain.SettlementScanRunner.Staged selected,
             WorldStorageDiscovery.Manifest manifest,
-            UUID chickenId, UUID wolfId, UUID nearChickenId, UUID nearWolfId)
-            throws IOException {
+            UUID chickenId, UUID wolfId, UUID nearChickenId, UUID nearWolfId,
+            boolean protectedMode) throws IOException {
         if (selected.savedContentWitness() == null
                 || !selected.requiredSourceIds().containsAll(manifest.requiredSourceIds())
                 || selected.report().regionFiles() != manifest.worldFiles().size()
                 || selected.report().playerFiles() != manifest.playerDataFiles().size())
             throw new IOException("Whole hybrid did not retain all required saved sources");
         var result = selected.pending().commit(); // local-only, never publish
-        if (!BigInteger.valueOf(50000).equals(result.dead())
-                || !BigInteger.valueOf(5000).equals(result.free())
-                || !BigInteger.valueOf(5000).equals(result.statistics().worldTotal())
+        BigInteger expectedDead = BigInteger.valueOf(protectedMode ? 55000 : 50000);
+        BigInteger expectedFree = BigInteger.valueOf(protectedMode ? 1000 : 5000);
+        if (!expectedDead.equals(result.dead())
+                || !expectedFree.equals(result.free())
+                || !expectedFree.equals(result.statistics().worldTotal())
                 || result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0)
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(chickenId.toString())
@@ -1811,7 +1939,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(nearWolfId.toString())
                         && e.value().equals(BigInteger.valueOf(5000))))
-            throw new IOException("Full hybrid WCL/chest sources lost/doubled 55000C or classified owners");
+            throw new IOException("Full hybrid WCL/BlockLocker money lost, doubled or misclassified");
         selected.savedContentWitness().requireUnchanged();
         manifest.requireUnchangedDiscovery();
     }
