@@ -8,9 +8,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.DeflaterOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,6 +29,8 @@ class SavedBlockLockerTerrainObservationsTest {
     private static final int Z = 4;
     private static final int CHEST_X = 511;
     private static final int NEIGHBOR_X = 512;
+    private static final UUID VERIFIED_OWNER =
+            UUID.fromString("00000000-0000-0000-0000-000000000091");
 
     private static void string(DataOutputStream out, String name, String value)
             throws IOException {
@@ -61,6 +66,11 @@ class SavedBlockLockerTerrainObservationsTest {
 
     private static byte[] chunk(int chunkX, boolean chest, boolean sign,
                                 boolean withMonetaryItem) throws IOException {
+        return chunk(chunkX, chest, sign, withMonetaryItem, null);
+    }
+
+    private static byte[] chunk(int chunkX, boolean chest, boolean sign,
+                                boolean withMonetaryItem, UUID signedOwner) throws IOException {
         int x = chest ? CHEST_X : NEIGHBOR_X;
         var bytes = new ByteArrayOutputStream();
         try (var out = new DataOutputStream(bytes)) {
@@ -117,6 +127,20 @@ class SavedBlockLockerTerrainObservationsTest {
                 if (sign) {
                     textFace(out, "front_text", "[Private]", "Alice");
                     textFace(out, "back_text", "", "");
+                    if (signedOwner != null) {
+                        // Synthetic, source-backed BlockLocker profile PDC. The
+                        // actual 1.15 provider readback is checked in Paper CI.
+                        out.writeByte(10); out.writeUTF("PublicBukkitValues");
+                        string(out, "blocklocker:header", "PRIVATE");
+                        out.writeByte(10); out.writeUTF("blocklocker:profile_1");
+                        string(out, "blocklocker:n", "Alice");
+                        out.writeByte(12); out.writeUTF("blocklocker:u");
+                        out.writeInt(2);
+                        out.writeLong(signedOwner.getMostSignificantBits());
+                        out.writeLong(signedOwner.getLeastSignificantBits());
+                        out.writeByte(0); // profile compound
+                        out.writeByte(0); // PDC compound
+                    }
                 }
                 if (chest && withMonetaryItem) {
                     // Real modern NBT ItemStack, not a mocked currency value.
@@ -170,11 +194,38 @@ class SavedBlockLockerTerrainObservationsTest {
     }
 
     private Fixture fixture(boolean sign, boolean withMonetaryItem) throws IOException {
+        return fixture(sign, withMonetaryItem, null, false);
+    }
+
+    private Fixture fixture(boolean sign, boolean withMonetaryItem,
+                            UUID signedOwner, boolean ownerHasPlayerdata) throws IOException {
         Path root = directory.resolve((sign ? "with-sign" : "no-sign")
-                + (withMonetaryItem ? "-money" : ""));
+                + (withMonetaryItem ? "-money" : "")
+                + (signedOwner == null ? "" : "-verified-owner"
+                        + (ownerHasPlayerdata ? "-registered" : "-no-playerdata")));
         Path saved = root.resolve("region");
         Path a = region(saved, 0, chunk(31, true, false, withMonetaryItem));
-        Path b = region(saved, 1, chunk(32, false, sign));
+        Path b = region(saved, 1, chunk(32, false, sign, false, signedOwner));
+        if (ownerHasPlayerdata) {
+            if (signedOwner == null)
+                throw new IllegalArgumentException("Cannot create anonymous playerdata");
+            var raw = new ByteArrayOutputStream();
+            try (var out = new DataOutputStream(raw)) {
+                out.writeByte(10); out.writeUTF("");
+                out.writeByte(9); out.writeUTF("Inventory");
+                out.writeByte(10); out.writeInt(0);
+                out.writeByte(9); out.writeUTF("EnderItems");
+                out.writeByte(10); out.writeInt(0);
+                out.writeByte(0);
+            }
+            var gzip = new ByteArrayOutputStream();
+            try (var out = new GZIPOutputStream(gzip)) {
+                out.write(raw.toByteArray());
+            }
+            Path file = root.resolve("playerdata/" + signedOwner + ".dat");
+            Files.createDirectories(file.getParent());
+            Files.write(file, gzip.toByteArray());
+        }
         WorldScope scope = new WorldScope(true, Set.of(), Set.of());
         var discovered = WorldStorageDiscovery.discover(Map.of("world", root), scope, 1000);
         assertEquals(2, discovered.worldFiles().size(), "Both real Region files were discovered");
@@ -357,6 +408,51 @@ class SavedBlockLockerTerrainObservationsTest {
         assertNotNull(staged.savedContentWitness());
         snapshot.witness().requireUnchanged();
         staged.savedContentWitness().requireUnchanged();
+    }
+
+    @Test void genuinePrivateSignStagesOwnerMoneyAsPersonalOrDeadByBanAndPlayerdata()
+            throws Exception {
+        // A signed UUID and independent proofs are synthetic *local* inputs;
+        // they cannot authorize G0 global writer exclusion or publication.
+        for (boolean hasPlayerdata : List.of(true, false)) {
+            Fixture f = fixture(true, true, VERIFIED_OWNER, hasPlayerdata);
+            var observed = capture(f);
+            assertEquals(VERIFIED_OWNER, observed.chests().getFirst().observation()
+                    .attachedSigns().getFirst().profiles().primaryOwner().orElseThrow());
+            for (BanEvidence.Status banStatus : List.of(
+                    BanEvidence.Status.CLEAR, BanEvidence.Status.BANNED)) {
+                var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of(
+                        VERIFIED_OWNER, List.of(new BanEvidence.Source(
+                                "paper-profile", banStatus))));
+                var lookup = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                        observed, f.manifest(), ban, chest -> syntheticComplete(false));
+                var staged = SettlementScanRunner.stageWithBanCoverage(
+                        f.manifest(), f.scope(), ban, lookup.sourceScoped(),
+                        (world, chunk) -> Map.of(), 1024 * 1024, 4 * 1024 * 1024);
+                var result = staged.pending().commit();
+                boolean personallyOwned = hasPlayerdata && banStatus == BanEvidence.Status.CLEAR;
+                assertEquals(personallyOwned ? BigInteger.valueOf(5000) : BigInteger.ZERO,
+                        result.personalBalances().getOrDefault(VERIFIED_OWNER, BigInteger.ZERO));
+                assertEquals(personallyOwned ? BigInteger.ZERO : BigInteger.valueOf(5000),
+                        result.dead(), "BAN or missing playerdata must classify physical chest money as D");
+                assertEquals(BigInteger.ZERO, result.free());
+                observed.witness().requireUnchanged();
+                staged.savedContentWitness().requireUnchanged();
+            }
+        }
+    }
+
+    @Test void genuinePrivateSignWithMissingBanSubjectFailsClosedRatherThanAssumeClear()
+            throws Exception {
+        Fixture f = fixture(true, true, VERIFIED_OWNER, false);
+        var observed = capture(f);
+        var ban = BanSourceCoverage.capture(Set.of("paper-profile"), Map.of());
+        var lookup = SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                observed, f.manifest(), ban, chest -> syntheticComplete(false));
+        assertThrows(IOException.class, () -> SettlementScanRunner.stageWithBanCoverage(
+                f.manifest(), f.scope(), ban, lookup.sourceScoped(),
+                (world, chunk) -> Map.of(), 1024 * 1024, 4 * 1024 * 1024),
+                "An observed protected owner absent from BAN proof must not silently become CLEAR");
     }
 
     @Test void genuineCaptureHandoffRejectsUnknownOwnerProofOrChangedSavedFile()
