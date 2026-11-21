@@ -27,8 +27,86 @@ public final class NativeSaveHook {
         HELD_CRAFT_RELEASE.countDown();
     }
 
+    // Active entry accounting for exactly ONE instrumented method.
+    // The gate lock makes close-vs-enter a single linearizable decision.
+    // This is a throwaway proof, not a deployed Paper writer coordinator.
+    private static final Object CRAFT_DRAIN_LOCK = new Object();
+    private static final ThreadLocal<Boolean> TRACKED_ENTRY = new ThreadLocal<>();
+    private static int activeCraftSaves;
+    private static int normalCraftReturns;
+    private static boolean trackedAdmissionsClosed;
+
+    public static int trackedCraftInFlight() {
+        synchronized (CRAFT_DRAIN_LOCK) {
+            return activeCraftSaves;
+        }
+    }
+
+    public static int trackedCraftNormalReturns() {
+        synchronized (CRAFT_DRAIN_LOCK) {
+            return normalCraftReturns;
+        }
+    }
+
+    public static void closeTrackedCraftAdmissions() {
+        synchronized (CRAFT_DRAIN_LOCK) {
+            if (!Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")
+                    || trackedAdmissionsClosed)
+                throw new IllegalStateException("Native tracked gate not open");
+            trackedAdmissionsClosed = true;
+            System.setProperty("a02.nativeAgent.closed", "true");
+            System.out.println("PAPER_A02_TRACKED_NATIVE_ENTRY_CLOSED_ACTIVE_"
+                    + activeCraftSaves);
+        }
+    }
+
+    public static boolean awaitTrackedCraftDrain(long millis) throws InterruptedException {
+        if (millis < 1 || millis > 30000)
+            throw new IllegalArgumentException("Invalid bounded drain timeout");
+        long deadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis);
+        synchronized (CRAFT_DRAIN_LOCK) {
+            if (!trackedAdmissionsClosed)
+                throw new IllegalStateException("Cannot drain before closing admissions");
+            while (activeCraftSaves != 0) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) return false;
+                long timeoutMillis = Math.max(1L,
+                        java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(remaining));
+                CRAFT_DRAIN_LOCK.wait(timeoutMillis);
+            }
+            return true;
+        }
+    }
+
+    public static void afterNativeSave() {
+        // Injected by the JVM Agent ONLY at the actual normal-return opcode,
+        // not when the original method body was merely released to run.
+        if (!Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")) return;
+        synchronized (CRAFT_DRAIN_LOCK) {
+            if (!Boolean.TRUE.equals(TRACKED_ENTRY.get()) || activeCraftSaves < 1)
+                throw new IllegalStateException("Unmatched real native save normal return");
+            TRACKED_ENTRY.remove();
+            activeCraftSaves--;
+            normalCraftReturns++;
+            CRAFT_DRAIN_LOCK.notifyAll();
+        }
+    }
+
     public static void beforeNativeSave() {
-        if (Boolean.getBoolean("a02.nativeAgent.closed")) {
+        if (Boolean.getBoolean("a02.nativeAgent.trackCraftDrain")) {
+            synchronized (CRAFT_DRAIN_LOCK) {
+                if (trackedAdmissionsClosed || Boolean.getBoolean("a02.nativeAgent.closed")) {
+                    System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED");
+                    throw new IllegalStateException(
+                            "A02 test-only Paper native save rejected during closed proof interval");
+                }
+                if (Boolean.TRUE.equals(TRACKED_ENTRY.get()))
+                    throw new IllegalStateException("Recursive tracked Paper save entry");
+                TRACKED_ENTRY.set(Boolean.TRUE);
+                activeCraftSaves++;
+            }
+        } else if (Boolean.getBoolean("a02.nativeAgent.closed")) {
             System.out.println("PAPER_A02_NATIVE_AGENT_CRAFTPLAYER_SAVE_DENIED");
             throw new IllegalStateException(
                     "A02 test-only Paper native save rejected during closed proof interval");
