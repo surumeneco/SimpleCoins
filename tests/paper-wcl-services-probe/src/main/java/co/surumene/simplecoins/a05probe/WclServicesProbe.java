@@ -15,6 +15,7 @@ import co.surumene.simplecoins.paper.PaperWonderfulSnapshotAssets;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedPdc;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedChunkCandidates;
 import co.surumene.simplecoins.paper.PaperWonderfulSavedSettlementSource;
+import co.surumene.simplecoins.paper.PaperProfileBanSource;
 import co.surumene.simplecoins.paper.PaperLoadedChunkAssets;
 import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
@@ -1797,14 +1798,62 @@ public final class WclServicesProbe extends JavaPlugin {
                         co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
                                 .ExternalProof.unknown();
 
-        String fixtureProvider = "fixture-ban-status";
-        var clear = new co.surumene.simplecoins.domain.BanEvidence.Source(
-                fixtureProvider,
-                co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR);
+        // Non-BlockLocker baseline retains the isolated fixture input. In
+        // the real BlockLocker/WCL integration, capture the *actual* official
+        // Paper profile BAN status of both saved monetary owners. Neither
+        // source IDs nor status may be synthesized from a fixture Boolean.
+        String fixtureProvider = protectedMode
+                ? PaperProfileBanSource.SOURCE_ID : "fixture-ban-status";
+        var clear = protectedMode
+                ? PaperProfileBanSource.observe(PERSISTENCE_FOLLOW)
+                : new co.surumene.simplecoins.domain.BanEvidence.Source(
+                        fixtureProvider,
+                        co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR);
+        var commander = protectedMode
+                ? PaperProfileBanSource.observe(WOLF_COMMANDER) : clear;
+        if (protectedMode) {
+            if (!PaperProfileBanSource.SOURCE_ID.equals(clear.id())
+                    || clear.status() != co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR
+                    || !PaperProfileBanSource.SOURCE_ID.equals(commander.id())
+                    || commander.status() != co.surumene.simplecoins.domain.BanEvidence.Status.BANNED)
+                throw new IOException("Real Paper profile BAN identities/status did not match actual fixture");
+            // The real Paper IP ban list has a distinct target namespace.
+            // It cannot be joined to either offline UUID without an
+            // independently authenticated IP→UUID association.
+            @SuppressWarnings("deprecation")
+            var actualIpEntries = Bukkit.getBanList(org.bukkit.BanList.Type.IP).getEntries();
+            if (actualIpEntries.size() != 1
+                    || actualIpEntries.stream().noneMatch(e ->
+                            "203.0.113.42".equals(String.valueOf(e.getTarget()))))
+                throw new IOException("Expected exact distinct real Paper IP BAN source");
+            // With paper-ip declared mandatory but NO verified association
+            // for these UUIDs, only profile data is insufficient. A complete
+            // BanSourceCoverage must refuse rather than silently infer CLEAR.
+            try {
+                co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                        Set.of(PaperProfileBanSource.SOURCE_ID, "paper-ip"),
+                        Map.of(PERSISTENCE_FOLLOW, List.of(clear),
+                               WOLF_COMMANDER, List.of(commander)));
+                throw new IOException("Incomplete IP BAN identity evidence incorrectly completed");
+            } catch (IOException expected) {
+                if (!expected.getMessage().contains("Incomplete BAN provider coverage"))
+                    throw expected;
+            }
+            getLogger().info("PAPER_A06_REAL_PROFILE_BANNED_AND_CLEAR_OWNERS_PASSED"
+                    + " clearUuid=" + PERSISTENCE_FOLLOW
+                    + " bannedUuid=" + WOLF_COMMANDER);
+            getLogger().info("PAPER_A06_REAL_IP_BAN_UNKNOWN_UUID_MAPPING_HOLD_PASSED");
+        }
+        // Isolated test-limited provider set is deliberately *only* profile
+        // BAN for protectedMode. No global IP or external-provider completeness
+        // can be derived from this local candidate.
         var covered = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
                 Set.of(fixtureProvider),
                 Map.of(PERSISTENCE_FOLLOW, List.of(clear),
-                       WOLF_COMMANDER, List.of(clear)));
+                       WOLF_COMMANDER, List.of(commander)));
+        if (protectedMode && (!covered.currentlyBanned(WOLF_COMMANDER)
+                || covered.currentlyBanned(PERSISTENCE_FOLLOW)))
+            throw new IOException("Authentic Paper profile BAN was not retained by coverage");
         // Explicit fixture-only ownership for OTHER saved container types.
         // The A04 BlockLocker source proof is valid only for physical chests.
         // The product must never silently assume a barrel/furnace/shulker is
