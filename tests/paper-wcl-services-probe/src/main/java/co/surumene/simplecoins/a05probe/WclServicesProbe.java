@@ -1296,12 +1296,22 @@ public final class WclServicesProbe extends JavaPlugin {
         Path region = world.getWorldPath()
                 .resolve("entities/r.1.1.mca").toAbsolutePath().normalize();
 
-        // Obtain source closure from the real Paper World folder, not a
-        // hand-selected one-file Manifest. Both terrain and Entity Anvil,
-        // plus any world-independent playerdata, are mandatory observed input.
+        // Paper 26.2 stores playerdata under the shared LEVEL root
+        // (world/players/data), not under the dimension's WorldFolder.
+        // Derive this root from the ACTUAL Paper world and require it to
+        // match the selected world name. Supplying no shared roots would
+        // silently omit real UUID.dat sources while scanning all Anvil files.
+        Path sharedLevelRoot = world.getWorldFolder().toPath().toAbsolutePath()
+                .normalize().getParent().getParent().getParent();
+        if (sharedLevelRoot == null
+                || !world.getName().equals(sharedLevelRoot.getFileName().toString())
+                || !Files.isDirectory(sharedLevelRoot.resolve("players/data"))
+                    && withBlockLocker())
+            throw new IOException("Paper 26.2 shared playerdata root does not match actual WorldFolder");
         WorldStorageDiscovery.Manifest boundedManifest = WorldStorageDiscovery.discover(
                 Map.of(world.getName(), world.getWorldFolder().toPath()),
-                new WorldScope(true, Set.of(), Set.of()), 100000);
+                new WorldScope(true, Set.of(), Set.of()), 100000,
+                Set.of(sharedLevelRoot));
         if (boundedManifest.origin() == null ||
                 boundedManifest.worldFiles().stream()
                         .filter(input -> input.kind() == WorldStorageDiscovery.Kind.ENTITY
