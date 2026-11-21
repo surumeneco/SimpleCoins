@@ -54,6 +54,10 @@ public final class PaperCapturedHybridSettlement {
     private boolean autoEnumerationCompleted;
     /** Explicit main-thread LIVE WCL reads from this capture's wallet generation. */
     private final List<WclHybridLiveOverlay.Selected> selectedWcl = new ArrayList<>();
+    /** Immutable first one-read WCL provenance for actual Paper Entity rereads. */
+    private final List<PaperWonderfulLiveCandidates.Candidate> selectedWclOriginals =
+            new ArrayList<>();
+    private Plugin selectedWclReader;
 
 
     private PaperCapturedHybridSettlement(PaperLiveUniverseAssets.Observed observed,
@@ -183,6 +187,8 @@ public final class PaperCapturedHybridSettlement {
                 throw new IOException("Selected WCL Entity has no captured LIVE Chunk");
             if (selectedWcl.stream().anyMatch(wcl -> wcl.entityId().equals(id)))
                 throw new IOException("Repeated WCL Entity in one captured generation: " + id);
+            if (selectedWclReader != null && selectedWclReader != consumer)
+                throw new IOException("Different WCL consumer in one LIVE capture");
             var candidate = PaperWonderfulLiveCandidates.collect(
                     consumer, entity, providerId, walletIds,
                     maxSerializedBytes, maxInflatedBytes);
@@ -238,6 +244,8 @@ public final class PaperCapturedHybridSettlement {
             selectedWcl.add(new WclHybridLiveOverlay.Selected(chunk, candidate.entityId(),
                     candidate.providerId(), candidate.ownerEvidence(), candidate.slotValues(),
                     sameItemMirrors));
+            selectedWclOriginals.add(candidate);
+            selectedWclReader = consumer;
         } catch (IOException | RuntimeException invalid) {
             consumed.set(true); // discard the whole potentially mutated wallet generation
             throw invalid;
@@ -456,6 +464,81 @@ public final class PaperCapturedHybridSettlement {
         return type;
     }
 
+    /**
+     * Necessary (not sufficient for G0) locally bounded WCL freshness proof:
+     * reject a changed, moved or missing *actually selected* LIVE provider
+     * source rather than returning a stale owner with an unchanged money total.
+     *
+     * This does not freeze a writer after return. Only the real Paper capture
+     * stores a source-backed initial candidate; fromObservedWithWcl is a test
+     * seam and must not masquerade as a successful Paper source recheck.
+     */
+    private void requireSelectedWclStillCurrent(
+            int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        if (selectedWcl.isEmpty() || capturedWorlds.isEmpty()) return;
+        if (!Bukkit.isPrimaryThread() || selectedWclReader == null
+                || selectedWclOriginals.size() != selectedWcl.size())
+            throw new IOException("Real LIVE WCL freshness proof is missing or off Paper thread");
+        for (int index = 0; index < selectedWclOriginals.size(); index++) {
+            var first = selectedWclOriginals.get(index);
+            var originalSelection = selectedWcl.get(index);
+            Entity entity = Bukkit.getEntity(first.entityId());
+            World selectedWorld = capturedWorlds.get(first.worldName());
+            if (entity == null || !entity.isValid() || selectedWorld == null
+                    || entity.getWorld() != selectedWorld
+                    || !entity.getWorld().getUID().equals(first.worldId())
+                    || !originalSelection.entityId().equals(first.entityId())
+                    || !originalSelection.providerId().equals(first.providerId())) {
+                throw new IOException("LIVE WCL holder changed during saved stage: "
+                        + first.entityId() + " (missing, moved or changed source)");
+            }
+            var location = entity.getLocation();
+            var currentChunk = new SavedLiveSourcePartition.Chunk(
+                    selectedWorld.getName(),
+                    Math.floorDiv(location.getBlockX(), 16),
+                    Math.floorDiv(location.getBlockZ(), 16));
+            if (!originalSelection.chunk().equals(currentChunk))
+                throw new IOException("LIVE WCL holder changed during saved stage: "
+                        + first.entityId() + " (chunk relocated)");
+            final PaperWonderfulLiveCandidates.Candidate fresh;
+            try {
+                // Separate identity set is correct for a value-preserving
+                // readback. Original shared-wallet uniqueness was verified
+                // during the first capture; raw serialized item bytes MUST
+                // match here, including wallet UUID and its monetary balance.
+                fresh = PaperWonderfulLiveCandidates.collect(
+                        selectedWclReader, entity, first.providerId(),
+                        new HashSet<>(), maxSerializedBytes, maxInflatedBytes);
+            } catch (IOException | RuntimeException failedRead) {
+                throw new IOException("LIVE WCL holder changed during saved stage: "
+                        + first.entityId() + " (unreadable reread)", failedRead);
+            }
+            boolean equal = first.entityId().equals(fresh.entityId())
+                    && first.worldId().equals(fresh.worldId())
+                    && first.worldName().equals(fresh.worldName())
+                    && first.providerId().equals(fresh.providerId())
+                    && first.ownerEvidence().equals(fresh.ownerEvidence())
+                    && first.relationships().equals(fresh.relationships())
+                    && first.slotValues().equals(fresh.slotValues())
+                    && first.physicalSlotKeys().equals(fresh.physicalSlotKeys())
+                    && first.sourceItems().keySet().equals(fresh.sourceItems().keySet());
+            if (equal) {
+                for (var entry : first.sourceItems().entrySet()) {
+                    var now = fresh.sourceItems().get(entry.getKey());
+                    if (now == null || !entry.getValue().slot().equals(now.slot())
+                            || !java.util.Arrays.equals(
+                                    entry.getValue().bytes(), now.bytes())) {
+                        equal = false;
+                        break;
+                    }
+                }
+            }
+            if (!equal)
+                throw new IOException("LIVE WCL holder changed during saved stage: "
+                        + first.entityId() + " (owner, values or ItemStack bytes)");
+        }
+    }
+
     private SettlementScanRunner.Staged stageCandidateInternal(
             WorldStorageDiscovery.Manifest manifest,
             WorldScope scope,
@@ -591,6 +674,11 @@ public final class PaperCapturedHybridSettlement {
         staged.savedContentWitness().requireUnchanged();
         if (savedWclSupplement != null)
             savedWclSupplement.requireWorldIdentityUnchanged();
+        // Read actual enrolled LIVE WWC/WWW once more after the saved phase.
+        // A changed owner with identical currency bytes must HOLD. This
+        // closes a *known local read-to-stage gap only*: it does not establish
+        // the global writer epoch through the caller's eventual publication.
+        requireSelectedWclStillCurrent(maximumCompressedBytes, maximumInflatedBytes);
         return staged;
     }
 }
