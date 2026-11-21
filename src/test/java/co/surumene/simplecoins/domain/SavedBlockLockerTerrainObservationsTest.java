@@ -209,4 +209,83 @@ class SavedBlockLockerTerrainObservationsTest {
         assertThrows(IOException.class, () -> capture(missing),
                 "A missing adjacent Chunk cannot silently become an unprotected chest");
     }
+
+    private static SavedBlockLockerOwnerCandidate.ExternalProof syntheticComplete(
+            boolean observedUnprotected) {
+        // Synthetic LOCAL evidence only. G0 all-writer epoch is still unknown.
+        return new SavedBlockLockerOwnerCandidate.ExternalProof(
+                true, true, true, true, observedUnprotected);
+    }
+
+    @Test void actualTwoRegionObservationCanBeBoundToLocalUnpublishedFreeCandidate()
+            throws Exception {
+        Fixture f = fixture(false);
+        var observed = capture(f);
+        var index = observed.assembleOwnerIndex(f.manifest(),
+                candidate -> syntheticComplete(true));
+        var holder = index.lookup("world", CHEST_X + "," + Y + "," + Z);
+        assertTrue(holder.verifiedNonProtection());
+        assertTrue(holder.verifiedOwner().isEmpty());
+        assertFalse(holder.everyoneEffective());
+        observed.witness().requireUnchanged();
+    }
+
+    @Test void unknownOrIncompleteIndependentProofCannotCreateIndex() throws Exception {
+        Fixture clear = fixture(false);
+        var observed = capture(clear);
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                clear.manifest(), candidate ->
+                        SavedBlockLockerOwnerCandidate.ExternalProof.unknown()));
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                clear.manifest(), candidate -> syntheticComplete(false)));
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                clear.manifest(), candidate -> null));
+        Fixture unresolved = fixture(true);
+        var withSign = capture(unresolved);
+        assertThrows(IOException.class, () -> withSign.assembleOwnerIndex(
+                unresolved.manifest(), candidate -> syntheticComplete(false)),
+                "Private sign without verified owner UUID must remain HOLD");
+    }
+
+    @Test void foreignDiscoveryOrChangedSavedBytesCannotReuseObservedIndex()
+            throws Exception {
+        Fixture f = fixture(false);
+        var observed = capture(f);
+        var rediscovered = WorldStorageDiscovery.discover(
+                Map.of("world", f.region0().getParent().getParent()), f.scope(), 1000);
+        assertEquals(f.manifest().worldFiles(), rediscovered.worldFiles());
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                rediscovered, candidate -> syntheticComplete(true)));
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                new WorldStorageDiscovery.Manifest(f.manifest().worldFiles(), Map.of()),
+                candidate -> syntheticComplete(true)));
+        byte[] edited = Files.readAllBytes(f.region1());
+        edited[edited.length - 1] ^= 1;
+        Files.write(f.region1(), edited);
+        assertThrows(IOException.class, () -> observed.assembleOwnerIndex(
+                f.manifest(), candidate -> syntheticComplete(true)));
+    }
+
+    @Test void forgedIncompleteNegativeSourceOrDuplicatePhysicalChestFailsAtomically()
+            throws Exception {
+        Fixture f = fixture(false);
+        var observed = capture(f);
+        var original = observed.chests().getFirst();
+        var incomplete = new SavedBlockLockerTerrainObservations.ObservedChest(
+                original.world(), List.of(original.sources().getFirst()), original.observation());
+        var forged = new SavedBlockLockerTerrainObservations.Snapshot(
+                List.of(incomplete), observed.witness(), observed.report());
+        assertThrows(IOException.class, () -> forged.assembleOwnerIndex(
+                f.manifest(), candidate -> syntheticComplete(true)));
+        var repeated = new SavedBlockLockerTerrainObservations.Snapshot(
+                List.of(original, original), observed.witness(), observed.report());
+        assertThrows(IOException.class, () -> repeated.assembleOwnerIndex(
+                f.manifest(), candidate -> syntheticComplete(true)));
+        var wrongWorld = new SavedBlockLockerTerrainObservations.Snapshot(
+                List.of(new SavedBlockLockerTerrainObservations.ObservedChest(
+                        "other-world", original.sources(), original.observation())),
+                observed.witness(), observed.report());
+        assertThrows(IOException.class, () -> wrongWorld.assembleOwnerIndex(
+                f.manifest(), candidate -> syntheticComplete(true)));
+    }
 }

@@ -62,6 +62,17 @@ public final class WorldSnapshotTraversal {
             this.stamps = Map.copyOf(stamps);
         }
 
+        /**
+         * An already verified SAVED content set must not be reused with another
+         * (or hand-authored) discovery. Independent discovery is a new time
+         * interval even if the paths are identical, not a world-writer fence.
+         */
+        public void requireOriginalManifest(WorldStorageDiscovery.Manifest candidate)
+                throws IOException {
+            if (candidate == null || candidate.origin() == null || candidate != manifest)
+                throw new IOException("SAVED observation does not belong to selected discovery Manifest");
+        }
+
         public void requireUnchanged() throws IOException {
             // Recheck directory closure too, including formerly empty roots.
             // A hand-created Manifest cannot claim that proof.
