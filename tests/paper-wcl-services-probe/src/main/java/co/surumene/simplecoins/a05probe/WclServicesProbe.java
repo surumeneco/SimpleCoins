@@ -1622,11 +1622,6 @@ public final class WclServicesProbe extends JavaPlugin {
                             new ResolvedEntitySettlementImport.Ownership(
                                     WOLF_COMMANDER, false, false));
                 };
-        var noUnverifiedBlock = (co.surumene.simplecoins.domain.SettlementScanRunner.BlockOwnerLookup)
-                (sourceWorld, position) -> {
-                    throw new IOException("Unexpected unverified SAVED BlockEntity in WCL-only fixture: "
-                            + sourceWorld + "/" + position);
-                };
         var noPositiveLive = (co.surumene.simplecoins.domain.HybridLiveSourceStage.Classifier)
                 (source, value) -> {
                     if (value.amount().signum() != 0)
@@ -1639,27 +1634,33 @@ public final class WclServicesProbe extends JavaPlugin {
         var budgets = new PaperLiveUniverseAssets.Budget(
                 1, 4096, 4096, 4096, 131072, 1,
                 2 * 1024 * 1024, 16 * 1024 * 1024);
+        int chestX = FAR_CHUNK * 16 + 5;
+        int chestZ = FAR_CHUNK * 16 + 5;
+        // One real PAPER chest tile+palette+5,000C stored by first Paper
+        // process. BlockLocker is intentionally ABSENT from this fixture.
+        // These explicit positive ExternalProof flags model the isolated
+        // test assumption only; no actual deployed whole-writer epoch.
+        if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null)
+            throw new IOException("Expected isolated no-BlockLocker fixture");
+        var terrain = co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations.capture(
+                manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
+                4096, Set.of("[Private]"), Set.of("[More Users]"),
+                Set.of("Everyone"), raw -> raw);
+        if (terrain.chests().size() != 1
+                || terrain.chests().getFirst().observation().storageMembers().stream()
+                    .noneMatch(p -> p.x() == chestX && p.y() == 121 && p.z() == chestZ))
+            throw new IOException("Exact physical SAVED BlockLocker source is missing/ambiguous");
+        var knownNonProtection =
+                (co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations
+                        .Snapshot.IndependentProofs) observed -> new
+                        co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
+                        .ExternalProof(true, true, true, true, true);
+        var unknownProtection =
+                (co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations
+                        .Snapshot.IndependentProofs) observed ->
+                        co.surumene.simplecoins.domain.SavedBlockLockerOwnerCandidate
+                                .ExternalProof.unknown();
 
-        // 1. Real LIVE source capture + automatically selected LIVE WCL
-        //    + full actual saved source traversal (NOT two isolated totals).
-        var first = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
-        var live = first.includeDiscoveredLoadedWcl(this);
-        if (live.holders().stream().anyMatch(e ->
-                e.entity().getUniqueId().equals(chickenId)
-                || e.entity().getUniqueId().equals(wolfId)
-                || e.entity().getUniqueId().equals(nearChickenId)
-                || e.entity().getUniqueId().equals(nearWolfId)))
-            throw new IOException("Unloaded saved WCL fixture leaked into LIVE discovery");
-        var selected = first.stageCandidateWithSavedWcl(
-                this, Map.of(world.getName(), world.getUID()),
-                manifest, scope, Set.of(), noUnverifiedBlock, owners,
-                2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
-        verifyCompleteUnpublishedWclCandidate(selected, manifest,
-                chickenId, wolfId, nearChickenId, nearWolfId);
-        getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
-
-        // 2. A declared fixture-only BAN provider: this tests source-local
-        //    BAN/pl-data propagation, NOT complete deployed IP/external BAN.
         String fixtureProvider = "fixture-ban-status";
         var clear = new co.surumene.simplecoins.domain.BanEvidence.Source(
                 fixtureProvider,
@@ -1668,18 +1669,43 @@ public final class WclServicesProbe extends JavaPlugin {
                 Set.of(fixtureProvider),
                 Map.of(PERSISTENCE_FOLLOW, List.of(clear),
                        WOLF_COMMANDER, List.of(clear)));
-        var second = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
-        second.includeDiscoveredLoadedWcl(this);
-        var stagedCovered = second.stageCandidateWithSavedWclAndBanCoverage(
-                this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                covered, noUnverifiedBlock, owners,
+        var ownerIndex = co.surumene.simplecoins.domain
+                .SavedBlockLockerSettlementOwnerLookup.fromCaptured(
+                        terrain, manifest, covered, knownNonProtection);
+
+        // 1. Existing product WCL+BAN path with genuine physical terrain
+        //    owner index; the same staged accumulator owns every monetary slot.
+        var first = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        var live = first.includeDiscoveredLoadedWcl(this);
+        if (live.holders().stream().anyMatch(e ->
+                e.entity().getUniqueId().equals(chickenId)
+                || e.entity().getUniqueId().equals(wolfId)
+                || e.entity().getUniqueId().equals(nearChickenId)
+                || e.entity().getUniqueId().equals(nearWolfId)))
+            throw new IOException("Unloaded SAVED WCL fixture leaked into LIVE discovery");
+        var selected = first.stageCandidateWithSavedWclAndBanCoverage(
+                this, Map.of(world.getName(), world.getUID()),
+                manifest, scope, covered, ownerIndex.sourceScoped(), owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
-        verifyCompleteUnpublishedWclCandidate(stagedCovered, manifest,
+        verifyCompleteUnpublishedWclCandidate(selected, manifest,
                 chickenId, wolfId, nearChickenId, nearWolfId);
+        getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
         getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
 
-        // 3. Missing declared BAN evidence for one actual persisted
-        //    commander must invalidate the WHOLE new candidate, never CLEAR.
+        // 2. New typed product composition must consume the same real
+        //    BlockLocker terrain receipt and WCL/WWC/WWW sources at once.
+        var second = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        second.includeDiscoveredLoadedWcl(this);
+        var stagedCombined = second.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
+                this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                covered, terrain, knownNonProtection, owners,
+                2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        verifyCompleteUnpublishedWclCandidate(stagedCombined, manifest,
+                chickenId, wolfId, nearChickenId, nearWolfId);
+        getLogger().info("PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED");
+
+        // 3. Missing BAN evidence for the actual WCL commander cannot be
+        //    treated as CLEAR, even though the chest is verified FREE.
         var incomplete = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
                 Set.of(fixtureProvider),
                 Map.of(PERSISTENCE_FOLLOW, List.of(clear)));
@@ -1687,9 +1713,9 @@ public final class WclServicesProbe extends JavaPlugin {
         third.includeDiscoveredLoadedWcl(this);
         boolean absentOwnerRejected = false;
         try {
-            third.stageCandidateWithSavedWclAndBanCoverage(
+            third.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
                     this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                    incomplete, noUnverifiedBlock, owners,
+                    incomplete, terrain, knownNonProtection, owners,
                     2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         } catch (IOException expected) {
             absentOwnerRejected = expected.getMessage() != null
@@ -1697,11 +1723,41 @@ public final class WclServicesProbe extends JavaPlugin {
             if (!absentOwnerRejected) throw expected;
         }
         if (!absentOwnerRejected)
-            throw new IOException("Missing WCL owner BAN evidence still returned a candidate");
+            throw new IOException("Missing actual WCL BAN evidence returned a hybrid candidate");
+        getLogger().info("PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED");
+
+        // 4. UNKNOWN local BlockLocker proof makes a fully populated WCL
+        //    candidate impossible, and MUST consume this LIVE snapshot too.
+        var fourth = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        fourth.includeDiscoveredLoadedWcl(this);
+        boolean unprovenChestRejected = false;
+        try {
+            fourth.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
+                    this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                    covered, terrain, unknownProtection, owners,
+                    2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        } catch (IOException expected) {
+            unprovenChestRejected = true;
+        }
+        if (!unprovenChestRejected)
+            throw new IOException("UNKNOWN chest protection was falsely treated as FREE");
+        boolean reuseDenied = false;
+        try {
+            fourth.stageCandidateWithSavedWclAndBanCoverage(
+                    this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                    covered, ownerIndex.sourceScoped(), owners,
+                    2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        } catch (IllegalStateException expected) {
+            reuseDenied = expected.getMessage() != null
+                    && expected.getMessage().contains("already consumed");
+        }
+        if (!reuseDenied)
+            throw new IOException("Failed BlockLocker proof allowed stale LIVE capture reuse");
         if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
             throw new IOException("Full hybrid verification loaded SAVED-only fixture Chunk");
+        terrain.witness().requireUnchanged();
         manifest.requireUnchangedDiscovery();
-        getLogger().info("PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED");
+        getLogger().info("PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED");
     }
 
     private static void verifyCompleteUnpublishedWclCandidate(
@@ -1716,8 +1772,8 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IOException("Whole hybrid did not retain all required saved sources");
         var result = selected.pending().commit(); // local-only, never publish
         if (!BigInteger.valueOf(50000).equals(result.dead())
-                || result.free().signum() != 0
-                || result.statistics().worldTotal().signum() != 0
+                || !BigInteger.valueOf(5000).equals(result.free())
+                || !BigInteger.valueOf(5000).equals(result.statistics().worldTotal())
                 || result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0)
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(chickenId.toString())
@@ -1737,7 +1793,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(nearWolfId.toString())
                         && e.value().equals(BigInteger.valueOf(5000))))
-            throw new IOException("Full hybrid WCL source lost/doubled 50000C or classified owners");
+            throw new IOException("Full hybrid WCL/chest sources lost/doubled 55000C or classified owners");
         selected.savedContentWitness().requireUnchanged();
         manifest.requireUnchangedDiscovery();
     }
