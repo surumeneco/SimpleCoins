@@ -28,6 +28,25 @@ public final class NativeSaveHook {
     }
 
 
+    // Independent NMS-root proof only. Hold AFTER the real NMS root has
+    // entered the shared family counter and BEFORE it writes playerdata.
+    // Never enabled by the normal nested-Craft test or production plugin.
+    private static final java.util.concurrent.CountDownLatch HELD_NMS_ENTERED =
+            new java.util.concurrent.CountDownLatch(1);
+    private static final java.util.concurrent.CountDownLatch HELD_NMS_RELEASE =
+            new java.util.concurrent.CountDownLatch(1);
+    private static final java.util.concurrent.atomic.AtomicBoolean HELD_NMS_ONCE =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    public static boolean awaitNmsSaveEntry(long timeoutMillis) throws InterruptedException {
+        return HELD_NMS_ENTERED.await(timeoutMillis,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    public static void releaseHeldNmsSave() {
+        HELD_NMS_RELEASE.countDown();
+    }
+
     // Shared, test-only gate for the exact synchronous CraftPlayer -> NMS
     // method nesting. Thread-local ancestry is NOT an async handoff token.
     private static final Object FAMILY_LOCK = new Object();
@@ -242,6 +261,22 @@ public final class NativeSaveHook {
     public static void beforeNmsSave() {
         if (Boolean.getBoolean("a02.nativeAgent.trackNativeFamily")) {
             enterNativeFamily("NMS");
+            if (Boolean.getBoolean("a02.nativeAgent.holdInsideNms")) {
+                if (!HELD_NMS_ONCE.compareAndSet(false, true))
+                    throw new IllegalStateException("A02 held NMS root entered more than once");
+                System.out.println("PAPER_A02_NATIVE_ALREADY_ADMITTED_NMS_ROOT_HELD_OPEN");
+                HELD_NMS_ENTERED.countDown();
+                try {
+                    if (!HELD_NMS_RELEASE.await(20, java.util.concurrent.TimeUnit.SECONDS))
+                        throw new IllegalStateException("A02 admitted NMS root hold timed out");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("A02 admitted NMS root interrupted", interrupted);
+                }
+                if (!Boolean.getBoolean("a02.nativeAgent.closed"))
+                    throw new IllegalStateException("NMS root released before admission closure");
+                System.out.println("PAPER_A02_NATIVE_ALREADY_ADMITTED_NMS_ROOT_RELEASED_CLOSED");
+            }
             return;
         }
         if (Boolean.getBoolean("a02.nativeAgent.closed")) {
