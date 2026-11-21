@@ -23,6 +23,9 @@ import co.surumene.simplecoins.paper.PaperWwcDisplayPhysicalAlias;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.ResolvedEntitySettlementImport;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
+import co.surumene.whatawonderfulchicken.WhatAWonderfulChickenPlugin;
+import co.surumene.whatawonderfulchicken.service.WonderfulChickenStore;
+import co.surumene.whatawonderfulchicken.data.WonderfulChickenData;
 import co.surumene.www.WhatAWonderfulWolfPlugin;
 import co.surumene.www.spawn.WonderfulWolfFactory;
 import co.surumene.www.spawn.WonderfulWolfCreationResult;
@@ -153,6 +156,11 @@ public final class WclServicesProbe extends JavaPlugin {
                 verifySerializedWclValuationBoundaries(world);
                 verifyCrossProviderWalletIdentity(world);
                 String phase = System.getProperty("a05.probe.phase", "baseline");
+                if (Boolean.getBoolean("a01.moneyOwnerWriterProbe")) {
+                    if (!"baseline".equals(phase) || withBlockLocker())
+                        throw new IOException("A01 LIVE writer experiment must use isolated baseline only");
+                    verifyActualWwcOwnerWriter(selected, world);
+                }
                 switch (phase) {
                     case "baseline" -> { }
                     case "persist" -> {
@@ -389,9 +397,126 @@ public final class WclServicesProbe extends JavaPlugin {
                         + " DEAD=" + result.dead()
                         + " worldTotal=" + result.statistics().worldTotal());
             getLogger().info("PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED");
+            if (Boolean.getBoolean("a01.moneyOwnerWriterProbe")) {
+                if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+                    throw new IOException("Real WWW writer requires zero-player Paper main thread");
+                UUID secondCommander =
+                        UUID.fromString("00000000-0000-0000-0000-00000000a073");
+                byte[] originalMainhand =
+                        wolf.getEquipment().getItemInMainHand().serializeAsBytes();
+                // Actual shipped WWW loaded writer, not manually written PDC.
+                var updated = individual.withCommandState(Mode.FOLLOW,
+                        Optional.of(secondCommander), ActionDistance.NORMAL,
+                        Optional.empty());
+                www.loadedIndividuals().saveAndRegister(wolf, updated);
+                var observedNext = PaperWonderfulLiveCandidates.collect(
+                        this, wolf, "www", new java.util.HashSet<>(),
+                        2 * 1024 * 1024, 16 * 1024 * 1024);
+                if (!commander.equals(candidate.ownerEvidence().owner())
+                        || !secondCommander.equals(observedNext.ownerEvidence().owner())
+                        || !secondCommander.equals(www.loadedIndividuals().find(wolf.getUniqueId())
+                                .orElseThrow().commanderId().orElseThrow())
+                        || !candidate.slotValues().equals(observedNext.slotValues())
+                        || !BigInteger.valueOf(10000).equals(observedNext.slotValues().get("weapon"))
+                        || !BigInteger.valueOf(5000).equals(observedNext.slotValues().get("cargo:7"))
+                        || !Arrays.equals(originalMainhand,
+                                wolf.getEquipment().getItemInMainHand().serializeAsBytes())
+                        || !Arrays.equals(candidate.sourceItems().get("weapon").bytes(),
+                                observedNext.sourceItems().get("weapon").bytes())
+                        || !Arrays.equals(candidate.sourceItems().get("cargo:7").bytes(),
+                                observedNext.sourceItems().get("cargo:7").bytes()))
+                    throw new IOException("WWW real owner writer altered monetary ItemStacks"
+                            + " or was invisible to the product WCL source");
+                getLogger().info("PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED"
+                        + " value=15000 previous=" + commander + " new=" + secondCommander);
+            }
         } finally {
             www.loadedIndividuals().unregister(wolf);
             wolf.remove();
+        }
+    }
+
+
+    /**
+     * A01/G0: invoke the real shipped WWC plugin's currently loaded
+     * WonderfulChickenStore.save (not synthetic PDC fabrication). An actual
+     * Chicken's WCL-owned 10,000C does not change, while its follow_target
+     * changes. This is a positive reachability proof of one LIVE owner writer,
+     * NOT a claim that it is blocked by a global settlement writer epoch.
+     */
+    private void verifyActualWwcOwnerWriter(
+            Map<String, WonderfulStorageReader> readers, World world) throws Exception {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IOException("Real WWC owner writer requires default-deny main-thread baseline");
+        var plugin = (WhatAWonderfulChickenPlugin)
+                Bukkit.getPluginManager().getPlugin("WhatAWonderfulChicken");
+        if (plugin == null || !plugin.isEnabled())
+            throw new IOException("Shipped WWC must be active for real store write");
+        // Use the *actual registered plugin's* initialized store, not an
+        // independent clone or a test-created fake persistence implementation.
+        var field = WhatAWonderfulChickenPlugin.class.getDeclaredField("store");
+        field.setAccessible(true);
+        Object instance = field.get(plugin);
+        if (!(instance instanceof WonderfulChickenStore store))
+            throw new IOException("WWC plugin does not own a genuine loaded store");
+        Chunk fixture = world.getChunkAt(3, 3);
+        if (!fixture.isLoaded())
+            throw new IOException("WWC owner writer chunk not physically loaded");
+        UUID firstOwner = UUID.fromString("00000000-0000-0000-0000-00000000a071");
+        UUID secondOwner = UUID.fromString("00000000-0000-0000-0000-00000000a072");
+        Chicken chicken = world.spawn(new Location(world, 52.5, 120, 52.5), Chicken.class);
+        try {
+            var data = new WonderfulChickenData();
+            data.followTarget(firstOwner);
+            data.shulkerBox(ItemStack.deserializeBytes(createMoneyShulker()));
+            store.save(chicken, data);
+            var pdc = chicken.getPersistentDataContainer();
+            var ownerKey = new NamespacedKey("whatawonderfulchicken", "follow_target");
+            var shulkerKey = new NamespacedKey("whatawonderfulchicken", "equipment_shulker_box");
+            byte[] firstBytes = pdc.get(shulkerKey, PersistentDataType.BYTE_ARRAY);
+            if (!firstOwner.toString().equals(pdc.get(ownerKey, PersistentDataType.STRING))
+                    || firstBytes == null)
+                throw new IOException("Real WWC save did not publish owner and saved shulker PDC");
+            var before = success(readers.get("wwc").readStored(
+                    chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                    "WWC genuine store before owner move");
+            var firstValues = PaperWonderfulSnapshotAssets.slotValues(
+                    PaperWonderfulLoadedEvidence.readStored(this,
+                            chicken.getUniqueId(), world.getUID(), "wwc", pdc)
+                            .snapshot().orElseThrow(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!firstOwner.equals(before.relationships().get("follow_target"))
+                    || before.items().size() != 1
+                    || !BigInteger.valueOf(10000).equals(firstValues.get("shulker")))
+                throw new IOException("WWC genuine first owner/value not observed by product");
+            // One genuine plugin-owned LIVE writer changes the monetary owner,
+            // without changing coins, their physical slot or any player count.
+            data.followTarget(secondOwner);
+            store.save(chicken, data);
+            var after = success(readers.get("wwc").readStored(
+                    chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                    "WWC genuine store after owner move");
+            var finalValues = PaperWonderfulSnapshotAssets.slotValues(
+                    PaperWonderfulLoadedEvidence.readStored(this,
+                            chicken.getUniqueId(), world.getUID(), "wwc", pdc)
+                            .snapshot().orElseThrow(),
+                    2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!secondOwner.toString().equals(pdc.get(ownerKey, PersistentDataType.STRING))
+                    || !secondOwner.equals(after.relationships().get("follow_target"))
+                    || !firstOwner.equals(before.relationships().get("follow_target"))
+                    || !Arrays.equals(firstBytes,
+                            pdc.get(shulkerKey, PersistentDataType.BYTE_ARRAY))
+                    || !Arrays.equals(before.items().getFirst().bytes(),
+                            after.items().getFirst().bytes())
+                    || !firstValues.equals(finalValues)
+                    || !BigInteger.valueOf(10000).equals(finalValues.get("shulker"))
+                    || !Bukkit.getOnlinePlayers().isEmpty())
+                throw new IOException("Real WWC write changed money or failed to change LIVE owner");
+            getLogger().info("PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED"
+                    + " value=10000 previous=" + firstOwner + " new=" + secondOwner);
+        } finally {
+            store.invalidate(chicken);
+            chicken.remove();
         }
     }
 
