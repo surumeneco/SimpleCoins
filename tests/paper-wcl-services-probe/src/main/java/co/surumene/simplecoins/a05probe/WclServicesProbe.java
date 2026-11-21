@@ -400,6 +400,18 @@ public final class WclServicesProbe extends JavaPlugin {
             if (Boolean.getBoolean("a01.moneyOwnerWriterProbe")) {
                 if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
                     throw new IOException("Real WWW writer requires zero-player Paper main thread");
+                // A05 safety: reuse the REAL captured source and staged
+                // candidate path, not a fabricated local pre/post boolean.
+                // Capture WCL owner A before the actual WWW plugin writes B.
+                // The earlier publisher-less success must stay compatible,
+                // but THIS new candidate has stale WCL owner and must HOLD.
+                var untrustedOldCapture = PaperCapturedHybridSettlement.capture(
+                        List.of(world),
+                        new PaperLiveUniverseAssets.Budget(
+                                1, 4096, 4096, 4096, 131072, 1,
+                                2 * 1024 * 1024, 16 * 1024 * 1024));
+                untrustedOldCapture.includeLoadedWcl(this, wolf, "www",
+                        2 * 1024 * 1024, 16 * 1024 * 1024);
                 UUID secondCommander =
                         UUID.fromString("00000000-0000-0000-0000-00000000a073");
                 byte[] originalMainhand =
@@ -429,6 +441,31 @@ public final class WclServicesProbe extends JavaPlugin {
                             + " or was invisible to the product WCL source");
                 getLogger().info("PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED"
                         + " value=15000 previous=" + commander + " new=" + secondCommander);
+                // Without an in-process WCL freshness check, the unchanged
+                // monetary sum would let this stale owner-A capture stage after
+                // actual WWW's owner-B mutation, while saved MCA is irrelevant.
+                try {
+                    var candidateAfterWriter = untrustedOldCapture.stageCandidate(
+                            new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                            new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                            (sourceWorld, position) -> null,
+                            (sourceWorld, savedChunk) -> Map.of(),
+                            2 * 1024 * 1024, 16 * 1024 * 1024,
+                            (source, value) -> new SettlementAccumulator.Asset(
+                                    source.id(), value.physicalKey(), value.world(),
+                                    value.physicalKey().equals("world/" + world.getName()
+                                            + "/entity/" + wolf.getUniqueId() + "/equipment/mainhand")
+                                            ? commander : null,
+                                    false, false, false,
+                                    value.amount(), value.physicalKey()));
+                    candidateAfterWriter.pending().commit();
+                    throw new IOException("Unsafe stale WWW owner was staged after actual plugin write");
+                } catch (IOException failedClosed) {
+                    if (!failedClosed.getMessage().startsWith(
+                            "LIVE WCL holder changed during saved stage:"))
+                        throw failedClosed;
+                }
+                getLogger().info("PAPER_A05_REAL_WWW_STALE_LIVE_OWNER_CANDIDATE_REJECTED_PASSED");
             }
         } finally {
             www.loadedIndividuals().unregister(wolf);
