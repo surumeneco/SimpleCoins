@@ -1118,6 +1118,18 @@ public final class WclServicesProbe extends JavaPlugin {
         pdc.set(new NamespacedKey("whatawonderfulwolf", "runtime_state"),
                 PersistentDataType.BYTE_ARRAY, runtime);
         assertPersistedWolf(providers.get("www"), wolf.getUniqueId(), world.getUID(), pdc, coins);
+        // Additional authentic saved BlockEntity, intentionally in the same
+        // FAR UNLOADED Chunk as the external-WCL entities. The LIVE source
+        // capture cannot see it, so the 5,000C must be accounted via the
+        // selected SAVED terrain Region and source-scoped BlockLocker index.
+        var chestBlock = world.getBlockAt((int) anchor + 5, 121, (int) anchor + 5);
+        chestBlock.setType(Material.CHEST);
+        if (!(chestBlock.getState() instanceof org.bukkit.block.Chest chest))
+            throw new IOException("Far physical chest failed to initialize");
+        chest.getBlockInventory().setItem(0, coins.create(CoinDenomination.FIVE_THOUSAND, 1));
+        chest.update(true, false);
+        if (chest.getBlockInventory().getItem(0) == null)
+            throw new IOException("Far physical 5000C chest was not filled");
         Files.writeString(farWitness("wwc-uuid.txt"), chicken.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("www-uuid.txt"), wolf.getUniqueId().toString() + "\n");
         Files.writeString(farWitness("wwc-shulker.b64"),
