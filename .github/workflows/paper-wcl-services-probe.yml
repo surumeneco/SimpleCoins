@@ -72,6 +72,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a05.wcl-verified-traversal-paper.md'
       - 'Lifecycle/Works/simplecoins.a05.paper-discovered-source-closure-proof.md'
       - 'Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md'
+      - 'Lifecycle/Works/simplecoins.a01.real-wwc-www-live-owner-writer.md'
 permissions:
   contents: read
 
@@ -122,6 +123,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.real-wwc-www-live-owner-writer.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.softdepend-distributed-plugin-names.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
@@ -290,7 +293,7 @@ jobs:
           cd smoke
           set +e
           timeout --signal=TERM --kill-after=5s 180s \
-            java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a05.log 2>&1
+            java -Da01.moneyOwnerWriterProbe=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a05.log 2>&1
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -307,6 +310,8 @@ jobs:
           grep -F 'PAPER_A05_PRODUCT_LOADED_WWC_SHULKER_VALUE_10000_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_WCL_HYBRID_UNPUBLISHED_STAGE_PASSED' paper-a05.log
           grep -F 'PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED' paper-a05.log
+          grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' paper-a05.log
+          grep -F 'PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED' paper-a05.log
           grep -F 'PAPER_A05_AUTO_DISCOVERED_LOADED_WCL_STAGE_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_WCL_VALUE_ZERO_AND_MALFORMED_REJECTION_PASSED' paper-a05.log
           grep -F 'PAPER_A05_PRODUCT_CROSS_WCL_CLONED_WALLET_REJECTED_PASSED' paper-a05.log
