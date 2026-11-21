@@ -405,11 +405,76 @@ jobs:
             esac
           done
           echo 'PAPER_A05_REAL_SAVED_ENTITY_CURRENCY_CROSS_RESTART_PASSED'
+      - name: Verify same real Paper saved generation with distributed BlockLocker, WWC and WWW
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A second *independent* world; never mutate the old three-phase
+          # WCL fixture and never call the source scan against a live server.
+          mkdir -p smoke-blocklocker/plugins
+          cp smoke/paper.jar smoke-blocklocker/paper.jar
+          for jar in SimpleCoinsGuard.jar SimpleCoins.jar WonderfulGenomeLib.jar \
+              WonderfulCoreLibrary.jar WhatAWonderfulChicken.jar \
+              WhatAWonderfulWolf.jar StorageProbe.jar; do
+            cp "smoke/plugins/$jar" "smoke-blocklocker/plugins/$jar"
+          done
+          curl -fLsS --retry 3 \
+            'https://github.com/rutgerkok/BlockLocker/releases/download/v1.15/blocklocker-1.15.jar' \
+            -o smoke-blocklocker/plugins/blocklocker-1.15.jar
+          echo '8e21655ce029c2fe17b62568b2fefbe24e90b98543dfe54990777529edc0b962  smoke-blocklocker/plugins/blocklocker-1.15.jar' | sha256sum -c -
+          printf 'eula=true\n' > smoke-blocklocker/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25596\n' \
+            > smoke-blocklocker/server.properties
+          cd smoke-blocklocker
+          for phase in persist reload; do
+            set +e
+            timeout --signal=TERM --kill-after=5s 180s \
+              java -Da05.probe.phase="$phase" -Da05.probe.blocklocker=true \
+                -Xms256M -Xmx1024M -jar paper.jar nogui \
+              </dev/null > "paper-a04-a05-$phase.log" 2>&1
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "Combined BlockLocker/WCL Paper phase=$phase exit=$status" >&2
+              tail -180 "paper-a04-a05-$phase.log"
+              exit 1
+            fi
+            grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' \
+              "paper-a04-a05-$phase.log"
+            grep -F 'SIMPLECOINS_WCL_REGISTRATION_OBSERVED status=PRESENT reason=two-registration-sources-present' \
+              "paper-a04-a05-$phase.log"
+            grep -F 'PAPER_A05_BOTH_PACKAGED_STORAGE_SERVICES_REGISTERED_PASSED' \
+              "paper-a04-a05-$phase.log"
+            if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' "paper-a04-a05-$phase.log"; then
+              tail -180 "paper-a04-a05-$phase.log"
+              exit 1
+            fi
+            if [ "$phase" = persist ]; then
+              grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_BOTH_PHYSICAL_SIGNS_SEEDED_PASSED' \
+                "paper-a04-a05-$phase.log"
+              test -s world/dimensions/minecraft/overworld/region/r.1.1.mca
+              test -s world/dimensions/minecraft/overworld/entities/r.1.1.mca
+            else
+              grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A05_UNLOADED_WWC_WWW_SAVED_NBT_TO_REAL_WCL_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000_PRIVATE_DEAD_EVERYONE_FREE_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' \
+                "paper-a04-a05-$phase.log"
+            fi
+          done
+          echo 'PAPER_A04_A05_REAL_DISTRIBUTED_BLOCKLOCKER_WCL_SAVED_GENERATION_PASSED'
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-a05-multi-provider-log
-          path: smoke/*.log
+          path: |
+            smoke/*.log
+            smoke-blocklocker/*.log
           if-no-files-found: ignore
           retention-days: 7
