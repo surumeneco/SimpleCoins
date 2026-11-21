@@ -1685,12 +1685,25 @@ public final class WclServicesProbe extends JavaPlugin {
                 Set.of(fixtureProvider),
                 Map.of(PERSISTENCE_FOLLOW, List.of(clear),
                        WOLF_COMMANDER, List.of(clear)));
-        var ownerIndex = co.surumene.simplecoins.domain
-                .SavedBlockLockerSettlementOwnerLookup.fromCaptured(
-                        terrain, manifest, covered, knownNonProtection);
+        // Explicit fixture-only ownership for OTHER saved container types.
+        // The A04 BlockLocker source proof is valid only for physical chests.
+        // The product must never silently assume a barrel/furnace/shulker is
+        // FREE; the caller supplies this independent source-scoped authority.
+        var nonChestOwners =
+                (co.surumene.simplecoins.domain.SettlementScanRunner.SourceBlockOwnerLookup)
+                (source, chunk, position) -> {
+                    if (Bukkit.getPluginManager().getPlugin("BlockLocker") != null
+                            || source.kind() != WorldStorageDiscovery.Kind.REGION
+                            || !manifest.worldFiles().contains(source)
+                            || !source.world().equals(world.getName()))
+                        throw new IOException("Non-chest SAVED fixture owner lacks declared proof");
+                    return new co.surumene.simplecoins.domain.BlockEntitySettlementImport
+                            .Ownership(null, false, false, false);
+                };
 
-        // 1. Existing product WCL+BAN path with genuine physical terrain
-        //    owner index; the same staged accumulator owns every monetary slot.
+        // All real SAVED blocks and WCL slots are staged in ONE accumulated
+        // candidate. The product router sends actual chests to A04 and every
+        // other physically verified container to the independent resolver.
         var first = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
         var live = first.includeDiscoveredLoadedWcl(this);
         if (live.holders().stream().anyMatch(e ->
@@ -1699,25 +1712,14 @@ public final class WclServicesProbe extends JavaPlugin {
                 || e.entity().getUniqueId().equals(nearChickenId)
                 || e.entity().getUniqueId().equals(nearWolfId)))
             throw new IOException("Unloaded SAVED WCL fixture leaked into LIVE discovery");
-        var selected = first.stageCandidateWithSavedWclAndBanCoverage(
-                this, Map.of(world.getName(), world.getUID()),
-                manifest, scope, covered, ownerIndex.sourceScoped(), owners,
+        var selected = first.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
+                this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                covered, terrain, knownNonProtection, nonChestOwners, owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         verifyCompleteUnpublishedWclCandidate(selected, manifest,
                 chickenId, wolfId, nearChickenId, nearWolfId);
         getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
         getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
-
-        // 2. New typed product composition must consume the same real
-        //    BlockLocker terrain receipt and WCL/WWC/WWW sources at once.
-        var second = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
-        second.includeDiscoveredLoadedWcl(this);
-        var stagedCombined = second.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
-                this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                covered, terrain, knownNonProtection, owners,
-                2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
-        verifyCompleteUnpublishedWclCandidate(stagedCombined, manifest,
-                chickenId, wolfId, nearChickenId, nearWolfId);
         getLogger().info("PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED");
 
         // 3. Missing BAN evidence for the actual WCL commander cannot be
@@ -1731,7 +1733,7 @@ public final class WclServicesProbe extends JavaPlugin {
         try {
             third.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
                     this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                    incomplete, terrain, knownNonProtection, owners,
+                    incomplete, terrain, knownNonProtection, nonChestOwners, owners,
                     2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         } catch (IOException expected) {
             absentOwnerRejected = expected.getMessage() != null
@@ -1750,7 +1752,7 @@ public final class WclServicesProbe extends JavaPlugin {
         try {
             fourth.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
                     this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                    covered, terrain, unknownProtection, owners,
+                    covered, terrain, unknownProtection, nonChestOwners, owners,
                     2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         } catch (IOException expected) {
             unprovenChestRejected = true;
@@ -1759,9 +1761,9 @@ public final class WclServicesProbe extends JavaPlugin {
             throw new IOException("UNKNOWN chest protection was falsely treated as FREE");
         boolean reuseDenied = false;
         try {
-            fourth.stageCandidateWithSavedWclAndBanCoverage(
+            fourth.stageCandidateWithCapturedBlockLockerAndSavedWclAndBanCoverage(
                     this, Map.of(world.getName(), world.getUID()), manifest, scope,
-                    covered, ownerIndex.sourceScoped(), owners,
+                    covered, terrain, knownNonProtection, nonChestOwners, owners,
                     2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
         } catch (IllegalStateException expected) {
             reuseDenied = expected.getMessage() != null
