@@ -1652,10 +1652,20 @@ public final class WclServicesProbe extends JavaPlugin {
                 manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
                 4096, Set.of("[Private]"), Set.of("[More Users]"),
                 Set.of("Everyone"), raw -> raw);
-        if (terrain.chests().size() != 1
-                || terrain.chests().getFirst().observation().storageMembers().stream()
-                    .noneMatch(p -> p.x() == chestX && p.y() == 121 && p.z() == chestZ))
-            throw new IOException("Exact physical SAVED BlockLocker source is missing/ambiguous");
+        // Full discovered terrain may contain other genuine vanilla chests
+        // from generated structures. Refusing or ignoring them just to keep
+        // a one-chest oracle would misrepresent the required source universe.
+        long exactMonetaryChest = terrain.chests().stream().filter(observed ->
+                observed.world().equals(world.getName())
+                && observed.observation().storageMembers().stream().anyMatch(p ->
+                        p.x() == chestX && p.y() == 121 && p.z() == chestZ)).count();
+        if (exactMonetaryChest != 1)
+            throw new IOException("Exact physical SAVED chest missing/ambiguous"
+                    + " expected=" + chestX + ",121," + chestZ
+                    + " matches=" + exactMonetaryChest
+                    + " actualChestGroups=" + terrain.chests().size()
+                    + " observed=" + terrain.chests().stream().limit(12)
+                        .map(e -> e.observation().storageMembers().toString()).toList());
         var knownNonProtection =
                 (co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations
                         .Snapshot.IndependentProofs) observed -> new
