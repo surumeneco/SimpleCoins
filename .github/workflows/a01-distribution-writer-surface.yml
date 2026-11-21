@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/MineCraftXPlayServer
-          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          ref: 79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e
           path: pinned-server
           sparse-checkout: |
             plugins
@@ -49,11 +49,11 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C pinned-server rev-parse HEAD)" = \
-            "90aa2d0e0a5ea80c705fd67d717f463decaf2a32"
+            "79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e"
           for item in \
             'WonderfulCoreLibrary-0.1.0.jar' \
-            'WhatAWonderfulChicken-2.1.0.jar' \
-            'WhatAWonderfulWolf-1.1.1.jar' \
+            'WhatAWonderfulChicken-2.1.1.jar' \
+            'WhatAWonderfulWolf-1.1.2.jar' \
             'blocklocker-1.15.jar'; do
             test -s "pinned-server/plugins/$item"
           done
@@ -62,15 +62,15 @@ jobs:
             --output writer-surface-report.json \
             --max-examples 20 \
             --require WonderfulCoreLibrary-0.1.0.jar \
-            --require WhatAWonderfulChicken-2.1.0.jar \
-            --require WhatAWonderfulWolf-1.1.1.jar \
+            --require WhatAWonderfulChicken-2.1.1.jar \
+            --require WhatAWonderfulWolf-1.1.2.jar \
             --require blocklocker-1.15.jar
           python - <<'PY'
           import json
           from pathlib import Path
           report = json.loads(Path('writer-surface-report.json').read_text(encoding='utf-8'))
           assert report['kind'] == 'STATIC_CANDIDATE_CALL_REFERENCES_ONLY'
-          assert len(report['jars']) >= 4
+          assert len(report['jars']) == 24  # same complete current distribution
           groups = ['INVENTORY_WRITE','PDC_WRITE','WORLD_WRITE','STORED_FILE_WRITE',
                     'PLAYERDATA_SAVE','NMS_MUTATION','ASYNC_ENTRY','DYNAMIC_DISPATCH']
           for group in groups:
@@ -78,8 +78,8 @@ jobs:
           assert sum(j['classes'] for j in report['jars']) > 0
           # Focus on packaged code paths relevant to offline playerdata and
           # plugin-owned inventory changes. These are SYMBOLIC references.
-          interesting = {'InvSee++.jar', 'WhatAWonderfulChicken-2.1.0.jar',
-                         'WhatAWonderfulWolf-1.1.1.jar', 'blocklocker-1.15.jar'}
+          interesting = {'InvSee++.jar', 'WhatAWonderfulChicken-2.1.1.jar',
+                         'WhatAWonderfulWolf-1.1.2.jar', 'blocklocker-1.15.jar'}
           for jar in report['jars']:
               if jar['jar'] not in interesting:
                   continue
@@ -133,6 +133,72 @@ jobs:
           print('A01_PINNED_24_JAR_NEW_WRITER_API_CALLREFS',total_new)
           print('A01_STATIC_INVOCATION_REFERENCE_ONLY_NOT_ALL_WRITER_CLOSURE')
           PY
+      # Separate the code changed in distributed WWC/WWW from changes in
+      # the classification rules. No claim that a callref executed or that
+      # arbitrary plugin/Paper writers are fenced follows from this comparison.
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 90aa2d0e0a5ea80c705fd67d717f463decaf2a32
+          path: historical-server
+          sparse-checkout: |
+            plugins
+          persist-credentials: false
+      - name: Diff real historical versus currently distributed WWC and WWW writer callrefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-server rev-parse HEAD)" = '79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e'
+          test "$(git -C historical-server rev-parse HEAD)" = '90aa2d0e0a5ea80c705fd67d717f463decaf2a32'
+          python tools/audit_writer_surface.py \
+            --plugins historical-server/plugins \
+            --output writer-surface-historical.json \
+            --max-examples 20 \
+            --require WonderfulCoreLibrary-0.1.0.jar \
+            --require WhatAWonderfulChicken-2.1.0.jar \
+            --require WhatAWonderfulWolf-1.1.1.jar \
+            --require blocklocker-1.15.jar
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          historical = json.loads(Path('writer-surface-historical.json').read_text(encoding='utf-8'))
+          current = json.loads(Path('writer-surface-report.json').read_text(encoding='utf-8'))
+          assert historical['kind'] == current['kind'] == 'STATIC_CANDIDATE_CALL_REFERENCES_ONLY'
+          old = {jar['jar']: jar for jar in historical['jars']}
+          new = {jar['jar']: jar for jar in current['jars']}
+          assert len(old) == len(new) == 24
+          replacements = {
+              'WhatAWonderfulChicken-2.1.0.jar': 'WhatAWonderfulChicken-2.1.1.jar',
+              'WhatAWonderfulWolf-1.1.1.jar': 'WhatAWonderfulWolf-1.1.2.jar',
+          }
+          assert set(old) - set(new) == set(replacements)
+          assert set(new) - set(old) == set(replacements.values())
+          # The remaining 22 binaries must be byte-identical, and therefore
+          # have byte-identical static callrefs under this SAME classifier.
+          for name in sorted(set(old) & set(new)):
+              for key in ('sha256', 'size', 'classes', 'method_references', 'categories'):
+                  assert old[name][key] == new[name][key], (name, key)
+          for oldname, newname in replacements.items():
+              previous, actual = old[oldname], new[newname]
+              assert previous['sha256'] != actual['sha256']
+              print('A01_DISTRIBUTED_WRITER_PLUGIN_CHANGED', oldname, newname,
+                    previous['sha256'], actual['sha256'])
+              print('A01_DISTRIBUTED_PLUGIN_CALLREF_COUNTS',
+                    oldname,previous['method_references'],
+                    newname,actual['method_references'])
+              for category in previous['categories']:
+                  before = previous['categories'][category]
+                  after = actual['categories'][category]
+                  print('A01_DISTRIBUTED_WRITER_CALLREF_DELTA',
+                        newname, category, after-before, 'before',before, 'after',after)
+              for category in ('PLAYERDATA_SAVE', 'STORED_FILE_WRITE',
+                               'INVENTORY_WRITE', 'PDC_WRITE', 'WORLD_WRITE',
+                               'NMS_MUTATION', 'ASYNC_ENTRY', 'DYNAMIC_DISPATCH'):
+                  for ref in actual['examples'].get(category, []):
+                      print('A01_CURRENT_WRITER_ENTRYPOINT',newname,category,
+                            ref['class'],ref['owner'],ref['method'])
+          print('A01_CURRENT_24_JAR_WRITER_REFS_COMPARED_NOT_G0_G3_CLOSED')
+          PY
       - name: Save exact per-JAR SHA256 writer reference evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -141,5 +207,6 @@ jobs:
           path: |
             writer-surface-report.json
             writer-surface-baseline.json
+            writer-surface-historical.json
           retention-days: 14
           if-no-files-found: ignore
