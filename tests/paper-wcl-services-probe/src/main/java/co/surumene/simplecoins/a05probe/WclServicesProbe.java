@@ -930,6 +930,13 @@ public final class WclServicesProbe extends JavaPlugin {
         Wolf wolf = world.spawn(new Location(world, 74.5, 120, 74.5), Wolf.class);
         wolf.addScoreboardTag(WOLF_PERSISTENCE_TAG);
         CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        // This persisted near WWW is part of the discovered SAVED universe.
+        // Give its runtime owner a real Paper tame-owner witness and ensure
+        // the WCL weapon is physically mirrored by the vanilla mainhand.
+        // Otherwise whole-source staging must HOLD, as the initial CI proved.
+        wolf.setOwner(Bukkit.getOfflinePlayer(WOLF_OWNER));
+        wolf.getEquipment().setItemInMainHand(
+                coins.create(CoinDenomination.TEN_THOUSAND, 1));
         byte[] runtime = wolfRuntimeFixture(WOLF_OWNER, WOLF_COMMANDER,
                 coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
                 coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
@@ -1572,6 +1579,10 @@ public final class WclServicesProbe extends JavaPlugin {
     private void verifyWholeHybridSavedWclCandidate(
             World world, WorldStorageDiscovery.Manifest manifest,
             UUID chickenId, UUID wolfId) throws Exception {
+        UUID nearChickenId = UUID.fromString(Files.readString(persistedIdFile()).strip());
+        UUID nearWolfId = UUID.fromString(Files.readString(persistedWolfIdFile()).strip());
+        if (Set.of(chickenId, wolfId, nearChickenId, nearWolfId).size() != 4)
+            throw new IOException("The full saved source fixture must contain four distinct WCL holders");
         if (!Bukkit.isPrimaryThread() || world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK)
                 || manifest.origin() == null || !manifest.playerDataFiles().isEmpty())
             throw new IOException("Whole WCL integration requires actual empty-player SAVED fixture");
@@ -1582,13 +1593,20 @@ public final class WclServicesProbe extends JavaPlugin {
                 (sourceWorld, chunk) -> {
                     if (!sourceWorld.equals(world.getName()))
                         throw new IOException("Unexpected saved Entity World source");
-                    // These two UUIDs are from the exact file-scoped Entity
-                    // observation, NOT arbitrary UUID claims for unknown entities.
+                    // Both far and near saved fixtures are mandatory members
+                    // of the discovered source universe; never silently
+                    // discard a second WCL holder to force a 25,000C total.
                     return Map.of(
                             chickenId.toString(),
                             new ResolvedEntitySettlementImport.Ownership(
                                     PERSISTENCE_FOLLOW, false, false),
+                            nearChickenId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    PERSISTENCE_FOLLOW, false, false),
                             wolfId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    WOLF_COMMANDER, false, false),
+                            nearWolfId.toString(),
                             new ResolvedEntitySettlementImport.Ownership(
                                     WOLF_COMMANDER, false, false));
                 };
@@ -1616,14 +1634,17 @@ public final class WclServicesProbe extends JavaPlugin {
         var live = first.includeDiscoveredLoadedWcl(this);
         if (live.holders().stream().anyMatch(e ->
                 e.entity().getUniqueId().equals(chickenId)
-                || e.entity().getUniqueId().equals(wolfId)))
+                || e.entity().getUniqueId().equals(wolfId)
+                || e.entity().getUniqueId().equals(nearChickenId)
+                || e.entity().getUniqueId().equals(nearWolfId)))
             throw new IOException("Unloaded saved WCL fixture leaked into LIVE discovery");
         var selected = first.stageCandidateWithSavedWcl(
                 this, Map.of(world.getName(), world.getUID()),
                 manifest, scope, Set.of(), noUnverifiedBlock, owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
-        verifyCompleteUnpublishedWclCandidate(selected, manifest, chickenId, wolfId);
-        getLogger().info("PAPER_A05_FULL_HYBRID_ACTUAL_SAVED_WWC_WWW_25000_ONCE_PASSED");
+        verifyCompleteUnpublishedWclCandidate(selected, manifest,
+                chickenId, wolfId, nearChickenId, nearWolfId);
+        getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
 
         // 2. A declared fixture-only BAN provider: this tests source-local
         //    BAN/pl-data propagation, NOT complete deployed IP/external BAN.
@@ -1641,7 +1662,8 @@ public final class WclServicesProbe extends JavaPlugin {
                 this, Map.of(world.getName(), world.getUID()), manifest, scope,
                 covered, noUnverifiedBlock, owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
-        verifyCompleteUnpublishedWclCandidate(stagedCovered, manifest, chickenId, wolfId);
+        verifyCompleteUnpublishedWclCandidate(stagedCovered, manifest,
+                chickenId, wolfId, nearChickenId, nearWolfId);
         getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
 
         // 3. Missing declared BAN evidence for one actual persisted
@@ -1672,7 +1694,8 @@ public final class WclServicesProbe extends JavaPlugin {
 
     private static void verifyCompleteUnpublishedWclCandidate(
             co.surumene.simplecoins.domain.SettlementScanRunner.Staged selected,
-            WorldStorageDiscovery.Manifest manifest, UUID chickenId, UUID wolfId)
+            WorldStorageDiscovery.Manifest manifest,
+            UUID chickenId, UUID wolfId, UUID nearChickenId, UUID nearWolfId)
             throws IOException {
         if (selected.savedContentWitness() == null
                 || !selected.requiredSourceIds().containsAll(manifest.requiredSourceIds())
@@ -1680,7 +1703,7 @@ public final class WclServicesProbe extends JavaPlugin {
                 || selected.report().playerFiles() != manifest.playerDataFiles().size())
             throw new IOException("Whole hybrid did not retain all required saved sources");
         var result = selected.pending().commit(); // local-only, never publish
-        if (!BigInteger.valueOf(25000).equals(result.dead())
+        if (!BigInteger.valueOf(50000).equals(result.dead())
                 || result.free().signum() != 0
                 || result.statistics().worldTotal().signum() != 0
                 || result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0)
@@ -1692,8 +1715,17 @@ public final class WclServicesProbe extends JavaPlugin {
                         && e.value().equals(BigInteger.valueOf(10000)))
                 || result.deadLocations().stream().noneMatch(e ->
                         e.location().contains(wolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(5000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearChickenId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearWolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearWolfId.toString())
                         && e.value().equals(BigInteger.valueOf(5000))))
-            throw new IOException("Full hybrid WCL source lost/doubled 25000C or classified owners");
+            throw new IOException("Full hybrid WCL source lost/doubled 50000C or classified owners");
         selected.savedContentWitness().requireUnchanged();
         manifest.requireUnchangedDiscovery();
     }
