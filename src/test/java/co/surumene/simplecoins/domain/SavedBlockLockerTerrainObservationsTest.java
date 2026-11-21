@@ -266,26 +266,46 @@ class SavedBlockLockerTerrainObservationsTest {
                 f.manifest(), candidate -> syntheticComplete(true)));
     }
 
-    @Test void forgedIncompleteNegativeSourceOrDuplicatePhysicalChestFailsAtomically()
+    @Test void onlyCapturedSnapshotsMayBeUsedAsOwnerEvidence() throws Exception {
+        // A Java caller must not be able to graft hand-authored protection
+        // observations onto a genuine saved-content witness.
+        assertEquals(0, SavedBlockLockerTerrainObservations.Snapshot.class
+                .getConstructors().length,
+                "No public Snapshot constructor may mint owner-eligible observations");
+        assertTrue(java.lang.reflect.Modifier.isFinal(
+                SavedBlockLockerTerrainObservations.Snapshot.class.getModifiers()));
+    }
+
+    @Test void capturedObservationsCannotBeRewrittenAfterVerifiedTraversal()
             throws Exception {
         Fixture f = fixture(false);
         var observed = capture(f);
-        var original = observed.chests().getFirst();
-        var incomplete = new SavedBlockLockerTerrainObservations.ObservedChest(
-                original.world(), List.of(original.sources().getFirst()), original.observation());
-        var forged = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(incomplete), observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> forged.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
-        var repeated = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(original, original), observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> repeated.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
-        var wrongWorld = new SavedBlockLockerTerrainObservations.Snapshot(
-                List.of(new SavedBlockLockerTerrainObservations.ObservedChest(
-                        "other-world", original.sources(), original.observation())),
-                observed.witness(), observed.report());
-        assertThrows(IOException.class, () -> wrongWorld.assembleOwnerIndex(
-                f.manifest(), candidate -> syntheticComplete(true)));
+        var chest = observed.chests().getFirst();
+        assertThrows(UnsupportedOperationException.class, () -> observed.chests().clear());
+        assertThrows(UnsupportedOperationException.class, () -> chest.sources().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> chest.observation().storageMembers().clear());
+        assertEquals(1, observed.assembleOwnerIndex(f.manifest(),
+                candidate -> syntheticComplete(true))
+                .lookup("world", CHEST_X + "," + Y + "," + Z)
+                .verifiedNonProtection() ? 1 : 0);
+    }
+
+    @Test void completeGenuinelyEmptySavedDiscoveryHasAnEmptyUnpublishedOwnerIndex()
+            throws Exception {
+        Path world = directory.resolve("empty-world");
+        Files.createDirectories(world);
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(Map.of("world", world), scope, 100);
+        var saved = SavedBlockLockerTerrainObservations.capture(
+                manifest, scope, 1024 * 1024, 4 * 1024 * 1024, 4,
+                Set.of("[Private]"), Set.of("[More Users]"), Set.of("Everyone"),
+                raw -> raw);
+        assertTrue(saved.chests().isEmpty());
+        var index = saved.assembleOwnerIndex(manifest,
+                chest -> { throw new AssertionError("No physical chest may request owner proof"); });
+        assertThrows(IOException.class, () -> index.lookup("world", "0,65,0"),
+                "An empty genuine index cannot infer unprotected ownership");
+        saved.witness().requireUnchanged();
     }
 }

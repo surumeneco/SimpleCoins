@@ -36,14 +36,35 @@ public final class SavedBlockLockerTerrainObservations {
         }
     }
 
-    public record Snapshot(
-            List<ObservedChest> chests,
-            WorldSnapshotTraversal.ContentWitness witness,
-            WorldSnapshotTraversal.Report report) {
-        public Snapshot {
-            chests = List.copyOf(chests);
-            Objects.requireNonNull(witness);
-            Objects.requireNonNull(report);
+    /**
+     * Only the completed terrain traversal may create this immutable receipt.
+     * A public record constructor allowed a caller to graft invented signage
+     * onto a genuine ContentWitness and then obtain a fabricated Free candidate.
+     * The separate source witness still does NOT exclude external writers.
+     */
+    public static final class Snapshot {
+        private final List<ObservedChest> chests;
+        private final WorldSnapshotTraversal.ContentWitness witness;
+        private final WorldSnapshotTraversal.Report report;
+
+        private Snapshot(List<ObservedChest> chests,
+                         WorldSnapshotTraversal.ContentWitness witness,
+                         WorldSnapshotTraversal.Report report) {
+            this.chests = List.copyOf(chests);
+            this.witness = Objects.requireNonNull(witness);
+            this.report = Objects.requireNonNull(report);
+        }
+
+        public List<ObservedChest> chests() {
+            return chests;
+        }
+
+        public WorldSnapshotTraversal.ContentWitness witness() {
+            return witness;
+        }
+
+        public WorldSnapshotTraversal.Report report() {
+            return report;
         }
 
         @FunctionalInterface
