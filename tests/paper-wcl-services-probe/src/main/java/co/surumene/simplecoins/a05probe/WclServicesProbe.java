@@ -1302,11 +1302,10 @@ public final class WclServicesProbe extends JavaPlugin {
         // match the selected world name. Supplying no shared roots would
         // silently omit real UUID.dat sources while scanning all Anvil files.
         Path sharedLevelRoot = world.getWorldFolder().toPath().toAbsolutePath()
-                .normalize().getParent().getParent().getParent();
-        if (sharedLevelRoot == null
-                || !world.getName().equals(sharedLevelRoot.getFileName().toString())
-                || !Files.isDirectory(sharedLevelRoot.resolve("players/data"))
-                    && withBlockLocker())
+                .normalize();
+        if (!world.getName().equals(sharedLevelRoot.getFileName().toString())
+                || (withBlockLocker()
+                    && !Files.isDirectory(sharedLevelRoot.resolve("players/data"))))
             throw new IOException("Paper 26.2 shared playerdata root does not match actual WorldFolder");
         WorldStorageDiscovery.Manifest boundedManifest = WorldStorageDiscovery.discover(
                 Map.of(world.getName(), world.getWorldFolder().toPath()),
