@@ -26,6 +26,24 @@ jobs:
           git rev-parse HEAD^{tree} > SNAPSHOT_TREE
           git archive --format=tar HEAD | gzip -n -9 > project.tar.gz
           sha256sum project.tar.gz > SNAPSHOT_SHA256
+      - name: Obtain independent actual JUnit Platform console runtime for direct Java test execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-console-standalone/1.11.4/junit-platform-console-standalone-1.11.4.jar \
+            --output junit-platform-console-standalone.jar
+          curl --fail --location --silent --show-error --retry 3 \
+            https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-console-standalone/1.11.4/junit-platform-console-standalone-1.11.4.jar.sha256 \
+            --output junit-platform-console-standalone.jar.sha256
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected=Path('junit-platform-console-standalone.jar.sha256').read_text().strip().split()[0]
+          actual=hashlib.sha256(Path('junit-platform-console-standalone.jar').read_bytes()).hexdigest()
+          assert actual==expected,(actual,expected)
+          print('A04_JUNIT_1114_ARTIFACT_SHA256',actual)
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: a04-readonly-fixed-project-snapshot
@@ -34,5 +52,7 @@ jobs:
             SNAPSHOT_COMMIT
             SNAPSHOT_TREE
             SNAPSHOT_SHA256
+            junit-platform-console-standalone.jar
+            junit-platform-console-standalone.jar.sha256
           if-no-files-found: error
           retention-days: 1
