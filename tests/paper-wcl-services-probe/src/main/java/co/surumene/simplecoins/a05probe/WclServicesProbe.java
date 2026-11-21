@@ -930,6 +930,13 @@ public final class WclServicesProbe extends JavaPlugin {
         Wolf wolf = world.spawn(new Location(world, 74.5, 120, 74.5), Wolf.class);
         wolf.addScoreboardTag(WOLF_PERSISTENCE_TAG);
         CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        // This persisted near WWW is part of the discovered SAVED universe.
+        // Give its runtime owner a real Paper tame-owner witness and ensure
+        // the WCL weapon is physically mirrored by the vanilla mainhand.
+        // Otherwise whole-source staging must HOLD, as the initial CI proved.
+        wolf.setOwner(Bukkit.getOfflinePlayer(WOLF_OWNER));
+        wolf.getEquipment().setItemInMainHand(
+                coins.create(CoinDenomination.TEN_THOUSAND, 1));
         byte[] runtime = wolfRuntimeFixture(WOLF_OWNER, WOLF_COMMANDER,
                 coins.create(CoinDenomination.TEN_THOUSAND, 1).serializeAsBytes(),
                 coins.create(CoinDenomination.THOUSAND, 5).serializeAsBytes());
@@ -1559,6 +1566,168 @@ public final class WclServicesProbe extends JavaPlugin {
                 + " source=entities/r.1.1.mca entities=2"
                 + " regionChunk=" + FAR_CHUNK + "," + FAR_CHUNK
                 + " totalCoins=25000");
+        verifyWholeHybridSavedWclCandidate(world, boundedManifest, wwcUuid, wwwUuid);
+    }
+
+
+    /**
+     * Cross-source bounded proof: actually run the existing product hybrid
+     * candidate pipeline against the SAME authentic discovered WorldFolder
+     * and both saved WCL providers. The global source/writer epoch remains
+     * deliberately unproven; no result is published or admitted.
+     */
+    private void verifyWholeHybridSavedWclCandidate(
+            World world, WorldStorageDiscovery.Manifest manifest,
+            UUID chickenId, UUID wolfId) throws Exception {
+        UUID nearChickenId = UUID.fromString(Files.readString(persistedIdFile()).strip());
+        UUID nearWolfId = UUID.fromString(Files.readString(persistedWolfIdFile()).strip());
+        if (Set.of(chickenId, wolfId, nearChickenId, nearWolfId).size() != 4)
+            throw new IOException("The full saved source fixture must contain four distinct WCL holders");
+        if (!Bukkit.isPrimaryThread() || world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK)
+                || manifest.origin() == null || !manifest.playerDataFiles().isEmpty())
+            throw new IOException("Whole WCL integration requires actual empty-player SAVED fixture");
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        if (!manifest.origin().scope().equals(scope))
+            throw new IOException("Whole WCL fixture changed source discovery scope");
+        var owners = (co.surumene.simplecoins.domain.SettlementScanRunner.EntityOwnerLookup)
+                (sourceWorld, chunk) -> {
+                    if (!sourceWorld.equals(world.getName()))
+                        throw new IOException("Unexpected saved Entity World source");
+                    // Both far and near saved fixtures are mandatory members
+                    // of the discovered source universe; never silently
+                    // discard a second WCL holder to force a 25,000C total.
+                    return Map.of(
+                            chickenId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    PERSISTENCE_FOLLOW, false, false),
+                            nearChickenId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    PERSISTENCE_FOLLOW, false, false),
+                            wolfId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    WOLF_COMMANDER, false, false),
+                            nearWolfId.toString(),
+                            new ResolvedEntitySettlementImport.Ownership(
+                                    WOLF_COMMANDER, false, false));
+                };
+        var noUnverifiedBlock = (co.surumene.simplecoins.domain.SettlementScanRunner.BlockOwnerLookup)
+                (sourceWorld, position) -> {
+                    throw new IOException("Unexpected unverified SAVED BlockEntity in WCL-only fixture: "
+                            + sourceWorld + "/" + position);
+                };
+        var noPositiveLive = (co.surumene.simplecoins.domain.HybridLiveSourceStage.Classifier)
+                (source, value) -> {
+                    if (value.amount().signum() != 0)
+                        throw new IOException("Unexpected unverified positive LIVE asset: "
+                                + value.physicalKey());
+                    return new SettlementAccumulator.Asset(source.id(), value.physicalKey(),
+                            value.world(), null, false, false, false,
+                            value.amount(), value.physicalKey());
+                };
+        var budgets = new PaperLiveUniverseAssets.Budget(
+                1, 4096, 4096, 4096, 131072, 1,
+                2 * 1024 * 1024, 16 * 1024 * 1024);
+
+        // 1. Real LIVE source capture + automatically selected LIVE WCL
+        //    + full actual saved source traversal (NOT two isolated totals).
+        var first = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        var live = first.includeDiscoveredLoadedWcl(this);
+        if (live.holders().stream().anyMatch(e ->
+                e.entity().getUniqueId().equals(chickenId)
+                || e.entity().getUniqueId().equals(wolfId)
+                || e.entity().getUniqueId().equals(nearChickenId)
+                || e.entity().getUniqueId().equals(nearWolfId)))
+            throw new IOException("Unloaded saved WCL fixture leaked into LIVE discovery");
+        var selected = first.stageCandidateWithSavedWcl(
+                this, Map.of(world.getName(), world.getUID()),
+                manifest, scope, Set.of(), noUnverifiedBlock, owners,
+                2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        verifyCompleteUnpublishedWclCandidate(selected, manifest,
+                chickenId, wolfId, nearChickenId, nearWolfId);
+        getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
+
+        // 2. A declared fixture-only BAN provider: this tests source-local
+        //    BAN/pl-data propagation, NOT complete deployed IP/external BAN.
+        String fixtureProvider = "fixture-ban-status";
+        var clear = new co.surumene.simplecoins.domain.BanEvidence.Source(
+                fixtureProvider,
+                co.surumene.simplecoins.domain.BanEvidence.Status.CLEAR);
+        var covered = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                Set.of(fixtureProvider),
+                Map.of(PERSISTENCE_FOLLOW, List.of(clear),
+                       WOLF_COMMANDER, List.of(clear)));
+        var second = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        second.includeDiscoveredLoadedWcl(this);
+        var stagedCovered = second.stageCandidateWithSavedWclAndBanCoverage(
+                this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                covered, noUnverifiedBlock, owners,
+                2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        verifyCompleteUnpublishedWclCandidate(stagedCovered, manifest,
+                chickenId, wolfId, nearChickenId, nearWolfId);
+        getLogger().info("PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED");
+
+        // 3. Missing declared BAN evidence for one actual persisted
+        //    commander must invalidate the WHOLE new candidate, never CLEAR.
+        var incomplete = co.surumene.simplecoins.domain.BanSourceCoverage.capture(
+                Set.of(fixtureProvider),
+                Map.of(PERSISTENCE_FOLLOW, List.of(clear)));
+        var third = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+        third.includeDiscoveredLoadedWcl(this);
+        boolean absentOwnerRejected = false;
+        try {
+            third.stageCandidateWithSavedWclAndBanCoverage(
+                    this, Map.of(world.getName(), world.getUID()), manifest, scope,
+                    incomplete, noUnverifiedBlock, owners,
+                    2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        } catch (IOException expected) {
+            absentOwnerRejected = expected.getMessage() != null
+                    && expected.getMessage().contains("Missing complete BAN source coverage for ");
+            if (!absentOwnerRejected) throw expected;
+        }
+        if (!absentOwnerRejected)
+            throw new IOException("Missing WCL owner BAN evidence still returned a candidate");
+        if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK))
+            throw new IOException("Full hybrid verification loaded SAVED-only fixture Chunk");
+        manifest.requireUnchangedDiscovery();
+        getLogger().info("PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED");
+    }
+
+    private static void verifyCompleteUnpublishedWclCandidate(
+            co.surumene.simplecoins.domain.SettlementScanRunner.Staged selected,
+            WorldStorageDiscovery.Manifest manifest,
+            UUID chickenId, UUID wolfId, UUID nearChickenId, UUID nearWolfId)
+            throws IOException {
+        if (selected.savedContentWitness() == null
+                || !selected.requiredSourceIds().containsAll(manifest.requiredSourceIds())
+                || selected.report().regionFiles() != manifest.worldFiles().size()
+                || selected.report().playerFiles() != manifest.playerDataFiles().size())
+            throw new IOException("Whole hybrid did not retain all required saved sources");
+        var result = selected.pending().commit(); // local-only, never publish
+        if (!BigInteger.valueOf(50000).equals(result.dead())
+                || result.free().signum() != 0
+                || result.statistics().worldTotal().signum() != 0
+                || result.personalBalances().values().stream().anyMatch(v -> v.signum() != 0)
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(chickenId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(wolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(wolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(5000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearChickenId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearWolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(10000)))
+                || result.deadLocations().stream().noneMatch(e ->
+                        e.location().contains(nearWolfId.toString())
+                        && e.value().equals(BigInteger.valueOf(5000))))
+            throw new IOException("Full hybrid WCL source lost/doubled 50000C or classified owners");
+        selected.savedContentWitness().requireUnchanged();
+        manifest.requireUnchangedDiscovery();
     }
 
     /**
