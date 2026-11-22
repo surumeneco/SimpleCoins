@@ -59,7 +59,7 @@ jobs:
             exit 1
           fi
           jar tf "$hook" | grep -Fx 'co/surumene/simplecoins/writeragent/WriterEpochHook.class'
-          unzip -p "$agent" META-INF/MANIFEST.MF | grep -F 'Premain-Class: co.surumene.simplecoins.writeragent.PaperNativeWriterAgent'
+          python -c 'import sys, zipfile; raw=zipfile.ZipFile(sys.argv[1]).read("META-INF/MANIFEST.MF").decode("utf-8"); unfolded=raw.replace("\r\n ", "").replace("\n ", ""); assert "Premain-Class: co.surumene.simplecoins.writeragent.PaperNativeWriterAgent" in unfolded' "$agent"
           if grep -Fq 'nativeWriterFence.arm(' src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java; then
             echo 'Product bootstrap must not arm incomplete writer universe' >&2
             exit 1
