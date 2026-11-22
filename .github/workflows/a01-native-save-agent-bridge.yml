@@ -6,6 +6,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.native-save-agent-bridge.md'
       - 'Lifecycle/Works/simplecoins.a01.wwc-www-owner-agent-writers.md'
       - 'Lifecycle/Works/simplecoins.a01.mainhand-equipment-agent-writer.md'
+      - 'Lifecycle/Works/simplecoins.a01.writer-exception-failclosed.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
@@ -58,6 +59,11 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a01.writer-exception-failclosed.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -101,6 +107,17 @@ jobs:
           grep -F 'SIMPLECOINS_WRITER_AGENT_WWW_EXACT_ENTRY_INSTRUMENTED' writer-agent-bridge-result.log
           grep -F 'SIMPLECOINS_WRITER_AGENT_EQUIPMENT_EXACT_ENTRY_INSTRUMENTED' writer-agent-bridge-result.log
           grep -F 'SIMPLECOINS_A01_CROSS_LOADER_NATIVE_AGENT_RED_GREEN_PASS' writer-agent-bridge-result.log
+      - name: Require caught escaping native writer error to revoke bootstrap and product epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$PWD"
+          java -Dsimplecoins.writerAgent.bootstrapJar="$root/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+            -javaagent:"$root/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+            -cp "$root/writer-fence-agent/build/classes/java/test" \
+            co.surumene.simplecoins.writeragent.AgentExceptionalExitMain \
+            "$root/build/libs/SimpleCoins-1.0.0.jar" | tee writer-agent-exception-result.log
+          grep -F 'SIMPLECOINS_A01_ESCAPING_NATIVE_WRITER_INVALIDATES_PRODUCT_PASS' writer-agent-exception-result.log
       - name: Boot actual official Paper 26.2 with passive product-bound Agent
         shell: bash
         run: |
@@ -248,6 +265,7 @@ jobs:
           name: a01-product-native-agent-cross-loader-evidence
           path: |
             writer-agent-bridge-result.log
+            writer-agent-exception-result.log
             smoke-native-agent/agent-paper.log
             smoke-actual-owners/agent-actual-owner.log
           retention-days: 14
