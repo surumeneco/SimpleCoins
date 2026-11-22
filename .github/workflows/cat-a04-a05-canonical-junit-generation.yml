@@ -145,7 +145,7 @@ jobs:
                                  ('A05','A05LiveHybridGeneratedTest.java')]:
               raw=(src/filename).read_bytes()
               digest=hashlib.sha256(raw).hexdigest()
-              (expected,)=Path('cat-a04a05-receipts',label+'-selected-junit-sha256.txt').read_text().split()
+              expected=Path('cat-a04a05-receipts',label+'-selected-junit-sha256.txt').read_text().split()[0]
               if digest != expected:
                   raise AssertionError('Generated canonical CAT JUnit mutated before Gradle')
               text=raw.decode('utf-8')
