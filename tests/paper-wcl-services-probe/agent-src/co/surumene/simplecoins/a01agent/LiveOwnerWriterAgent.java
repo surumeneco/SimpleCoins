@@ -70,6 +70,12 @@ public final class LiveOwnerWriterAgent {
                     method = null;
                     descriptor = null;
                     pdc = false;
+                } else if ("org/bukkit/craftbukkit/inventory/CraftInventory"
+                        .equals(name) && Boolean.getBoolean("a01.liveOwnerAgent.instrumentInventory")) {
+                    label = "INVENTORY";
+                    method = null;
+                    descriptor = null;
+                    pdc = false;
                 } else {
                     return null;
                 }
@@ -95,8 +101,13 @@ public final class LiveOwnerWriterAgent {
                                                     "(Lorg/bukkit/inventory/ItemStack;)V")
                                                 || m.methodTypeSymbol().descriptorString().equals(
                                                     "(Lorg/bukkit/inventory/ItemStack;Z)V")))
-                                        : (m.methodName().stringValue().equals(method)
-                                           && m.methodTypeSymbol().descriptorString().equals(descriptor))))) {
+                                        : ("INVENTORY".equals(label)
+                                            ? m.methodName().stringValue().equals("setItem")
+                                                && m.methodTypeSymbol().descriptorString().equals(
+                                                        "(ILorg/bukkit/inventory/ItemStack;)V")
+                                            : m.methodName().stringValue().equals(method)
+                                                && m.methodTypeSymbol().descriptorString()
+                                                        .equals(descriptor))))) {
                             count.incrementAndGet();
                             builder.transformMethod(m, MethodTransform.transformingCode(
                                     new CodeTransform() {
@@ -104,7 +115,9 @@ public final class LiveOwnerWriterAgent {
                                             code.invokestatic(HOOK,
                                                     pdc ? "beforePdcMutation"
                                                             : "EQUIPMENT".equals(label)
-                                                                ? "beforeEquipmentMutation" : "before" + label,
+                                                                ? "beforeEquipmentMutation"
+                                                                : "INVENTORY".equals(label)
+                                                                    ? "beforeInventoryMutation" : "before" + label,
                                                     MethodTypeDesc.ofDescriptor("()V"));
                                         }
                                         @Override public void accept(CodeBuilder code, CodeElement e) {
@@ -112,7 +125,9 @@ public final class LiveOwnerWriterAgent {
                                                 code.invokestatic(HOOK,
                                                         pdc ? "afterPdcMutation"
                                                                 : "EQUIPMENT".equals(label)
-                                                                    ? "afterEquipmentMutation" : "after" + label,
+                                                                    ? "afterEquipmentMutation"
+                                                                    : "INVENTORY".equals(label)
+                                                                        ? "afterInventoryMutation" : "after" + label,
                                                         MethodTypeDesc.ofDescriptor("()V"));
                                             }
                                             code.with(e);
