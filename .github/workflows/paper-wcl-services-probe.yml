@@ -437,6 +437,7 @@ jobs:
               -Da01.liveOwnerAgent.directEquipmentProof=true \
               -Da01.liveOwnerAgent.directInventoryProof=true \
               -Da01.liveOwnerAgent.expectInventoryBypass=true \
+              -Da01.liveOwnerAgent.coverageProof=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-inventory-negative.log 2>&1
           status=$?
@@ -447,6 +448,7 @@ jobs:
           fi
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_BLOCK_CHEST_DIRECT_SETITEM_BYPASS_REPRODUCED' paper-a01-inventory-negative.log
+          grep -F 'PAPER_A01_INCOMPLETE_SOURCE_ROSTER_EPOCH_MINT_REJECTED_PASSED' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-inventory-negative.log
           echo 'PAPER_A01_REAL_CHEST_COIN_DIRECT_INVENTORY_WRITE_BYPASS_PROVED'
@@ -482,6 +484,7 @@ jobs:
               -Da01.liveOwnerAgent.instrumentEquipment=true \
               -Da01.liveOwnerAgent.directInventoryProof=true \
               -Da01.liveOwnerAgent.instrumentInventory=true \
+              -Da01.liveOwnerAgent.coverageProof=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
           status=$?
@@ -504,6 +507,8 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_INVENTORY_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_KNOWN_SOURCE_CLOSED_EPOCH_MINTED_FROM_REAL_HOOKS_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_KNOWN_SOURCE_EPOCH_REOPEN_AND_REPLAY_DENIED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_PDC_IMPL_CLASS=' paper-a01-agent.log
