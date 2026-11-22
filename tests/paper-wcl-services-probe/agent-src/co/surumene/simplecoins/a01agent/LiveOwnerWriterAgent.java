@@ -141,6 +141,12 @@ public final class LiveOwnerWriterAgent {
                     if (count.get() != expected)
                         throw new IllegalStateException("Expected " + expected
                                 + " exact " + label + " mutation method(s), found " + count.get());
+                    // Binding requires an actual installed transformer
+                    // result, not an operator-supplied Boolean or startup flag.
+                    Class.forName(
+                            "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null)
+                            .getMethod("registerObservedTransformation", String.class)
+                            .invoke(null, label);
                     System.out.println("PAPER_A01_LIVE_AGENT_" + label + "_WRITER_INSTRUMENTED");
                     return transformed;
                 } catch (Throwable failure) {
