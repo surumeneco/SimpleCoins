@@ -168,7 +168,7 @@ jobs:
                   target.write_bytes(raw)
                   print(label,'CANONICAL_JUNIT_STAGED_IN_TEST_ONLY_CLASSPATH',target)
           PY
-          gradle --no-daemon --stacktrace test \
+          gradle --no-daemon --stacktrace :test \
             --tests '*GeneratedA04SavedOwnerCase*' \
             --tests '*GeneratedA05WclEvidenceCase*'
           python - <<'PY'
