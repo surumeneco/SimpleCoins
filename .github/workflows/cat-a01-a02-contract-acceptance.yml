@@ -98,6 +98,8 @@ jobs:
               if target.exists(): assert target.read_bytes()==source
               else:target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(source)
               (receipts/(label+'-test-sha256.txt')).write_text(hashlib.sha256(source).hexdigest()+'\n')
+              obligations=run([cli,'obligations','--work',w])
+              assert obligations['status']=='passed',obligations
               a=run([cli,'conformance','--work',w,'--kind','implementation-conformance'])
               assert a['status']=='inconclusive',a
               (receipts/(label+'-implementation-conformance.json')).write_text(json.dumps(a,ensure_ascii=False,indent=2)+'\n')
