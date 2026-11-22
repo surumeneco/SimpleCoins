@@ -23,6 +23,8 @@ spec_status: unknown
 
 # A01/G0 — 全writer世代から原子公開するための規範境界
 
+> **現行規範の参照**：2026-11-23の利用者によるCAT承認判断委任後、A01/A02の正式Process/PI/TCEは `docs/cat/confirmed/` を正本とする。本WorkのDraft・当時の未承認記述は旧技術検証の履歴であり、最新規範の未承認を意味しない。全writer排他と製品G0/G3は引続き未成立。
+
 ## Evidence
 | URI |
 | --- |
@@ -46,7 +48,7 @@ spec_status: unknown
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.writer-epoch-publication-contract.md;docs/cat/drafts/a01-writer-epoch-publication-*.md | — | — |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.writer-epoch-publication-contract.md;docs/cat/confirmed/a01-writer-epoch-publication-*.md | — | — |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |

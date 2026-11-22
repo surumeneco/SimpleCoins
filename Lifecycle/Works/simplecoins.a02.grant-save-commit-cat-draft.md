@@ -22,6 +22,8 @@ spec_status: unknown
 
 # A02 — 予約配布の保存・受領・ACK境界のCAT規範候補
 
+> **現行規範の参照**：2026-11-23の利用者によるCAT承認判断委任後、A01/A02の正式Process/PI/TCEは `docs/cat/confirmed/` を正本とする。本WorkのDraft・当時の未承認記述は旧技術検証の履歴であり、最新規範の未承認を意味しない。全writer排他と製品G0/G3は引続き未成立。
+
 ## Evidence
 
 | URI |
@@ -50,7 +52,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.grant-save-commit-cat-draft.md;docs/cat/drafts/a02-grant-delivery-process.md;docs/cat/drafts/a02-grant-delivery-pi.md;docs/cat/drafts/a02-grant-delivery-tce.md;tests/a02_grant_draft_partition.py;.github/workflows/a02-grant-delivery-cat-draft.yml;.github/workflows/cat-a02-grant-draft-lint.yml | — | tests/a02_grant_draft_partition.py;.github/workflows/a02-grant-delivery-cat-draft.yml;.github/workflows/cat-a02-grant-draft-lint.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.grant-save-commit-cat-draft.md;docs/cat/confirmed/a02-grant-delivery-process.md;docs/cat/confirmed/a02-grant-delivery-pi.md;docs/cat/confirmed/a02-grant-delivery-tce.md;tests/a02_grant_draft_partition.py;.github/workflows/a02-grant-delivery-cat-draft.yml;.github/workflows/cat-a02-grant-draft-lint.yml | — | tests/a02_grant_draft_partition.py;.github/workflows/a02-grant-delivery-cat-draft.yml;.github/workflows/cat-a02-grant-draft-lint.yml |
 
 ## Checks
 
@@ -78,7 +80,7 @@ spec_status: unknown
 - Approved product 03/02B requires UUID+reservation identity and restart-stable pending delivery until the exact physical coins and PDC receipt are persisted as one playerdata generation; receipt-only or ledger-only is never an actual issue.
 - [#434](https://github.com/surumeneco/SimpleCoins/pull/434) demonstrated genuine Paper 26.2 `CraftPlayer.saveData()/loadData` and silent non-durable `saveData()` return under disabled writing/IO fault; verified persisted item and PDC before ACK and post-SIGKILL acknowledgment recovery on another JVM. [#437](https://github.com/surumeneco/SimpleCoins/pull/437) added full-inventory refusal and preservation of unrelated existing stored items.
 - `GrantLedger.acknowledge(grant,seq)` is a lower-level API trusting a caller-supplied sequence; a standalone Java filesystem probe succeeded at ACK without any real playerdata. This is a caller proof obligation; **no live issuance service connected in SimpleCoinsPlugin has been shown to exploit it**.
-- Draft Process/PI/TCE in `docs/cat/drafts/a02-grant-delivery-*` specify candidate proof-before-ACK, no delivery on failed save, owner of recovery, and explicit uncertainty. They **cannot self-promote to Confirmed**. Full inventory, logout, race, OS power-loss and external Plugin mutation may need refined state abstraction; TCE remains `網羅要求: 部分`.
+- Draft Process/PI/TCE in `docs/cat/confirmed/a02-grant-delivery-*` specify candidate proof-before-ACK, no delivery on failed save, owner of recovery, and explicit uncertainty. They **cannot self-promote to Confirmed**. Full inventory, logout, race, OS power-loss and external Plugin mutation may need refined state abstraction; TCE remains `網羅要求: 部分`.
 - [#467](https://github.com/surumeneco/SimpleCoins/pull/467)/[#468](https://github.com/surumeneco/SimpleCoins/pull/468) cover partial-save/final-save-before-ACK crash boundaries; [#473](https://github.com/surumeneco/SimpleCoins/pull/473) adds **real Paper pre-save SIGKILL** and the ninth/tenth independent JVM recovery. Existing durable ACK replay must not cause a new physical delivery; however an acknowledged coin can legitimately leave its original slot later.
 - Existing `cat-a02-grant-draft-lint.yml` had an exact eight-case whitelist and fails on valid new fail-closed cases. Preserve its original eight regression scenarios as a mandatory subset, while permitting additive cases; the new independent exhaustive partition test rejects overlaps, gaps and weak ACK conditions. This change is to verification compatibility, not to formal CAT logic or approval.
 - A deterministic stdlib-only Draft partition check enumerates all 128 assignments of the seven PI Boolean inputs across prepare, verify and recover, requiring a unique case per origin and forbidding every ACK without saved physical proof, complete receipt, stable generation, other-inventory preservation and authentic pending reservation. It checks that contradicted delivered states block without reopening an already-ACKed reservation. **This is independent issue-work verification, not CAT model-conformance or a proof that external observables have been classified correctly.**

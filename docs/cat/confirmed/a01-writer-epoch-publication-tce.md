@@ -2,20 +2,20 @@
 cat_version: '0.3'
 kind: tce
 id: simplecoins.settlement.writer-epoch-publication.tce.authorize
-status: draft
+status: confirmed
 process: simplecoins.settlement.writer-epoch-publication
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://drive.google.com/file/d/1Py55wN7KsfMqIWfD9P2IwSDwXSzUBqeR/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs:
   - simplecoins.settlement.writer-epoch-publication.pi.authorize
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# TCE: G0公開試行・未公開保留・既公開失効（Draft）
+# TCE: G0公開試行・未公開保留・既公開失効
 
 網羅要求: 閉包
 

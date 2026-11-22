@@ -2,7 +2,7 @@
 cat_version: '0.3'
 kind: process
 id: simplecoins.grants.paper-save-commit
-status: draft
+status: confirmed
 process: simplecoins.grants.paper-save-commit
 source_refs:
   - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
@@ -17,14 +17,14 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/502
   - https://github.com/surumeneco/SimpleCoins/pull/505
   - https://github.com/surumeneco/SimpleCoins/pull/510
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs:
   - simplecoins.grants.pi.delivery
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# Process: Paperプレイヤーデータ保存を伴う配布確定 (Draft)
+# Process: Paperプレイヤーデータ保存を伴う配布確定 
 
 ## 契約
 閉世界: 真
@@ -68,13 +68,13 @@ language: ja
 
 [#473](https://github.com/surumeneco/SimpleCoins/pull/473)では、実Paperの隔離された第8 JVMで予約4の永続記録後・メモリ上の現物/receipt変更後に**playerdata保存前SIGKILL**し、第9 JVMで未保存の第4貨幣不在とpending維持を確認して、実保存・読戻し・ACKを一度だけ実行した。第10 JVMでは実ファイルと台帳の再読取で貨幣合計665,000 C、配布済み履歴4件、未配布0件、ACK冪等性を確認した。これは合成オフラインプレイヤーのJVM停止境界の実測であり、実クライアント操作・OS電源断・全外部writerには適用しない。
 
-**Paper保存表現の等価性（未承認の正規化候補）**：実Paper 26.2 [#480](https://github.com/surumeneco/SimpleCoins/pull/480) の対象プレイヤー保存で、変更前は`equipment`フィールド欠損（null）、変更後は空のCompound（`{}`）だった。装備アイテムの増減は確認されず、正規5000C貨幣・受領PDCが同一playerdataに保存され単一root証明は成功したが、現行`verifyTransition`のNBT構造一致判定はこの空/欠損差を「他収納の改変」と誤判定し、G3正常配布を妨げた。**mainhandアイテム自体の鏡像変化は、このログからは立証されない。** `他収納保全`の実装候補として、*空の`equipment` Compoundと未出現だけ*を同等と扱い、非空の装備変化、誤型、異常なnested貨幣、EnderItems/Inventory/receiptの変更は従来どおり拒否する。これはDraftの意味検討であり、正式CAT Confirmed・修正済み実装ではない。
+**Paper保存表現の等価性（未承認の正規化候補）**：実Paper 26.2 [#480](https://github.com/surumeneco/SimpleCoins/pull/480) の対象プレイヤー保存で、変更前は`equipment`フィールド欠損（null）、変更後は空のCompound（`{}`）だった。装備アイテムの増減は確認されず、正規5000C貨幣・受領PDCが同一playerdataに保存され単一root証明は成功したが、現行`verifyTransition`のNBT構造一致判定はこの空/欠損差を「他収納の改変」と誤判定し、G3正常配布を妨げた。**mainhandアイテム自体の鏡像変化は、このログからは立証されない。** `他収納保全`の実装候補として、*空の`equipment` Compoundと未出現だけ*を同等と扱い、非空の装備変化、誤型、異常なnested貨幣、EnderItems/Inventory/receiptの変更は従来どおり拒否する。これは本契約の外側にある未採用の技術的正規化候補であり、修正済み実装でもない。
 
 **技術上の重要な不足**：保存済playerdataの一度の読戻し・内容SHA/ctime証明が成功しても、その直後から永続ACKまで無通知の外部writerが変更できれば、古い受領/貨幣を根拠にACKしてしまう競合を排除できない。従ってTCEの`入力.保存世代証拠有効`を、検査瞬間だけの整合として真とみなさない。保護範囲と永続化の保証を別途選定・実証する必要がある。現行の読取専用ブリッジだけではG3の製品配布サービスを安全に有効化できない。
 
-実Paperで`CraftPlayer.saveData()`が成功値なしで戻り、保存無効・ファイル書込み失敗を黙殺し得ることを既存CIは確認した。`GrantLedger.acknowledge(grant,seq)`はディスク上の現物証拠を引数に要求しない。このProcessは配布サービスに必要な保存証拠を規範候補として記述するが、`fsync`/OS電源断の保証境界、同時接続・外部Pluginの変更とジャーナル整合は未決であり、正式なConfirmedではない。
+実Paperで`CraftPlayer.saveData()`が成功値なしで戻り、保存無効・ファイル書込み失敗を黙殺し得ることを既存CIは確認した。`GrantLedger.acknowledge(grant,seq)`はディスク上の現物証拠を引数に要求しない。このProcessは配布サービスに必要な保存証拠の規範を記述するが、`fsync`/OS電源断の保証境界、同時接続・外部Pluginの変更とジャーナル整合は未決であり、技術的な保存方式は未確定である。
 
-## 既入場writerの排出が必要な保存世代証拠（技術観測・Draft）
+## 既入場writerの排出が必要な保存世代証拠（技術観測・未実装）
 
 [#499](https://github.com/surumeneco/SimpleCoins/pull/499)は、協調writerの入場許可→新規writer受付拒否→**既入場writer全員の排出完了**→本物の圧縮playerdata保存・file/parent fsync→本物の保存済貨幣+receipt読戻し→`GrantLedger`永続ACKまで排他を保持し、ACK後にだけ明示再開する**テスト専用**プロトコルをJUnitで検証した。これは実Paper保存/外部Plugin writerに配線していない。
 

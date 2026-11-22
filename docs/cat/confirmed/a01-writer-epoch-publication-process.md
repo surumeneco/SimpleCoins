@@ -2,20 +2,20 @@
 cat_version: '0.3'
 kind: process
 id: simplecoins.settlement.writer-epoch-publication
-status: draft
+status: confirmed
 process: simplecoins.settlement.writer-epoch-publication
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://drive.google.com/file/d/1Py55wN7KsfMqIWfD9P2IwSDwXSzUBqeR/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs:
   - simplecoins.settlement.writer-epoch-publication.pi.authorize
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# Process: G0全writer保護世代の決算公開判定（Draft）
+# Process: G0全writer保護世代の決算公開判定
 
 ## 契約
 閉世界: 真
@@ -52,8 +52,8 @@ language: ja
 
 ## 正本保証と技術境界
 
-Drive 02B/04で既決のG0保証を緩めない。0人の走査で全貨幣・財布を一つの正本世代で決算し、失敗した候補・統計は公開せず、入室も許可しない。本Processは、既存のPaperSavedSourceDiscovery、PaperCapturedHybridSettlement、SettlementScanRunner、SettlementSnapshotPublisherをつなぐ際の公開判定を定めるDraftであり、下位スキャナーの実装選択を規定しない。
+Drive 02B/04で既決のG0保証を緩めない。0人の走査で全貨幣・財布を一つの正本世代で決算し、失敗した候補・統計は公開せず、入室も許可しない。本Processは、既存のPaperSavedSourceDiscovery、PaperCapturedHybridSettlement、SettlementScanRunner、SettlementSnapshotPublisherをつなぐ際の公開判定を定める規範であり、下位スキャナーの実装選択を規定しない。
 
 全writerは、受付拒否だけでなく既入場済み処理の排出を要求し、候補取得・保存読取・BAN/所有者・重複解消・通常仕訳への引継・原子切替終了まで保護を維持する。Paper main-threadのイベント取消、0人、JAR一覧、最終hash再検査では十分でない。未観測・不一致・出所不明を成功や資産0に変換しない。現24-JARの動的実行とPaper native writerを全て制御できた証拠は**まだない**。
 
-出力「公開試行許可」は原子publishの完了・耐久化・入室Permitを意味しない。保護逸脱やJournal監視失効は旧候補の再公開ではなく即時失効へ進む。正当な公開後仕訳は継続できる設計が必要。Processの閉世界性は入出力の判定表を指し、実サーバーの全writer閉包の成立とは別。正式CAT Confirmed/Model/Implementation Gate・配備・入室解禁は未成立。
+出力「公開試行許可」は原子publishの完了・耐久化・入室Permitを意味しない。保護逸脱やJournal監視失効は旧候補の再公開ではなく即時失効へ進む。正当な公開後仕訳は継続できる設計が必要。Processの閉世界性は入出力の判定表を指し、実サーバーの全writer閉包の成立とは別。正式CATのModel/Implementation Gate・配備・入室解禁は別途検証を要する。

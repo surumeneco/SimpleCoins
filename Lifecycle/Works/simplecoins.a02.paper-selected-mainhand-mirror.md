@@ -24,6 +24,8 @@ spec_status: unknown
 
 # A02 — Paperの空equipment Compoundを他収納改変と誤判定する保存差分
 
+> **現行規範の参照**：2026-11-23の利用者によるCAT承認判断委任後、A01/A02の正式Process/PI/TCEは `docs/cat/confirmed/` を正本とする。本WorkのDraft・当時の未承認記述は旧技術検証の履歴であり、最新規範の未承認を意味しない。全writer排他と製品G0/G3は引続き未成立。
+
 ## Evidence
 
 | URI |
@@ -48,7 +50,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.paper-selected-mainhand-mirror.md;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadbackTest.java;docs/cat/drafts/a02-grant-delivery-process.md;docs/cat/drafts/a02-grant-delivery-pi.md;docs/cat/drafts/a02-grant-delivery-tce.md | — | tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadbackTest.java |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.paper-selected-mainhand-mirror.md;tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadbackTest.java;docs/cat/confirmed/a02-grant-delivery-process.md;docs/cat/confirmed/a02-grant-delivery-pi.md;docs/cat/confirmed/a02-grant-delivery-tce.md | — | tests/paper-invsee-writer-probe/src/main/java/co/surumene/simplecoins/a02invsee/InvseeWriterProbe.java;.github/workflows/paper-invsee-writer-gap-probe.yml;src/test/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadbackTest.java |
 
 ## Checks
 
