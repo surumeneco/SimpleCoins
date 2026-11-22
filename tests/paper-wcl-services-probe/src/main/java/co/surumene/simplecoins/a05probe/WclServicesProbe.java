@@ -567,6 +567,77 @@ public final class WclServicesProbe extends JavaPlugin {
      * Does not claim global writer coverage, already-in-flight drain or G0.
      */
     /**
+     * A separate writer can modify owner PDC directly without entering
+     * WonderfulChickenStore.save. The NEGATIVE control must prove the bypass;
+     * the positive experiment must reject both setter and remover while the
+     * same already-closed writer gate is held.
+     */
+    private void verifyPaperPdcDirectOwnerWriterUnderClosedGate(
+            WonderfulStorageReader reader, Chicken chicken, World world,
+            PersistentDataContainer pdc, NamespacedKey ownerKey, UUID owner)
+            throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.directPdcProof")) return;
+        String ownerBefore = pdc.get(ownerKey, PersistentDataType.STRING);
+        if (!owner.toString().equals(ownerBefore))
+            throw new IOException("Incorrect precondition for direct PDC mutation counterexample");
+        String foreign = "00000000-0000-0000-0000-00000000a076";
+        getLogger().info("PAPER_A01_REAL_PDC_IMPL_CLASS=" + pdc.getClass().getName());
+        boolean uninstrumented = Boolean.getBoolean("a01.liveOwnerAgent.expectPdcBypass");
+        if (uninstrumented) {
+            try {
+                pdc.set(ownerKey, PersistentDataType.STRING, foreign);
+                var changed = success(reader.readStored(
+                        chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                        "Direct Paper PDC owner bypass negative observation");
+                if (!foreign.equals(pdc.get(ownerKey, PersistentDataType.STRING))
+                        || !UUID.fromString(foreign).equals(
+                                changed.relationships().get("follow_target")))
+                    throw new IOException("PDC mutation bypass was not actually observed");
+                getLogger().info("PAPER_A01_PDC_OWNER_DIRECT_BYPASS_NEGATIVE_REPRODUCED");
+            } finally {
+                pdc.set(ownerKey, PersistentDataType.STRING, ownerBefore);
+            }
+            var restored = success(reader.readStored(
+                    chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                    "Restored owner after negative-control direct PDC bypass");
+            if (!owner.equals(restored.relationships().get("follow_target")))
+                throw new IOException("PDC negative-control restoration failed");
+            return;
+        }
+
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+        if (!(Boolean) hook.getMethod("isClosed").invoke(null))
+            throw new IOException("Direct PDC probe must run inside same closed writer interval");
+        int previousDenials = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "pdcDenied");
+        try {
+            pdc.set(ownerKey, PersistentDataType.STRING, foreign);
+            throw new IOException("Unsafe direct Paper PDC set passed the closed writer gate");
+        } catch (IllegalStateException denied) {
+            if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                throw denied;
+        }
+        try {
+            pdc.remove(ownerKey);
+            throw new IOException("Unsafe direct Paper PDC remove passed the closed writer gate");
+        } catch (IllegalStateException denied) {
+            if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                throw denied;
+        }
+        int actualDenials = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "pdcDenied");
+        var retained = success(reader.readStored(
+                chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                "Actual PDC set and remove closed writer evidence");
+        if (actualDenials != previousDenials + 2
+                || !owner.toString().equals(pdc.get(ownerKey, PersistentDataType.STRING))
+                || !owner.equals(retained.relationships().get("follow_target")))
+            throw new IOException("PDC direct owner writer escaped the closed gate");
+        getLogger().info("PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED");
+    }
+
+    /**
      * Hold the REAL provider method after its instrumented entry but before
      * the plugin's owner/PDC write. A controller thread may touch only the
      * bootstrap hook: all Bukkit and WCL reads remain on Paper's main thread.
@@ -584,6 +655,8 @@ public final class WclServicesProbe extends JavaPlugin {
         String key = writer.toLowerCase(java.util.Locale.ROOT);
         int previousReturns = (Integer) hook.getMethod("count", String.class)
                 .invoke(null, key + "Returns");
+        int previousPdcReturns = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "pdcReturns");
         hook.getMethod("armHold", String.class).invoke(null, writer);
         var controllerFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
         Thread controller = new Thread(() -> {
@@ -641,6 +714,10 @@ public final class WclServicesProbe extends JavaPlugin {
         if (nowReturns != previousReturns + 1
                 || !(Boolean) hook.getMethod("isClosed").invoke(null))
             throw new IOException("Owner writer did not return exactly once under closed gate");
+        if ("WWC".equals(writer) && Boolean.getBoolean("a01.liveOwnerAgent.instrumentPdc")
+                && (Integer) hook.getMethod("count", String.class)
+                        .invoke(null, "pdcReturns") <= previousPdcReturns)
+            throw new IOException("Previously admitted WWC writer failed to enter nested PDC mutator");
         hook.getMethod("clearHold", String.class).invoke(null, writer);
         getLogger().info("PAPER_A01_LIVE_AGENT_" + writer
                 + "_ALREADY_ADMITTED_DRAINED_AFTER_REAL_RETURN_PASSED");
@@ -770,6 +847,8 @@ public final class WclServicesProbe extends JavaPlugin {
                         store.save(chicken, uncommitted);
                     },
                     () -> {
+                        verifyPaperPdcDirectOwnerWriterUnderClosedGate(
+                                readers.get("wwc"), chicken, world, pdc, ownerKey, secondOwner);
                         var retained = success(readers.get("wwc").readStored(
                                 chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
                                 "WWC genuine store after closed writer rejection");

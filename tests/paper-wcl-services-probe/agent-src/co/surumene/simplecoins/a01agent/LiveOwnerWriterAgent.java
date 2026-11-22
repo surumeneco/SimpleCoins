@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarFile;
 
 /**
- * Test-only interception of TWO demonstrated loaded WCL monetary-owner writers.
+ * Test-only interception of two loaded WCL owner writers plus one low-level Paper PDC mutation surface.
  * Neither a production agent nor proof of a complete G0 writer epoch.
  */
 public final class LiveOwnerWriterAgent {
@@ -43,18 +43,27 @@ public final class LiveOwnerWriterAgent {
                 String method;
                 String descriptor;
                 String label;
+                boolean pdc;
                 if ("co/surumene/whatawonderfulchicken/service/WonderfulChickenStore"
                         .equals(name)) {
                     label = "WWC";
+                    pdc = false;
                     method = "save";
                     descriptor = "(Lorg/bukkit/entity/Chicken;Lco/surumene/"
                             + "whatawonderfulchicken/data/WonderfulChickenData;)V";
                 } else if ("co/surumene/www/persistence/WonderfulWolfLoadedIndividuals"
                         .equals(name)) {
                     label = "WWW";
+                    pdc = false;
                     method = "saveAndRegister";
                     descriptor = "(Lorg/bukkit/entity/Wolf;Lco/surumene/www/"
                             + "individual/WonderfulWolfIndividual;)V";
+                } else if ("org/bukkit/craftbukkit/persistence/CraftPersistentDataContainer"
+                        .equals(name) && Boolean.getBoolean("a01.liveOwnerAgent.instrumentPdc")) {
+                    label = "PDC";
+                    method = null;
+                    descriptor = null;
+                    pdc = true;
                 } else {
                     return null;
                 }
@@ -66,18 +75,28 @@ public final class LiveOwnerWriterAgent {
                     AtomicInteger count = new AtomicInteger();
                     byte[] transformed = api.transformClass(api.parse(bytes), (builder, element) -> {
                         if (element instanceof MethodModel m
-                                && m.methodName().stringValue().equals(method)
-                                && m.methodTypeSymbol().descriptorString().equals(descriptor)) {
+                                && (pdc
+                                    ? (m.methodName().stringValue().equals("set")
+                                        && m.methodTypeSymbol().descriptorString().equals(
+                                            "(Lorg/bukkit/NamespacedKey;Lorg/bukkit/persistence/"
+                                                    + "PersistentDataType;Ljava/lang/Object;)V"))
+                                      || (m.methodName().stringValue().equals("remove")
+                                        && m.methodTypeSymbol().descriptorString().equals(
+                                            "(Lorg/bukkit/NamespacedKey;)V"))
+                                    : (m.methodName().stringValue().equals(method)
+                                       && m.methodTypeSymbol().descriptorString().equals(descriptor)))) {
                             count.incrementAndGet();
                             builder.transformMethod(m, MethodTransform.transformingCode(
                                     new CodeTransform() {
                                         @Override public void atStart(CodeBuilder code) {
-                                            code.invokestatic(HOOK, "before" + label,
+                                            code.invokestatic(HOOK,
+                                                    pdc ? "beforePdcMutation" : "before" + label,
                                                     MethodTypeDesc.ofDescriptor("()V"));
                                         }
                                         @Override public void accept(CodeBuilder code, CodeElement e) {
                                             if (e instanceof ReturnInstruction) {
-                                                code.invokestatic(HOOK, "after" + label,
+                                                code.invokestatic(HOOK,
+                                                        pdc ? "afterPdcMutation" : "after" + label,
                                                         MethodTypeDesc.ofDescriptor("()V"));
                                             }
                                             code.with(e);
@@ -87,9 +106,9 @@ public final class LiveOwnerWriterAgent {
                             builder.with(element);
                         }
                     });
-                    if (count.get() != 1)
-                        throw new IllegalStateException("Expected exactly one " + label
-                                + " writer method but found " + count.get());
+                    if (count.get() != (pdc ? 2 : 1))
+                        throw new IllegalStateException("Expected " + (pdc ? 2 : 1)
+                                + " exact " + label + " mutation method(s), found " + count.get());
                     System.out.println("PAPER_A01_LIVE_AGENT_" + label + "_WRITER_INSTRUMENTED");
                     return transformed;
                 } catch (Throwable failure) {

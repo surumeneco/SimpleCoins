@@ -342,6 +342,42 @@ jobs:
           grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
+      - name: Negative control Paper PDC owner bypasses the two upper WCL writer hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-pdc-negative/plugins
+          cp smoke/paper.jar smoke/eula.txt smoke/server.properties smoke-pdc-negative/
+          cp smoke/plugins/*.jar smoke-pdc-negative/plugins/
+          cp -a smoke/world smoke-pdc-negative/world
+          cd smoke-pdc-negative
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s \
+            java -javaagent:../live-owner-agent.jar \
+              -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
+              -Da01.liveOwnerAgent.probe=true \
+              -Da01.liveOwnerAgent.inflight=true \
+              -Da01.liveOwnerAgent.directPdcProof=true \
+              -Da01.liveOwnerAgent.expectPdcBypass=true \
+              -Da01.moneyOwnerWriterProbe=true \
+              -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-pdc-negative.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-pdc-negative.log; then
+            tail -180 paper-a01-pdc-negative.log
+            exit 1
+          fi
+          grep -F 'PAPER_A01_REAL_PDC_IMPL_CLASS=' paper-a01-pdc-negative.log
+          grep -F 'PAPER_A01_PDC_OWNER_DIRECT_BYPASS_NEGATIVE_REPRODUCED' paper-a01-pdc-negative.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_ALREADY_ADMITTED_DRAINED_AFTER_REAL_RETURN_PASSED' paper-a01-pdc-negative.log
+          echo 'PAPER_A01_DIRECT_PDC_OWNER_WRITER_BYPASS_COUNTEREXAMPLE_PROVED'
+      - name: Save actual bypass counterexample
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-real-paper-pdc-bypass-negative
+          path: smoke-pdc-negative/*.log
+          retention-days: 14
       - name: Real Paper WWC/WWW loaded-owner mutation denied by isolated Agent
         shell: bash
         run: |
@@ -361,6 +397,8 @@ jobs:
               -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
               -Da01.liveOwnerAgent.probe=true \
               -Da01.liveOwnerAgent.inflight=true \
+              -Da01.liveOwnerAgent.directPdcProof=true \
+              -Da01.liveOwnerAgent.instrumentPdc=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
           status=$?
@@ -378,6 +416,9 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_TEST_ONLY_INSTALLED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWC_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWW_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_PDC_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_REAL_PDC_IMPL_CLASS=' paper-a01-agent.log
+          grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWC_ALREADY_ADMITTED_DRAIN_BLOCKED_PASSED' paper-a01-agent.log

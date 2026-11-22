@@ -16,8 +16,10 @@ public final class LiveOwnerWriterHook {
     private static int active;
     private static int wwcReturns;
     private static int wwwReturns;
+    private static int pdcReturns;
     private static int wwcDenied;
     private static int wwwDenied;
+    private static int pdcDenied;
     private static boolean closed;
 
     // Probe-only one-shot hold. The control thread never calls Bukkit APIs.
@@ -32,6 +34,8 @@ public final class LiveOwnerWriterHook {
     public static void afterWWC() { leave("WWC"); }
     public static void beforeWWW() { enter("WWW"); }
     public static void afterWWW() { leave("WWW"); }
+    public static void beforePdcMutation() { enter("PDC"); }
+    public static void afterPdcMutation() { leave("PDC"); }
 
     private static void enter(String writer) {
         CountDownLatch entered = null;
@@ -41,8 +45,12 @@ public final class LiveOwnerWriterHook {
             // closed gate. This is NOT an async handoff token.
             ArrayDeque<String> callStack = STACK.get();
             if (closed && callStack.isEmpty()) {
-                if ("WWC".equals(writer)) wwcDenied++;
-                else wwwDenied++;
+                switch (writer) {
+                    case "WWC" -> wwcDenied++;
+                    case "WWW" -> wwwDenied++;
+                    case "PDC" -> pdcDenied++;
+                    default -> throw new IllegalStateException("Unknown writer type");
+                }
                 System.out.println("PAPER_A01_LIVE_AGENT_" + writer + "_ENTRY_DENIED");
                 throw new IllegalStateException("A01 live provider writer fenced");
             }
@@ -78,8 +86,12 @@ public final class LiveOwnerWriterHook {
             stack.removeLast();
             if (stack.isEmpty()) STACK.remove();
             active--;
-            if ("WWC".equals(writer)) wwcReturns++;
-            else wwwReturns++;
+            switch (writer) {
+                case "WWC" -> wwcReturns++;
+                case "WWW" -> wwwReturns++;
+                case "PDC" -> pdcReturns++;
+                default -> throw new IllegalStateException("Unknown writer type");
+            }
             LOCK.notifyAll();
         }
     }
@@ -173,8 +185,10 @@ public final class LiveOwnerWriterHook {
                 case "active" -> active;
                 case "wwcReturns" -> wwcReturns;
                 case "wwwReturns" -> wwwReturns;
+                case "pdcReturns" -> pdcReturns;
                 case "wwcDenied" -> wwcDenied;
                 case "wwwDenied" -> wwwDenied;
+                case "pdcDenied" -> pdcDenied;
                 default -> throw new IllegalArgumentException("Unknown hook evidence " + kind);
             };
         }
