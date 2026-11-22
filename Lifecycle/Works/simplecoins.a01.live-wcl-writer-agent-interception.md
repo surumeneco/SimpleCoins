@@ -89,6 +89,17 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 - 終了できないHold、異常終了、誤順序、想定外の引き継ぎ、他スレッド実API呼出、元writerが未計測等は合格にせずfail-closed。例外時の全writer排出・非同期子処理・他writerとの同一gateを証明するものではない。
 - データは隔離された公式Paper 26.2と配布WWC/WWW/WCL/WGLの固定fixtureだけを用い、main/本番VPS/製品JAR/Admission/G3 ACKを変更しない。DraftをAI自身でConfirmedにせず、issue-work検証とCIの結果を正式CAT Gateと混同しない。
 
+## 継続検証 — 外部Plugin保存メソッドを経由しないPaper PDC直接書換え
+
+#606/#607の正例は、実WWC/WWWの特定の上位保存メソッドをAgentで阻止する。**Bukkit/Paper PDCの直接setter/removerはこれらを通らず、ownerだけを変え得る**。この経路は、全writer閉包の証明に必須の具体的な候補であり、単なる静的JAR列挙では排除できない。
+
+- 現配布WWCの本物の保存済みowner Bと10,000Cシュルカーを用い、上位WWC保存入口がclosedで拒否されている**同一gate区間**に、実Entityの`PersistentDataContainer.set(follow_target,...)`を直接呼ぶ。
+- **負例（正しく制御されない旧経路）**：Java25 AgentがWWC/WWWの入口だけをinstrumentし、PDC下位mutatorをinstrumentしない隔離JVMで、保存メソッドに入らずowner B→Cへ書換えが到達し、WCL `readStored`が新しいownerを返すことを検査する。元のPDC値はテスト中に復元してfixture汚染を防ぐ。負例の成功はG0不成立の証明であってG0成功ではない。
+- **対応実験**：別の隔離JVMで、実行中のPaperのPDC実装クラスに限定して`set`と`remove`の正確なdescriptorをJava25 Class-File APIで識別し、同じ入場・排出monitorの別入口としてinstrumentする。閉鎖中の新規PDC owner書換え・削除は本文前に拒否し、owner Bと金額/ItemStackが不変であることを実WCL Reader/PDCで検証する。
+- 上位WWC writerが閉鎖前に入場し、閉鎖後に同じスレッドでPDC `set`へ到達する場合は、**入場済み親の同期的子**として下位書換えを許し、上位とPDCの両scopeが正常returnしてからのみ排出可能とする。独立した新しいPDC rootへこの許可を継承しない。
+- 実行マーカー・実PDCクラス名・ターゲットclass/method/descriptor一致・旧バイパスと新拒否を必須証拠にし、実装されていない追加API、他の直接変更経路、反射・別クラスローダー・非同期continuation、Paper native保存やファイルI/Oは制御済みと解釈しない。
+- この実験は既存の`Lifecycle/Works/simplecoins.a01.live-wcl-writer-agent-interception.md`の限定検証を広げるもので、新しい独立製品仕様やCAT Confirmedを作らない。実VPS・製品JAR・Admission・G0公開・G3 ACK・mainは不変。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。
