@@ -360,6 +360,7 @@ jobs:
             java -javaagent:../live-owner-agent.jar \
               -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
               -Da01.liveOwnerAgent.probe=true \
+              -Da01.liveOwnerAgent.inflight=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
           status=$?
@@ -379,6 +380,12 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_WWW_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_ALREADY_ADMITTED_DRAIN_BLOCKED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_ALREADY_ADMITTED_DRAIN_BLOCKED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_ALREADY_ADMITTED_RELEASED_CLOSED_true' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_ALREADY_ADMITTED_RELEASED_CLOSED_true' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_ALREADY_ADMITTED_DRAINED_AFTER_REAL_RETURN_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_ALREADY_ADMITTED_DRAINED_AFTER_REAL_RETURN_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWC_ENTRY_DENIED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWW_ENTRY_DENIED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWC_CLOSED_REAL_WRITER_REJECTED_PASSED' paper-a01-agent.log
