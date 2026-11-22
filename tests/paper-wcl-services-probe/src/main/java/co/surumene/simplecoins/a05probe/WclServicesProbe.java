@@ -678,9 +678,12 @@ public final class WclServicesProbe extends JavaPlugin {
                     + " value=10000 previous=" + firstOwner + " new=" + secondOwner);
             verifyAgentBlocksLoadedOwnerWriter("WWC",
                     () -> {
-                        data.followTarget(UUID.fromString(
+                        // Never mutate the store's already cached data object:
+                        // the actual writer is what the Agent must reject.
+                        var uncommitted = data.copy();
+                        uncommitted.followTarget(UUID.fromString(
                                 "00000000-0000-0000-0000-00000000a075"));
-                        store.save(chicken, data);
+                        store.save(chicken, uncommitted);
                     },
                     () -> {
                         var retained = success(readers.get("wwc").readStored(
