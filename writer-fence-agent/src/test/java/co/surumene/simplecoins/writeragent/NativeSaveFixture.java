@@ -6,9 +6,14 @@ import java.util.concurrent.TimeUnit;
 /** Synchronize an already-admitted NMS body with a seal in another thread. */
 public final class NativeSaveFixture {
     private static volatile CountDownLatch entered, release;
+    private static volatile RuntimeException failNext;
     private NativeSaveFixture() {}
     public static void install(CountDownLatch e, CountDownLatch r) { entered=e; release=r; }
+    public static void failNext(RuntimeException failure) { failNext = failure; }
     public static void onNmsBody() {
+        RuntimeException pending = failNext;
+        failNext = null;
+        if (pending != null) throw pending;
         if (entered != null) {
             entered.countDown();
             try {
