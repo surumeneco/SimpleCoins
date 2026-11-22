@@ -33,6 +33,12 @@ public final class PaperNativeSaveFenceAdapter {
                     throw new IllegalStateException("Unknown NMS parent token");
                 yield fence.enterNested(entry);
             }
+            case "PDC", "INVENTORY" -> {
+                if (parent == null) yield fence.enterRoot();
+                if (!(parent instanceof WriterEpochFence.Entry entry))
+                    throw new IllegalStateException("Unrecognized nested Paper inventory/PDC writer token");
+                yield fence.enterNested(entry);
+            }
             default -> throw new IllegalArgumentException("Unknown observed writer target");
         };
     }

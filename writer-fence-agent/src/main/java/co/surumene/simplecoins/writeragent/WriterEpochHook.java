@@ -23,7 +23,7 @@ public final class WriterEpochHook {
     private static final Object LOCK = new Object();
     private static final ThreadLocal<ArrayDeque<Frame>> STACK =
             ThreadLocal.withInitial(ArrayDeque::new);
-    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS");
+    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS", "PDC", "INVENTORY");
     private static final Set<String> TRANSFORMED = new HashSet<>();
     private static Mode mode = Mode.PASSIVE;
     private static int passiveActive;
@@ -110,6 +110,10 @@ public final class WriterEpochHook {
     public static void afterCraft() { after("CRAFT"); }
     public static void beforeNms() { before("NMS"); }
     public static void afterNms() { after("NMS"); }
+    public static void beforePdc() { before("PDC"); }
+    public static void afterPdc() { after("PDC"); }
+    public static void beforeInventory() { before("INVENTORY"); }
+    public static void afterInventory() { after("INVENTORY"); }
 
     private static void before(String target) {
         synchronized (LOCK) {
@@ -121,10 +125,14 @@ public final class WriterEpochHook {
                 stack.addLast(new Frame(target, null, false));
                 return;
             }
-            if (!stack.isEmpty()
-                    && !("NMS".equals(target) && "CRAFT".equals(stack.peekLast().target()))) {
-                faultLocked();
-                throw new IllegalStateException("Unrecognized nested native writer ancestry");
+            if (!stack.isEmpty()) {
+                boolean nativeSaveChild = "NMS".equals(target)
+                        && "CRAFT".equals(stack.peekLast().target());
+                boolean lowerLevelMutation = "PDC".equals(target) || "INVENTORY".equals(target);
+                if (!nativeSaveChild && !lowerLevelMutation) {
+                    faultLocked();
+                    throw new IllegalStateException("Unrecognized nested writer ancestry");
+                }
             }
             Object parent = stack.isEmpty() ? null : stack.peekLast().entry();
             try {

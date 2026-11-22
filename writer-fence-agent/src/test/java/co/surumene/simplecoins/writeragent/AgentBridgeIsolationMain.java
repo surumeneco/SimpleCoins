@@ -19,10 +19,15 @@ public final class AgentBridgeIsolationMain {
 
     public static void main(String[] args) throws Exception {
         check(WriterEpochHook.class.getClassLoader() == null, "hook is not bootstrap loaded");
-        new CraftPlayer().saveData(); // Starts PASSIVE; drives both real transformed fixture classes.
+        new CraftPlayer().saveData(); // Starts PASSIVE; exercises real transformed native fixtures.
+        var pdc = new org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer();
+        var key = new org.bukkit.NamespacedKey();
+        var valueType = new org.bukkit.persistence.PersistentDataType();
+        pdc.set(key, valueType, "sample"); // Invokes real transformed CraftInventory.setItem.
+        pdc.remove(key);
         check(WriterEpochHook.mode() == WriterEpochHook.Mode.PASSIVE, "passive by default");
-        check(WriterEpochHook.instrumentedTargets().equals(Set.of("CRAFT", "NMS")),
-                "missing transform/descriptor");
+        check(WriterEpochHook.instrumentedTargets().equals(Set.of("CRAFT", "NMS", "PDC", "INVENTORY")),
+                "missing native, PDC or inventory transform/descriptor");
         check(WriterEpochHook.inFlight() == 0, "passive save leaked");
 
         // The product JAR is NOT on the system classpath: emulate Paper's child loader.
@@ -41,6 +46,10 @@ public final class AgentBridgeIsolationMain {
 
             fenceType.getMethod("arm").invoke(fence); // test-only, never called in product bootstrap.
             WriterEpochHook.beginLimitedFamilyProof();
+            pdc.set(key, valueType, "tracked nested write");
+            pdc.remove(key);
+            check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
+                    "actual nested PDC/Inventory callbacks failed to drain");
             CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
             NativeSaveFixture.install(entered, release);
             AtomicReference<Throwable> writerError = new AtomicReference<>();
