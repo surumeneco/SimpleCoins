@@ -45,6 +45,23 @@ final class PaperNativeSaveFenceAdapterTest {
     }
 
     @Test
+    void chickenAndWolfOwnerWritersShareLowerLevelMutationDrain() throws Exception {
+        WriterEpochFence fence = new WriterEpochFence();
+        PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);
+        fence.arm();
+        Object chicken = adapter.enter("WWC", null);
+        Object pdc = adapter.enter("PDC", chicken);
+        Object inventory = adapter.enter("INVENTORY", pdc);
+        assertEquals(3, fence.inFlight());
+        WriterEpochFence.Seal seal = fence.seal();
+        adapter.normalReturn(inventory);
+        adapter.normalReturn(pdc);
+        adapter.normalReturn(chicken);
+        assertTrue(fence.awaitDrained(seal, 100));
+        assertThrows(IllegalStateException.class, () -> adapter.enter("WWW", null));
+    }
+
+    @Test
     void directNmsRootAndExceptionInvalidateOneEpoch() {
         WriterEpochFence fence = new WriterEpochFence();
         PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);

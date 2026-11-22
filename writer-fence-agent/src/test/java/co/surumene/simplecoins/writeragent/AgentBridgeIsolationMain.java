@@ -25,9 +25,16 @@ public final class AgentBridgeIsolationMain {
         var valueType = new org.bukkit.persistence.PersistentDataType();
         pdc.set(key, valueType, "sample"); // Invokes real transformed CraftInventory.setItem.
         pdc.remove(key);
+        new co.surumene.whatawonderfulchicken.service.WonderfulChickenStore().save(
+                new org.bukkit.entity.Chicken(),
+                new co.surumene.whatawonderfulchicken.data.WonderfulChickenData());
+        new co.surumene.www.persistence.WonderfulWolfLoadedIndividuals().saveAndRegister(
+                new org.bukkit.entity.Wolf(),
+                new co.surumene.www.individual.WonderfulWolfIndividual());
         check(WriterEpochHook.mode() == WriterEpochHook.Mode.PASSIVE, "passive by default");
-        check(WriterEpochHook.instrumentedTargets().equals(Set.of("CRAFT", "NMS", "PDC", "INVENTORY")),
-                "missing native, PDC or inventory transform/descriptor");
+        check(WriterEpochHook.instrumentedTargets().equals(
+                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "WWC", "WWW")),
+                "missing native, PDC, inventory or WCL-owner transform/descriptor");
         check(WriterEpochHook.inFlight() == 0, "passive save leaked");
 
         // The product JAR is NOT on the system classpath: emulate Paper's child loader.
@@ -50,6 +57,14 @@ public final class AgentBridgeIsolationMain {
             pdc.remove(key);
             check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
                     "actual nested PDC/Inventory callbacks failed to drain");
+            new co.surumene.whatawonderfulchicken.service.WonderfulChickenStore().save(
+                    new org.bukkit.entity.Chicken(),
+                    new co.surumene.whatawonderfulchicken.data.WonderfulChickenData());
+            new co.surumene.www.persistence.WonderfulWolfLoadedIndividuals().saveAndRegister(
+                    new org.bukkit.entity.Wolf(),
+                    new co.surumene.www.individual.WonderfulWolfIndividual());
+            check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
+                    "actual nested WWC/WWW PDC/Inventory callbacks failed to drain");
             CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
             NativeSaveFixture.install(entered, release);
             AtomicReference<Throwable> writerError = new AtomicReference<>();

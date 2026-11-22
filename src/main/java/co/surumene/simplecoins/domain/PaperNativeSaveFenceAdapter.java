@@ -39,6 +39,11 @@ public final class PaperNativeSaveFenceAdapter {
                     throw new IllegalStateException("Unrecognized nested Paper inventory/PDC writer token");
                 yield fence.enterNested(entry);
             }
+            case "WWC", "WWW" -> {
+                if (parent != null)
+                    throw new IllegalStateException("New WCL owner writer cannot inherit unrelated ancestry");
+                yield fence.enterRoot();
+            }
             default -> throw new IllegalArgumentException("Unknown observed writer target");
         };
     }

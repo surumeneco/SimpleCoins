@@ -7,7 +7,7 @@ import co.surumene.simplecoins.writeragent.WriterEpochHook;
 public final class CraftInventory {
     public void setItem(int slot, ItemStack item) {
         if (WriterEpochHook.mode() == WriterEpochHook.Mode.LIMITED_TRACKING
-                && WriterEpochHook.inFlight() != 2)
+                && WriterEpochHook.inFlight() < 2)
             throw new AssertionError("Injected Inventory setter was not nested in PDC scope");
     }
 }
