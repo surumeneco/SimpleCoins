@@ -293,6 +293,8 @@ jobs:
           done
           if grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-additem.log; then
             echo 'A01_REAL_PAPER_ADDITEM_UNCOVERED_MONETARY_WRITER_OBSERVED'
+          elif grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-additem.log; then
+            echo 'A01_REAL_PAPER_ADDITEM_PARTIAL_MONEY_WRITE_BEFORE_KNOWN_HOOK_REFUSAL_OBSERVED'
           elif grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1' agent-actual-additem.log; then
             echo 'A01_REAL_PAPER_ADDITEM_REACHES_KNOWN_WRITER_HOOK_OBSERVED'
           else
