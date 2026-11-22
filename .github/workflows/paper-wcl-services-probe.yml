@@ -416,6 +416,47 @@ jobs:
           name: a01-real-paper-equipment-bypass-negative
           path: smoke-equipment-negative/*.log
           retention-days: 14
+      - name: Negative control real Chest currency bypasses upper, PDC and equipment fences
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-inventory-negative/plugins
+          cp smoke/paper.jar smoke/eula.txt smoke/server.properties smoke-inventory-negative/
+          cp smoke/plugins/*.jar smoke-inventory-negative/plugins/
+          cp -a smoke/world smoke-inventory-negative/world
+          cd smoke-inventory-negative
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s \
+            java -javaagent:../live-owner-agent.jar \
+              -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
+              -Da01.liveOwnerAgent.probe=true \
+              -Da01.liveOwnerAgent.inflight=true \
+              -Da01.liveOwnerAgent.instrumentPdc=true \
+              -Da01.liveOwnerAgent.instrumentEquipment=true \
+              -Da01.liveOwnerAgent.directPdcProof=true \
+              -Da01.liveOwnerAgent.directEquipmentProof=true \
+              -Da01.liveOwnerAgent.directInventoryProof=true \
+              -Da01.liveOwnerAgent.expectInventoryBypass=true \
+              -Da01.moneyOwnerWriterProbe=true \
+              -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-inventory-negative.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-inventory-negative.log; then
+            tail -180 paper-a01-inventory-negative.log
+            exit 1
+          fi
+          grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-inventory-negative.log
+          grep -F 'PAPER_A01_BLOCK_CHEST_DIRECT_SETITEM_BYPASS_REPRODUCED' paper-a01-inventory-negative.log
+          grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-inventory-negative.log
+          grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-inventory-negative.log
+          echo 'PAPER_A01_REAL_CHEST_COIN_DIRECT_INVENTORY_WRITE_BYPASS_PROVED'
+      - name: Preserve real Chest currency writer bypass evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-real-paper-chest-inventory-bypass-negative
+          path: smoke-inventory-negative/*.log
+          retention-days: 14
       - name: Real Paper WWC/WWW loaded-owner mutation denied by isolated Agent
         shell: bash
         run: |
@@ -439,6 +480,8 @@ jobs:
               -Da01.liveOwnerAgent.instrumentPdc=true \
               -Da01.liveOwnerAgent.directEquipmentProof=true \
               -Da01.liveOwnerAgent.instrumentEquipment=true \
+              -Da01.liveOwnerAgent.directInventoryProof=true \
+              -Da01.liveOwnerAgent.instrumentInventory=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
           status=$?
@@ -458,6 +501,9 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_WWW_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_PDC_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_EQUIPMENT_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_INVENTORY_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-agent.log
+          grep -F 'PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_PDC_IMPL_CLASS=' paper-a01-agent.log

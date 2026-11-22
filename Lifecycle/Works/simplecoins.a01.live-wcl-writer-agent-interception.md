@@ -110,6 +110,17 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 - Instrumentation失敗、直接装備変更の否認、別の`EntityEquipment.setItem`経路、オフハンド/防具・NMS内部/reflective writer、別Plugin・非同期は個別未証明として残す。単一方法の正例から装備全スロットや全24 JARのwriter閉包へ一般化しない。
 - 本番Agent・製品コード・保存帳簿・G0/G3の公開・VPS・mainは変更しない。issue-work検証であり、CAT Draftを自動Confirmedにしない。
 
+## 追加検証 — バニラのLIVEコンテナ貨幣と低位Inventory書込み
+
+#606〜#609はWCL上位、実Paper PDC、WWW主手の局所writerを扱った。G0の元仕様は**通常のBlockEntityコンテナ内貨幣**も対象とする。これらの入口を閉じても、標準`Inventory.setItem`が貨幣をSTONEに置換できれば会計世代は無保証となる。
+
+- 既存loopback/0人/独立入室拒否のPaper26.2実環境と、真正`CoinItemCodec`の10,000C貨幣1枚を使用。テスト専用の既ロードchunkにチェストを設置し、`BlockState`から取得した本物のインベントリに保存する。実装型の完全名を記録。
+- 既存上位WWC/WWW、PDC、native主手Agentをロードして、その**共通writerゲートを閉じたまま**同一チェストの`Inventory.setItem(slot, STONE)`へ新規入場する。
+- 装備側までinstrument済みだが**Inventoryだけは未instrument**の隔離JVMでは、10,000C→STONEの実変化が通過することを必須負例とする。復元後に金額・serialized ItemStackが元通りであることを確認する。
+- 別の隔離JVMでは、対象の実`CraftInventory#setItem(int, ItemStack)`の**実descriptorを完全一致**でJava25 test-only Agentに登録し、同じ閉鎖区間の直接変更を拒否。元の10,000C貨幣・PDC識別子・数量・ItemStack bytesは不変、他の既存writer拒否/排出と3 JVM/BlockLocker回帰はGreenであること。
+- 未instrumentの別Inventory実装、double chest、Hopper、NMS内部の`Container#setItem`、NBT直接I/Oなどを、`CraftInventory`一箇所の実証から閉包済みとはみなさない。上位APIフックの増殖だけでG0/G3完成と主張せず、未捕捉経路を明確にして本番公開と製品接続は維持保留。
+- 本Workは同じissue-work検証の技術対象を広げる。製品JAR、本番VPS、`main`、入室Guard、G0公開、G3 ACK、CAT DraftのConfirmed化は行わない。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。
