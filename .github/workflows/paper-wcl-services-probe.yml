@@ -273,8 +273,18 @@ jobs:
           javac --release 25 -d live-owner-agent-classes \
             tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/LiveOwnerWriterAgent.java \
             tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.java
-          jar cf live-owner-hook.jar -C live-owner-agent-classes \
-            co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.class
+          # The bootstrap-visible hook signature references its private epoch
+          # token class. Ship both hook classes, NEVER bootstrap-load the whole
+          # Agent JAR: its anonymous transformer is app-loader owned.
+          jar cf live-owner-hook.jar \
+            -C live-owner-agent-classes co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.class \
+            -C live-owner-agent-classes 'co/surumene/simplecoins/a01agent/LiveOwnerWriterHook$KnownSourcesClosedEpoch.class'
+          unzip -Z1 live-owner-hook.jar | grep -Fx \
+            'co/surumene/simplecoins/a01agent/LiveOwnerWriterHook$KnownSourcesClosedEpoch.class'
+          if unzip -Z1 live-owner-hook.jar | grep -Fq 'LiveOwnerWriterAgent'; then
+            echo 'Agent transformer must not enter bootstrap hook JAR' >&2
+            exit 1
+          fi
           printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent\n\n' > live-owner-agent.mf
           jar cfm live-owner-agent.jar live-owner-agent.mf -C live-owner-agent-classes .
           unzip -p live-owner-agent.jar META-INF/MANIFEST.MF | grep -F \
