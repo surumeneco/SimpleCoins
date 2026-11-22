@@ -22,6 +22,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
@@ -124,6 +131,62 @@ jobs:
               (receipts/(label+'-generated-junit.java')).write_text(source)
               print(label+'_RELEASED_CANONICAL_CAT_JUNIT_GENERATED_ONLY_NOT_GREEN')
           print('A04_A05_RELEASED_CANONICAL_CAT_PI_ONLY_NOT_IMPLEMENTATION_PASS')
+          PY
+      - name: Compile and execute both current CAT Queue JUnit cases against real existing domain drivers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          src=Path('Lifecycle/Works/.cat-flow/generated')
+          for label,filename in [('A04','A04SavedOwnerGeneratedTest.java'),
+                                 ('A05','A05LiveHybridGeneratedTest.java')]:
+              raw=(src/filename).read_bytes()
+              digest=hashlib.sha256(raw).hexdigest()
+              expected=Path('cat-a04a05-receipts',label+'-selected-junit-sha256.txt').read_text().split()[0]
+              if digest != expected:
+                  raise AssertionError('Generated canonical CAT JUnit mutated before Gradle')
+              text=raw.decode('utf-8')
+              assert 'CAPABILITIES NOT VERIFIED' in text
+              packages=[line.removeprefix('package ').removesuffix(';')
+                        for line in text.splitlines()
+                        if line.startswith('package ') and line.endswith(';')]
+              if len(packages)!=1 or not packages[0].startswith('co.surumene.simplecoins.'):
+                  raise AssertionError('Unrecognized canonical JUnit package')
+              declared=[line[len('final class '):].split()[0]
+                        for line in text.splitlines() if line.startswith('final class ')]
+              if len(declared)!=1:
+                  raise AssertionError('Missing or duplicate canonical generated test class')
+              target=Path('src/test/java')/Path(packages[0].replace('.','/'))/(declared[0]+'.java')
+              if target.exists():
+                  if target.read_bytes()!=raw:
+                      raise AssertionError('Tracked generated test differs from current canonical bytes')
+                  print(label,'TRACKED_CANONICAL_JUNIT_BYTE_IDENTICAL_REUSED',target)
+              else:
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(raw)
+                  print(label,'CANONICAL_JUNIT_STAGED_IN_TEST_ONLY_CLASSPATH',target)
+          PY
+          gradle --no-daemon --stacktrace :test \
+            --tests '*GeneratedA04SavedOwnerCase*' \
+            --tests '*GeneratedA05WclEvidenceCase*'
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('build/test-results/test')
+          selected=list(root.glob('TEST-*GeneratedA04SavedOwnerCase*.xml'))
+          selected+=list(root.glob('TEST-*GeneratedA05WclEvidenceCase*.xml'))
+          assert len(selected)==2,('Missing distinct real JUnit results',selected)
+          for p in selected:
+              tree=ET.parse(p).getroot()
+              tests=int(tree.get('tests','0'))
+              failed=int(tree.get('failures','0'))+int(tree.get('errors','0'))
+              skipped=int(tree.get('skipped','0'))
+              assert (tests,failed,skipped)==(1,0,0),(p,tests,failed,skipped)
+              assert tree.find('testcase') is not None,p
+              (Path('cat-a04a05-receipts')/p.name).write_bytes(p.read_bytes())
+          print('A04_A05_CANONICAL_CURRENT_QUEUE_ACTUAL_JUNIT_TWO_GREEN_NOT_FULL_PROCESS')
           PY
       - name: Preserve canonical selected tests, exact receipts and source hashes
         if: always()
