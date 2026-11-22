@@ -8,6 +8,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.mainhand-equipment-agent-writer.md'
       - 'Lifecycle/Works/simplecoins.a01.writer-exception-failclosed.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md'
+      - 'Lifecycle/Works/simplecoins.a01.craftinventory-additem-prebody.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -67,6 +68,11 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md
+          work=Lifecycle/Works/simplecoins.a01.craftinventory-additem-prebody.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -291,17 +297,14 @@ jobs:
           for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
             grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-additem.log
           done
-          if grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-additem.log; then
-            echo 'A01_REAL_PAPER_ADDITEM_UNCOVERED_MONETARY_WRITER_OBSERVED'
-          elif grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-additem.log; then
-            echo 'A01_REAL_PAPER_ADDITEM_PARTIAL_MONEY_WRITE_BEFORE_KNOWN_HOOK_REFUSAL_OBSERVED'
-          elif grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1' agent-actual-additem.log; then
-            echo 'A01_REAL_PAPER_ADDITEM_REACHES_KNOWN_WRITER_HOOK_OBSERVED'
-          else
-            echo 'No verified real Paper addItem classification' >&2
-            tail -180 agent-actual-additem.log
+          if grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-additem.log \
+              || grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-additem.log; then
+            echo 'Real Paper addItem still mutates currency with sealed product epoch' >&2
+            tail -160 agent-actual-additem.log
             exit 1
           fi
+          grep -F 'PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1' agent-actual-additem.log
+          echo 'PAPER_A01_REAL_CHEST_ADDITEM_PREBODY_ENTRY_DENY_5000C_UNCHANGED_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4

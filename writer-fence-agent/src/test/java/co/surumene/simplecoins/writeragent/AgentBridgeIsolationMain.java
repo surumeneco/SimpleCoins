@@ -68,6 +68,18 @@ public final class AgentBridgeIsolationMain {
                     new co.surumene.www.individual.WonderfulWolfIndividual());
             check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
                     "actual nested WWC/WWW PDC/Inventory callbacks failed to drain");
+            // Real Paper's non-void addItem must be a writer, not just its
+            // later setItem delegation. Verify open-generation normal return.
+            var inventory = new org.bukkit.craftbukkit.inventory.CraftInventory();
+            int addItemBodiesBefore = org.bukkit.craftbukkit.inventory.CraftInventory
+                    .addItemBodyExecutions();
+            var inserted = inventory.addItem(new org.bukkit.inventory.ItemStack());
+            check(inserted.isEmpty(), "transformed addItem changed its HashMap return");
+            check(org.bukkit.craftbukkit.inventory.CraftInventory
+                    .addItemBodyExecutions() == addItemBodiesBefore + 1,
+                    "open addItem never entered original body");
+            check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
+                    "actual addItem normal return did not drain");
             CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
             NativeSaveFixture.install(entered, release);
             AtomicReference<Throwable> writerError = new AtomicReference<>();
@@ -87,6 +99,20 @@ public final class AgentBridgeIsolationMain {
             check(!activeWriter.isAlive() && writerError.get() == null, "real nested return not completed");
             check((Boolean) awaitDrain.invoke(fence, seal, 1000L), "normal-return drain failed");
             check(WriterEpochHook.inFlight() == 0, "bridge count not drained");
+            int sealedAddItemBodies = org.bukkit.craftbukkit.inventory.CraftInventory
+                    .addItemBodyExecutions();
+            try {
+                inventory.addItem(new org.bukkit.inventory.ItemStack());
+                throw new AssertionError("closed CraftInventory.addItem entered unguarded body");
+            } catch (IllegalStateException expected) {
+                check(WriterEpochHook.mode() == WriterEpochHook.Mode.FAULTED,
+                        "denied addItem did not fault bootstrap generation");
+                check(fenceType.getMethod("state").invoke(fence).toString().equals("FAULTED"),
+                        "denied addItem left product generation healthy");
+            }
+            check(org.bukkit.craftbukkit.inventory.CraftInventory
+                            .addItemBodyExecutions() == sealedAddItemBodies,
+                    "closed addItem executed body before rejecting");
             try {
                 new PlayerDataStorage().save(new Player()); // Independent NMS root after seal.
                 throw new AssertionError("new NMS root unexpectedly admitted");
