@@ -28,7 +28,7 @@ public final class WriterEpochHook {
     private static Mode mode = Mode.PASSIVE;
     private static int passiveActive;
     private static int trackedActive;
-    private static MethodHandle enter, normal, exceptional;
+    private static MethodHandle enter, normal, exceptional, invalidateProduct;
 
     private WriterEpochHook() {}
 
@@ -53,21 +53,24 @@ public final class WriterEpochHook {
 
     /** Non-arming bind. Does not imply the 24-JAR writer roster was closed. */
     public static void bindProductCallbacks(MethodHandle onEnter,
-            MethodHandle onNormalReturn, MethodHandle onExceptionalReturn) {
+            MethodHandle onNormalReturn, MethodHandle onExceptionalReturn, MethodHandle onInvalidateProduct) {
         synchronized (LOCK) {
             Objects.requireNonNull(onEnter, "enter callback");
             Objects.requireNonNull(onNormalReturn, "normal return callback");
             Objects.requireNonNull(onExceptionalReturn, "exception callback");
+            Objects.requireNonNull(onInvalidateProduct, "invalidation callback");
             if (mode != Mode.PASSIVE || enter != null
                     || !onEnter.type().equals(MethodType.methodType(Object.class, String.class, Object.class))
                     || !onNormalReturn.type().equals(MethodType.methodType(void.class, Object.class))
-                    || !onExceptionalReturn.type().equals(MethodType.methodType(void.class, Object.class))) {
+                    || !onExceptionalReturn.type().equals(MethodType.methodType(void.class, Object.class))
+                    || !onInvalidateProduct.type().equals(MethodType.methodType(void.class))) {
                 faultLocked();
                 throw new IllegalStateException("Untrusted or duplicate product writer binding");
             }
             enter = onEnter;
             normal = onNormalReturn;
             exceptional = onExceptionalReturn;
+            invalidateProduct = onInvalidateProduct;
         }
     }
 
@@ -88,7 +91,20 @@ public final class WriterEpochHook {
     }
 
     public static void fault() { synchronized (LOCK) { faultLocked(); } }
-    private static void faultLocked() { mode = Mode.FAULTED; LOCK.notifyAll(); }
+    private static void faultLocked() {
+        boolean firstFault = mode != Mode.FAULTED;
+        mode = Mode.FAULTED;
+        LOCK.notifyAll();
+        // A standalone Agent failure must invalidate the *same* product epoch.
+        // Otherwise a previously minted Seal could still appear drained and valid.
+        if (firstFault && invalidateProduct != null) {
+            try { invalidateProduct.invokeExact(); }
+            catch (Throwable failure) {
+                throw new IllegalStateException(
+                        "Cannot revoke product writer epoch after Agent fault", failure);
+            }
+        }
+    }
 
     public static void beforeCraft() { before("CRAFT"); }
     public static void afterCraft() { after("CRAFT"); }

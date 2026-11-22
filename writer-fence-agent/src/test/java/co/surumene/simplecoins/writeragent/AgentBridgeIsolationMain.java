@@ -66,6 +66,8 @@ public final class AgentBridgeIsolationMain {
             } catch (IllegalStateException expected) {
                 check(WriterEpochHook.mode() == WriterEpochHook.Mode.FAULTED,
                         "closed writer refusal did not invalidate bridge");
+                check(fenceType.getMethod("state").invoke(fence).toString().equals("FAULTED"),
+                        "Agent fault left an apparently valid product Seal");
             }
         }
         System.out.println("SIMPLECOINS_A01_CROSS_LOADER_NATIVE_AGENT_RED_GREEN_PASS");

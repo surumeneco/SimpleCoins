@@ -49,6 +49,9 @@ public final class PaperNativeSaveFenceAdapter {
         entry.exceptionalReturn();
     }
 
+    /** Revoke every future use of a product Seal if the bootstrap Agent faults. */
+    public void invalidateFromAgent() { fence.invalidate(); }
+
     /**
      * Bind to a bootstrap-loader class only if the actual separate Agent exists.
      * No explicit Agent means default-deny settlement remains in force.
@@ -72,9 +75,11 @@ public final class PaperNativeSaveFenceAdapter {
             MethodHandle exceptional = lookup.findVirtual(PaperNativeSaveFenceAdapter.class,
                     "exceptionalReturn", MethodType.methodType(void.class, Object.class))
                     .bindTo(this);
+            MethodHandle invalidate = lookup.findVirtual(PaperNativeSaveFenceAdapter.class,
+                    "invalidateFromAgent", MethodType.methodType(void.class)).bindTo(this);
             bootstrapHook.getMethod("bindProductCallbacks", MethodHandle.class,
-                    MethodHandle.class, MethodHandle.class)
-                    .invoke(null, enter, normal, exceptional);
+                    MethodHandle.class, MethodHandle.class, MethodHandle.class)
+                    .invoke(null, enter, normal, exceptional, invalidate);
             return true;
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException failure) {
             throw new IllegalStateException("Writer Agent bootstrap bridge binding failed", failure);
