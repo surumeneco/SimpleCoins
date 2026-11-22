@@ -109,7 +109,11 @@ jobs:
               implementation=run([
                   cli,'conformance','--work',work,'--kind','implementation-conformance'])
               assert implementation['status']=='inconclusive',implementation
-              assert not implementation.get('technology_results'),implementation
+              # The released independent inspector may explicitly emit
+              # inconclusive technology rows instead of an empty array.
+              # Both shapes are NON-PASS, never mask them as all-covered.
+              assert all(row.get('status')=='inconclusive'
+                         for row in implementation.get('technology_results',[])),implementation
               (receipts/(label+'-formal-gates.json')).write_text(
                   json.dumps({'source_work':work,'process_closure':closure,
                               'model_conformance':conformance,
