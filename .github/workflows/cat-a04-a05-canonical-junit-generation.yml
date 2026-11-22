@@ -1,0 +1,135 @@
+name: A04 A05 canonical released CAT JUnit generation and non-green boundary
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/cat-a04-a05-canonical-junit-generation.yml'
+      - 'Lifecycle/Works/simplecoins.a04a05.junit-generation-compatibility.md'
+      - 'Lifecycle/Works/simplecoins.a04.saved-terrain-observation-producer.md'
+      - 'Lifecycle/Works/simplecoins.a05.live-wcl-hybrid-stage.md'
+      - 'docs/cat/confirmed/a04-*'
+      - 'docs/cat/confirmed/a05-*'
+      - 'tests/cat/a04-saved-owner-junit-binding.json'
+      - 'tests/cat/a05-wcl-consumer-junit-binding.json'
+permissions:
+  contents: read
+jobs:
+  released-cat-a04-a05:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          path: released-cat
+          persist-credentials: false
+      - name: Verify immutable released CAT source and bounded issue Work
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C released-cat rev-parse HEAD)" = a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          test "$(git -C released-cat rev-parse HEAD:.cat-system)" = eeb6cdbd008dedc261f1df380b92f8052be0c045
+          python released-cat/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a04a05.junit-generation-compatibility.md
+      - name: Execute canonical A04 A05 formal Process and Model gates and generate PI-only JUnit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          root = pathlib.Path.cwd()
+          cli = pathlib.Path('released-cat/.cat-system/scripts/cat_flow.py')
+          compiler = pathlib.Path('released-cat/.cat-system/scripts/cat_compile_v2.py')
+          rows = [
+              ('A04','a04','simplecoins.a04.saved-terrain-observation-producer',
+               'a04-saved-owner','a04-saved-blocklocker-owner','a04-saved-owner-junit-binding.json',
+               'A04SavedOwnerGeneratedTest.java',20),
+              ('A05','a05','simplecoins.a05.live-wcl-hybrid-stage',
+               'a05-live-hybrid','a05-wcl-consumer','a05-wcl-consumer-junit-binding.json',
+               'A05LiveHybridGeneratedTest.java',29),
+          ]
+          receipts=pathlib.Path('cat-a04a05-receipts')
+          receipts.mkdir()
+          for label,_,work_name,prefix,spec,binding,test_output,obligation_count in rows:
+              work='Lifecycle/Works/'+work_name+'.md'
+              process='docs/cat/confirmed/'+spec+'-process.md'
+              pi='docs/cat/confirmed/'+spec+'-pi.md'
+              tce='docs/cat/confirmed/'+spec+'-tce.md'
+              base='Lifecycle/Works/.cat-flow/cache/'+prefix
+              model=base+'-model.json'
+              vectors=base+'-vectors.json'
+              queue=base+'-queue.json'
+              tests='Lifecycle/Works/.cat-flow/generated/'+test_output
+              def run(argv):
+                  p=subprocess.run([sys.executable,*map(str,argv)],text=True,
+                                   stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                   timeout=90,check=False)
+                  print(label,*map(str,argv), 'exit=',p.returncode,flush=True)
+                  if p.stdout: print(p.stdout[-6000:],flush=True)
+                  if p.stderr: print('stderr:',p.stderr[-6000:],flush=True)
+                  if p.returncode!=0: raise RuntimeError('Canonical CAT command failed')
+                  return json.loads(p.stdout) if p.stdout.strip().startswith('{') else None
+              validated=run([cli,'validate','--work',work])
+              assert validated['contract_valid'] and validated['status']=='passed'
+              closure=run([cli,'conformance','--work',work,'--kind','process-closure'])
+              assert closure['status']=='passed',closure
+              for kind in ['model','vectors','queue']:
+                  result=run([cli,'compile','--work',work,'--kind',kind])
+                  assert result['status']=='passed',result
+              conformance=run([cli,'conformance','--work',work,'--kind','model-conformance'])
+              assert conformance['status']=='passed',conformance
+              obligations=run([cli,'obligations','--work',work])
+              assert obligations['status']=='passed',obligations
+              payload=json.loads((root / (base+'-obligations.json')).read_text())
+              assert len(payload['items'])==obligation_count,len(payload['items'])
+              # Unlike cat_flow's old default-Vitest selection, the RELEASED
+              # canonical compiler explicitly supports a JUnit renderer.
+              args=[compiler,'tests',model,vectors,'tests/cat/'+binding,
+                    '--queue',queue,'--framework','junit',
+                    '--process',process,'--pi',pi,'--tce',tce,'-o',tests]
+              run(args)
+              source=(root/tests).read_text(encoding='utf-8')
+              assert '// Generated by CAT from the confirmed TestModel' in source
+              assert 'CAPABILITIES NOT VERIFIED (PI input/output only)' in source
+              assert 'org.junit.jupiter.api.Test' in source
+              assert source.count('@Test')==1, 'Only the current CAT Queue item is generated'
+              assert 'new co.surumene.simplecoins.' in source
+              run(args[:-2]+['--check']+args[-2:])
+              (receipts/(label+'-selected-junit-sha256.txt')).write_text(
+                  hashlib.sha256(source.encode()).hexdigest()+'  '+tests+'\n')
+              implementation=run([
+                  cli,'conformance','--work',work,'--kind','implementation-conformance'])
+              assert implementation['status']=='inconclusive',implementation
+              assert not implementation.get('technology_results'),implementation
+              (receipts/(label+'-formal-gates.json')).write_text(
+                  json.dumps({'source_work':work,'process_closure':closure,
+                              'model_conformance':conformance,
+                              'implementation_conformance':implementation,
+                              'test_generation':'ONE_CURRENT_PI_ONLY_NOT_JUNIT_GREEN',
+                              'unverified_capabilities_explicit':True},
+                             ensure_ascii=False,indent=2)+'\n')
+              (receipts/(label+'-generated-junit.java')).write_text(source)
+              print(label+'_RELEASED_CANONICAL_CAT_JUNIT_GENERATED_ONLY_NOT_GREEN')
+          print('A04_A05_RELEASED_CANONICAL_CAT_PI_ONLY_NOT_IMPLEMENTATION_PASS')
+          PY
+      - name: Preserve canonical selected tests, exact receipts and source hashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a04-a05-released-cat-junit-generation-evidence
+          path: |
+            cat-a04a05-receipts/
+            Lifecycle/Works/.cat-flow/cache/*-model.json
+            Lifecycle/Works/.cat-flow/cache/*-vectors.json
+            Lifecycle/Works/.cat-flow/cache/*-queue.json
+          retention-days: 14
+          if-no-files-found: warn
