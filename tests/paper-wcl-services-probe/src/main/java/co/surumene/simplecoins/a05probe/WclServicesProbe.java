@@ -778,6 +778,22 @@ public final class WclServicesProbe extends JavaPlugin {
                         throw new IOException("Inventory writer closed gate was not invoked");
                     getLogger().info("PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED");
                 }
+                if (Boolean.getBoolean("a01.liveOwnerAgent.probeBulkInventoryBypass")) {
+                    // Unlike CraftInventory#setItem(int,ItemStack), this is a
+                    // WHOLE-inventory mutation API referenced by real WWC,
+                    // CoreProtect and WorldEdit distribution bytecode.
+                    ItemStack[] oldContents = inventory.getContents();
+                    ItemStack[] overwritten = oldContents.clone();
+                    overwritten[0] = new ItemStack(Material.STONE);
+                    inventory.setContents(overwritten);
+                    ItemStack changed = inventory.getItem(0);
+                    if (changed == null || changed.getType() != Material.STONE
+                            || Arrays.equals(expected, changed.serializeAsBytes()))
+                        throw new IOException(
+                                "Native whole-inventory setter did not bypass item-slot gate");
+                    getLogger().info("PAPER_A01_CHEST_SETCONTENTS_BYPASSED_SETITEM_GATE");
+                    inventory.setContents(oldContents);
+                }
                 ItemStack retained = inventory.getItem(0);
                 if (retained == null || retained.getAmount() != 1
                         || coinCodec.identify(retained).orElseThrow()
