@@ -57,6 +57,14 @@ public final class InventoryAddItemClosureProbe {
         block.setType(Material.CHEST, false);
         require(block.getState() instanceof Chest, "Real Chest did not materialize");
         Inventory chest = ((Chest) block.getState()).getBlockInventory();
+        Method liveAddItem = chest.getClass().getMethod("addItem", ItemStack[].class);
+        System.out.println("PAPER_A01_REAL_ADDITEM_METHOD"
+                + " receiver=" + chest.getClass().getName()
+                + " owner=" + liveAddItem.getDeclaringClass().getName()
+                + " descriptor=" + java.lang.invoke.MethodType
+                        .methodType(liveAddItem.getReturnType(),
+                                liveAddItem.getParameterTypes())
+                        .toMethodDescriptorString());
         CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
         ItemStack seed = codec.create(CoinDenomination.fromValue(5000), 1);
         ItemStack additional = codec.create(CoinDenomination.fromValue(5000), 1);
