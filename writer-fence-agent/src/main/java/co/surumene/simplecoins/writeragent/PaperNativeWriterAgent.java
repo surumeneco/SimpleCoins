@@ -18,18 +18,58 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarFile;
 
 /**
- * Startup-only Java 25 bytecode bridge for two known Paper native save methods.
- * Never represents all plugin/Paper/file/async writer coverage, and never
- * unlocks G0, G3 or Admission. Use with its separately packaged bootstrap JAR.
+ * Java 25 startup agent for four independently bounded Paper writer families.
+ * Native PlayerDataStorage and CraftPlayer plus PDC set/remove and inventory
+ * setItem are not a complete plugin, NMS, asynchronous or direct-file writer
+ * universe. No observed hook count authorizes G0/G3 publication or Admission.
  */
 public final class PaperNativeWriterAgent {
     private static final ClassDesc BOOTSTRAP =
             ClassDesc.of("co.surumene.simplecoins.writeragent.WriterEpochHook");
-    private static final String CRAFT = "org/bukkit/craftbukkit/entity/CraftPlayer";
-    private static final String NMS = "net/minecraft/world/level/storage/PlayerDataStorage";
-    private static final String NMS_METHOD = "(Lnet/minecraft/world/entity/player/Player;)V";
+    private static final String PLAYER = "(Lnet/minecraft/world/entity/player/Player;)V";
+    private static final String PDC_SET = "(Lorg/bukkit/NamespacedKey;"
+            + "Lorg/bukkit/persistence/PersistentDataType;Ljava/lang/Object;)V";
+    private static final String PDC_REMOVE = "(Lorg/bukkit/NamespacedKey;)V";
+    private static final String INVENTORY_SET = "(ILorg/bukkit/inventory/ItemStack;)V";
+
+    private enum Target {
+        CRAFT("beforeCraft", "afterCraft", 1),
+        NMS("beforeNms", "afterNms", 1),
+        PDC("beforePdc", "afterPdc", 2),
+        INVENTORY("beforeInventory", "afterInventory", 1);
+
+        final String enterHook, returnHook;
+        final int expectedMethods;
+        Target(String enterHook, String returnHook, int expectedMethods) {
+            this.enterHook = enterHook;
+            this.returnHook = returnHook;
+            this.expectedMethods = expectedMethods;
+        }
+
+        boolean isWriter(MethodModel m) {
+            String name = m.methodName().stringValue();
+            String desc = m.methodTypeSymbol().descriptorString();
+            return switch (this) {
+                case CRAFT -> name.equals("saveData") && desc.equals("()V");
+                case NMS -> name.equals("save") && desc.equals(PLAYER);
+                case PDC -> name.equals("set") && desc.equals(PDC_SET)
+                        || name.equals("remove") && desc.equals(PDC_REMOVE);
+                case INVENTORY -> name.equals("setItem") && desc.equals(INVENTORY_SET);
+            };
+        }
+    }
 
     private PaperNativeWriterAgent() {}
+
+    private static Target targetFor(String name) {
+        return switch (name) {
+            case "org/bukkit/craftbukkit/entity/CraftPlayer" -> Target.CRAFT;
+            case "net/minecraft/world/level/storage/PlayerDataStorage" -> Target.NMS;
+            case "org/bukkit/craftbukkit/persistence/CraftPersistentDataContainer" -> Target.PDC;
+            case "org/bukkit/craftbukkit/inventory/CraftInventory" -> Target.INVENTORY;
+            default -> null;
+        };
+    }
 
     public static void premain(String arguments, Instrumentation instrumentation) {
         if (Runtime.version().feature() != 25)
@@ -41,41 +81,37 @@ public final class PaperNativeWriterAgent {
             instrumentation.appendToBootstrapClassLoaderSearch(
                     new JarFile(Path.of(hookJar).toFile()));
             if (WriterEpochHook.class.getClassLoader() != null)
-                throw new IllegalStateException("Writer hook must be loaded by bootstrap classloader");
-        } catch (Exception badBootstrap) {
-            throw new IllegalStateException("Cannot initialize isolated bootstrap writer hook", badBootstrap);
+                throw new IllegalStateException("Writer hook must be bootstrap-loaded");
+        } catch (Exception failure) {
+            throw new IllegalStateException("Cannot initialize isolated bootstrap writer hook", failure);
         }
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override
             public byte[] transform(ClassLoader loader, String name,
-                    Class<?> redefine, ProtectionDomain domain, byte[] source) {
-                if (!CRAFT.equals(name) && !NMS.equals(name)) return null;
-                String family = CRAFT.equals(name) ? "CRAFT" : "NMS";
+                    Class<?> redefining, ProtectionDomain domain, byte[] source) {
+                Target target = targetFor(name);
+                if (target == null) return null;
                 try {
                     ClassHierarchyResolver hierarchy = ClassHierarchyResolver.ofResourceParsing(loader)
                             .orElse(ClassHierarchyResolver.defaultResolver());
                     ClassFile api = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(hierarchy));
-                    AtomicInteger count = new AtomicInteger();
+                    AtomicInteger matched = new AtomicInteger();
                     byte[] changed = api.transformClass(api.parse(source), (builder, element) -> {
-                        if (element instanceof MethodModel method
-                                && method.methodName().stringValue().equals(
-                                        CRAFT.equals(name) ? "saveData" : "save")
-                                && method.methodTypeSymbol().descriptorString().equals(
-                                        CRAFT.equals(name) ? "()V" : NMS_METHOD)) {
-                            count.incrementAndGet();
+                        if (element instanceof MethodModel method && target.isWriter(method)) {
+                            matched.incrementAndGet();
                             builder.transformMethod(method, MethodTransform.transformingCode(
                                     new CodeTransform() {
                                         @Override public void atStart(CodeBuilder code) {
-                                            code.invokestatic(BOOTSTRAP,
-                                                    CRAFT.equals(name) ? "beforeCraft" : "beforeNms",
+                                            code.invokestatic(BOOTSTRAP, target.enterHook,
                                                     MethodTypeDesc.ofDescriptor("()V"));
                                         }
+
                                         @Override public void accept(CodeBuilder code, CodeElement element) {
-                                            if (element instanceof ReturnInstruction) {
-                                                code.invokestatic(BOOTSTRAP,
-                                                        CRAFT.equals(name) ? "afterCraft" : "afterNms",
+                                            // All selected methods return void. Exception paths remain
+                                            // uncompleted and block a later protected-epoch drain.
+                                            if (element instanceof ReturnInstruction)
+                                                code.invokestatic(BOOTSTRAP, target.returnHook,
                                                         MethodTypeDesc.ofDescriptor("()V"));
-                                            }
                                             code.with(element);
                                         }
                                     }));
@@ -83,19 +119,18 @@ public final class PaperNativeWriterAgent {
                             builder.with(element);
                         }
                     });
-                    if (count.get() != 1)
-                        throw new IllegalStateException("Expected exactly one " + family
-                                + " method descriptor; found " + count.get());
-                    WriterEpochHook.recordInstrumentedTarget(family);
-                    System.out.println("SIMPLECOINS_WRITER_AGENT_" + family
+                    if (matched.get() != target.expectedMethods)
+                        throw new IllegalStateException("Expected " + target.expectedMethods
+                                + " exact " + target + " writer method(s), found " + matched.get());
+                    WriterEpochHook.recordInstrumentedTarget(target.name());
+                    System.out.println("SIMPLECOINS_WRITER_AGENT_" + target
                             + "_EXACT_ENTRY_INSTRUMENTED");
                     return changed;
                 } catch (Throwable failure) {
-                    // The JVM can otherwise quietly ignore a transformer failure.
-                    // Poison the callback bridge and make this visible to preflight.
-                    WriterEpochHook.fault();
-                    System.err.println("SIMPLECOINS_WRITER_AGENT_" + family + "_TRANSFORM_FAILED");
+                    System.err.println("SIMPLECOINS_WRITER_AGENT_" + target + "_TRANSFORM_FAILED");
                     failure.printStackTrace(System.err);
+                    try { WriterEpochHook.fault(); }
+                    catch (Throwable revokeFailed) { revokeFailed.printStackTrace(System.err); }
                     return null;
                 }
             }

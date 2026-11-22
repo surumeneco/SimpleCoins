@@ -30,15 +30,18 @@ final class PaperNativeSaveFenceAdapterTest {
     }
 
     @Test
-    void bootstrapInvalidationRevokesAnOtherwiseDrainedSeal() throws Exception {
+    void paperPdcAndInventoryUseSameRootAndNestedEpoch() throws Exception {
         WriterEpochFence fence = new WriterEpochFence();
         PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);
         fence.arm();
-        WriterEpochFence.Seal sealed = fence.seal();
-        assertTrue(fence.awaitDrained(sealed, 100));
-        adapter.invalidateFromAgent();
-        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
-        assertThrows(IllegalStateException.class, () -> fence.requireDrained(sealed));
+        Object pdc = adapter.enter("PDC", null);
+        Object inventory = adapter.enter("INVENTORY", pdc);
+        assertEquals(2, fence.inFlight());
+        WriterEpochFence.Seal seal = fence.seal();
+        adapter.normalReturn(inventory);
+        adapter.normalReturn(pdc);
+        assertTrue(fence.awaitDrained(seal, 100));
+        assertThrows(IllegalStateException.class, () -> adapter.enter("PDC", null));
     }
 
     @Test
