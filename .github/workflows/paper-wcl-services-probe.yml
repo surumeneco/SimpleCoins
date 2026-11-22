@@ -509,6 +509,7 @@ jobs:
               -Da01.liveOwnerAgent.instrumentEquipment=true \
               -Da01.liveOwnerAgent.directInventoryProof=true \
               -Da01.liveOwnerAgent.instrumentInventory=true \
+              -Da01.liveOwnerAgent.probeBulkInventoryBypass=true \
               -Da01.liveOwnerAgent.coverageProof=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
@@ -532,6 +533,7 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_INVENTORY_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_CHEST_SETCONTENTS_BYPASSED_SETITEM_GATE' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_CLOSED_EPOCH_MINTED_FROM_REAL_HOOKS_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_ATOMIC_ACTION_BLOCKED_REOPEN_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_EPOCH_REOPEN_AND_REPLAY_DENIED_PASSED' paper-a01-agent.log
