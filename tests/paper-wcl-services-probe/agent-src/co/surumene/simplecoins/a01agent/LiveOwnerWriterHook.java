@@ -61,11 +61,15 @@ public final class LiveOwnerWriterHook {
                 && equipmentReturns > 0 && inventoryReturns > 0;
     }
 
-    /** A ticket for the *five audited methods only*, never global G0 proof. */
-    public record KnownSourcesClosedEpoch(long generation, long revision) {
-        public KnownSourcesClosedEpoch {
+    /** A non-constructible-by-callers token for FIVE audited methods, not global G0. */
+    public static final class KnownSourcesClosedEpoch {
+        private final long generation;
+        private final long revision;
+        private KnownSourcesClosedEpoch(long generation, long revision) {
             if (generation <= 0 || revision != REQUIRED_KNOWN_TARGETS.size())
                 throw new IllegalArgumentException("Unverified known writer source epoch");
+            this.generation = generation;
+            this.revision = revision;
         }
     }
 
@@ -80,8 +84,8 @@ public final class LiveOwnerWriterHook {
     public static boolean knownEpochStillCurrent(KnownSourcesClosedEpoch proof) {
         synchronized (LOCK) {
             return proof != null && closed && active == 0
-                    && proof.generation() == closedGeneration
-                    && proof.revision() == coverageRevision
+                    && proof.generation == closedGeneration
+                    && proof.revision == coverageRevision
                     && knownTargetsTransformedAndReturned();
         }
     }
