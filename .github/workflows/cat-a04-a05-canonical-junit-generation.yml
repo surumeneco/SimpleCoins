@@ -139,7 +139,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import hashlib
-          import re
           src=Path('Lifecycle/Works/.cat-flow/generated')
           for label,filename in [('A04','A04SavedOwnerGeneratedTest.java'),
                                  ('A05','A05LiveHybridGeneratedTest.java')]:
@@ -150,20 +149,12 @@ jobs:
                   raise AssertionError('Generated canonical CAT JUnit mutated before Gradle')
               text=raw.decode('utf-8')
               assert 'CAPABILITIES NOT VERIFIED' in text
-              package=re.search(r'^package (co\.surumene\.simplecoins\.[\w.]+);        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: a04-a05-released-cat-junit-generation-evidence
-          path: |
-            cat-a04a05-receipts/
-            Lifecycle/Works/.cat-flow/cache/*-model.json
-            Lifecycle/Works/.cat-flow/cache/*-vectors.json
-            Lifecycle/Works/.cat-flow/cache/*-queue.json
-          retention-days: 14
-          if-no-files-found: warn
-,text,re.M)
-              if package is None: raise AssertionError('Missing canonical test package')
-              target=Path('src/test/java')/Path(package.group(1).replace('.','/'))/filename
+              packages=[line.removeprefix('package ').removesuffix(';')
+                        for line in text.splitlines()
+                        if line.startswith('package ') and line.endswith(';')]
+              if len(packages)!=1 or not packages[0].startswith('co.surumene.simplecoins.'):
+                  raise AssertionError('Unrecognized canonical JUnit package')
+              target=Path('src/test/java')/Path(packages[0].replace('.','/'))/filename
               if target.exists(): raise AssertionError('Would overwrite handwritten test')
               target.parent.mkdir(parents=True,exist_ok=True)
               target.write_bytes(raw)
@@ -179,18 +170,14 @@ jobs:
           selected=list(root.glob('TEST-*GeneratedA04SavedOwnerCase*.xml'))
           selected+=list(root.glob('TEST-*GeneratedA05WclEvidenceCase*.xml'))
           assert len(selected)==2,('Missing distinct real JUnit results',selected)
-          totals=[]
           for p in selected:
               tree=ET.parse(p).getroot()
               tests=int(tree.get('tests','0'))
               failed=int(tree.get('failures','0'))+int(tree.get('errors','0'))
               skipped=int(tree.get('skipped','0'))
               assert (tests,failed,skipped)==(1,0,0),(p,tests,failed,skipped)
-              assert tree.find('testcase') is not None, p
-              totals.append((p,tests))
-              receipt=Path('cat-a04a05-receipts')/p.name
-              receipt.write_bytes(p.read_bytes())
-          assert sum(n for _,n in totals)==2
+              assert tree.find('testcase') is not None,p
+              (Path('cat-a04a05-receipts')/p.name).write_bytes(p.read_bytes())
           print('A04_A05_CANONICAL_CURRENT_QUEUE_ACTUAL_JUNIT_TWO_GREEN_NOT_FULL_PROCESS')
           PY
       - name: Preserve canonical selected tests, exact receipts and source hashes
