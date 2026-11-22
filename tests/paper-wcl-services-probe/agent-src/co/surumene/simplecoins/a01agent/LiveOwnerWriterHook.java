@@ -1,6 +1,8 @@
 package co.surumene.simplecoins.a01agent;
 
 import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -25,6 +27,11 @@ public final class LiveOwnerWriterHook {
     private static int equipmentDenied;
     private static int inventoryDenied;
     private static boolean closed;
+    private static final Set<String> REQUIRED_KNOWN_TARGETS = Set.of(
+            "WWC", "WWW", "PDC", "EQUIPMENT", "INVENTORY");
+    private static final Set<String> observedTransformedTargets = new HashSet<>();
+    private static long coverageRevision;
+    private static long closedGeneration;
 
     // Probe-only one-shot hold. The control thread never calls Bukkit APIs.
     private static String heldWriter;
@@ -33,6 +40,59 @@ public final class LiveOwnerWriterHook {
     private static boolean holdConsumed;
 
     private LiveOwnerWriterHook() {}
+
+    /**
+     * Called only by the actual Java 25 Instrumentation transformer after
+     * matching the exact target class and method descriptor count. No caller
+     * can manufacture a successful live method return with this operation.
+     */
+    public static void registerObservedTransformation(String target) {
+        synchronized (LOCK) {
+            if (!REQUIRED_KNOWN_TARGETS.contains(target) || closed
+                    || !observedTransformedTargets.add(target))
+                throw new IllegalStateException("Unexpected or duplicate observed writer target");
+            coverageRevision++;
+        }
+    }
+
+    private static boolean knownTargetsTransformedAndReturned() {
+        return observedTransformedTargets.equals(REQUIRED_KNOWN_TARGETS)
+                && wwcReturns > 0 && wwwReturns > 0 && pdcReturns > 0
+                && equipmentReturns > 0 && inventoryReturns > 0;
+    }
+
+    /** A non-constructible-by-callers token for FIVE audited methods, not global G0. */
+    public static final class KnownSourcesClosedEpoch {
+        private final long generation;
+        private final long revision;
+        private KnownSourcesClosedEpoch(long generation, long revision) {
+            if (generation <= 0 || revision != REQUIRED_KNOWN_TARGETS.size())
+                throw new IllegalArgumentException("Unverified known writer source epoch");
+            this.generation = generation;
+            this.revision = revision;
+        }
+    }
+
+    public static KnownSourcesClosedEpoch mintKnownSourcesClosedEpoch() {
+        synchronized (LOCK) {
+            if (!closed || active != 0 || !knownTargetsTransformedAndReturned())
+                throw new IllegalStateException("Missing observed known writer coverage or drain");
+            return new KnownSourcesClosedEpoch(closedGeneration, coverageRevision);
+        }
+    }
+
+    public static boolean knownEpochStillCurrent(KnownSourcesClosedEpoch proof) {
+        synchronized (LOCK) {
+            return proof != null && closed && active == 0
+                    && proof.generation == closedGeneration
+                    && proof.revision == coverageRevision
+                    && knownTargetsTransformedAndReturned();
+        }
+    }
+
+    public static boolean knownCoverageComplete() {
+        synchronized (LOCK) { return knownTargetsTransformedAndReturned(); }
+    }
 
     public static void beforeWWC() { enter("WWC"); }
     public static void afterWWC() { leave("WWC"); }
@@ -113,6 +173,7 @@ public final class LiveOwnerWriterHook {
             if (closed)
                 throw new IllegalStateException("Owner writer admission is already closed");
             closed = true;
+            closedGeneration = Math.addExact(closedGeneration, 1);
             System.out.println("PAPER_A01_LIVE_AGENT_PROBE_CLOSED");
         }
     }

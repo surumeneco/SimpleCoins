@@ -212,6 +212,7 @@ public final class WclServicesProbe extends JavaPlugin {
                     }
                     default -> throw new IllegalArgumentException("Unknown A05 probe phase: " + phase);
                 }
+                verifyKnownWriterEpochCoverage();
                 Bukkit.shutdown();
             } catch (Throwable failure) {
                 getLogger().log(Level.SEVERE, "PAPER_A05_SERVICES_PROBE_FAILED", failure);
@@ -569,6 +570,66 @@ public final class WclServicesProbe extends JavaPlugin {
      * cannot enter once the test JVM Agent closes its two known entries.
      * Does not claim global writer coverage, already-in-flight drain or G0.
      */
+    /**
+     * Form a test-only in-JVM proof from five *observed, invoked and returned*
+     * known writer surfaces. The negative CI controls deliberately omit the
+     * real Chest Inventory hook: an incomplete source roster cannot mint it.
+     */
+    private void verifyKnownWriterEpochCoverage() throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.coverageProof")) return;
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IOException("Known-writer closure evidence requires isolated main-thread Paper");
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+        boolean expectFull = Boolean.getBoolean("a01.liveOwnerAgent.instrumentInventory");
+        boolean observed = (Boolean) hook.getMethod("knownCoverageComplete").invoke(null);
+        if (observed != expectFull)
+            throw new IOException("Unexpected real writer transformation/return roster: "
+                    + observed + ", expected=" + expectFull);
+        int active = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "active");
+        if (active != 0) throw new IOException("Cannot test covered generation with active writer");
+        hook.getMethod("closeForProbe").invoke(null);
+        Object token = null;
+        try {
+            if (!(Boolean) hook.getMethod("awaitDrain", long.class).invoke(null, 800L))
+                throw new IOException("Known-writer epoch did not drain");
+            try {
+                token = hook.getMethod("mintKnownSourcesClosedEpoch").invoke(null);
+            } catch (java.lang.reflect.InvocationTargetException rejected) {
+                if (expectFull || !(rejected.getCause() instanceof IllegalStateException denied)
+                        || !"Missing observed known writer coverage or drain"
+                                .equals(denied.getMessage()))
+                    throw rejected;
+            }
+            if (expectFull) {
+                if (token == null || !(Boolean) hook.getMethod("knownEpochStillCurrent",
+                        token.getClass()).invoke(null, token))
+                    throw new IOException("Fully observed known writer epoch not stable while closed");
+                getLogger().info("PAPER_A01_KNOWN_SOURCE_CLOSED_EPOCH_MINTED_FROM_REAL_HOOKS_PASSED");
+            } else {
+                if (token != null)
+                    throw new IOException("Missing actual inventory writer still minted an epoch");
+                getLogger().info("PAPER_A01_INCOMPLETE_SOURCE_ROSTER_EPOCH_MINT_REJECTED_PASSED");
+            }
+        } finally {
+            hook.getMethod("reopenForProbe").invoke(null);
+        }
+        if (expectFull) {
+            var current = hook.getMethod("knownEpochStillCurrent", token.getClass());
+            if ((Boolean) current.invoke(null, token))
+                throw new IOException("Known writer epoch survived admission reopening");
+            hook.getMethod("closeForProbe").invoke(null);
+            try {
+                if ((Boolean) current.invoke(null, token))
+                    throw new IOException("Stale closed epoch was replayed in a later generation");
+            } finally {
+                hook.getMethod("reopenForProbe").invoke(null);
+            }
+            getLogger().info("PAPER_A01_KNOWN_SOURCE_EPOCH_REOPEN_AND_REPLAY_DENIED_PASSED");
+        }
+    }
+
     /**
      * Real block-chest coin mutation through the normal Bukkit inventory API,
      * in a disposable preloaded chunk of the isolated Paper fixture.

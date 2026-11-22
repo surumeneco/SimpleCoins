@@ -121,6 +121,16 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 - 未instrumentの別Inventory実装、double chest、Hopper、NMS内部の`Container#setItem`、NBT直接I/Oなどを、`CraftInventory`一箇所の実証から閉包済みとはみなさない。上位APIフックの増殖だけでG0/G3完成と主張せず、未捕捉経路を明確にして本番公開と製品接続は維持保留。
 - 本Workは同じissue-work検証の技術対象を広げる。製品JAR、本番VPS、`main`、入室Guard、G0公開、G3 ACK、CAT DraftのConfirmed化は行わない。
 
+## 次段 — 掲示マーカーではなく実到達writerの同一閉鎖世代証拠
+
+これまでの#606〜#610の単独フック正例は、製品公開へは繋がらない。特に、callerが「writer閉包完了=true」と主張するBooleanや、classpathにAgentが存在するだけという証拠からG0の保護世代は成立しない。**既に実証済みの5種の入口**（`WWC.save`、`WWW.saveAndRegister`、`CraftPersistentDataContainer.set/remove`、`CraftEntityEquipment.setItemInMainHand`、`CraftInventory.setItem`）に限定して、閉包の証拠型と欠落拒否を検証する。
+
+1. 実Java25 Agentから各targetクラスとdescriptorを実際にtransformした事実をbootstrap側監視に登録する。加えて実method**normal return**が観測された種類だけを「実到達済み」に数える。Agent起動/変換要求/logだけではこの条件を満たさない。
+2. mutexによる閉鎖とActive=0を同一スナップショットで確認したときのみ、既知5種の集合・対象revision・非再利用の単調epoch IDから**検証用不変token**を返す。setterを1つ除いた既存負例JVMではこのtokenを発行できず、欠落を資産0・安全とみなさない。
+3. 5種が揃った正例JVMでは、実WWC/WWW/PDC/装備/チェストからの正常return確認後、閉鎖→既入場排出→token作成・照合を実行。閉鎖解除または新世代開始後は古いtokenを無効化し、再使用を拒否する。欠損や不一致で公開・入室・ACKを行わない。
+4. 採用されたwriter集合自体が全実環境を網羅することは**別証明**である。現在の5種だけをもってG0 global writer closure、G3 playerdata/InvSee/native、全24 JAR、全Storage/Entity/Block/IO、async/例外の実排出が成立したと主張してはならない。試験用の`ClosedEpoch`を製品publisherへ渡してはならない。
+5. 既存の実Paper反例・正例と全回帰を保持し、**この証拠型が製品の会計世代根拠を実現する候補として使用可能か**のみ検証する。CAT DraftはApproved/Confirmedへ自己昇格せず、製品コード・本番JAR・入室Guard・G3 ACK・VPS/`main`は不変。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。
