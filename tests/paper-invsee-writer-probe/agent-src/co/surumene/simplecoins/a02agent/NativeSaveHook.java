@@ -107,6 +107,34 @@ public final class NativeSaveHook {
         }
     }
 
+    // A test-only protected operation of one already CLOSED+drained native
+    // save family. No token from this scope authorizes a production grant.
+    private static boolean nativeGuardedActionActive;
+    private static boolean nativeGuardedActionFailed;
+
+    public static void runUnderClosedNativeFamily(Runnable action) {
+        java.util.Objects.requireNonNull(action, "native protected callback");
+        synchronized (FAMILY_LOCK) {
+            if (!Boolean.getBoolean("a02.nativeAgent.trackNativeFamily")
+                    || !familyClosed || familyActive != 0
+                    || nativeGuardedActionActive || nativeGuardedActionFailed
+                    || familyCraftReturns < 1 || familyNmsReturns < 1
+                    || familyNestedNms < 1)
+                throw new IllegalStateException("Real native save family is not fully closed/drained");
+            nativeGuardedActionActive = true;
+            try {
+                action.run();
+                if (familyActive != 0 || !familyClosed)
+                    throw new IllegalStateException("Native writer scope changed during callback");
+            } catch (RuntimeException | Error failed) {
+                nativeGuardedActionFailed = true;
+                throw failed;
+            } finally {
+                nativeGuardedActionActive = false;
+            }
+        }
+    }
+
     private static void enterNativeFamily(String method) {
         synchronized (FAMILY_LOCK) {
             java.util.ArrayDeque<String> callStack = FAMILY_STACK.get();
