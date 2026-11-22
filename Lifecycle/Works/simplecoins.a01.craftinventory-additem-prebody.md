@@ -76,5 +76,5 @@ TDD: Add a Java25 JVM fixture `CraftInventory.addItem` with a method-body execut
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-process.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-tce.md | — | — | — | @work/.cat-flow/cache/a01-additem-model.json | @work/.cat-flow/cache/a01-additem-vectors.json | @work/.cat-flow/cache/a01-additem-queue.json | — | — | @work/.cat-flow/cache/a01-additem-obligations.json | — | false |
