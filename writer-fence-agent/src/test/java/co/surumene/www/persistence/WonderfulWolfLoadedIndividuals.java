@@ -10,5 +10,8 @@ import co.surumene.www.individual.WonderfulWolfIndividual;
 public final class WonderfulWolfLoadedIndividuals {
     public void saveAndRegister(Wolf wolf, WonderfulWolfIndividual data) {
         new CraftPersistentDataContainer().set(new NamespacedKey(), new PersistentDataType(), data);
+        var equip = new org.bukkit.craftbukkit.inventory.CraftEntityEquipment();
+        equip.setItemInMainHand(new org.bukkit.inventory.ItemStack());
+        equip.setItemInMainHand(new org.bukkit.inventory.ItemStack(), true);
     }
 }

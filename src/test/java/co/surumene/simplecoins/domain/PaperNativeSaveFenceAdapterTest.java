@@ -62,6 +62,21 @@ final class PaperNativeSaveFenceAdapterTest {
     }
 
     @Test
+    void nativeMainhandSetterSharesWolfOwnerEpochAndDeniesIndependentRootAfterSeal() throws Exception {
+        WriterEpochFence fence = new WriterEpochFence();
+        PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);
+        fence.arm();
+        Object wolf = adapter.enter("WWW", null);
+        Object equipment = adapter.enter("EQUIPMENT", wolf);
+        assertEquals(2, fence.inFlight());
+        WriterEpochFence.Seal seal = fence.seal();
+        adapter.normalReturn(equipment);
+        adapter.normalReturn(wolf);
+        assertTrue(fence.awaitDrained(seal, 100));
+        assertThrows(IllegalStateException.class, () -> adapter.enter("EQUIPMENT", null));
+    }
+
+    @Test
     void directNmsRootAndExceptionInvalidateOneEpoch() {
         WriterEpochFence fence = new WriterEpochFence();
         PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);

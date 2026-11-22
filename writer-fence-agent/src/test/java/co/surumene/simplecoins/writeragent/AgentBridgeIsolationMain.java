@@ -25,6 +25,9 @@ public final class AgentBridgeIsolationMain {
         var valueType = new org.bukkit.persistence.PersistentDataType();
         pdc.set(key, valueType, "sample"); // Invokes real transformed CraftInventory.setItem.
         pdc.remove(key);
+        var equipment = new org.bukkit.craftbukkit.inventory.CraftEntityEquipment();
+        equipment.setItemInMainHand(new org.bukkit.inventory.ItemStack());
+        equipment.setItemInMainHand(new org.bukkit.inventory.ItemStack(), false);
         new co.surumene.whatawonderfulchicken.service.WonderfulChickenStore().save(
                 new org.bukkit.entity.Chicken(),
                 new co.surumene.whatawonderfulchicken.data.WonderfulChickenData());
@@ -33,8 +36,8 @@ public final class AgentBridgeIsolationMain {
                 new co.surumene.www.individual.WonderfulWolfIndividual());
         check(WriterEpochHook.mode() == WriterEpochHook.Mode.PASSIVE, "passive by default");
         check(WriterEpochHook.instrumentedTargets().equals(
-                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "WWC", "WWW")),
-                "missing native, PDC, inventory or WCL-owner transform/descriptor");
+                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW")),
+                "missing native, PDC, inventory, equipment or WCL-owner transform/descriptor");
         check(WriterEpochHook.inFlight() == 0, "passive save leaked");
 
         // The product JAR is NOT on the system classpath: emulate Paper's child loader.

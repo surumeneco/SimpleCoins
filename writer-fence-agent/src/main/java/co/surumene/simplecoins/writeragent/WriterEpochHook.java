@@ -23,7 +23,7 @@ public final class WriterEpochHook {
     private static final Object LOCK = new Object();
     private static final ThreadLocal<ArrayDeque<Frame>> STACK =
             ThreadLocal.withInitial(ArrayDeque::new);
-    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "WWC", "WWW");
+    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW");
     private static final Set<String> TRANSFORMED = new HashSet<>();
     private static Mode mode = Mode.PASSIVE;
     private static int passiveActive;
@@ -114,6 +114,8 @@ public final class WriterEpochHook {
     public static void afterPdc() { after("PDC"); }
     public static void beforeInventory() { before("INVENTORY"); }
     public static void afterInventory() { after("INVENTORY"); }
+    public static void beforeEquipment() { before("EQUIPMENT"); }
+    public static void afterEquipment() { after("EQUIPMENT"); }
     public static void beforeWwc() { before("WWC"); }
     public static void afterWwc() { after("WWC"); }
     public static void beforeWww() { before("WWW"); }
@@ -132,7 +134,8 @@ public final class WriterEpochHook {
             if (!stack.isEmpty()) {
                 boolean nativeSaveChild = "NMS".equals(target)
                         && "CRAFT".equals(stack.peekLast().target());
-                boolean lowerLevelMutation = "PDC".equals(target) || "INVENTORY".equals(target);
+                boolean lowerLevelMutation = "PDC".equals(target) || "INVENTORY".equals(target)
+                        || "EQUIPMENT".equals(target);
                 if (!nativeSaveChild && !lowerLevelMutation) {
                     faultLocked();
                     throw new IllegalStateException("Unrecognized nested writer ancestry");
