@@ -273,7 +273,7 @@ jobs:
             tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.java
           jar cf live-owner-hook.jar -C live-owner-agent-classes \
             co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.class
-          printf 'Manifest-Version: 1.0\\nPremain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent\\n\\n' > live-owner-agent.mf
+          printf 'Manifest-Version: 1.0\nPremain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent\n\n' > live-owner-agent.mf
           jar cfm live-owner-agent.jar live-owner-agent.mf -C live-owner-agent-classes .
           unzip -p live-owner-agent.jar META-INF/MANIFEST.MF | grep -F \
             'Premain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent'
