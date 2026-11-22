@@ -78,11 +78,76 @@ jobs:
           grep -F 'SIMPLECOINS_WRITER_AGENT_CRAFT_EXACT_ENTRY_INSTRUMENTED' writer-agent-bridge-result.log
           grep -F 'SIMPLECOINS_WRITER_AGENT_NMS_EXACT_ENTRY_INSTRUMENTED' writer-agent-bridge-result.log
           grep -F 'SIMPLECOINS_A01_CROSS_LOADER_NATIVE_AGENT_RED_GREEN_PASS' writer-agent-bridge-result.log
+      - name: Boot actual official Paper 26.2 with passive product-bound Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :admission-guard:jar
+          mkdir -p smoke-native-agent/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-PassiveAgentSmoke/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' \
+            -o smoke-native-agent/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke-native-agent/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke-native-agent/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke-native-agent/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke-native-agent/paper.jar
+          printf '%s  %s\n' "$sha" smoke-native-agent/paper.jar | sha256sum -c -
+          cp build/libs/SimpleCoins-1.0.0.jar smoke-native-agent/plugins/SimpleCoins.jar
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke-native-agent/plugins/SimpleCoinsGuard.jar
+          printf 'eula=true\n' > smoke-native-agent/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25585\n' \
+            > smoke-native-agent/server.properties
+          cd smoke-native-agent
+          mkfifo console.in
+          java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+            -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+            -Xms256M -Xmx1024M -jar paper.jar nogui < console.in > agent-paper.log 2>&1 &
+          server_pid=$!
+          exec 3> console.in
+          cleanup() {
+            printf 'stop\n' >&3 2>/dev/null || true
+            exec 3>&- || true
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Done (' agent-paper.log; then ready=1; break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo 'Actual Paper terminated before startup' >&2
+              tail -180 agent-paper.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'Actual Paper startup exceeded bounded readiness interval' >&2
+            tail -180 agent-paper.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_BOOTSTRAP_INSTALLED_PASSIVE' agent-paper.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-paper.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-paper.log
+          grep -F 'Settlement engine not connected; player admission remains disabled.' agent-paper.log
+          if grep -E 'SIMPLECOINS_WRITER_AGENT_.*TRANSFORM_FAILED' agent-paper.log; then
+            echo 'Real Paper agent transformation failed' >&2
+            exit 1
+          fi
+          printf 'stop\n' >&3
+          exec 3>&-
+          wait "$server_pid"
+          trap - EXIT
+          grep -F 'Saving worlds' agent-paper.log
+          echo 'SIMPLECOINS_A01_REAL_PAPER_AGENT_BOOT_PASSIVE_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: a01-product-native-agent-cross-loader-evidence
-          path: writer-agent-bridge-result.log
+          path: |
+            writer-agent-bridge-result.log
+            smoke-native-agent/agent-paper.log
           retention-days: 14
           if-no-files-found: ignore
