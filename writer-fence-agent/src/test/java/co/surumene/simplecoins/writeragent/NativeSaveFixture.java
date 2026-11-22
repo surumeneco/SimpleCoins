@@ -11,9 +11,9 @@ public final class NativeSaveFixture {
     public static void install(CountDownLatch e, CountDownLatch r) { entered=e; release=r; }
     public static void failNext(RuntimeException failure) { failNext = failure; }
     public static void onNmsBody() {
-        RuntimeException failure = failNext;
+        RuntimeException pending = failNext;
         failNext = null;
-        if (failure != null) throw failure;
+        if (pending != null) throw pending;
         if (entered != null) {
             entered.countDown();
             try {
