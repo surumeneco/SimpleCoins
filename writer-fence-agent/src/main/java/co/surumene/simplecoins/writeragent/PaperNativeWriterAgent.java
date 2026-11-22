@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarFile;
 
 /**
- * Java 25 startup agent for four independently bounded Paper writer families.
+ * Java 25 startup agent for six bounded native/Paper/WCL writer families.
  * Native PlayerDataStorage and CraftPlayer plus PDC set/remove and inventory
  * setItem are not a complete plugin, NMS, asynchronous or direct-file writer
  * universe. No observed hook count authorizes G0/G3 publication or Admission.
@@ -31,12 +31,18 @@ public final class PaperNativeWriterAgent {
             + "Lorg/bukkit/persistence/PersistentDataType;Ljava/lang/Object;)V";
     private static final String PDC_REMOVE = "(Lorg/bukkit/NamespacedKey;)V";
     private static final String INVENTORY_SET = "(ILorg/bukkit/inventory/ItemStack;)V";
+    private static final String WWC_SAVE = "(Lorg/bukkit/entity/Chicken;Lco/surumene/"
+            + "whatawonderfulchicken/data/WonderfulChickenData;)V";
+    private static final String WWW_SAVE = "(Lorg/bukkit/entity/Wolf;Lco/surumene/www/"
+            + "individual/WonderfulWolfIndividual;)V";
 
     private enum Target {
         CRAFT("beforeCraft", "afterCraft", 1),
         NMS("beforeNms", "afterNms", 1),
         PDC("beforePdc", "afterPdc", 2),
-        INVENTORY("beforeInventory", "afterInventory", 1);
+        INVENTORY("beforeInventory", "afterInventory", 1),
+        WWC("beforeWwc", "afterWwc", 1),
+        WWW("beforeWww", "afterWww", 1);
 
         final String enterHook, returnHook;
         final int expectedMethods;
@@ -55,6 +61,8 @@ public final class PaperNativeWriterAgent {
                 case PDC -> name.equals("set") && desc.equals(PDC_SET)
                         || name.equals("remove") && desc.equals(PDC_REMOVE);
                 case INVENTORY -> name.equals("setItem") && desc.equals(INVENTORY_SET);
+                case WWC -> name.equals("save") && desc.equals(WWC_SAVE);
+                case WWW -> name.equals("saveAndRegister") && desc.equals(WWW_SAVE);
             };
         }
     }
@@ -67,6 +75,8 @@ public final class PaperNativeWriterAgent {
             case "net/minecraft/world/level/storage/PlayerDataStorage" -> Target.NMS;
             case "org/bukkit/craftbukkit/persistence/CraftPersistentDataContainer" -> Target.PDC;
             case "org/bukkit/craftbukkit/inventory/CraftInventory" -> Target.INVENTORY;
+            case "co/surumene/whatawonderfulchicken/service/WonderfulChickenStore" -> Target.WWC;
+            case "co/surumene/www/persistence/WonderfulWolfLoadedIndividuals" -> Target.WWW;
             default -> null;
         };
     }
