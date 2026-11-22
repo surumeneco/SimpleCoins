@@ -349,6 +349,11 @@ jobs:
           mkdir -p smoke-live-owner/plugins
           cp smoke/paper.jar smoke/eula.txt smoke/server.properties smoke-live-owner/
           cp smoke/plugins/*.jar smoke-live-owner/plugins/
+          # Bootstrap a second JVM from the completed first baseline, not
+          # from a concurrently generating world. We need to distinguish the
+          # test-only writer fence from the already-proven first-boot
+          # disk/world-generation race; keep this copy isolated and disposable.
+          cp -a smoke/world smoke-live-owner/world
           cd smoke-live-owner
           set +e
           timeout --signal=TERM --kill-after=5s 180s \
