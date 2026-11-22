@@ -154,11 +154,19 @@ jobs:
                         if line.startswith('package ') and line.endswith(';')]
               if len(packages)!=1 or not packages[0].startswith('co.surumene.simplecoins.'):
                   raise AssertionError('Unrecognized canonical JUnit package')
-              target=Path('src/test/java')/Path(packages[0].replace('.','/'))/filename
-              if target.exists(): raise AssertionError('Would overwrite handwritten test')
-              target.parent.mkdir(parents=True,exist_ok=True)
-              target.write_bytes(raw)
-              print(label,'CANONICAL_JUNIT_STAGED_IN_TEST_ONLY_CLASSPATH',target)
+              declared=[line[len('final class '):].split()[0]
+                        for line in text.splitlines() if line.startswith('final class ')]
+              if len(declared)!=1:
+                  raise AssertionError('Missing or duplicate canonical generated test class')
+              target=Path('src/test/java')/Path(packages[0].replace('.','/'))/(declared[0]+'.java')
+              if target.exists():
+                  if target.read_bytes()!=raw:
+                      raise AssertionError('Tracked generated test differs from current canonical bytes')
+                  print(label,'TRACKED_CANONICAL_JUNIT_BYTE_IDENTICAL_REUSED',target)
+              else:
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(raw)
+                  print(label,'CANONICAL_JUNIT_STAGED_IN_TEST_ONLY_CLASSPATH',target)
           PY
           gradle --no-daemon --stacktrace test \
             --tests '*GeneratedA04SavedOwnerCase*' \
