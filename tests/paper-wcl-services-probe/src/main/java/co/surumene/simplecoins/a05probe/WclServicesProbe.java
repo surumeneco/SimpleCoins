@@ -449,6 +449,9 @@ public final class WclServicesProbe extends JavaPlugin {
                                                 "00000000-0000-0000-0000-00000000a074")),
                                         ActionDistance.NORMAL, Optional.empty())),
                         () -> {
+                            verifyDirectNativeMainhandUnderClosedWriterGate(
+                                    wolf, originalMainhand, secondCommander,
+                                    observedNext.slotValues());
                             var retained = PaperWonderfulLiveCandidates.collect(
                                     this, wolf, "www", new java.util.HashSet<>(),
                                     2 * 1024 * 1024, 16 * 1024 * 1024);
@@ -566,6 +569,72 @@ public final class WclServicesProbe extends JavaPlugin {
      * cannot enter once the test JVM Agent closes its two known entries.
      * Does not claim global writer coverage, already-in-flight drain or G0.
      */
+    /**
+     * A separate Paper equipment writer bypasses WWW's registered store and
+     * even the already-instrumented PDC mutation surface. Use the real loaded
+     * WWW monetary mirror (10,000C native mainhand / 5,000C cargo).
+     */
+    private void verifyDirectNativeMainhandUnderClosedWriterGate(
+            Wolf wolf, byte[] originalNative, UUID expectedCommander,
+            Map<String, BigInteger> expectedValues) throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.directEquipmentProof")) return;
+        if (!Bukkit.isPrimaryThread()) throw new IOException("Native equipment proof off main thread");
+        var equipment = wolf.getEquipment();
+        if (equipment == null) throw new IOException("Actual WWW wolf has no equipment");
+        getLogger().info("PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=" + equipment.getClass().getName());
+        if (!Arrays.equals(originalNative, equipment.getItemInMainHand().serializeAsBytes()))
+            throw new IOException("WWW native mirror invalid before closed equipment proof");
+        boolean uninstrumented = Boolean.getBoolean(
+                "a01.liveOwnerAgent.expectEquipmentBypass");
+        if (uninstrumented) {
+            var original = equipment.getItemInMainHand().clone();
+            try {
+                equipment.setItemInMainHand(new ItemStack(Material.STONE));
+                var wcl = PaperWonderfulLiveCandidates.collect(
+                        this, wolf, "www", new java.util.HashSet<>(),
+                        2 * 1024 * 1024, 16 * 1024 * 1024);
+                if (Arrays.equals(originalNative,
+                                equipment.getItemInMainHand().serializeAsBytes())
+                        || !expectedCommander.equals(wcl.ownerEvidence().owner())
+                        || !expectedValues.equals(wcl.slotValues()))
+                    throw new IOException("Independent native equipment bypass not observed");
+                getLogger().info("PAPER_A01_NATIVE_MAINHAND_BYPASS_NEGATIVE_REPRODUCED");
+            } finally {
+                equipment.setItemInMainHand(original);
+            }
+            if (!Arrays.equals(originalNative,
+                    equipment.getItemInMainHand().serializeAsBytes()))
+                throw new IOException("Failed to restore native equipment after bypass probe");
+            return;
+        }
+
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+        if (!(Boolean) hook.getMethod("isClosed").invoke(null))
+            throw new IOException("Equipment proof needs actual closed WCL gate");
+        int previousDenials = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "equipmentDenied");
+        try {
+            equipment.setItemInMainHand(new ItemStack(Material.STONE));
+            throw new IOException("Unfenced native equipment setter changed the 10000C mirror");
+        } catch (IllegalStateException denied) {
+            if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                throw denied;
+        }
+        int denied = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, "equipmentDenied");
+        var retained = PaperWonderfulLiveCandidates.collect(
+                this, wolf, "www", new java.util.HashSet<>(),
+                2 * 1024 * 1024, 16 * 1024 * 1024);
+        if (denied != previousDenials + 1
+                || !Arrays.equals(originalNative,
+                    equipment.getItemInMainHand().serializeAsBytes())
+                || !expectedCommander.equals(retained.ownerEvidence().owner())
+                || !expectedValues.equals(retained.slotValues()))
+            throw new IOException("Equipment bypass escaped shared writer gate");
+        getLogger().info("PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED");
+    }
+
     /**
      * A separate writer can modify owner PDC directly without entering
      * WonderfulChickenStore.save. The NEGATIVE control must prove the bypass;

@@ -100,6 +100,16 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 - 実行マーカー・実PDCクラス名・ターゲットclass/method/descriptor一致・旧バイパスと新拒否を必須証拠にし、実装されていない追加API、他の直接変更経路、反射・別クラスローダー・非同期continuation、Paper native保存やファイルI/Oは制御済みと解釈しない。
 - この実験は既存の`Lifecycle/Works/simplecoins.a01.live-wcl-writer-agent-interception.md`の限定検証を広げるもので、新しい独立製品仕様やCAT Confirmedを作らない。実VPS・製品JAR・Admission・G0公開・G3 ACK・mainは不変。
 
+## 継続検証 — WWWのnative装備を上位writer/PDCを通らず書き換える経路
+
+[PR #605](https://github.com/surumeneco/SimpleCoins/pull/605)の現行実Paper A05試験では、WWWのWCL武器10,000C/収納5,000C・owner・ItemStack bytesが不変でも、Paper native mainhandだけを変更でき、古い決算候補を拒否する必要があると実証済み。#606/#607/#608で上位writerとPDC setter/removerを同じテストAgent gateへ入れた**後でも**、`EntityEquipment.setItemInMainHand`は独立書込み入口の候補として残る。
+
+- 既存の実WWW founder/wolf・WCL readLoaded・native mainhand=10,000Cのfixtureを再使用。上位WWWの新規入場が拒否され、既入場処理が排出済みの**同じ閉鎖期間内**に、実Paperの`Wolf.getEquipment().setItemInMainHand(STONE)`を直接実行する。
+- **負例**：装備APIが未計測のAgentで、WCL owner/B・武器/収納の額とItemStackが同じまま、native mainhandだけSTONEになることを確認する。実装備を元の10,000Cに戻し、元の安全なfixtureへ回復する。G0公開してよい根拠ではない。
+- **対応実験**：現Paperの実装備クラス名と`setItemInMainHand(ItemStack)`および`setItemInMainHand(ItemStack,boolean)`の実bytecode descriptorを確認し、同じtest-only Agentの共通writer gateへ入場/正常returnを記録。閉鎖中の外部からの書込みを本文前に拒否し、実装備のserialized bytesとWCL証拠の不変性を確認する。今あるPDC setter/removerやWWC/WWW Writer試験・BlockLocker/3 JVM復元を維持する。
+- Instrumentation失敗、直接装備変更の否認、別の`EntityEquipment.setItem`経路、オフハンド/防具・NMS内部/reflective writer、別Plugin・非同期は個別未証明として残す。単一方法の正例から装備全スロットや全24 JARのwriter閉包へ一般化しない。
+- 本番Agent・製品コード・保存帳簿・G0/G3の公開・VPS・mainは変更しない。issue-work検証であり、CAT Draftを自動Confirmedにしない。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。

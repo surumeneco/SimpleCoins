@@ -378,6 +378,44 @@ jobs:
           name: a01-real-paper-pdc-bypass-negative
           path: smoke-pdc-negative/*.log
           retention-days: 14
+      - name: Negative control direct native equipment mutation bypasses upper and PDC writer hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-equipment-negative/plugins
+          cp smoke/paper.jar smoke/eula.txt smoke/server.properties smoke-equipment-negative/
+          cp smoke/plugins/*.jar smoke-equipment-negative/plugins/
+          cp -a smoke/world smoke-equipment-negative/world
+          cd smoke-equipment-negative
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s \
+            java -javaagent:../live-owner-agent.jar \
+              -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
+              -Da01.liveOwnerAgent.probe=true \
+              -Da01.liveOwnerAgent.inflight=true \
+              -Da01.liveOwnerAgent.directPdcProof=true \
+              -Da01.liveOwnerAgent.instrumentPdc=true \
+              -Da01.liveOwnerAgent.directEquipmentProof=true \
+              -Da01.liveOwnerAgent.expectEquipmentBypass=true \
+              -Da01.moneyOwnerWriterProbe=true \
+              -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-equipment-negative.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-equipment-negative.log; then
+            tail -180 paper-a01-equipment-negative.log
+            exit 1
+          fi
+          grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-equipment-negative.log
+          grep -F 'PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=' paper-a01-equipment-negative.log
+          grep -F 'PAPER_A01_NATIVE_MAINHAND_BYPASS_NEGATIVE_REPRODUCED' paper-a01-equipment-negative.log
+          echo 'PAPER_A01_NATIVE_EQUIPMENT_WRITER_BYPASS_COUNTEREXAMPLE_PROVED'
+      - name: Preserve real native equipment bypass evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-real-paper-equipment-bypass-negative
+          path: smoke-equipment-negative/*.log
+          retention-days: 14
       - name: Real Paper WWC/WWW loaded-owner mutation denied by isolated Agent
         shell: bash
         run: |
@@ -399,6 +437,8 @@ jobs:
               -Da01.liveOwnerAgent.inflight=true \
               -Da01.liveOwnerAgent.directPdcProof=true \
               -Da01.liveOwnerAgent.instrumentPdc=true \
+              -Da01.liveOwnerAgent.directEquipmentProof=true \
+              -Da01.liveOwnerAgent.instrumentEquipment=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
           status=$?
@@ -417,6 +457,9 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_WWC_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_WWW_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_LIVE_AGENT_PDC_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_EQUIPMENT_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=' paper-a01-agent.log
+          grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_PDC_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
