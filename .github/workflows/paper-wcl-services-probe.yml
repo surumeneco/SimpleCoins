@@ -459,6 +459,7 @@ jobs:
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_BLOCK_CHEST_DIRECT_SETITEM_BYPASS_REPRODUCED' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_INCOMPLETE_SOURCE_ROSTER_EPOCH_MINT_REJECTED_PASSED' paper-a01-inventory-negative.log
+          grep -F 'PAPER_A01_INCOMPLETE_SOURCE_ATOMIC_ACTION_REJECTED_PASSED' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_PDC_DIRECT_SET_AND_REMOVE_REJECTED_PASSED' paper-a01-inventory-negative.log
           grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-inventory-negative.log
           echo 'PAPER_A01_REAL_CHEST_COIN_DIRECT_INVENTORY_WRITE_BYPASS_PROVED'
@@ -518,6 +519,7 @@ jobs:
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_CLOSED_EPOCH_MINTED_FROM_REAL_HOOKS_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_KNOWN_SOURCE_ATOMIC_ACTION_BLOCKED_REOPEN_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_EPOCH_REOPEN_AND_REPLAY_DENIED_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_EQUIPMENT_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_NATIVE_MAINHAND_SETTER_REJECTED_PASSED' paper-a01-agent.log

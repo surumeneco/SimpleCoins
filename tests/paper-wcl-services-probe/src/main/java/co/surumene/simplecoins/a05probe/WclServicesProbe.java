@@ -575,6 +575,78 @@ public final class WclServicesProbe extends JavaPlugin {
      * known writer surfaces. The negative CI controls deliberately omit the
      * real Chest Inventory hook: an incomplete source roster cannot mint it.
      */
+    /** Test a short effect inside the SAME monitor as token verification. */
+    private void verifyAtomicKnownSourceCommit(Class<?> hook, Object token,
+            boolean allFiveObserved) throws Exception {
+        Class<?> epoch = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook$KnownSourcesClosedEpoch",
+                true, null);
+        var action = hook.getMethod("runUnderKnownSourcesClosedEpoch", epoch, Runnable.class);
+        var effects = new java.util.concurrent.atomic.AtomicInteger();
+        if (!allFiveObserved) {
+            try {
+                action.invoke(null, null, (Runnable) () -> effects.incrementAndGet());
+                throw new IOException("Incomplete writer roster ran guarded action");
+            } catch (java.lang.reflect.InvocationTargetException rejected) {
+                if (!(rejected.getCause() instanceof IllegalStateException))
+                    throw rejected;
+            }
+            if (effects.get() != 0)
+                throw new IOException("Partial source minted an actual callback effect");
+            getLogger().info("PAPER_A01_INCOMPLETE_SOURCE_ATOMIC_ACTION_REJECTED_PASSED");
+            return;
+        }
+        if (token == null) throw new IOException("Full source proof token missing");
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var reopened = new java.util.concurrent.CountDownLatch(1);
+        var contenderError = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread contender = new Thread(() -> {
+            started.countDown();
+            try {
+                hook.getMethod("reopenForProbe").invoke(null);
+            } catch (Throwable failure) {
+                contenderError.set(failure);
+            } finally {
+                reopened.countDown();
+            }
+        }, "a01-real-writer-epoch-reopen-contender");
+        contender.setDaemon(true);
+        try {
+            action.invoke(null, token, (Runnable) () -> {
+                try {
+                    contender.start();
+                    if (!started.await(2000L, java.util.concurrent.TimeUnit.MILLISECONDS))
+                        throw new IOException("Reopen contender never started");
+                    if (reopened.await(180L, java.util.concurrent.TimeUnit.MILLISECONDS))
+                        throw new IOException("Writer gate reopened during guarded callback");
+                    if (!(Boolean) hook.getMethod("knownEpochStillCurrent", epoch)
+                            .invoke(null, token))
+                        throw new IOException("Known source changed during guarded callback");
+                    // Reentrant same-thread reopen must also be forbidden.
+                    try {
+                        hook.getMethod("reopenForProbe").invoke(null);
+                        throw new IOException("Guarded callback reopened its own writer gate");
+                    } catch (java.lang.reflect.InvocationTargetException denied) {
+                        if (!(denied.getCause() instanceof IllegalStateException))
+                            throw denied;
+                    }
+                    effects.incrementAndGet();
+                } catch (Exception failure) {
+                    throw new IllegalStateException(
+                            "Actual known-epoch callback validation failed", failure);
+                }
+            });
+        } finally {
+            contender.join(5000L);
+        }
+        if (contender.isAlive() || contenderError.get() != null
+                || reopened.getCount() != 0L || effects.get() != 1
+                || (Boolean) hook.getMethod("isClosed").invoke(null))
+            throw new IOException("Atomic known-epoch action was not isolated until its return",
+                    contenderError.get());
+        getLogger().info("PAPER_A01_KNOWN_SOURCE_ATOMIC_ACTION_BLOCKED_REOPEN_PASSED");
+    }
+
     private void verifyKnownWriterEpochCoverage() throws Exception {
         if (!Boolean.getBoolean("a01.liveOwnerAgent.coverageProof")) return;
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
@@ -612,8 +684,10 @@ public final class WclServicesProbe extends JavaPlugin {
                     throw new IOException("Missing actual inventory writer still minted an epoch");
                 getLogger().info("PAPER_A01_INCOMPLETE_SOURCE_ROSTER_EPOCH_MINT_REJECTED_PASSED");
             }
+            verifyAtomicKnownSourceCommit(hook, token, expectFull);
         } finally {
-            hook.getMethod("reopenForProbe").invoke(null);
+            if ((Boolean) hook.getMethod("isClosed").invoke(null))
+                hook.getMethod("reopenForProbe").invoke(null);
         }
         if (expectFull) {
             var current = hook.getMethod("knownEpochStillCurrent", token.getClass());
@@ -623,6 +697,18 @@ public final class WclServicesProbe extends JavaPlugin {
             try {
                 if ((Boolean) current.invoke(null, token))
                     throw new IOException("Stale closed epoch was replayed in a later generation");
+                var atomic = hook.getMethod("runUnderKnownSourcesClosedEpoch",
+                        token.getClass(), Runnable.class);
+                var staleEffects = new java.util.concurrent.atomic.AtomicInteger();
+                try {
+                    atomic.invoke(null, token, (Runnable) () -> staleEffects.incrementAndGet());
+                    throw new IOException("Stale generation executed protected action");
+                } catch (java.lang.reflect.InvocationTargetException rejected) {
+                    if (!(rejected.getCause() instanceof IllegalStateException))
+                        throw rejected;
+                }
+                if (staleEffects.get() != 0)
+                    throw new IOException("Stale token produced side effects");
             } finally {
                 hook.getMethod("reopenForProbe").invoke(null);
             }
