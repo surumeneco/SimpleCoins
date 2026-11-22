@@ -41,5 +41,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon test --tests co.surumene.simplecoins.domain.WriterEpochFenceTest jar
+          gradle --no-daemon :test --tests co.surumene.simplecoins.domain.WriterEpochFenceTest jar
           unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fx 'co/surumene/simplecoins/domain/WriterEpochFence.class'
