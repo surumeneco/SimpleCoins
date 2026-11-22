@@ -7,6 +7,8 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.wwc-www-owner-agent-writers.md'
       - 'Lifecycle/Works/simplecoins.a01.mainhand-equipment-agent-writer.md'
       - 'Lifecycle/Works/simplecoins.a01.writer-exception-failclosed.md'
+      - 'Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md'
+      - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
@@ -64,6 +66,7 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -258,6 +261,45 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-owner.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' agent-actual-owner.log
           echo 'SIMPLECOINS_A01_REAL_WWC_WWW_AGENT_PASSIVE_OBSERVED_PASS'
+      - name: Classify actual Paper Chest addItem behavior under sealed known seven-writer epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-additem/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-additem/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-additem/plugins/
+          printf 'eula=true\n' > smoke-actual-additem/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25587\n' \
+            > smoke-actual-additem/server.properties
+          cd smoke-actual-additem
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryAddItemClosureProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-additem.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED' agent-actual-additem.log; then
+            echo "Real Paper addItem classification failed code=$status" >&2
+            tail -220 agent-actual-additem.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_BOOTSTRAP_INSTALLED_PASSIVE' agent-actual-additem.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-additem.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-additem.log
+          for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
+            grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-additem.log
+          done
+          if grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-additem.log; then
+            echo 'A01_REAL_PAPER_ADDITEM_UNCOVERED_MONETARY_WRITER_OBSERVED'
+          elif grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1' agent-actual-additem.log; then
+            echo 'A01_REAL_PAPER_ADDITEM_REACHES_KNOWN_WRITER_HOOK_OBSERVED'
+          else
+            echo 'No verified real Paper addItem classification' >&2
+            tail -180 agent-actual-additem.log
+            exit 1
+          fi
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -268,5 +310,6 @@ jobs:
             writer-agent-exception-result.log
             smoke-native-agent/agent-paper.log
             smoke-actual-owners/agent-actual-owner.log
+            smoke-actual-additem/agent-actual-additem.log
           retention-days: 14
           if-no-files-found: ignore
