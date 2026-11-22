@@ -41,7 +41,7 @@ spec_status: unknown
 
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
-| --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- |
 | SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01a02.draft-model-syntax-preflight.md;docs/cat/drafts/a02-grant-delivery-process.md;.github/workflows/cat-a01-a02-draft-model-preflight.yml | — | .github/workflows/cat-a01-a02-draft-model-preflight.yml |
 
 ## Checks
