@@ -1,0 +1,110 @@
+name: A01 A02 unapproved Draft source syntax and bounded Boolean partition review
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/cat-a01-a02-draft-model-preflight.yml'
+      - 'Lifecycle/Works/simplecoins.a01a02.draft-model-syntax-preflight.md'
+      - 'docs/cat/drafts/a01-writer-epoch-publication-*.md'
+      - 'docs/cat/drafts/a02-grant-delivery-*.md'
+permissions:
+  contents: read
+jobs:
+  draft-only-model-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          path: released-cat
+          persist-credentials: false
+      - name: Verify immutable upstream and independent Draft review Work
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C released-cat rev-parse HEAD)" = a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          test "$(git -C released-cat rev-parse HEAD:.cat-system)" = eeb6cdbd008dedc261f1df380b92f8052be0c045
+          python released-cat/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01a02.draft-model-syntax-preflight.md
+      - name: Demonstrate A02 original parse failure, then draft-only A01 A02 closed Boolean models
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          repo=pathlib.Path.cwd()
+          compiler='released-cat/.cat-system/scripts/cat_compile_v2.py'
+          out=pathlib.Path('cat-draft-source-review')
+          out.mkdir()
+          defs=[
+              ('A01','a01-writer-epoch-publication',5,2),
+              ('A02','a02-grant-delivery',24,3),
+          ]
+          for name,prefix,rule_count,trigger_count in defs:
+              process=pathlib.Path('docs/cat/drafts/'+prefix+'-process.md')
+              pi=pathlib.Path('docs/cat/drafts/'+prefix+'-pi.md')
+              tce=pathlib.Path('docs/cat/drafts/'+prefix+'-tce.md')
+              for p in (process,pi,tce):
+                  body=p.read_text(encoding='utf-8')
+                  assert 'status: draft' in body and "decision_ref: ''" in body
+              args=[sys.executable,compiler,'model',str(process),str(pi),
+                    str(tce),'--allow-draft','--allow-partial','-o',
+                    str(out/(name+'-candidate-model.json'))]
+              if name=='A02':
+                  original=process.read_text(encoding='utf-8')
+                  correct='## 観測能力\n| ID | 情報源 | Domain |\n| --- | --- | --- |\n'
+                  malformed='## 観測能力\n| ID | 情報源 | Domain |\n| --- | --- |\n'
+                  assert original.count(correct)==1
+                  red=out/'A02-malformed-red.md'
+                  red.write_text(original.replace(correct,malformed),encoding='utf-8')
+                  bad=list(args)
+                  bad[3]=str(red)
+                  p=subprocess.run(bad,capture_output=True,text=True,timeout=50)
+                  if p.returncode!=2 or 'invalid Markdown table header' not in p.stderr:
+                      raise AssertionError('A02 original parser failure was not reproduced')
+                  print('A02_MALFORMED_SOURCE_EXPECTED_RED_VERIFIED')
+              result=subprocess.run(args,capture_output=True,text=True,timeout=50)
+              print(name,'canonical Draft compile exit=',result.returncode)
+              if result.stderr:print(result.stderr[-1800:])
+              if result.returncode!=0:
+                  raise AssertionError('CAT Draft model compiler did not accept corrected source')
+              src=out/(name+'-candidate-model.json')
+              data=json.loads(src.read_text(encoding='utf-8'))
+              assert data['status']=='draft' and len(data['rules'])==rule_count
+              checks=data['coverage_checks']
+              assert len(checks)==trigger_count,checks
+              for trigger,check in checks.items():
+                  assert check['result']=='proved'
+                  assert check['overlap_count']==0
+                  assert check['uncovered_count']==0
+                  assert not check['unreachable_rules'], (trigger,check)
+              assert not data.get('unverified_rule_ids'),data.get('unverified_rule_ids')
+              digest=hashlib.sha256(src.read_bytes()).hexdigest()
+              (out/(name+'-candidate-summary.json')).write_text(
+                  json.dumps({'schema':'simplecoins-issue-review/v1','scope':'DRAFT_ONLY',
+                              'process':data['process'],'rules':rule_count,
+                              'triggers':trigger_count,'overlaps':0,'uncovered':0,
+                              'model_sha256':digest,'not_normative_approval':True,
+                              'not_CatGate_or_implementation_evidence':True},
+                             ensure_ascii=False,indent=2)+'\n')
+              print(name+'_DRAFT_BOOLEAN_CLOSED_NO_OVERLAP_UNAPPROVED')
+          print('A01_A02_DRAFT_PARSE_AND_FINITE_MODEL_REVIEW_ONLY_PASSED')
+          PY
+      - name: Preserve unapproved A01/A02 models and review receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-a02-unapproved-draft-model-evidence
+          path: cat-draft-source-review/
+          retention-days: 14
+          if-no-files-found: warn
