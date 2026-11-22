@@ -161,6 +161,78 @@ jobs:
           trap - EXIT
           grep -F 'Saving worlds' agent-paper.log
           echo 'SIMPLECOINS_A01_REAL_PAPER_AGENT_BOOT_PASSIVE_PASS'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/MineCraftXPlayServer
+          ref: 79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e
+          path: server-snapshot
+          sparse-checkout: |
+            plugins/WonderfulGenomeLib-1.0.1.jar
+            plugins/WonderfulCoreLibrary-0.1.0.jar
+            plugins/WhatAWonderfulChicken-2.1.1.jar
+            plugins/WhatAWonderfulWolf-1.1.2.jar
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify actual distributed owner writer JARs and build independent Paper observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C server-snapshot rev-parse HEAD)" = '79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e'
+          declare -A blobs=(
+            [WonderfulGenomeLib-1.0.1.jar]='09acaf08b42cad7343de92de262518da2edec3f1'
+            [WonderfulCoreLibrary-0.1.0.jar]='64ab60fc7f8b2ef07c4712d410c3f4d10f022698'
+            [WhatAWonderfulChicken-2.1.1.jar]='77831eafab4d0fa55ae76d03e4249f69f472d1cf'
+            [WhatAWonderfulWolf-1.1.2.jar]='27c137123ef99c2c11867e957671a65ac6170db8'
+          )
+          for jar in "${!blobs[@]}"; do
+            f="server-snapshot/plugins/$jar"
+            test "$(git hash-object "$f")" = "${blobs[$jar]}"
+            unzip -tqq "$f"
+          done
+          gradle --no-daemon -p tests/paper-wcl-services-probe jar
+          unzip -p tests/paper-wcl-services-probe/build/libs/SimpleCoinsWclServicesProbe.jar plugin.yml |
+            grep -F 'name: SimpleCoinsWclServicesProbe'
+      - name: Verify real WWC and WWW plugin-owned monetary writer execution under passive product Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-owners/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-owners/paper.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke-actual-owners/plugins/SimpleCoins.jar
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke-actual-owners/plugins/SimpleCoinsGuard.jar
+          cp server-snapshot/plugins/WonderfulGenomeLib-1.0.1.jar smoke-actual-owners/plugins/WonderfulGenomeLib.jar
+          cp server-snapshot/plugins/WonderfulCoreLibrary-0.1.0.jar smoke-actual-owners/plugins/WonderfulCoreLibrary.jar
+          cp server-snapshot/plugins/WhatAWonderfulChicken-2.1.1.jar smoke-actual-owners/plugins/WhatAWonderfulChicken.jar
+          cp server-snapshot/plugins/WhatAWonderfulWolf-1.1.2.jar smoke-actual-owners/plugins/WhatAWonderfulWolf.jar
+          cp tests/paper-wcl-services-probe/build/libs/SimpleCoinsWclServicesProbe.jar smoke-actual-owners/plugins/StorageProbe.jar
+          printf 'eula=true\n' > smoke-actual-owners/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25586\n' > smoke-actual-owners/server.properties
+          cd smoke-actual-owners
+          set +e
+          timeout --signal=TERM --kill-after=10s 210s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.moneyOwnerWriterProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-owner.log 2>&1
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -ne 0 ]; then
+            echo "Real Paper distributed owner writer smoke failed code=$exit_code" >&2
+            tail -180 agent-actual-owner.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' agent-actual-owner.log; then
+            tail -180 agent-actual-owner.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_WWC_EXACT_ENTRY_INSTRUMENTED' agent-actual-owner.log
+          grep -F 'SIMPLECOINS_WRITER_AGENT_WWW_EXACT_ENTRY_INSTRUMENTED' agent-actual-owner.log
+          grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' agent-actual-owner.log
+          grep -F 'PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED' agent-actual-owner.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-owner.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-owner.log
+          grep -F 'Settlement engine not connected; player admission remains disabled.' agent-actual-owner.log
+          echo 'SIMPLECOINS_A01_REAL_WWC_WWW_AGENT_PASSIVE_OBSERVED_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -169,5 +241,6 @@ jobs:
           path: |
             writer-agent-bridge-result.log
             smoke-native-agent/agent-paper.log
+            smoke-actual-owners/agent-actual-owner.log
           retention-days: 14
           if-no-files-found: ignore
