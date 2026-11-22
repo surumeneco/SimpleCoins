@@ -96,10 +96,13 @@ public final class WclServicesProbe extends JavaPlugin {
         // A01 bounded investigation: a separate disposable process exercises
         // the product's existing seven-family fence. Never part of normal A05
         // reader proofs, distribution, or production startup.
-        if (Boolean.getBoolean("a01.inventoryAddItemClosureProbe")) {
+        boolean removeItemProbe = Boolean.getBoolean("a01.inventoryRemoveItemClosureProbe");
+        if (removeItemProbe || Boolean.getBoolean("a01.inventoryAddItemClosureProbe")) {
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 try {
-                    String outcome = InventoryAddItemClosureProbe.execute();
+                    String outcome = removeItemProbe
+                            ? InventoryRemoveItemClosureProbe.execute()
+                            : InventoryAddItemClosureProbe.execute();
                     getLogger().info(outcome);
                     System.out.println(outcome);
                     System.out.flush();
