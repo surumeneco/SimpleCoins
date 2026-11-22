@@ -114,12 +114,20 @@ public final class InventoryAddItemClosureProbe {
             require(hook.getMethod("mode").invoke(null).toString().equals("FAULTED")
                     && fence.state() == WriterEpochFence.State.FAULTED,
                     "addItem rejected without Agent and product fail-closed");
+            System.err.println("PAPER_A01_ADDITEM_INTERCEPT_TRACE "
+                    + java.util.Arrays.toString(rejected.getStackTrace()));
             intercepted = true;
         }
         int after = coinsIn(chest, codec);
         if (intercepted) {
-            require(after == 1, "Intercepted addItem changed physical money");
-            return "PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1";
+            if (after == 1)
+                return "PAPER_A01_REAL_CHEST_ADDITEM_INTERCEPTED count=1";
+            // The real Paper body may mutate an earlier slot before delegating
+            // to a known lower-level setter that finally rejects admission.
+            // An exception is NOT proof that the original mutation was atomic.
+            require(after == 2, "Unexpected partial addItem effect on money: " + after);
+            return "PAPER_A01_REAL_CHEST_ADDITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL"
+                    + " coinsBefore=1 coinsAfter=2 hookFaulted=true productFaulted=true";
         }
         require(after == 2, "Unintercepted addItem did not add exactly one genuine coin");
         require(fence.inFlight() == 0
