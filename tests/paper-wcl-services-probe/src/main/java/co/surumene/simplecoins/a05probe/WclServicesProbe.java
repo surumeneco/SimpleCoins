@@ -441,6 +441,26 @@ public final class WclServicesProbe extends JavaPlugin {
                             + " or was invisible to the product WCL source");
                 getLogger().info("PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED"
                         + " value=15000 previous=" + commander + " new=" + secondCommander);
+                verifyAgentBlocksLoadedOwnerWriter("WWW",
+                        () -> www.loadedIndividuals().saveAndRegister(wolf,
+                                updated.withCommandState(Mode.FOLLOW,
+                                        Optional.of(UUID.fromString(
+                                                "00000000-0000-0000-0000-00000000a074")),
+                                        ActionDistance.NORMAL, Optional.empty())),
+                        () -> {
+                            var retained = PaperWonderfulLiveCandidates.collect(
+                                    this, wolf, "www", new java.util.HashSet<>(),
+                                    2 * 1024 * 1024, 16 * 1024 * 1024);
+                            return secondCommander.equals(retained.ownerEvidence().owner())
+                                    && observedNext.slotValues().equals(retained.slotValues())
+                                    && Arrays.equals(originalMainhand,
+                                            wolf.getEquipment().getItemInMainHand()
+                                                    .serializeAsBytes())
+                                    && Arrays.equals(observedNext.sourceItems().get("weapon").bytes(),
+                                            retained.sourceItems().get("weapon").bytes())
+                                    && Arrays.equals(observedNext.sourceItems().get("cargo:7").bytes(),
+                                            retained.sourceItems().get("cargo:7").bytes());
+                        });
                 // Without an in-process WCL freshness check, the unchanged
                 // monetary sum would let this stale owner-A capture stage after
                 // actual WWW's owner-B mutation, while saved MCA is irrelevant.
@@ -535,6 +555,57 @@ public final class WclServicesProbe extends JavaPlugin {
      * changes. This is a positive reachability proof of one LIVE owner writer,
      * NOT a claim that it is blocked by a global settlement writer epoch.
      */
+    @FunctionalInterface
+    private interface CheckedSourceUnchanged {
+        boolean evaluate() throws Exception;
+    }
+
+    /**
+     * Issue-work/verification only: prove the *actual shipped* owner writer
+     * cannot enter once the test JVM Agent closes its two known entries.
+     * Does not claim global writer coverage, already-in-flight drain or G0.
+     */
+    private void verifyAgentBlocksLoadedOwnerWriter(String writer, Runnable attempted,
+            CheckedSourceUnchanged sourceUnchanged) throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.probe")) return;
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+        String key = writer.toLowerCase(java.util.Locale.ROOT);
+        int previousReturns = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, key + "Returns");
+        int previousDenials = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, key + "Denied");
+        if (previousReturns <= 0)
+            throw new IOException("Real " + writer + " Agent method has no genuine prior return");
+        hook.getMethod("closeForProbe").invoke(null);
+        try {
+            try {
+                attempted.run();
+                throw new IOException("A01 live owner writer bypassed closed Agent: " + writer);
+            } catch (IllegalStateException denied) {
+                if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                    throw denied;
+            }
+            if (!sourceUnchanged.evaluate())
+                throw new IOException("Genuine WCL owner or money changed after Agent denial");
+            int actualDenials = (Integer) hook.getMethod("count", String.class)
+                    .invoke(null, key + "Denied");
+            int actualReturns = (Integer) hook.getMethod("count", String.class)
+                    .invoke(null, key + "Returns");
+            int active = (Integer) hook.getMethod("count", String.class)
+                    .invoke(null, "active");
+            if (actualDenials != previousDenials + 1
+                    || actualReturns != previousReturns || active != 0)
+                throw new IOException("Unverifiable Agent admission/return evidence: "
+                        + writer + " denied=" + actualDenials
+                        + " returns=" + actualReturns + " active=" + active);
+        } finally {
+            hook.getMethod("reopenForProbe").invoke(null);
+        }
+        getLogger().info("PAPER_A01_LIVE_AGENT_" + writer
+                + "_CLOSED_REAL_WRITER_REJECTED_PASSED");
+    }
+
     private void verifyActualWwcOwnerWriter(
             Map<String, WonderfulStorageReader> readers, World world) throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
@@ -605,6 +676,24 @@ public final class WclServicesProbe extends JavaPlugin {
                 throw new IOException("Real WWC write changed money or failed to change LIVE owner");
             getLogger().info("PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED"
                     + " value=10000 previous=" + firstOwner + " new=" + secondOwner);
+            verifyAgentBlocksLoadedOwnerWriter("WWC",
+                    () -> {
+                        data.followTarget(UUID.fromString(
+                                "00000000-0000-0000-0000-00000000a075"));
+                        store.save(chicken, data);
+                    },
+                    () -> {
+                        var retained = success(readers.get("wwc").readStored(
+                                chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
+                                "WWC genuine store after closed writer rejection");
+                        return secondOwner.toString().equals(
+                                    pdc.get(ownerKey, PersistentDataType.STRING))
+                                && secondOwner.equals(retained.relationships().get("follow_target"))
+                                && Arrays.equals(firstBytes,
+                                    pdc.get(shulkerKey, PersistentDataType.BYTE_ARRAY))
+                                && Arrays.equals(after.items().getFirst().bytes(),
+                                    retained.items().getFirst().bytes());
+                    });
         } finally {
             store.invalidate(chicken);
             chicken.remove();
