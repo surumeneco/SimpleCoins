@@ -5,6 +5,8 @@ import co.surumene.simplecoins.guard.api.AdmissionPermit;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
 import co.surumene.simplecoins.domain.GrantLedger;
+import co.surumene.simplecoins.domain.WriterEpochFence;
+import co.surumene.simplecoins.domain.PaperNativeSaveFenceAdapter;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.JavaCurrencyPack;
 import co.surumene.simplecoins.domain.GeyserResourceInstaller;
@@ -37,6 +39,7 @@ import java.util.logging.Level;
  */
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
+    private WriterEpochFence nativeWriterFence;
     private SettlementSnapshotPublisher publication;
     private NormalMutationJournal normalJournal;
     private GrantLedger issuanceGrants;
@@ -49,6 +52,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     public void onEnable() {
         admission = new AdmissionBarrier();
         publication = new SettlementSnapshotPublisher(admission);
+        // Passive bootstrap-hook handshake only. This agent family covers two
+        // native save entrypoints, NOT the complete G0/G3 writer universe.
+        // NEVER arm this fence or enable tracked writer mode at bootstrap.
+        nativeWriterFence = new WriterEpochFence();
 
         // Register as early as possible in the Paper plugin lifecycle.
         // AdmissionBarrier starts BLOCKED; do not call begin() or complete()
@@ -56,6 +63,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         try {
             if (!getServer().getOnlinePlayers().isEmpty())
                 throw new IllegalStateException("Unsafe startup: players already online");
+            boolean nativeBridgePresent =
+                    new PaperNativeSaveFenceAdapter(nativeWriterFence).bindIfAgentPresent();
+            getLogger().info("SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound="
+                    + nativeBridgePresent + " (not armed; G0/G3/Admission denied)");
             // Open and check persistent monetary evidence before registering
             // any runtime listener/service. This is NOT world reconciliation.
             try {
