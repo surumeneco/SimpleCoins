@@ -105,6 +105,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
             Boolean.getBoolean("a02.invsee.nativeDrainAccounting");
     private final boolean testNativeFamilyNested =
             Boolean.getBoolean("a02.invsee.nativeFamilyNested");
+    private final boolean testNativeFamilyAtomicAck =
+            Boolean.getBoolean("a02.invsee.nativeFamilyAtomicAck");
+    private final boolean recoverNativeFamilyAtomicAck =
+            Boolean.getBoolean("a02.invsee.checkNativeFamilyAtomicAck");
     private final boolean testIndependentNmsRootDrain =
             Boolean.getBoolean("a02.invsee.independentNmsRootDrain");
     private final boolean testNmsSaveBypassesCraftAgent =
@@ -168,6 +172,7 @@ public final class InvseeWriterProbe extends JavaPlugin {
             else if (recoverNmsBypassAfterHalt)
                 verifyPaperDirectAfterHalt();
             else if (replayNativePostDrainFalseAck) verifyNativePostDrainFalseAckOnColdRestart();
+            else if (recoverNativeFamilyAtomicAck) verifyNativeFamilyAtomicAckOnColdRestart();
             else initializePhysicalProofThenInvokeActualPlugin();
         } catch (Throwable failure) {
             fail(failure);
@@ -963,6 +968,10 @@ public final class InvseeWriterProbe extends JavaPlugin {
                 || originalStorage[0] == null
                 || originalStorage[0].getType() != Material.STONE)
             throw new IllegalStateException("Actual original Paper player lacks grant or preserved STONE");
+        if (testNativeFamilyAtomicAck) {
+            verifyRealNativeFamilyAtomicAck(writer);
+            throw new AssertionError("Native family protected ACK halt returned");
+        }
         writer.getInventory().setItem(1, null);
         if (testNativeFamilyNested) {
             verifyNestedNativeFamilyDrainAfterClosure(writer);
@@ -1273,6 +1282,114 @@ public final class InvseeWriterProbe extends JavaPlugin {
      * test-only native-family gate closes. A Craft-only active count would
      * incorrectly report zero here. No production fence or normative Gate.
      */
+    /**
+     * Real-Paper bounded POSITIVE proof: freshly saved money and signed
+     * receipt -> actual CraftPlayer/NMS normal returns -> one native family
+     * close/drain -> fresh authenticated readback and durable pending ACK
+     * under exactly the same family mutex. Not a deployed G3 coordinator.
+     */
+    private void verifyRealNativeFamilyAtomicAck(Player writer) throws Exception {
+        if (!testNativeFamilyAtomicAck || !testPaperDirectAfterInvseeVeto
+                || !Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || writer != originalDetachedPaperWriter
+                || vetoedSaveEvents.get() != 1 || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getFirst().delivered())
+            throw new IllegalStateException("Protected ACK fixture was not safely isolated");
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a02agent.NativeSaveHook", true, null);
+        System.setProperty("a02.nativeAgent.trackNativeFamily", "true");
+        // The ORIGINAL detached Paper Player still owns its genuine 5000C
+        // item and receipt. This SAVE is performed while the family gate is
+        // open; both real bytecode methods must finish before we can close.
+        writer.saveData();
+        int craft = ((Number) hook.getMethod("familyCraftNormalReturns")
+                .invoke(null)).intValue();
+        int nms = ((Number) hook.getMethod("familyNmsNormalReturns")
+                .invoke(null)).intValue();
+        int nested = ((Number) hook.getMethod("familyNestedNmsAdmissions")
+                .invoke(null)).intValue();
+        int active = ((Number) hook.getMethod("familyInFlight")
+                .invoke(null)).intValue();
+        if (craft != 1 || nms != 1 || nested != 1 || active != 0)
+            throw new IllegalStateException("Actual positive Craft/NMS root did not return exactly once");
+        Map<String, Object> beforeClose = saved();
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(beforeClose))
+                || SavedGrantReceiptNbt.readAndVerify(beforeClose, ledger, ID)
+                        .completedSequence() != grant.sequence())
+            throw new IllegalStateException("Actual native save erased positive physical proof");
+        byte[] originalFile = Files.readAllBytes(dataFile());
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_POSITIVE_REAL_CRAFT_NMS_RETURNED");
+        hook.getMethod("closeNativeFamilyAdmissions").invoke(null);
+        if (!Boolean.TRUE.equals(hook.getMethod("awaitNativeFamilyDrain", long.class)
+                .invoke(null, 5000L)))
+            throw new IllegalStateException("Positive native save family did not drain");
+        // This must be a REAL Paper invocation, not a manually called hook.
+        try {
+            writer.saveData();
+            throw new IllegalStateException("New real CraftPlayer save escaped closed gate");
+        } catch (IllegalStateException denied) {
+            if (!"A02 native family closed to new root writers".equals(denied.getMessage()))
+                throw denied;
+        }
+        if (!Arrays.equals(originalFile, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("Denied root save changed physical playerdata");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_POSITIVE_NEW_CRAFT_DENIED");
+
+        var callback = hook.getMethod("runUnderClosedNativeFamily", Runnable.class);
+        java.util.concurrent.atomic.AtomicInteger commits = new java.util.concurrent.atomic.AtomicInteger();
+        callback.invoke(null, (Runnable) () -> {
+            try {
+                forceActualPlayerdataAndContainingDirectory();
+                byte[] frozen = Files.readAllBytes(dataFile());
+                var proof = SavedGrantDeliveryFileReadback.verify(
+                        discover(), ledger, ID, staged, priorRoot,
+                        MAX_COMPRESSED, MAX_INFLATED);
+                if (proof.receipt().active()
+                        || proof.receipt().completedSequence() != grant.sequence()
+                        || !BigInteger.valueOf(5000).equals(proof.matchedMonetaryValue())
+                        || !Arrays.equals(originalFile, frozen))
+                    throw new IllegalStateException("Protected native readback rejected positive file");
+                ledger.acknowledge(grant, proof.receipt().completedSequence());
+                if (!Arrays.equals(frozen, Files.readAllBytes(dataFile())))
+                    throw new IllegalStateException("Protected ACK raced with physical playerdata");
+                commits.incrementAndGet();
+            } catch (Exception failed) {
+                throw new IllegalStateException("Protected native family proof/ACK failed", failed);
+            }
+        });
+        if (commits.get() != 1 || !ledger.pending(ID).isEmpty()
+                || ledger.historySnapshot().size() != 1
+                || !ledger.historySnapshot().getFirst().delivered()
+                || !Arrays.equals(originalFile, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("Single genuine native-protected ACK not durable");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_ATOMIC_READBACK_ACK_PASSED");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_ATOMIC_ACK_ABRUPT_HALT");
+        Runtime.getRuntime().halt(154);
+    }
+
+    /** Agent-free Paper JVM: recheck exactly one issued 5000C plus durable ACK. */
+    private void verifyNativeFamilyAtomicAckOnColdRestart() throws Exception {
+        if (!recoverNativeFamilyAtomicAck || !Bukkit.isPrimaryThread()
+                || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Invalid native family ACK cold-recovery fixture");
+        GrantLedger recovered = actualProductLedger();
+        Map<String, Object> disk = saved();
+        GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(disk, recovered, ID);
+        if (!BigInteger.valueOf(5000).equals(totalSavedMoney(disk))
+                || receipt.active() || receipt.completedSequence() != 1
+                || !recovered.pending(ID).isEmpty()
+                || recovered.historySnapshot().size() != 1
+                || !recovered.historySnapshot().getFirst().delivered()
+                || !(disk.get("Inventory") instanceof java.util.List<?> items)
+                || items.stream().noneMatch(raw -> raw instanceof Map<?, ?> item
+                        && item.get("Slot") instanceof Number slot && slot.intValue() == 0
+                        && "minecraft:stone".equals(item.get("id"))))
+            throw new IllegalStateException("Native-family ACK lost durable coin, receipt, or ledger");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_ACK_COLD_RESTART_ONE_COIN_ONE_ACK");
+        getLogger().info("PAPER_A02_NATIVE_FAMILY_ACK_GUARD_DEFAULT_DENY");
+        Bukkit.shutdown();
+    }
+
     private void verifyIndependentNmsRootDrainAfterClosure(Player writer) throws Exception {
         if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
                 || !testIndependentNmsRootDrain || !testPaperDirectAfterInvseeVeto
