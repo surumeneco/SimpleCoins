@@ -25,8 +25,8 @@ spec_status: confirmed
 ## Evidence
 | URI |
 | --- |
-https://github.com/surumeneco/SimpleCoins/issues/423#issuecomment-7082513010
-https://github.com/surumeneco/SimpleCoins/issues/423
+| https://github.com/surumeneco/SimpleCoins/issues/423#issuecomment-7082513010 |
+| https://github.com/surumeneco/SimpleCoins/issues/423 |
 
 ## Scope
 | Process IDs | Changed IDs | Preserved IDs |
