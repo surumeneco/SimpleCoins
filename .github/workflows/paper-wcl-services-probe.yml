@@ -388,6 +388,9 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-pdc-negative.log; then
+            echo "Actual isolated PDC negative JVM exit=$status" >&2
+            grep -nE 'PAPER_A05_SERVICES_PROBE_FAILED|Watchdog|ERROR|Exception|failed|Failed' \
+              paper-a01-pdc-negative.log | head -45 || true
             tail -180 paper-a01-pdc-negative.log
             exit 1
           fi
@@ -769,5 +772,9 @@ jobs:
           path: |
             smoke/*.log
             smoke-blocklocker/*.log
+            smoke-pdc-negative/*.log
+            smoke-equipment-negative/*.log
+            smoke-inventory-negative/*.log
+            smoke-live-owner/*.log
           if-no-files-found: ignore
           retention-days: 7
