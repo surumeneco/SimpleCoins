@@ -293,6 +293,20 @@ jobs:
             echo 'Test-only WCL Agent leaked into SimpleCoins production JAR' >&2
             exit 1
           fi
+      - name: Reject stale known-writer registration in standalone JVM protocol tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac --release 25 -cp live-owner-agent-classes -d live-owner-agent-classes \
+            tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/KnownWriterRosterFaultUnit.java
+          java -cp live-owner-agent-classes \
+            co.surumene.simplecoins.a01agent.KnownWriterRosterFaultUnit open |
+              tee roster-open.log
+          grep -F 'PAPER_A01_SOURCE_ROSTER_FAULT_UNIT_OPEN_CLOSED_REVOKED_PASSED' roster-open.log
+          java -cp live-owner-agent-classes \
+            co.surumene.simplecoins.a01agent.KnownWriterRosterFaultUnit closed |
+              tee roster-closed.log
+          grep -F 'PAPER_A01_SOURCE_ROSTER_FAULT_UNIT_CLOSED_CLOSED_REVOKED_PASSED' roster-closed.log
       - name: Download hash-verified official Paper 26.2 build 134
         shell: bash
         run: |
