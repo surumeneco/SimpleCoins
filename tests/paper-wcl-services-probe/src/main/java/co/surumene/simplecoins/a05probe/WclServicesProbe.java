@@ -420,7 +420,8 @@ public final class WclServicesProbe extends JavaPlugin {
                 var updated = individual.withCommandState(Mode.FOLLOW,
                         Optional.of(secondCommander), ActionDistance.NORMAL,
                         Optional.empty());
-                www.loadedIndividuals().saveAndRegister(wolf, updated);
+                writeWithAlreadyAdmittedOwnerProof("WWW",
+                        () -> www.loadedIndividuals().saveAndRegister(wolf, updated));
                 var observedNext = PaperWonderfulLiveCandidates.collect(
                         this, wolf, "www", new java.util.HashSet<>(),
                         2 * 1024 * 1024, 16 * 1024 * 1024);
@@ -565,6 +566,88 @@ public final class WclServicesProbe extends JavaPlugin {
      * cannot enter once the test JVM Agent closes its two known entries.
      * Does not claim global writer coverage, already-in-flight drain or G0.
      */
+    /**
+     * Hold the REAL provider method after its instrumented entry but before
+     * the plugin's owner/PDC write. A controller thread may touch only the
+     * bootstrap hook: all Bukkit and WCL reads remain on Paper's main thread.
+     */
+    private void writeWithAlreadyAdmittedOwnerProof(String writer, Runnable actualWrite)
+            throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.inflight")) {
+            actualWrite.run();
+            return;
+        }
+        if (!Bukkit.isPrimaryThread())
+            throw new IOException("Real owner writer must execute on Paper main thread");
+        Class<?> hook = Class.forName(
+                "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+        String key = writer.toLowerCase(java.util.Locale.ROOT);
+        int previousReturns = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, key + "Returns");
+        hook.getMethod("armHold", String.class).invoke(null, writer);
+        var controllerFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread controller = new Thread(() -> {
+            try {
+                if (!(Boolean) hook.getMethod("awaitHeldEntry", String.class, long.class)
+                        .invoke(null, writer, 8000L))
+                    throw new IOException("Real " + writer + " method did not enter armed hold");
+                int during = (Integer) hook.getMethod("count", String.class)
+                        .invoke(null, "active");
+                if (during != 1)
+                    throw new IOException("Expected one actual " + writer
+                            + " in-flight writer, observed " + during);
+                hook.getMethod("closeForProbe").invoke(null);
+                if ((Boolean) hook.getMethod("awaitDrain", long.class)
+                        .invoke(null, 250L))
+                    throw new IOException("A01 prematurely reported drained while body held");
+                getLogger().info("PAPER_A01_LIVE_AGENT_" + writer
+                        + "_ALREADY_ADMITTED_DRAIN_BLOCKED_PASSED");
+                hook.getMethod("releaseHeldEntry", String.class).invoke(null, writer);
+                if (!(Boolean) hook.getMethod("awaitDrain", long.class)
+                        .invoke(null, 8000L))
+                    throw new IOException("A01 " + writer + " did not drain after normal return");
+                if ((Integer) hook.getMethod("count", String.class)
+                        .invoke(null, "active") != 0)
+                    throw new IOException("A01 reported drain but retained active writer");
+            } catch (Throwable failed) {
+                controllerFailure.set(failed);
+                // Never strand the Paper main thread on a failed test.
+                try {
+                    hook.getMethod("releaseHeldEntry", String.class).invoke(null, writer);
+                } catch (Throwable releaseFailure) {
+                    failed.addSuppressed(releaseFailure);
+                }
+            }
+        }, "a01-real-" + key + "-writer-drain-controller");
+        controller.setDaemon(true);
+        controller.start();
+        Throwable actualFailure = null;
+        try {
+            actualWrite.run();
+        } catch (Throwable failed) {
+            actualFailure = failed;
+        }
+        controller.join(11000L);
+        if (controller.isAlive())
+            throw new IOException("A01 real owner writer drain controller hung");
+        if (actualFailure != null)
+            throw new IOException("Real " + writer + " provider writer failed after admitted hold",
+                    actualFailure);
+        if (controllerFailure.get() != null)
+            throw new IOException("A01 real " + writer + " drain proof failed",
+                    controllerFailure.get());
+        int nowReturns = (Integer) hook.getMethod("count", String.class)
+                .invoke(null, key + "Returns");
+        if (nowReturns != previousReturns + 1
+                || !(Boolean) hook.getMethod("isClosed").invoke(null))
+            throw new IOException("Owner writer did not return exactly once under closed gate");
+        hook.getMethod("clearHold", String.class).invoke(null, writer);
+        getLogger().info("PAPER_A01_LIVE_AGENT_" + writer
+                + "_ALREADY_ADMITTED_DRAINED_AFTER_REAL_RETURN_PASSED");
+        // Intentional: retain the closed gate for a subsequent NEW writer
+        // rejection against the same accounting generation.
+    }
+
     private void verifyAgentBlocksLoadedOwnerWriter(String writer, Runnable attempted,
             CheckedSourceUnchanged sourceUnchanged) throws Exception {
         if (!Boolean.getBoolean("a01.liveOwnerAgent.probe")) return;
@@ -577,7 +660,8 @@ public final class WclServicesProbe extends JavaPlugin {
                 .invoke(null, key + "Denied");
         if (previousReturns <= 0)
             throw new IOException("Real " + writer + " Agent method has no genuine prior return");
-        hook.getMethod("closeForProbe").invoke(null);
+        if (!(Boolean) hook.getMethod("isClosed").invoke(null))
+            hook.getMethod("closeForProbe").invoke(null);
         try {
             try {
                 attempted.run();
@@ -654,7 +738,7 @@ public final class WclServicesProbe extends JavaPlugin {
             // One genuine plugin-owned LIVE writer changes the monetary owner,
             // without changing coins, their physical slot or any player count.
             data.followTarget(secondOwner);
-            store.save(chicken, data);
+            writeWithAlreadyAdmittedOwnerProof("WWC", () -> store.save(chicken, data));
             var after = success(readers.get("wwc").readStored(
                     chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
                     "WWC genuine store after owner move");
