@@ -779,20 +779,28 @@ public final class WclServicesProbe extends JavaPlugin {
                     getLogger().info("PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED");
                 }
                 if (Boolean.getBoolean("a01.liveOwnerAgent.probeBulkInventoryBypass")) {
-                    // Unlike CraftInventory#setItem(int,ItemStack), this is a
-                    // WHOLE-inventory mutation API referenced by real WWC,
-                    // CoreProtect and WorldEdit distribution bytecode.
-                    ItemStack[] oldContents = inventory.getContents();
-                    ItemStack[] overwritten = oldContents.clone();
+                    // Real Paper 26.2 build134 CraftInventory#setContents
+                    // delegates to setItem(int,ItemStack). This follows the
+                    // actual stack trace from the bounded source-first Red
+                    // attempt; do NOT add an unjustified second Agent hook.
+                    ItemStack[] overwritten = inventory.getContents().clone();
                     overwritten[0] = new ItemStack(Material.STONE);
-                    inventory.setContents(overwritten);
-                    ItemStack changed = inventory.getItem(0);
-                    if (changed == null || changed.getType() != Material.STONE
-                            || Arrays.equals(expected, changed.serializeAsBytes()))
+                    int beforeBulkDenials = (Integer) hook.getMethod("count", String.class)
+                            .invoke(null, "inventoryDenied");
+                    try {
+                        inventory.setContents(overwritten);
                         throw new IOException(
-                                "Native whole-inventory setter did not bypass item-slot gate");
-                    getLogger().info("PAPER_A01_CHEST_SETCONTENTS_BYPASSED_SETITEM_GATE");
-                    inventory.setContents(oldContents);
+                                "CraftInventory.setContents bypassed already fenced setItem");
+                    } catch (IllegalStateException denied) {
+                        if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                            throw denied;
+                    }
+                    if ((Integer) hook.getMethod("count", String.class)
+                            .invoke(null, "inventoryDenied") != beforeBulkDenials + 1)
+                        throw new IOException(
+                                "Actual setContents did not delegate to instrumented setItem");
+                    getLogger().info(
+                            "PAPER_A01_CHEST_SETCONTENTS_DELEGATES_TO_GATED_SETITEM_PASSED");
                 }
                 ItemStack retained = inventory.getItem(0);
                 if (retained == null || retained.getAmount() != 1
