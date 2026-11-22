@@ -35,6 +35,7 @@ public final class LiveOwnerWriterHook {
     private static long closedGeneration;
     private static boolean guardedActionActive;
     private static boolean guardedActionFaulted;
+    private static boolean transformedSourceRosterFaulted;
 
     // Probe-only one-shot hold. The control thread never calls Bukkit APIs.
     private static String heldWriter;
@@ -52,14 +53,28 @@ public final class LiveOwnerWriterHook {
     public static void registerObservedTransformation(String target) {
         synchronized (LOCK) {
             if (!REQUIRED_KNOWN_TARGETS.contains(target) || closed
-                    || !observedTransformedTargets.add(target))
+                    || transformedSourceRosterFaulted
+                    || observedTransformedTargets.contains(target)) {
+                // A classloader reload, duplicate descriptor, or unexpected
+                // late writer cannot leave the OLD roster valid after the
+                // Agent declines instrumentation. Close immediately; this
+                // isolated proof must not silently mint from stale coverage.
+                transformedSourceRosterFaulted = true;
+                if (!closed) {
+                    closed = true;
+                    closedGeneration = Math.addExact(closedGeneration, 1);
+                }
+                System.err.println("PAPER_A01_LIVE_AGENT_SOURCE_ROSTER_TERMINAL_FAULT_" + target);
                 throw new IllegalStateException("Unexpected or duplicate observed writer target");
+            }
+            observedTransformedTargets.add(target);
             coverageRevision++;
         }
     }
 
     private static boolean knownTargetsTransformedAndReturned() {
-        return observedTransformedTargets.equals(REQUIRED_KNOWN_TARGETS)
+        return !transformedSourceRosterFaulted
+                && observedTransformedTargets.equals(REQUIRED_KNOWN_TARGETS)
                 && wwcReturns > 0 && wwwReturns > 0 && pdcReturns > 0
                 && equipmentReturns > 0 && inventoryReturns > 0;
     }
@@ -280,7 +295,8 @@ public final class LiveOwnerWriterHook {
 
     public static void reopenForProbe() {
         synchronized (LOCK) {
-            if (!closed || active != 0 || guardedActionActive || guardedActionFaulted)
+            if (!closed || active != 0 || guardedActionActive || guardedActionFaulted
+                    || transformedSourceRosterFaulted)
                 throw new IllegalStateException("Cannot reopen active/faulted provider gate");
             closed = false;
             System.out.println("PAPER_A01_LIVE_AGENT_PROBE_REOPENED");
