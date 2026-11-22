@@ -466,6 +466,60 @@ public final class WclServicesProbe extends JavaPlugin {
                         throw failedClosed;
                 }
                 getLogger().info("PAPER_A05_REAL_WWW_STALE_LIVE_OWNER_CANDIDATE_REJECTED_PASSED");
+                // Real Paper source drift after WCL owner/cargo reread: the
+                // managed WWW item remains 10,000C, but vanilla mainhand
+                // changes independently. A same-WCL-only freshness check
+                // would still publish the *old* native mainhand value.
+                var staleNativeMirror = PaperCapturedHybridSettlement.capture(
+                        List.of(world),
+                        new PaperLiveUniverseAssets.Budget(
+                                1, 4096, 4096, 4096, 131072, 1,
+                                2 * 1024 * 1024, 16 * 1024 * 1024));
+                staleNativeMirror.includeLoadedWcl(this, wolf, "www",
+                        2 * 1024 * 1024, 16 * 1024 * 1024);
+                ItemStack originalDisplayed = wolf.getEquipment().getItemInMainHand().clone();
+                try {
+                    wolf.getEquipment().setItemInMainHand(new ItemStack(Material.STONE));
+                    if (Arrays.equals(originalDisplayed.serializeAsBytes(),
+                            wolf.getEquipment().getItemInMainHand().serializeAsBytes()))
+                        throw new IOException("Real Paper equipment did not change");
+                    var unchangedWcl = PaperWonderfulLiveCandidates.collect(
+                            this, wolf, "www", new java.util.HashSet<>(),
+                            2 * 1024 * 1024, 16 * 1024 * 1024);
+                    if (!secondCommander.equals(unchangedWcl.ownerEvidence().owner())
+                            || !BigInteger.valueOf(10000).equals(
+                                    unchangedWcl.slotValues().get("weapon"))
+                            || !BigInteger.valueOf(5000).equals(
+                                    unchangedWcl.slotValues().get("cargo:7"))
+                            || !Arrays.equals(observedNext.sourceItems().get("weapon").bytes(),
+                                    unchangedWcl.sourceItems().get("weapon").bytes()))
+                        throw new IOException("WWW provider changed with vanilla-only equipment edit");
+                    try {
+                        var invalidStaged = staleNativeMirror.stageCandidate(
+                                new WorldStorageDiscovery.Manifest(List.of(), Map.of()),
+                                new WorldScope(true, Set.of(), Set.of()), Set.of(),
+                                (sourceWorld, position) -> null,
+                                (sourceWorld, savedChunk) -> Map.of(),
+                                2 * 1024 * 1024, 16 * 1024 * 1024,
+                                (source, value) -> new SettlementAccumulator.Asset(
+                                        source.id(), value.physicalKey(), value.world(),
+                                        value.physicalKey().equals("world/" + world.getName()
+                                                + "/entity/" + wolf.getUniqueId()
+                                                + "/equipment/mainhand") ? secondCommander : null,
+                                        false, false, false,
+                                        value.amount(), value.physicalKey()));
+                        invalidStaged.pending().commit();
+                        throw new IOException("Unsafe stale vanilla mainhand mirror was staged");
+                    } catch (IOException rejected) {
+                        if (rejected.getMessage() == null
+                                || !rejected.getMessage().startsWith(
+                                        "LIVE WCL holder changed during saved stage:"))
+                            throw rejected;
+                    }
+                } finally {
+                    wolf.getEquipment().setItemInMainHand(originalDisplayed);
+                }
+                getLogger().info("PAPER_A05_STALE_NATIVE_EQUIPMENT_MIRROR_REJECTED_PASSED");
             }
         } finally {
             www.loadedIndividuals().unregister(wolf);
