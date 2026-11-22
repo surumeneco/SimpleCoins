@@ -78,6 +78,17 @@ G0公開には全貨幣owner writerについて新規入場拒否と既入場排
 3. プローブ専用でのみ、各試験直後に閉鎖を解除する。これは公開保護世代の再開や製品実装を意味しない。正常baseline、BlockLocker、各再起動、既存A05試験に退行がないことをCIで確認する。
 4. 必要なら旧配布でなく**固定した現配布**のバイトコード構造／メソッド数を実測し、未知クラス、例外復帰、既入場処理、さらに下位PDC/外部保存経路の未捕捉を別途記録する。
 
+## 継続検証 — 実書込みが入場した後の閉鎖と排出
+
+PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前に入場した書込みがその後で実行される**危険を検証していない。これは[#592](https://github.com/surumeneco/SimpleCoins/pull/592)がPaper nativeで反証した境界であり、WWC/WWWでは独立に実証する必要がある。今回も既存fixtureを利用し、個別test-only JVM Agentに限った検証とする。
+
+- AgentがWWC `WonderfulChickenStore.save` とWWW `WonderfulWolfLoadedIndividuals.saveAndRegister` の実メソッドに入場した**直後、実ボディ前**をそれぞれ一度だけHoldする。Holdは明示的に武装した1回だけ、期限付きで行い、起動時通常実装には影響させない。
+- Paperメインスレッドの実writerが保持されたことを別スレッドから検知する。**同じロック**で新規入場を閉じた時点でActive=1を観測し、`awaitDrain` は明示タイムアウトまで偽でなければならない。入場数0を便宜的に正例としない。
+- 別スレッドからHoldを解く。閉鎖済みでも**既入場の実メソッド本文は完了し**、実PDC/WCL owner A→Bが変化すること（価値、ItemStack bytesは不変）を確認する。Agentの本物のnormal return hookを通過して初めてActive=0、`awaitDrain` 真にできる。解放ボタンだけで排出済みとしない。
+- **同じ閉鎖世代のまま**、各writerの別UUID owner Cへの新規保存は拒否され、WCL/PDCのowner Bが不変であることを確認する。試験終了時にのみgateを再開し、従来のA05・BlockLocker・三段階保存復元回帰を再検証する。
+- 終了できないHold、異常終了、誤順序、想定外の引き継ぎ、他スレッド実API呼出、元writerが未計測等は合格にせずfail-closed。例外時の全writer排出・非同期子処理・他writerとの同一gateを証明するものではない。
+- データは隔離された公式Paper 26.2と配布WWC/WWW/WCL/WGLの固定fixtureだけを用い、main/本番VPS/製品JAR/Admission/G3 ACKを変更しない。DraftをAI自身でConfirmedにせず、issue-work検証とCIの結果を正式CAT Gateと混同しない。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。
