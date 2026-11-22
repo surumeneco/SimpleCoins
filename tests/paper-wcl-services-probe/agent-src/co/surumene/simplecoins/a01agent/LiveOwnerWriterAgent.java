@@ -64,6 +64,12 @@ public final class LiveOwnerWriterAgent {
                     method = null;
                     descriptor = null;
                     pdc = true;
+                } else if ("org/bukkit/craftbukkit/inventory/CraftEntityEquipment"
+                        .equals(name) && Boolean.getBoolean("a01.liveOwnerAgent.instrumentEquipment")) {
+                    label = "EQUIPMENT";
+                    method = null;
+                    descriptor = null;
+                    pdc = false;
                 } else {
                     return null;
                 }
@@ -83,20 +89,30 @@ public final class LiveOwnerWriterAgent {
                                       || (m.methodName().stringValue().equals("remove")
                                         && m.methodTypeSymbol().descriptorString().equals(
                                             "(Lorg/bukkit/NamespacedKey;)V"))
-                                    : (m.methodName().stringValue().equals(method)
-                                       && m.methodTypeSymbol().descriptorString().equals(descriptor)))) {
+                                    : ("EQUIPMENT".equals(label)
+                                        ? (m.methodName().stringValue().equals("setItemInMainHand")
+                                            && (m.methodTypeSymbol().descriptorString().equals(
+                                                    "(Lorg/bukkit/inventory/ItemStack;)V")
+                                                || m.methodTypeSymbol().descriptorString().equals(
+                                                    "(Lorg/bukkit/inventory/ItemStack;Z)V")))
+                                        : (m.methodName().stringValue().equals(method)
+                                           && m.methodTypeSymbol().descriptorString().equals(descriptor))))) {
                             count.incrementAndGet();
                             builder.transformMethod(m, MethodTransform.transformingCode(
                                     new CodeTransform() {
                                         @Override public void atStart(CodeBuilder code) {
                                             code.invokestatic(HOOK,
-                                                    pdc ? "beforePdcMutation" : "before" + label,
+                                                    pdc ? "beforePdcMutation"
+                                                            : "EQUIPMENT".equals(label)
+                                                                ? "beforeEquipmentMutation" : "before" + label,
                                                     MethodTypeDesc.ofDescriptor("()V"));
                                         }
                                         @Override public void accept(CodeBuilder code, CodeElement e) {
                                             if (e instanceof ReturnInstruction) {
                                                 code.invokestatic(HOOK,
-                                                        pdc ? "afterPdcMutation" : "after" + label,
+                                                        pdc ? "afterPdcMutation"
+                                                                : "EQUIPMENT".equals(label)
+                                                                    ? "afterEquipmentMutation" : "after" + label,
                                                         MethodTypeDesc.ofDescriptor("()V"));
                                             }
                                             code.with(e);
@@ -106,8 +122,9 @@ public final class LiveOwnerWriterAgent {
                             builder.with(element);
                         }
                     });
-                    if (count.get() != (pdc ? 2 : 1))
-                        throw new IllegalStateException("Expected " + (pdc ? 2 : 1)
+                    int expected = pdc || "EQUIPMENT".equals(label) ? 2 : 1;
+                    if (count.get() != expected)
+                        throw new IllegalStateException("Expected " + expected
                                 + " exact " + label + " mutation method(s), found " + count.get());
                     System.out.println("PAPER_A01_LIVE_AGENT_" + label + "_WRITER_INSTRUMENTED");
                     return transformed;
