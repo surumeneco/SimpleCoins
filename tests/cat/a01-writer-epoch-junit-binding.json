@@ -1,0 +1,21 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.settlement.writer-epoch-publication",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedA01WriterEpochTest",
+  "driver_class": "co.surumene.simplecoins.domain.A01WriterEpochDecisionDriver",
+  "capability_scope": {
+    "kind": "pi-only-unverified",
+    "observations": [
+      "観測.全ソース確定",
+      "観測.全writer閉包",
+      "観測.世代継続",
+      "観測.通常仕訳引継"
+    ],
+    "actions": [
+      "作用.公開試行許可",
+      "作用.未公開保留",
+      "作用.公開失効"
+    ]
+  }
+}
