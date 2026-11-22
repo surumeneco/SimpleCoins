@@ -2,19 +2,19 @@
 cat_version: '0.3'
 kind: pi
 id: simplecoins.settlement.writer-epoch-publication.pi.authorize
-status: draft
+status: confirmed
 process: simplecoins.settlement.writer-epoch-publication
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://drive.google.com/file/d/1Py55wN7KsfMqIWfD9P2IwSDwXSzUBqeR/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs: []
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# PI: G0保護世代の公開・保留・失効判定（Draft）
+# PI: G0保護世代の公開・保留・失効判定
 
 ## 境界
 | 相手Process | 方向 |

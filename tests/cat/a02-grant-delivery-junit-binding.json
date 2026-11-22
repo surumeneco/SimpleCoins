@@ -1,0 +1,20 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.grants.paper-save-commit",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedA02GrantDeliveryTest",
+  "driver_class": "co.surumene.simplecoins.domain.A02GrantDeliveryDecisionDriver",
+  "capability_scope": {
+    "kind": "pi-only-unverified",
+    "observations": [
+      "観測.永続予約台帳",
+      "観測.プレイヤーデータ正本",
+      "観測.物理貨幣と受領証明",
+      "観測.予約全額受領"
+    ],
+    "actions": [
+      "作用.台帳ack",
+      "作用.配布候補遮断"
+    ]
+  }
+}

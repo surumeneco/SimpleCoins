@@ -2,7 +2,7 @@
 cat_version: '0.3'
 kind: tce
 id: simplecoins.grants.tce.delivery
-status: draft
+status: confirmed
 process: simplecoins.grants.paper-save-commit
 source_refs:
   - https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view
@@ -13,14 +13,14 @@ source_refs:
   - https://github.com/surumeneco/SimpleCoins/pull/502
   - https://github.com/surumeneco/SimpleCoins/pull/505
   - https://github.com/surumeneco/SimpleCoins/pull/510
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs:
   - simplecoins.grants.pi.delivery
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# TCE: 保存直前・直後の配布中断と回復 (Draft)
+# TCE: 保存直前・直後の配布中断と回復 
 
 網羅要求: 部分
 
@@ -57,12 +57,12 @@ language: ja
 - **イベント拒否開始と既入場writer完了は異なる**：[#499](https://github.com/surumeneco/SimpleCoins/pull/499)の`closeAndDrain()` JUnitは、既存permitが残る間は排他完了とせず、全排出→保存→fsync→現物+receipt照合→ACKまで新規writer拒否を維持する限定モデルを検証。[#500](https://github.com/surumeneco/SimpleCoins/pull/500)は実Paper/InvSee++で、初回保存イベントを許可した直後に新規拒否へ移行しても、初回の後続`saveData`が5000C貨幣を消し完了receiptを残す反例、後続2回目の保存だけを拒否できる事実を確認。したがって**排出未完**は`入力.保存世代証拠有効 == 偽`であり、`v2/r2`に振り分けてACK禁止・予約維持・異常遮断とする。新規拒否開始だけを根拠に`v0/r0`を選択しない。永久的な元スロット固定は採用しない。
 - **既知の1件と全writerの区別**：[#502](https://github.com/surumeneco/SimpleCoins/pull/502)の実Paper正例は、特定InvSee保存Future完了後に実file/dir fsync・fresh現物/receipt読戻し・ACK・強制終了/別JVM復元が成立することだけを示す。[#505](https://github.com/surumeneco/SimpleCoins/pull/505)は、同じInvSee++イベント拒否状態でもPaper標準`Player.saveData()`がイベント非経由で同じUUID.datの貨幣を消せる反例である。これは単なる`保存済み現物受領対`の瞬間的一致では防げない。**この限定条件下では`入力.保存世代証拠有効=偽`として`v2/r2`のACK禁止・予約維持・異常遮断を選ぶ**。#505の元予約は未ACKであり、実誤ACKや通常のプレイヤー取引を観測したとは言わない。TCEの条件/効果を新規承認なく変更せず、PI入力の根拠境界を補強する。
 
-- **実Paperの他収納等価性**：[PR #480](https://github.com/surumeneco/SimpleCoins/pull/480)は`equipment`欠損→空Compoundという構造的差のみで他収納保全を偽と判定する既存実装の反例。実装上の修正候補は`equipment`の空/欠損限定同値化であり、同値化が安全と立証されたときには`入力.他収納保全=真`へ写像する。非空の装備/PDC/異常型を広く同等視しない。これは**PI入力写像の未承認検討**で、24分岐自体と`網羅要求: 部分`を変更しない。
+- **実Paperの他収納等価性**：[PR #480](https://github.com/surumeneco/SimpleCoins/pull/480)は`equipment`欠損→空Compoundという構造的差のみで他収納保全を偽と判定する既存実装の反例。実装上の修正候補は`equipment`の空/欠損限定同値化であり、同値化が安全と立証されたときには`入力.他収納保全=真`へ写像する。非空の装備/PDC/異常型を広く同等視しない。これは**PI入力写像の未採用技術候補**で、24分岐自体と`網羅要求: 部分`を変更しない。
 
 - 実Paperの合成NMS Player保存、保存無効とIOException黙殺、物理貨幣/PDCの単一保存、在庫満杯・他収納保全、未ack SIGKILL後の次起動読み戻しとack回復は [#434](https://github.com/surumeneco/SimpleCoins/pull/434) / [#437](https://github.com/surumeneco/SimpleCoins/pull/437) に証拠がある。実ネットワークログイン・切断・OS電源断ではない。
 - 部分受領が正しく保存されると `入力.保存済み現物受領対=真` であっても `入力.予約全額受領済=偽` である。旧`v0/r0`が部分受領を誤ってACK可能とした区別欠如を補正した。`v1p/r1p`は部分受領を予約維持・ACK禁止で扱う。完了受領は同一正本世代の貨幣・PDC・実予約を照合した場合だけ `v0/r0` に入る。実Paper [#467](https://github.com/surumeneco/SimpleCoins/pull/467) は初回128/130枚を保存した直後のSIGKILLから残り2枚のみを配布、[#468](https://github.com/surumeneco/SimpleCoins/pull/468) は最後の2枚を保存した直後のSIGKILLから次回起動のACKのみを回復した。これらは実接続プレイヤーや全ての外部書換え状態に対する証明ではない。
 - `v1/r1` は現物受領対が無い通常の未完了、`v1p/r1p` は正しく保存済みの部分受領、`v2/r2` は保存世代証拠不成立・他収納損失・矛盾を分離する。現物・PDCの不一致があれば単なる未配布ではなく `入力.矛盾あり=真` として異常遮断を行う。
-- 満杯、切断直前、書込み失敗と不完全な部分保全、ACK直後の再中断・同時操作などの細部は、このDraftの`網羅要求: 部分`の外側に残る。機械的Model Gateは未通過。認可済み仕様への昇格時には適切な時点・関連Processと状態同値類を正式に決める。
+- 満杯、切断直前、書込み失敗と不完全な部分保全、ACK直後の再中断・同時操作などの細部は、本契約の`網羅要求: 部分`の外側に残る。モデルの分岐検証結果はWork/CIの証拠で別管理し、関連Processとの意味的結合と外部保存の立証はImplementation Conformanceの独立した検証対象とする。
 - **保存前の物理操作中断**：[#473](https://github.com/surumeneco/SimpleCoins/pull/473) の実Paper 8〜10 JVMは、予約の永続化後・実メモリ上の貨幣/receipt更新後・playerdata保存前SIGKILLで、次回起動に現物/受領が現れず予約だけ残ることを確認した。次起動に保存・読戻し・ACKし、次々起動で再発行しない。これは `r1` の一実例であり、オンラインでの可視化・切断を保証しない。
 - **ACK済み再検査**：`p3/v3/r3` は本物の履歴で既ACKの予約を認識したときに、**ACKを再指示せず貨幣を再発行しない**。保存済みプレイヤーが後から貨幣を正当に移動・消費し得るため、既ACKの現物が発行直後と同じスロットに残ることまで要求しない。台帳とreceiptのロールバック・不一致は `入力.矛盾あり=真` として既ACK時は `p2d/v4/r4` の拒否に振り分ける。未ACKの矛盾は `p2/v2/r2` とし、未ACK予約だけを保持する。
 - **観測入力の閉包**：`v6/r6` は正規予約も矛盾もない保存後照合・復旧を無操作へ、`v7/r7` は「保存された現物受領対が偽なのに全額受領済みが真」と申告された自己矛盾を明示的異常遮断へ振り分ける。7真偽入力の128通りは各起点について単一分岐となるよう独立した検証で列挙するが、**実世界のあらゆる事象を7入力へ正しく写像できることの証明ではない**。従って`網羅要求: 部分`のままにする。

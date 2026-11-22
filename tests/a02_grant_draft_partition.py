@@ -12,7 +12,7 @@ from pathlib import Path
 import unittest
 
 TCE = (Path(__file__).resolve().parents[1]
-       / "docs/cat/drafts/a02-grant-delivery-tce.md")
+       / "docs/cat/confirmed/a02-grant-delivery-tce.md")
 INPUTS = (
     "入力.予約あり",
     "入力.保存済み現物受領対",

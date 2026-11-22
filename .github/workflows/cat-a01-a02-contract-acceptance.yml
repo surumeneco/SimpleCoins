@@ -1,0 +1,130 @@
+name: CAT A01 G0 and A02 G3 confirmed PI-only Red Green
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docs/cat/confirmed/a01-writer-epoch-publication-*.md'
+      - 'docs/cat/confirmed/a02-grant-delivery-*.md'
+      - 'Lifecycle/Works/simplecoins.a01.writer-epoch-publication-implementation.md'
+      - 'Lifecycle/Works/simplecoins.a02.grant-save-commit-implementation.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecision.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantDeliveryDecision.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/A01WriterEpochDecisionDriver.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/A02GrantDeliveryDecisionDriver.java'
+      - 'tests/cat/a01-writer-epoch-junit-binding.json'
+      - 'tests/cat/a02-grant-delivery-junit-binding.json'
+      - '.github/workflows/cat-a01-a02-contract-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  confirmed-model-and-junit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          path: released-cat
+          persist-credentials: false
+      - name: Verify released canonical CAT identity and six authorized artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C released-cat rev-parse HEAD)" = a6ff19bd0cfdb7a8b007f4df62e25f154acbe643
+          test "$(git -C released-cat rev-parse HEAD:.cat-system)" = eeb6cdbd008dedc261f1df380b92f8052be0c045
+          python released-cat/.cat-system/skills/cat-specification-gate/scripts/cat_artifact_lint.py --files docs/cat/confirmed/a01-writer-epoch-publication-process.md docs/cat/confirmed/a01-writer-epoch-publication-pi.md docs/cat/confirmed/a01-writer-epoch-publication-tce.md docs/cat/confirmed/a02-grant-delivery-process.md docs/cat/confirmed/a02-grant-delivery-pi.md docs/cat/confirmed/a02-grant-delivery-tce.md
+      - name: Execute actual CAT process closure model conformance and current generated JUnit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,pathlib,subprocess,sys,hashlib
+          cli=pathlib.Path('released-cat/.cat-system/scripts/cat_flow.py')
+          cmp=pathlib.Path('released-cat/.cat-system/scripts/cat_compile_v2.py')
+          receipts=pathlib.Path('cat-a01a02-receipts');receipts.mkdir()
+          rows=[
+            ('A01','simplecoins.a01.writer-epoch-publication-implementation','a01-writer-epoch-publication','a01-writer-epoch','A01WriterEpochGeneratedTest.java',5,2),
+            ('A02','simplecoins.a02.grant-save-commit-implementation','a02-grant-delivery','a02-grant-delivery','A02GrantDeliveryGeneratedTest.java',24,3),
+          ]
+          def run(args):
+              p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True,timeout=90)
+              print('CAT',*map(str,args),'exit=',p.returncode,flush=True)
+              if p.stdout:print(p.stdout[-4000:],flush=True)
+              if p.stderr:print('stderr=',p.stderr[-1500:],flush=True)
+              if p.returncode:raise RuntimeError('CAT canonical command failed')
+              if p.stdout.strip().startswith('{'):return json.loads(p.stdout)
+          for label,work,stem,cache,out,rule_count,trigger_count in rows:
+              w='Lifecycle/Works/'+work+'.md'
+              a=run([cli,'validate','--work',w]);assert a['status']=='passed',a
+              for k in ['process-closure']:
+                  a=run([cli,'conformance','--work',w,'--kind',k]);assert a['status']=='passed',a
+              a=run([cli,'compile','--work',w,'--kind','model']);assert a['status']=='passed',a
+              a=run([cli,'conformance','--work',w,'--kind','model-conformance']);assert a['status']=='passed',a
+              for k in ['vectors','queue']:
+                  a=run([cli,'compile','--work',w,'--kind',k]);assert a['status']=='passed',a
+              model='Lifecycle/Works/.cat-flow/cache/'+cache+'-model.json'
+              vec='Lifecycle/Works/.cat-flow/cache/'+cache+'-vectors.json'
+              queue='Lifecycle/Works/.cat-flow/cache/'+cache+'-queue.json'
+              data=json.loads(pathlib.Path(model).read_text())
+              assert data['status']=='confirmed' and len(data['rules'])==rule_count
+              assert len(data['coverage_checks'])==trigger_count
+              assert all(x['result']=='proved' and x['overlap_count']==0 and x['uncovered_count']==0 for x in data['coverage_checks'].values())
+              process='docs/cat/confirmed/'+stem+'-process.md'
+              pi='docs/cat/confirmed/'+stem+'-pi.md'
+              tce='docs/cat/confirmed/'+stem+'-tce.md'
+              binding='tests/cat/'+cache+'-junit-binding.json'
+              output='Lifecycle/Works/.cat-flow/generated/'+out
+              args=[cmp,'tests',model,vec,binding,'--queue',queue,'--framework','junit','--process',process,'--pi',pi,'--tce',tce,'-o',output]
+              run(args);source=pathlib.Path(output).read_bytes()
+              assert b'CAPABILITIES NOT VERIFIED' in source and source.count(b'@Test')==1
+              run(args[:-2]+['--check']+args[-2:])
+              text=source.decode()
+              package=[x[len('package '):-1] for x in text.splitlines() if x.startswith('package ') and x.endswith(';')]
+              klass=[x[len('final class '):].split()[0] for x in text.splitlines() if x.startswith('final class ')]
+              assert len(package)==len(klass)==1
+              target=pathlib.Path('src/test/java')/package[0].replace('.','/')/(klass[0]+'.java')
+              if target.exists(): assert target.read_bytes()==source
+              else:target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(source)
+              (receipts/(label+'-test-sha256.txt')).write_text(hashlib.sha256(source).hexdigest()+'\n')
+              obligations=run([cli,'obligations','--work',w])
+              assert obligations['status']=='passed',obligations
+              a=run([cli,'conformance','--work',w,'--kind','implementation-conformance'])
+              assert a['status']=='inconclusive',a
+              (receipts/(label+'-implementation-conformance.json')).write_text(json.dumps(a,ensure_ascii=False,indent=2)+'\n')
+              print(label+'_CONFIRMED_CAT_MODEL_AND_CURRENT_GENERATED_JUNIT_READY_NOT_IMPLEMENTATION_PASS')
+          PY
+          python tests/a02_grant_draft_partition.py
+          gradle --no-daemon :test --tests '*GeneratedA01WriterEpochCase*' --tests '*GeneratedA02GrantDeliveryCase*'
+          python - <<'PY'
+          import pathlib,xml.etree.ElementTree as ET
+          p=pathlib.Path('build/test-results/test')
+          xml=list(p.glob('TEST-*GeneratedA01WriterEpochCase*.xml'))+list(p.glob('TEST-*GeneratedA02GrantDeliveryCase*.xml'))
+          assert len(xml)==2,xml
+          for f in xml:
+              s=ET.parse(f).getroot()
+              assert (int(s.get('tests',0)),int(s.get('failures',0)),int(s.get('errors',0)),int(s.get('skipped',0)))==(1,0,0,0),f
+              pathlib.Path('cat-a01a02-receipts',f.name).write_bytes(f.read_bytes())
+          print('A01_A02_CANONICAL_CURRENT_JUNIT_GREEN_TWO_ACTUAL_CASES_BOUNDED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a01-a02-confirmed-model-and-current-junit-evidence
+          path: |
+            cat-a01a02-receipts/
+            Lifecycle/Works/.cat-flow/cache/a01-writer-epoch-*.json
+            Lifecycle/Works/.cat-flow/cache/a02-grant-delivery-*.json
+          retention-days: 14
+          if-no-files-found: warn

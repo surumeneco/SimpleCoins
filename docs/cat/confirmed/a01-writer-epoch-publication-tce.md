@@ -2,20 +2,20 @@
 cat_version: '0.3'
 kind: tce
 id: simplecoins.settlement.writer-epoch-publication.tce.authorize
-status: draft
+status: confirmed
 process: simplecoins.settlement.writer-epoch-publication
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://drive.google.com/file/d/1Py55wN7KsfMqIWfD9P2IwSDwXSzUBqeR/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: ''
+decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
 refs:
   - simplecoins.settlement.writer-epoch-publication.pi.authorize
 semantic_contract: markdown-v2
 language: ja
 ---
 
-# TCE: G0公開試行・未公開保留・既公開失効（Draft）
+# TCE: G0公開試行・未公開保留・既公開失効
 
 網羅要求: 閉包
 
@@ -32,4 +32,4 @@ language: ja
 
 全ての必須Booleanを観測に紐付けた場合の公開試行・保留・失効の分岐であり、実環境の全writerが閉じたことや原子的publishが成立したことは立証しない。r1は既公開のまま維持してよいという許可でもなく、単に失効通知時点で新たな操作を指示しない。旧候補の再公開、監視を失った後の再Permit、未知のwriterを「無い」とする挙動は禁止。
 
-実Paper受入は、非協調Paper native保存、既入場InvSee++未来Future、LIVE貨幣増減、額不変のowner移動、WorldLoad/Unload ABA、通常仕訳引継、監視喪失、失敗後永続拒否の各区別を要する。既存 #470/#471、#505/#510、#559 の負例を再利用し、同じテストの量産は行わない。Formal Process/Model/Implementation Conformance、配布実機と原子公開は未実行。
+実Paper受入は、非協調Paper native保存、既入場InvSee++未来Future、LIVE貨幣増減、額不変のowner移動、WorldLoad/Unload ABA、通常仕訳引継、監視喪失、失敗後永続拒否の各区別を要する。既存 #470/#471、#505/#510、#559 の負例を再利用し、同じテストの量産は行わない。各CAT Gateの実行結果はWork/CIの証拠で別管理し、Process/Modelの分岐検証を全writerの実運用閉包、原子的公開またはImplementation Conformanceの成立と混同しない。

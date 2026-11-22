@@ -24,15 +24,17 @@ spec_status: draft
 
 # G3/A02 — 部分受領を完了ACK判定から分離するCAT Draft整備
 
+> **現行規範の参照**：2026-11-23の利用者によるCAT承認判断委任後、A01/A02の正式Process/PI/TCEは `docs/cat/confirmed/` を正本とする。本WorkのDraft・当時の未承認記述は旧技術検証の履歴であり、最新規範の未承認を意味しない。全writer排他と製品G0/G3は引続き未成立。
+
 ## Evidence
 
 | URI |
 | --- |
 | https://github.com/surumeneco/SimpleCoins/pull/467 |
 | https://github.com/surumeneco/SimpleCoins/pull/468 |
-| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/drafts/a02-grant-delivery-process.md |
-| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/drafts/a02-grant-delivery-pi.md |
-| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/drafts/a02-grant-delivery-tce.md |
+| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/confirmed/a02-grant-delivery-process.md |
+| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/confirmed/a02-grant-delivery-pi.md |
+| https://github.com/surumeneco/SimpleCoins/blob/develop/docs/cat/confirmed/a02-grant-delivery-tce.md |
 
 ## Scope
 
@@ -50,7 +52,7 @@ spec_status: draft
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.cat-partial-vs-complete-ack.md;docs/cat/drafts/a02-grant-delivery-process.md;docs/cat/drafts/a02-grant-delivery-pi.md;docs/cat/drafts/a02-grant-delivery-tce.md;.github/workflows/cat-a02-grant-draft-lint.yml | — | .github/workflows/cat-a02-grant-draft-lint.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a02.cat-partial-vs-complete-ack.md;docs/cat/confirmed/a02-grant-delivery-process.md;docs/cat/confirmed/a02-grant-delivery-pi.md;docs/cat/confirmed/a02-grant-delivery-tce.md;.github/workflows/cat-a02-grant-draft-lint.yml | — | .github/workflows/cat-a02-grant-draft-lint.yml |
 
 ## Checks
 
