@@ -7,6 +7,7 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeTransform;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.MethodTransform;
+import java.lang.classfile.Label;
 import java.lang.classfile.instruction.ReturnInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
@@ -117,18 +118,36 @@ public final class PaperNativeWriterAgent {
                             matched.incrementAndGet();
                             builder.transformMethod(method, MethodTransform.transformingCode(
                                     new CodeTransform() {
+                                        private Label admitted, originalEnd, onException;
+
                                         @Override public void atStart(CodeBuilder code) {
                                             code.invokestatic(BOOTSTRAP, target.enterHook,
                                                     MethodTypeDesc.ofDescriptor("()V"));
+                                            // Entry callback faults independently if it throws.
+                                            admitted = code.newBoundLabel();
+                                            originalEnd = code.newLabel();
+                                            onException = code.newLabel();
                                         }
 
                                         @Override public void accept(CodeBuilder code, CodeElement element) {
-                                            // All selected methods return void. Exception paths remain
-                                            // uncompleted and block a later protected-epoch drain.
                                             if (element instanceof ReturnInstruction)
                                                 code.invokestatic(BOOTSTRAP, target.returnHook,
                                                         MethodTypeDesc.ofDescriptor("()V"));
                                             code.with(element);
+                                        }
+
+                                        @Override public void atEnd(CodeBuilder code) {
+                                            code.labelBinding(originalEnd);
+                                            code.labelBinding(onException);
+                                            // The original Throwable is on the operand stack.
+                                            // Invalidating the bootstrap bridge also revokes
+                                            // the isolated product WriterEpochFence generation.
+                                            code.invokestatic(BOOTSTRAP, "fault",
+                                                    MethodTypeDesc.ofDescriptor("()V"));
+                                            code.athrow();
+                                            // Original method handlers precede this catch-all,
+                                            // so internally handled failures may return normally.
+                                            code.exceptionCatchAll(admitted, originalEnd, onException);
                                         }
                                     }));
                         } else {
