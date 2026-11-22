@@ -263,6 +263,24 @@ jobs:
               grep -Fx "  - $actual"
             echo "PAPER_A05_REAL_SOFTDEPEND_NAME_PASSED name=$actual"
           done
+      - name: Build isolated A01 WWC/WWW live-owner writer Agent (never production)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live-owner-agent-classes
+          javac --release 25 -d live-owner-agent-classes \
+            tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/LiveOwnerWriterAgent.java \
+            tests/paper-wcl-services-probe/agent-src/co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.java
+          jar cf live-owner-hook.jar -C live-owner-agent-classes \
+            co/surumene/simplecoins/a01agent/LiveOwnerWriterHook.class
+          printf 'Manifest-Version: 1.0\\nPremain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent\\n\\n' > live-owner-agent.mf
+          jar cfm live-owner-agent.jar live-owner-agent.mf -C live-owner-agent-classes .
+          unzip -p live-owner-agent.jar META-INF/MANIFEST.MF | grep -F \
+            'Premain-Class: co.surumene.simplecoins.a01agent.LiveOwnerWriterAgent'
+          if unzip -Z1 build/libs/SimpleCoins-1.0.0.jar | grep -Fq 'LiveOwnerWriterAgent'; then
+            echo 'Test-only WCL Agent leaked into SimpleCoins production JAR' >&2
+            exit 1
+          fi
       - name: Download hash-verified official Paper 26.2 build 134
         shell: bash
         run: |
@@ -322,6 +340,50 @@ jobs:
           grep -F 'PAPER_A05_PRODUCT_STORED_FAILURES_NOT_ADOPTED_PASSED' paper-a05.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a05.log; then exit 1; fi
           echo 'PAPER_A05_PINNED_MULTI_PROVIDER_REAL_PAPER_PASSED'
+      - name: Real Paper WWC/WWW loaded-owner mutation denied by isolated Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-live-owner/plugins
+          cp smoke/paper.jar smoke/eula.txt smoke/server.properties smoke-live-owner/
+          cp smoke/plugins/*.jar smoke-live-owner/plugins/
+          cd smoke-live-owner
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s \
+            java -javaagent:../live-owner-agent.jar \
+              -Da01.liveOwnerAgent.hookJar=../live-owner-hook.jar \
+              -Da01.liveOwnerAgent.probe=true \
+              -Da01.moneyOwnerWriterProbe=true \
+              -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Real Paper live-owner Agent experiment exit=$status" >&2
+            tail -180 paper-a01-agent.log
+            exit 1
+          fi
+          if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-agent.log; then
+            tail -180 paper-a01-agent.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_TEST_ONLY_INSTALLED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_WRITER_INSTRUMENTED' paper-a01-agent.log
+          grep -F 'PAPER_A01_REAL_WWC_MONETARY_OWNER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_REAL_WWW_MONETARY_COMMANDER_WRITER_VALUE_INVARIANT_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_ENTRY_DENIED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_ENTRY_DENIED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWC_CLOSED_REAL_WRITER_REJECTED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_LIVE_AGENT_WWW_CLOSED_REAL_WRITER_REJECTED_PASSED' paper-a01-agent.log
+          echo 'PAPER_A01_REAL_LOADED_PROVIDER_AGENT_ENTRY_FEASIBILITY_ONLY_PASSED'
+      - name: Preserve bounded live-owner Agent real-Paper evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a01-real-paper-wcl-live-writer-agent-evidence
+          path: smoke-live-owner/*.log
+          retention-days: 14
       - name: Verify world saved real WWC entity persists across a second Paper process
         shell: bash
         run: |
