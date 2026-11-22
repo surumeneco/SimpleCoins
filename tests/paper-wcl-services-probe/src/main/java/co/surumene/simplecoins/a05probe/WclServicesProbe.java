@@ -93,6 +93,29 @@ public final class WclServicesProbe extends JavaPlugin {
             Bukkit.shutdown();
             return;
         }
+        // A01 bounded investigation: a separate disposable process exercises
+        // the product's existing seven-family fence. Never part of normal A05
+        // reader proofs, distribution, or production startup.
+        if (Boolean.getBoolean("a01.inventoryAddItemClosureProbe")) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                try {
+                    String outcome = InventoryAddItemClosureProbe.execute();
+                    getLogger().info(outcome);
+                    System.out.println(outcome);
+                    System.out.flush();
+                    // The limited proof intentionally leaves the fence sealed
+                    // or faulted. Do not run later Paper shutdown saves.
+                    Runtime.getRuntime().halt(0);
+                } catch (Throwable failure) {
+                    getLogger().log(Level.SEVERE,
+                            "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED", failure);
+                    System.err.println("PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED");
+                    System.err.flush();
+                    Runtime.getRuntime().halt(2);
+                }
+            }, 50L);
+            return;
+        }
         Bukkit.getScheduler().runTaskLater(this, () -> {
             try {
                 for (String pluginName : new String[]{
