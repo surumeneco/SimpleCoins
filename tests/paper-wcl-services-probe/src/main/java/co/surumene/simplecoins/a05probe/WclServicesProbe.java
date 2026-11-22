@@ -570,6 +570,82 @@ public final class WclServicesProbe extends JavaPlugin {
      * Does not claim global writer coverage, already-in-flight drain or G0.
      */
     /**
+     * Real block-chest coin mutation through the normal Bukkit inventory API,
+     * in a disposable preloaded chunk of the isolated Paper fixture.
+     */
+    private void verifyActualChestInventoryMutationUnderClosedGate(World world)
+            throws Exception {
+        if (!Boolean.getBoolean("a01.liveOwnerAgent.directInventoryProof")) return;
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IOException("Chest monetary writer proof must use isolated main-thread baseline");
+
+        var block = world.getBlockAt(49, 120, 49);
+        Material initialType = block.getType();
+        // The test controls a fresh disposable world; all mutations are later
+        // removed, and the loaded chunk is owned by the fixture.
+        block.setType(Material.CHEST);
+        try {
+            if (!(block.getState() instanceof org.bukkit.block.Chest chest))
+                throw new IOException("Physical test Chest did not materialize");
+            var inventory = chest.getBlockInventory();
+            getLogger().info("PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS="
+                    + inventory.getClass().getName());
+            var coinCodec = new CoinItemCodec(CoinItemCodec.defaultNames());
+            ItemStack originalMoney = coinCodec.create(CoinDenomination.TEN_THOUSAND, 1);
+            inventory.setItem(0, originalMoney.clone());
+            byte[] expected = originalMoney.serializeAsBytes();
+            ItemStack observed = inventory.getItem(0);
+            if (observed == null || observed.getAmount() != 1
+                    || coinCodec.identify(observed).orElseThrow() != CoinDenomination.TEN_THOUSAND
+                    || !Arrays.equals(expected, observed.serializeAsBytes()))
+                throw new IOException("Real Chest monetary source never materialized");
+
+            Class<?> hook = Class.forName(
+                    "co.surumene.simplecoins.a01agent.LiveOwnerWriterHook", true, null);
+            if ((Boolean) hook.getMethod("isClosed").invoke(null))
+                throw new IOException("Cannot begin independent Chest probe with closed gate");
+            hook.getMethod("closeForProbe").invoke(null);
+            try {
+                boolean uninstrumented = Boolean.getBoolean(
+                        "a01.liveOwnerAgent.expectInventoryBypass");
+                if (uninstrumented) {
+                    inventory.setItem(0, new ItemStack(Material.STONE));
+                    ItemStack changed = inventory.getItem(0);
+                    if (changed == null || changed.getType() != Material.STONE
+                            || Arrays.equals(expected, changed.serializeAsBytes()))
+                        throw new IOException("Uncontrolled CraftInventory write did not run");
+                    getLogger().info("PAPER_A01_BLOCK_CHEST_DIRECT_SETITEM_BYPASS_REPRODUCED");
+                    inventory.setItem(0, originalMoney.clone());
+                } else {
+                    int previousDenied = (Integer) hook.getMethod("count", String.class)
+                            .invoke(null, "inventoryDenied");
+                    try {
+                        inventory.setItem(0, new ItemStack(Material.STONE));
+                        throw new IOException("Unfenced Inventory.setItem removed real 10000C");
+                    } catch (IllegalStateException denied) {
+                        if (!"A01 live provider writer fenced".equals(denied.getMessage()))
+                            throw denied;
+                    }
+                    if ((Integer) hook.getMethod("count", String.class)
+                            .invoke(null, "inventoryDenied") != previousDenied + 1)
+                        throw new IOException("Inventory writer closed gate was not invoked");
+                    getLogger().info("PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED");
+                }
+                ItemStack retained = inventory.getItem(0);
+                if (retained == null || retained.getAmount() != 1
+                        || coinCodec.identify(retained).orElseThrow()
+                                != CoinDenomination.TEN_THOUSAND
+                        || !Arrays.equals(expected, retained.serializeAsBytes()))
+                    throw new IOException("Chest coin changed across direct writer test");
+            } finally {
+                hook.getMethod("reopenForProbe").invoke(null);
+            }
+        } finally {
+            block.setType(initialType);
+        }
+    }
+
+    /**
      * A separate Paper equipment writer bypasses WWW's registered store and
      * even the already-instrumented PDC mutation surface. Use the real loaded
      * WWW monetary mirror (10,000C native mainhand / 5,000C cargo).
@@ -929,6 +1005,7 @@ public final class WclServicesProbe extends JavaPlugin {
                                 && Arrays.equals(after.items().getFirst().bytes(),
                                     retained.items().getFirst().bytes());
                     });
+            verifyActualChestInventoryMutationUnderClosedGate(world);
         } finally {
             store.invalidate(chicken);
             chicken.remove();
