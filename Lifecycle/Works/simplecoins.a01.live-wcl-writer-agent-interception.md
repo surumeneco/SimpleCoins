@@ -126,7 +126,7 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 これまでの#606〜#610の単独フック正例は、製品公開へは繋がらない。特に、callerが「writer閉包完了=true」と主張するBooleanや、classpathにAgentが存在するだけという証拠からG0の保護世代は成立しない。**既に実証済みの5種の入口**（`WWC.save`、`WWW.saveAndRegister`、`CraftPersistentDataContainer.set/remove`、`CraftEntityEquipment.setItemInMainHand`、`CraftInventory.setItem`）に限定して、閉包の証拠型と欠落拒否を検証する。
 
 1. 実Java25 Agentから各targetクラスとdescriptorを実際にtransformした事実をbootstrap側監視に登録する。加えて実method**normal return**が観測された種類だけを「実到達済み」に数える。Agent起動/変換要求/logだけではこの条件を満たさない。
-2. mutexによる閉鎖とActive=0を同一スナップショットで確認したときのみ、既知5種の集合・対象revision・非再利用の単調epoch IDから**検証用不変token**を返す。setterを1つ除いた既存負例JVMではこのtokenを発行できず、欠落を資産0・安全とみなさない。
+2. mutexによる閉鎖とActive=0を同一スナップショットで確認したときのみ、既知5種の集合・対象revision・非再利用の単調epoch IDから**検証用不変token**を返す。setterを1つ除いた既存負例JVMではこのtokenを発行できず、欠落を資産0・安全とみなさない。**同じclass/descriptorの再transform、起動後の未登録targetや閉鎖中の追加登録が発生すると、現在の既知writer登録が古いclassloaderに属する可能性があるため、既存tokenを必ず失効し、登録をterminal faultへ倒してそのJVMでは再開できないこと。** 例外を記録しただけで旧集合を引き続き完全とみなしてはならない。再起動後の全登録証拠再構築を必要条件とする。これはclassloader変化を実Paperで全件検知したことではなく、検知された登録異常を拒否する監視機構の独立検証である。
 3. 5種が揃った正例JVMでは、実WWC/WWW/PDC/装備/チェストからの正常return確認後、閉鎖→既入場排出→token作成・照合を実行。閉鎖解除または新世代開始後は古いtokenを無効化し、再使用を拒否する。**さらにtoken検証と試験用の短い確定相当操作を同一monitor内で実行する。**別スレッドが操作中に入場再開を試みても、その操作が完了するまで再開は実行できない。検証済みと確認しただけでmonitorを外し、後から任意の確定処理を行う方式はTOCTOUが残るため不合格とする。新世代・失効token・部分集合では試験用操作自体が実行されない。
    - コールバックの実行中に同一スレッドからgateを再開しようとする場合も拒否する。コールバック異常終了時は原則として閉鎖を保持し、疑わしい世代を使って再実行/公開しない。
    - この検証用「確定相当操作」は実Snapshot公開・通常Journalの接続ではなく、同じlock下で短い効果を1回だけ発生させる試験フックに限る。既知5種だけのtokenをG0/G3の決算許可へ転用しない。
