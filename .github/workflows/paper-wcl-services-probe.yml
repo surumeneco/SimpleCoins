@@ -388,6 +388,9 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' paper-a01-pdc-negative.log; then
+            echo "Actual isolated PDC negative JVM exit=$status" >&2
+            grep -nE 'PAPER_A05_SERVICES_PROBE_FAILED|Watchdog|ERROR|Exception|failed|Failed' \
+              paper-a01-pdc-negative.log | head -45 || true
             tail -180 paper-a01-pdc-negative.log
             exit 1
           fi
@@ -509,6 +512,7 @@ jobs:
               -Da01.liveOwnerAgent.instrumentEquipment=true \
               -Da01.liveOwnerAgent.directInventoryProof=true \
               -Da01.liveOwnerAgent.instrumentInventory=true \
+              -Da01.liveOwnerAgent.probeBulkInventoryBypass=true \
               -Da01.liveOwnerAgent.coverageProof=true \
               -Da01.moneyOwnerWriterProbe=true \
               -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-a01-agent.log 2>&1
@@ -532,6 +536,7 @@ jobs:
           grep -F 'PAPER_A01_LIVE_AGENT_INVENTORY_WRITER_INSTRUMENTED' paper-a01-agent.log
           grep -F 'PAPER_A01_REAL_BLOCK_INVENTORY_IMPL_CLASS=' paper-a01-agent.log
           grep -F 'PAPER_A01_BLOCK_CHEST_SETITEM_REJECTED_PASSED' paper-a01-agent.log
+          grep -F 'PAPER_A01_CHEST_SETCONTENTS_DELEGATES_TO_GATED_SETITEM_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_CLOSED_EPOCH_MINTED_FROM_REAL_HOOKS_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_ATOMIC_ACTION_BLOCKED_REOPEN_PASSED' paper-a01-agent.log
           grep -F 'PAPER_A01_KNOWN_SOURCE_EPOCH_REOPEN_AND_REPLAY_DENIED_PASSED' paper-a01-agent.log
@@ -767,5 +772,9 @@ jobs:
           path: |
             smoke/*.log
             smoke-blocklocker/*.log
+            smoke-pdc-negative/*.log
+            smoke-equipment-negative/*.log
+            smoke-inventory-negative/*.log
+            smoke-live-owner/*.log
           if-no-files-found: ignore
           retention-days: 7

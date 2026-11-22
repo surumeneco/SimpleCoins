@@ -133,6 +133,16 @@ PR #606の実到達2入口の「閉鎖後の新規拒否」は、**閉鎖直前�
 4. 採用されたwriter集合自体が全実環境を網羅することは**別証明**である。現在の5種だけをもってG0 global writer closure、G3 playerdata/InvSee/native、全24 JAR、全Storage/Entity/Block/IO、async/例外の実排出が成立したと主張してはならない。試験用の`ClosedEpoch`を製品publisherへ渡してはならない。
 5. 既存の実Paper反例・正例と全回帰を保持し、**この証拠型が製品の会計世代根拠を実現する候補として使用可能か**のみ検証する。CAT DraftはApproved/Confirmedへ自己昇格せず、製品コード・本番JAR・入室Guard・G3 ACK・VPS/`main`は不変。
 
+## 固定24 JAR差分に基づく実測 — `CraftInventory.setContents`は既存フックで阻止
+
+既存[PR #610](https://github.com/surumeneco/SimpleCoins/pull/610)は実Paper `CraftInventory#setItem(int,ItemStack)`をtest-only Agentで監視している。現XPlayServer `develop@79e4afdbc530c9f8151c44bb390d06f7ff8fcf6e` の24 JAR静的監査（[CI #44907075634](https://github.com/surumeneco/SimpleCoins/actions/runs/44907075634)）では、`CoreProtect RollbackUtil`、`WWC InventoryService`、`WorldEdit BukkitPlayerBlockBag` に別API `Inventory.setContents(ItemStack[])` の参照があり、呼出しだけでは既存フックの迂回可否を確定できなかった。
+
+**最初の実Paper検証結果（[CI #45033224871](https://github.com/surumeneco/SimpleCoins/actions/runs/45033224871)）**：試験用の実10,000C貨幣をチェストに置き、全5既知writerフックの閉鎖中に `CraftInventory.setContents(...STONE...)` を呼ぶと、実スタックトレースで **`CraftInventory.setContents(CraftInventory.java:94) → CraftInventory.setItem → LiveOwnerWriterHook.beforeInventoryMutation`** と到達し、既存 `IllegalStateException("A01 live provider writer fenced")` により本文実行が拒否された。したがって「一括setterは独立した迂回である」という負例仮説はこの固定Paper buildでは**否定**された。テストの最初の期待失敗を実装不具合にすり替えず、別のAgentフックは追加しない。
+
+**継続受入条件**：実Paperで`setContents`から既存hookの拒否回数が正確に1増え、実チェストの元10,000C/枚数/PDC/serialized bytes不変を確認する。WWC/WWW、直接PDC、装備、通常`setItem`、BlockLockerとsaved/restart回帰、Domain/Phase6を維持。失敗ログは全文artifactとして保存する。
+
+この1経路の委譲結果は、`Inventory.addItem/removeItem/clear/setStorageContents`、`ItemStack.setAmount`、CoreProtect本物のロールバック実行、ホッパー/NMS、非同期や24 JAR全域まで証明しない。CAT G0/G3 Draft・製品G0公開/G3 ACK/入室Guard・main/VPSは不変とする。
+
 ## この段階では証明しないこと
 
 **この2つの入口だけをAgentが拒否できても、24 JARの全writer、WWC/WWWの別入口、直接PDC mutation、Paper/NMS、非同期処理、例外時排出、LIVE/SAVED同一会計世代、G3保存/ACKを証明したことにはならない。** この限定結果で`SettlementSnapshotPublisher`を有効化したり入室Guardを開放しない。原子的公開までの全入口閉包が実証されない限りG0は未完了、G3は未ACKを保つ。
