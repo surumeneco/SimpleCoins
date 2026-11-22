@@ -2,6 +2,7 @@ package co.surumene.simplecoins.a01agent;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +33,8 @@ public final class LiveOwnerWriterHook {
     private static final Set<String> observedTransformedTargets = new HashSet<>();
     private static long coverageRevision;
     private static long closedGeneration;
+    private static boolean guardedActionActive;
+    private static boolean guardedActionFaulted;
 
     // Probe-only one-shot hold. The control thread never calls Bukkit APIs.
     private static String heldWriter;
@@ -75,7 +78,8 @@ public final class LiveOwnerWriterHook {
 
     public static KnownSourcesClosedEpoch mintKnownSourcesClosedEpoch() {
         synchronized (LOCK) {
-            if (!closed || active != 0 || !knownTargetsTransformedAndReturned())
+            if (!closed || active != 0 || guardedActionActive || guardedActionFaulted
+                    || !knownTargetsTransformedAndReturned())
                 throw new IllegalStateException("Missing observed known writer coverage or drain");
             return new KnownSourcesClosedEpoch(closedGeneration, coverageRevision);
         }
@@ -84,9 +88,40 @@ public final class LiveOwnerWriterHook {
     public static boolean knownEpochStillCurrent(KnownSourcesClosedEpoch proof) {
         synchronized (LOCK) {
             return proof != null && closed && active == 0
+                    && !guardedActionFaulted
                     && proof.generation == closedGeneration
                     && proof.revision == coverageRevision
                     && knownTargetsTransformedAndReturned();
+        }
+    }
+
+    /**
+     * Test-only atomic publication-shaped boundary: validate the exact closed
+     * epoch and execute a short Runnable while HOLDING the same admission
+     * mutex. A separate 'stillCurrent' check followed by a Runnable is unsafe,
+     * because reopen/new writers can interleave between those operations.
+     *
+     * The callback cannot reopen the gate. A callback failure invalidates the
+     * epoch and permanently retains closure for this isolated JVM proof.
+     * NEVER use this bounded five-source gate for product G0 or G3.
+     */
+    public static void runUnderKnownSourcesClosedEpoch(
+            KnownSourcesClosedEpoch proof, Runnable action) {
+        Objects.requireNonNull(action, "atomic known-epoch callback");
+        synchronized (LOCK) {
+            if (guardedActionActive || !knownEpochStillCurrent(proof))
+                throw new IllegalStateException("Unknown, stale or open writer epoch");
+            guardedActionActive = true;
+            try {
+                action.run();
+                if (!knownEpochStillCurrent(proof))
+                    throw new IllegalStateException("Writer source coverage changed in callback");
+            } catch (RuntimeException | Error invalid) {
+                guardedActionFaulted = true;
+                throw invalid;
+            } finally {
+                guardedActionActive = false;
+            }
         }
     }
 
@@ -245,8 +280,8 @@ public final class LiveOwnerWriterHook {
 
     public static void reopenForProbe() {
         synchronized (LOCK) {
-            if (!closed || active != 0)
-                throw new IllegalStateException("Cannot reopen active provider gate");
+            if (!closed || active != 0 || guardedActionActive || guardedActionFaulted)
+                throw new IllegalStateException("Cannot reopen active/faulted provider gate");
             closed = false;
             System.out.println("PAPER_A01_LIVE_AGENT_PROBE_REOPENED");
         }
