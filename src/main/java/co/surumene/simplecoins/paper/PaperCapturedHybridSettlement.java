@@ -533,6 +533,46 @@ public final class PaperCapturedHybridSettlement {
                     }
                 }
             }
+            if (equal) {
+                // An original positive WWW weapon/WWC head was also physically
+                // counted from vanilla equipment. The provider's snapshot can
+                // remain byte-identical while a separate Paper equipment writer
+                // replaces that real native item. Recheck BOTH physical views
+                // at this last local staging boundary, never accept an old
+                // native 10,000C just because the WCL weapon still says 10,000C.
+                for (String slot : originalSelection.verifiedEquipmentMirrorSlots()) {
+                    try {
+                        String nativeSlot = switch (first.providerId() + "/" + slot) {
+                            case "www/weapon" -> "mainhand";
+                            case "wwc/head" -> "head";
+                            default -> throw new IOException(
+                                    "Unknown verified WCL/native equipment mirror slot");
+                        };
+                        if (!(entity instanceof LivingEntity living)
+                                || living.getEquipment() == null)
+                            throw new IOException("Selected LIVE WCL entity has no equipment");
+                        ItemStack now = "mainhand".equals(nativeSlot)
+                                ? living.getEquipment().getItemInMainHand()
+                                : living.getEquipment().getHelmet();
+                        if (now == null || now.getType().isAir())
+                            throw new IOException("Mirrored native equipment is missing");
+                        String nativePhysical = "world/" + originalSelection.chunk().world()
+                                + "/entity/" + first.entityId()
+                                + "/equipment/" + nativeSlot;
+                        byte[] original = originalLiveEquipment.get(nativePhysical);
+                        var stored = first.sourceItems().get(slot);
+                        if (original == null || stored == null)
+                            throw new IOException("Missing original native/WCL mirror evidence");
+                        WclLiveEquipmentMirrorProof.prove(original, now.serializeAsBytes(),
+                                stored.bytes(), maxSerializedBytes, maxInflatedBytes);
+                    } catch (IOException | RuntimeException changedNative) {
+                        throw new IOException("LIVE WCL holder changed during saved stage: "
+                                + first.entityId() + " (native equipment mirror drift)",
+                                changedNative);
+                    }
+                }
+            }
+
             if (!equal)
                 throw new IOException("LIVE WCL holder changed during saved stage: "
                         + first.entityId() + " (owner, values or ItemStack bytes)");
