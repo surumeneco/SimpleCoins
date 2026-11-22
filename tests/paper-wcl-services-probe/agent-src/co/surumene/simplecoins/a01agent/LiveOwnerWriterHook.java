@@ -18,10 +18,12 @@ public final class LiveOwnerWriterHook {
     private static int wwwReturns;
     private static int pdcReturns;
     private static int equipmentReturns;
+    private static int inventoryReturns;
     private static int wwcDenied;
     private static int wwwDenied;
     private static int pdcDenied;
     private static int equipmentDenied;
+    private static int inventoryDenied;
     private static boolean closed;
 
     // Probe-only one-shot hold. The control thread never calls Bukkit APIs.
@@ -40,6 +42,8 @@ public final class LiveOwnerWriterHook {
     public static void afterPdcMutation() { leave("PDC"); }
     public static void beforeEquipmentMutation() { enter("EQUIPMENT"); }
     public static void afterEquipmentMutation() { leave("EQUIPMENT"); }
+    public static void beforeInventoryMutation() { enter("INVENTORY"); }
+    public static void afterInventoryMutation() { leave("INVENTORY"); }
 
     private static void enter(String writer) {
         CountDownLatch entered = null;
@@ -54,6 +58,7 @@ public final class LiveOwnerWriterHook {
                     case "WWW" -> wwwDenied++;
                     case "PDC" -> pdcDenied++;
                     case "EQUIPMENT" -> equipmentDenied++;
+                    case "INVENTORY" -> inventoryDenied++;
                     default -> throw new IllegalStateException("Unknown writer type");
                 }
                 System.out.println("PAPER_A01_LIVE_AGENT_" + writer + "_ENTRY_DENIED");
@@ -96,6 +101,7 @@ public final class LiveOwnerWriterHook {
                 case "WWW" -> wwwReturns++;
                 case "PDC" -> pdcReturns++;
                 case "EQUIPMENT" -> equipmentReturns++;
+                case "INVENTORY" -> inventoryReturns++;
                 default -> throw new IllegalStateException("Unknown writer type");
             }
             LOCK.notifyAll();
@@ -193,10 +199,12 @@ public final class LiveOwnerWriterHook {
                 case "wwwReturns" -> wwwReturns;
                 case "pdcReturns" -> pdcReturns;
                 case "equipmentReturns" -> equipmentReturns;
+                case "inventoryReturns" -> inventoryReturns;
                 case "wwcDenied" -> wwcDenied;
                 case "wwwDenied" -> wwwDenied;
                 case "pdcDenied" -> pdcDenied;
                 case "equipmentDenied" -> equipmentDenied;
+                case "inventoryDenied" -> inventoryDenied;
                 default -> throw new IllegalArgumentException("Unknown hook evidence " + kind);
             };
         }
