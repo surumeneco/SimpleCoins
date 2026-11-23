@@ -46,7 +46,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | — | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/BoundedStagedPublicationProbe.java;.github/workflows/paper-wcl-services-probe.yml | — | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/BoundedStagedPublicationProbe.java;.github/workflows/paper-wcl-services-probe.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
