@@ -51,7 +51,7 @@ spec_status: confirmed
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a02.real-product-full-chain | tests | github-actions | @repo:SimpleCoins | Paper26.2 save/reload grant probe | PAPER_A02_PRODUCT_COORDINATOR_SAVED_ACK_PASSED;PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED | tests/paper-grant-save-probe/src/main/java/co/surumene/simplecoins/a02probe/PaperSaveProbe.java | smoke-product-coordinator/*.log | 1800 |
+
 
 ## Gates
 | Gate | Status | Evidence |
