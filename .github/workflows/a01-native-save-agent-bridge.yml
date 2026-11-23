@@ -16,6 +16,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md'
       - 'Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md'
       - 'Lifecycle/Works/simplecoins.a01.hopper-native-entry-trace.md'
+      - 'Lifecycle/Works/simplecoins.a01.native-hopper-pull-prebody.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -91,6 +92,11 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.hopper-native-entry-trace.md
+          work=Lifecycle/Works/simplecoins.a01.native-hopper-pull-prebody.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -530,6 +536,33 @@ jobs:
             tail -180 agent-actual-hopper-veto.log
             exit 1
           fi
+      - name: Demand real Hopper NMS pre-body writer exclusion before money debit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-hopper-prebody/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-hopper-prebody/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-hopper-prebody/plugins/
+          printf 'eula=true\n' > smoke-actual-hopper-prebody/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25593\n' \
+            > smoke-actual-hopper-prebody/server.properties
+          cd smoke-actual-hopper-prebody
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryHopperPrebodyProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-hopper-prebody.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_HOPPER_PREBODY_PROBE_FAILED' agent-actual-hopper-prebody.log; then
+            echo "Real Hopper native pre-body test failed code=$status" >&2
+            tail -190 agent-actual-hopper-prebody.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_HOPPER_EXACT_ENTRY_INSTRUMENTED' agent-actual-hopper-prebody.log
+          grep -F 'PAPER_A01_REAL_HOPPER_NATIVE_PREBODY_NO_MUTATION_PASS' agent-actual-hopper-prebody.log
+          echo 'PAPER_A01_REAL_HOPPER_PREBODY_FAILCLOSED_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -546,5 +579,6 @@ jobs:
             smoke-actual-clear-slot/agent-actual-clear-slot.log
             smoke-actual-hopper/agent-actual-hopper.log
             smoke-actual-hopper-veto/agent-actual-hopper-veto.log
+            smoke-actual-hopper-prebody/agent-actual-hopper-prebody.log
           retention-days: 14
           if-no-files-found: ignore
