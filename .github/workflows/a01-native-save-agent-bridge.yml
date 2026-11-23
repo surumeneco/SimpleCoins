@@ -13,6 +13,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.craftinventory-removeitem-prebody.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md'
+      - 'Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -85,6 +86,7 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -440,6 +442,47 @@ jobs:
             tail -180 agent-actual-clear-slot.log
             exit 1
           fi
+      - name: Observe actual Paper automatic Hopper monetary transfer under sealed known writer epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-hopper/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-hopper/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-hopper/plugins/
+          printf 'eula=true\n' > smoke-actual-hopper/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25591\n' \
+            > smoke-actual-hopper/server.properties
+          cd smoke-actual-hopper
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryHopperTransferClosureProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-hopper.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED' agent-actual-hopper.log; then
+            echo "Real Paper Hopper writer reachability probe failed code=$status" >&2
+            tail -220 agent-actual-hopper.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_BOOTSTRAP_INSTALLED_PASSIVE' agent-actual-hopper.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-hopper.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-hopper.log
+          grep -F 'PAPER_A01_REAL_HOPPER_SOURCE' agent-actual-hopper.log
+          for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
+            grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-hopper.log
+          done
+          grep -F 'PAPER_A01_REAL_HOPPER_TRANSFER_OBSERVED chestBefore=2' agent-actual-hopper.log
+          if grep -Fq 'PAPER_A01_REAL_HOPPER_NATIVE_UNCOVERED_TRANSFER' agent-actual-hopper.log; then
+            echo 'PAPER_A01_REAL_HOPPER_NATIVE_WRITER_BYPASS_CONFIRMED'
+          elif grep -Fq 'PAPER_A01_REAL_HOPPER_NATIVE_PARTIAL_MUTATION_BEFORE_FAULT' agent-actual-hopper.log; then
+            echo 'PAPER_A01_REAL_HOPPER_PARTIAL_MONETARY_WRITER_CONFIRMED'
+          else
+            echo 'Hopper writer result not classified under same product fence' >&2
+            tail -180 agent-actual-hopper.log
+            exit 1
+          fi
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -454,5 +497,6 @@ jobs:
             smoke-actual-removeitem/agent-actual-removeitem.log
             smoke-actual-clear/agent-actual-clear.log
             smoke-actual-clear-slot/agent-actual-clear-slot.log
+            smoke-actual-hopper/agent-actual-hopper.log
           retention-days: 14
           if-no-files-found: ignore
