@@ -48,6 +48,13 @@ final class SavedGrantProtectedAckStageTest {
     /** Save the real canonical 64-coin partial stack, not a receipt-only claim. */
     private void write(UUID player, GrantReceiptState receipt, int coinCount,
                        String unrelatedItem) throws IOException {
+        write(player, receipt, coinCount, 0, unrelatedItem);
+    }
+
+    private void write(UUID player, GrantReceiptState receipt, int coinCount,
+                       int extraCoinCount, String unrelatedItem) throws IOException {
+        if (extraCoinCount < 0 || extraCoinCount > 64)
+            throw new IllegalArgumentException("Invalid test-only final coin stack");
         if (coinCount < 0 || coinCount > 64)
             throw new IllegalArgumentException("Invalid test-only saved coin stack size");
         try (var gzip = new GZIPOutputStream(Files.newOutputStream(playerFile(player)));
@@ -59,11 +66,25 @@ final class SavedGrantProtectedAckStageTest {
             out.writeInt(savedReceipt.length); out.write(savedReceipt);
             out.writeByte(0);
             out.writeByte(9); out.writeUTF("Inventory");
-            out.writeByte(10); out.writeInt(coinCount > 0 ? 2 : 1);
+            out.writeByte(10); out.writeInt((coinCount > 0 ? 1 : 0)
+                    + (extraCoinCount > 0 ? 1 : 0) + 1);
             if (coinCount > 0) {
                 out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
                 out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
                 out.writeByte(3); out.writeUTF("count"); out.writeInt(coinCount);
+                out.writeByte(10); out.writeUTF("components");
+                out.writeByte(8); out.writeUTF("minecraft:item_model");
+                out.writeUTF("simplecoins:coin_5000");
+                out.writeByte(10); out.writeUTF("minecraft:custom_data");
+                out.writeByte(10); out.writeUTF("PublicBukkitValues");
+                out.writeByte(3); out.writeUTF("simplecoins:coin_denomination");
+                out.writeInt(5000);
+                out.writeByte(0); out.writeByte(0); out.writeByte(0); out.writeByte(0);
+            }
+            if (extraCoinCount > 0) {
+                out.writeByte(1); out.writeUTF("Slot"); out.writeByte(1);
+                out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
+                out.writeByte(3); out.writeUTF("count"); out.writeInt(extraCoinCount);
                 out.writeByte(10); out.writeUTF("components");
                 out.writeByte(8); out.writeUTF("minecraft:item_model");
                 out.writeUTF("simplecoins:coin_5000");
@@ -117,6 +138,125 @@ final class SavedGrantProtectedAckStageTest {
         } catch (InvocationTargetException failure) {
             throw failure.getCause();
         }
+    }
+
+
+    /** Real 65-coin grant, first 64 already saved with an active PDC cursor. */
+    private record Resumed(GrantLedger ledger, GrantLedger.Grant grant,
+                           PaperGrantInventorySlotPlan first,
+                           PaperGrantInventorySlotPlan last) {}
+
+    private static Resumed resumedPlan(GrantLedger ledger, UUID player) throws IOException {
+        var grant = ledger.reserveCoins(player, CoinDenomination.FIVE_THOUSAND, 65, "console");
+        var firstSlots = new ArrayList<>(Collections.nCopies(36, "stone"));
+        firstSlots.set(0, null);
+        var first = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                GrantReceiptState.empty(),
+                new PaperGrantInventorySlotPlan.StorageSnapshot(firstSlots)).orElseThrow();
+        assertTrue(first.nextReceipt().active());
+        assertEquals(320_000, first.nextReceipt().partialValue());
+        var lastSlots = new ArrayList<>(Collections.nCopies(36, "stone"));
+        lastSlots.set(1, null);
+        var last = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                first.nextReceipt(),
+                new PaperGrantInventorySlotPlan.StorageSnapshot(lastSlots)).orElseThrow();
+        assertFalse(last.nextReceipt().active());
+        assertEquals(grant.sequence(), last.nextReceipt().completedSequence());
+        assertEquals(1, last.placements().size());
+        assertEquals(1, last.placements().getFirst().index());
+        assertEquals(1, last.placements().getFirst().count());
+        return new Resumed(ledger, grant, first, last);
+    }
+
+    /** Resolve reflectively so the exact absent product method yields meaningful Red. */
+    private static SavedGrantDeliveryReadback.Proof finishLastPartialBatch(
+            WriterEpochFence fence, WriterEpochFence.Seal seal,
+            WorldStorageDiscovery.Manifest manifest, GrantLedger ledger, UUID player,
+            GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
+            Map<String, Object> savedBefore) throws Throwable {
+        Class<?> stage = Class.forName(
+                "co.surumene.simplecoins.paper.SavedGrantProtectedAckStage");
+        var method = stage.getDeclaredMethod("finishLastPartialBatch",
+                WriterEpochFence.class, WriterEpochFence.Seal.class,
+                WorldStorageDiscovery.Manifest.class, GrantLedger.class,
+                UUID.class, GrantLedger.Grant.class, PaperGrantInventorySlotPlan.class,
+                Map.class, int.class, int.class);
+        method.setAccessible(true);
+        try {
+            return (SavedGrantDeliveryReadback.Proof) method.invoke(
+                    null, fence, seal, manifest, ledger, player, grant,
+                    plan, savedBefore, 65536, 65536);
+        } catch (InvocationTargetException invocation) {
+            throw invocation.getCause();
+        }
+    }
+
+    @Test void finalPartialBatchFreshSaveAcksWithoutReissuingEarlierCoins() throws Throwable {
+        UUID player = UUID.randomUUID();
+        Path journal = temp.resolve("grants-final-partial-success");
+        Resumed pair = resumedPlan(new GrantLedger(journal), player);
+        write(player, pair.first().nextReceipt(), 64, 0, "minecraft:stone");
+        Map<String, Object> savedBefore = PlayerDataReader.read(
+                playerFile(player), 65536, 65536);
+        write(player, pair.last().nextReceipt(), 64, 1, "minecraft:stone");
+
+        var fence = new WriterEpochFence(); fence.arm();
+        var seal = fence.seal();
+        var result = finishLastPartialBatch(fence, seal, discovery(),
+                pair.ledger(), player, pair.grant(), pair.last(), savedBefore);
+        assertEquals(BigInteger.valueOf(5000), result.matchedMonetaryValue());
+        assertEquals(1, result.matchedStacks());
+        assertEquals(pair.grant().sequence(), result.receipt().completedSequence());
+        fence.requireDrained(seal);
+        assertEquals(WriterEpochFence.State.SEALED, fence.state());
+
+        var replay = new GrantLedger(journal);
+        assertTrue(replay.pending(player).isEmpty());
+        assertTrue(replay.historySnapshot().getFirst().delivered());
+        var physical = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        var assets = co.surumene.simplecoins.domain.SavedPlayerAssets.extract(physical);
+        assertEquals(BigInteger.valueOf(320000), assets.get("inventory:0"));
+        assertEquals(BigInteger.valueOf(5000), assets.get("inventory:1"));
+        assertEquals(pair.last().nextReceipt(),
+                SavedGrantReceiptNbt.readAndVerify(physical, replay, player));
+    }
+
+    @Test void finalPartialBatchMissingOrChangedCoinFailsClosed() throws Throwable {
+        for (int failureCase = 0; failureCase < 2; failureCase++) {
+            UUID player = UUID.randomUUID();
+            Path journal = temp.resolve("grants-final-partial-failure-" + failureCase);
+            Resumed pair = resumedPlan(new GrantLedger(journal), player);
+            write(player, pair.first().nextReceipt(), 64, 0, "minecraft:stone");
+            Map<String, Object> savedBefore = PlayerDataReader.read(
+                    playerFile(player), 65536, 65536);
+            // Either the newly issued coin disappeared, or previously saved
+            // 64 coins were modified while the final receipt falsely completed.
+            write(player, pair.last().nextReceipt(), failureCase == 0 ? 64 : 63,
+                    failureCase == 0 ? 0 : 1, "minecraft:stone");
+            var fence = new WriterEpochFence(); fence.arm();
+            var seal = fence.seal();
+            assertThrows(IOException.class, () ->
+                    finishLastPartialBatch(fence, seal, discovery(),
+                            pair.ledger(), player, pair.grant(), pair.last(), savedBefore));
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+            assertEquals(1, new GrantLedger(journal).pending(player).size());
+        }
+    }
+
+    @Test void singleBatchAckStillRejectsActivePriorCursor() throws Throwable {
+        UUID player = UUID.randomUUID();
+        Resumed pair = resumedPlan(new GrantLedger(temp.resolve("grants-final-single-negative")),
+                player);
+        write(player, pair.first().nextReceipt(), 64, 0, "minecraft:stone");
+        var before = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        write(player, pair.last().nextReceipt(), 64, 1, "minecraft:stone");
+        var fence = new WriterEpochFence(); fence.arm();
+        var seal = fence.seal();
+        assertThrows(IllegalStateException.class, () ->
+                execute(fence, seal, discovery(), pair.ledger(), player,
+                        pair.grant(), pair.last(), before));
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertEquals(1, pair.ledger().pending(player).size());
     }
 
     @Test void successfullyFsyncsFreshProofAndAcksWithinOneSeal() throws Throwable {

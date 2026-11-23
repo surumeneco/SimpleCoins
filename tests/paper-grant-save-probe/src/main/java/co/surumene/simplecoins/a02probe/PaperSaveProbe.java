@@ -61,6 +61,7 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
+                else if ("protected-final-acked-reload".equals(phase)) protectedFinalAckedReloadPhase(player);
                 else if ("before-save-crash".equals(phase)) beforeSaveCrashPhase(player);
                 else if ("recover-unsaved".equals(phase)) recoverUnsavedPhase(player);
                 else if ("unsaved-acked-reload".equals(phase)) unsavedAckedReloadPhase(player);
@@ -759,7 +760,13 @@ public final class PaperSaveProbe extends JavaPlugin {
             // physical inventory + completed receipt reached disk. No ACK.
             return;
         }
-        ledger.acknowledge(grant, proof.receipt().completedSequence());
+        var productFinal = protectedProductSavedStage(
+                "co.surumene.simplecoins.paper.SavedGrantProtectedAckStage",
+                "finishLastPartialBatch", actualPlayerManifest(), ledger, grant, stage, before);
+        if (!productFinal.equals(proof) || ledger.pending(ID).size() != 0)
+            throw new IllegalStateException("Protected resumed final batch failed actual Paper proof/ACK");
+        getLogger().info("PAPER_A02_PRODUCT_PROTECTED_FINAL_PARTIAL_REAL_SAVE_10000_ACK_PASSED"
+                + " TEST_ONLY_NO_INSTALLED_WRITER_CLOSURE");
         GrantLedger reopened = new GrantLedger(grantDirectory());
         if (reopened.historySnapshot().size() != 3
                 || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
@@ -849,6 +856,51 @@ public final class PaperSaveProbe extends JavaPlugin {
                 + " durableGrants=3 pending=0 originalMoneyPreserved=true");
     }
 
+
+
+    /**
+     * Alternate independent Paper boot on a COPY of the fifth-JVM saved
+     * partial-state: verify that protected final ACK persisted across a real
+     * restart without ever adding a second physical coin batch.
+     */
+    private void protectedFinalAckedReloadPhase(Player player) throws Exception {
+        Path file = dataFile();
+        byte[] original = Files.readAllBytes(file);
+        player.loadData();
+        if (player.isOnline() || playerCountIsNonzero())
+            throw new IllegalStateException("Protected final ACK recovery requires detached player");
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 3 || history.stream().anyMatch(g -> !g.delivered())
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Protected final durable ACK missing on actual Paper reboot");
+        GrantReceiptState saved = SavedGrantReceiptNbt.readAndVerify(readDisk(file), ledger, ID);
+        if (saved.active() || saved.completedSequence() != 3
+                || !saved.equals(PaperGrantReceiptPdc.read(player.getPersistentDataContainer())))
+            throw new IllegalStateException("Protected final saved receipt mismatched on restart");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        int[] indices = {0, 1, 2, 3, 4};
+        int[] counts = {1, 1, 2, 64, 64};
+        long savedTotal = 0;
+        var assets = SavedPlayerAssets.extract(readDisk(file));
+        for (int i = 0; i < indices.length; i++) {
+            ItemStack item = player.getInventory().getItem(indices[i]);
+            if (item == null || item.getAmount() != counts[i]
+                    || codec.identify(item).orElse(null) != CoinDenomination.FIVE_THOUSAND
+                    || !java.math.BigInteger.valueOf(5000L * counts[i])
+                            .equals(assets.get("inventory:" + indices[i])))
+                throw new IllegalStateException("Protected final saved money missing at " + indices[i]);
+            savedTotal += 5000L * counts[i];
+        }
+        if (savedTotal != 660000
+                || player.getInventory().getItem(9) == null
+                || player.getInventory().getItem(9).getType() != Material.STONE
+                || player.getInventory().getItem(9).getAmount() != 2
+                || !Arrays.equals(original, Files.readAllBytes(file)))
+            throw new IllegalStateException("Protected final ACK recovery lost saved unrelated items");
+        getLogger().info("PAPER_A02_PRODUCT_FINAL_PARTIAL_REBOOT_ACKED_NO_REISSUE_PASSED"
+                + " total=660000 completed=3 pending=0 durableGrants=3");
+    }
 
     /**
      * Eighth actual Paper JVM: reserve the fourth grant and mutate a detached
