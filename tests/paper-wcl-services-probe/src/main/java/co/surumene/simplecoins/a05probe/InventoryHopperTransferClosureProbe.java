@@ -47,14 +47,19 @@ public final class InventoryHopperTransferClosureProbe {
     }
 
     public static void begin(Plugin probe) throws Exception {
-        begin(probe, false);
+        begin(probe, false, false);
     }
 
     public static void beginEventVeto(Plugin probe) throws Exception {
-        begin(probe, true);
+        begin(probe, true, false);
     }
 
-    private static void begin(Plugin probe, boolean cancelMoveEvent) throws Exception {
+    public static void beginPrebody(Plugin probe) throws Exception {
+        begin(probe, false, true);
+    }
+
+    private static void begin(Plugin probe, boolean cancelMoveEvent,
+            boolean verifyPrebody) throws Exception {
         require(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty()
                 && "127.0.0.1".equals(Bukkit.getServer().getIp()),
                 "Not isolated no-player main-thread real Paper");
@@ -114,9 +119,13 @@ public final class InventoryHopperTransferClosureProbe {
         require(hook.getClassLoader() == null, "Writer Agent not bootstrap loaded");
         @SuppressWarnings("unchecked")
         Set<String> targets = (Set<String>) hook.getMethod("instrumentedTargets").invoke(null);
-        require(targets.equals(Set.of("CRAFT", "NMS", "PDC", "INVENTORY",
-                        "EQUIPMENT", "WWC", "WWW")),
-                "Known seven target Agent set incomplete: " + targets);
+        Set<String> seven = Set.of("CRAFT", "NMS", "PDC", "INVENTORY",
+                "EQUIPMENT", "WWC", "WWW");
+        Set<String> eight = Set.of("CRAFT", "NMS", "PDC", "INVENTORY",
+                "EQUIPMENT", "WWC", "WWW", "HOPPER");
+        require((verifyPrebody && (targets.equals(seven) || targets.equals(eight)))
+                        || (!verifyPrebody && targets.equals(seven)),
+                "Required actual Paper Agent target set not instrumented: " + targets);
         require("PASSIVE".equals(hook.getMethod("mode").invoke(null).toString())
                 && ((Number) hook.getMethod("inFlight").invoke(null)).intValue() == 0,
                 "Cannot seal with an active or unknown native writer");
@@ -175,7 +184,9 @@ public final class InventoryHopperTransferClosureProbe {
 
         Bukkit.getScheduler().runTaskLater(probe, () -> {
             try {
-                if (cancelMoveEvent) {
+                if (verifyPrebody) {
+                    finishPrebody(chest, hopper, codec, hook, fence);
+                } else if (cancelMoveEvent) {
                     finishEventVeto(chest, hopper, codec, hook, fence, seal,
                             moveEvents.get(), firstAtEvent[0], firstAtEvent[1],
                             firstNativeTrace[0]);
@@ -185,17 +196,45 @@ public final class InventoryHopperTransferClosureProbe {
                 Runtime.getRuntime().halt(0);
             } catch (Throwable failure) {
                 probe.getLogger().log(Level.SEVERE,
-                        cancelMoveEvent
-                                ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
-                                : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED",
+                        verifyPrebody
+                                ? "PAPER_A01_REAL_HOPPER_PREBODY_PROBE_FAILED"
+                                : cancelMoveEvent
+                                        ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
+                                        : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED",
                         failure);
-                System.err.println(cancelMoveEvent
-                        ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
-                        : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED");
+                System.err.println(verifyPrebody
+                        ? "PAPER_A01_REAL_HOPPER_PREBODY_PROBE_FAILED"
+                        : cancelMoveEvent
+                                ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
+                                : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED");
                 System.err.flush();
                 Runtime.getRuntime().halt(2);
             }
         }, 60L);
+    }
+
+    private static void finishPrebody(Inventory chest, Inventory hopper,
+            CoinItemCodec codec, Class<?> hook, WriterEpochFence fence) throws Exception {
+        require(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty(),
+                "Actual Hopper native pre-body completion not isolated/main thread");
+        int source = coinsIn(chest, codec);
+        int destination = coinsIn(hopper, codec);
+        // Red is expected to fail here specifically because the current
+        // uncovered Hopper NMS writer moved real money during a sealed epoch.
+        require(source == 2 && destination == 0,
+                "Native Hopper pre-body admission did not protect physical money"
+                        + " chest=" + source + " hopper=" + destination);
+        require("FAULTED".equals(hook.getMethod("mode").invoke(null).toString())
+                        && fence.state() == WriterEpochFence.State.FAULTED
+                        && fence.inFlight() == 0,
+                "Native Hopper guard did not revoke bootstrap/product generation");
+        @SuppressWarnings("unchecked")
+        Set<String> targets = (Set<String>) hook.getMethod("instrumentedTargets").invoke(null);
+        require(targets.contains("HOPPER"),
+                "Native Hopper exact pre-body class method not instrumented");
+        System.out.println("PAPER_A01_REAL_HOPPER_NATIVE_PREBODY_NO_MUTATION_PASS"
+                + " chestBefore=2 chestAfter=2 hopperBefore=0 hopperAfter=0"
+                + " hookFaulted=true productFaulted=true tickSurvived=true");
     }
 
     private static void finishEventVeto(Inventory chest, Inventory hopper,
