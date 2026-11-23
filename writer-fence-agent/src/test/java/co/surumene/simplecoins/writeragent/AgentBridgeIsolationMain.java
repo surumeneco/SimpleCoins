@@ -80,6 +80,15 @@ public final class AgentBridgeIsolationMain {
                     "open addItem never entered original body");
             check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
                     "actual addItem normal return did not drain");
+            int removeItemBodiesBefore = org.bukkit.craftbukkit.inventory.CraftInventory
+                    .removeItemBodyExecutions();
+            var removed = inventory.removeItem(new org.bukkit.inventory.ItemStack());
+            check(removed.isEmpty(), "transformed removeItem changed its HashMap return");
+            check(org.bukkit.craftbukkit.inventory.CraftInventory
+                    .removeItemBodyExecutions() == removeItemBodiesBefore + 1,
+                    "open removeItem did not execute original body under admitted writer");
+            check(((Number) fenceType.getMethod("inFlight").invoke(fence)).intValue() == 0,
+                    "removeItem normal return did not drain shared writer epoch");
             CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
             NativeSaveFixture.install(entered, release);
             AtomicReference<Throwable> writerError = new AtomicReference<>();
