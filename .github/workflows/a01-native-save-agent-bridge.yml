@@ -332,7 +332,7 @@ jobs:
               -jar paper.jar nogui </dev/null > agent-actual-removeitem.log 2>&1
           status=$?
           set -e
-          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED' agent-actual-removeitem.log; then
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_CLOSURE_PROBE_FAILED' agent-actual-removeitem.log; then
             echo "Real Paper removeItem classification failed code=$status" >&2
             tail -200 agent-actual-removeitem.log
             exit 1
