@@ -59,6 +59,10 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
                 else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
                 else if ("product-coordinator-full".equals(phase)) productCoordinatorFullPhase(player);
+                else if ("product-async-commit".equals(phase)) {
+                    productAsyncCommitPhase(player);
+                    return; // completion and shutdown are scheduled from the real worker
+                }
                 else if ("product-coordinator-acked-reload".equals(phase))
                     productCoordinatorAckedReloadPhase(player);
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
@@ -490,6 +494,142 @@ public final class PaperSaveProbe extends JavaPlugin {
      * must exercise the PRODUCT coordinator from plan through real Paper
      * saveData, sealed fresh readback and durable ACK, not test glue.
      */
+    /**
+     * Genuine Paper 26.2 product stage handoff: the detached CraftPlayer
+     * mutates/saves ONLY on the server thread, while real SHA/NBT/fsync,
+     * protected receipt proof and durable GrantLedger ACK run on an entirely
+     * separate Java thread under the SAME prior SEALED writer epoch.
+     */
+    private void productAsyncCommitPhase(Player player) throws Exception {
+        if (!Bukkit.isPrimaryThread() || player.isOnline() || playerCountIsNonzero())
+            throw new IllegalStateException("Async real-save preflight must run without admissions");
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 1 || !history.getFirst().delivered()
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Async product starts from authentic first durable grant");
+        var priorReceipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (priorReceipt.active() || priorReceipt.completedSequence() != 1
+                || !priorReceipt.equals(
+                        SavedGrantReceiptNbt.readAndVerify(readDisk(dataFile()), ledger, ID)))
+            throw new IllegalStateException("Async product had divergent prior saved receipt");
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        if (player.getInventory().getItem(0) == null
+                || codec.identify(player.getInventory().getItem(0)).orElse(null)
+                        != CoinDenomination.FIVE_THOUSAND
+                || player.getInventory().getItem(1) != null
+                || player.getInventory().getItem(9) == null
+                || player.getInventory().getItem(9).getType() != Material.STONE)
+            throw new IllegalStateException("Async product original money/STONE not present");
+        var second = ledger.reserveCoins(ID, CoinDenomination.FIVE_THOUSAND, 1,
+                "a02-async-product-real-save");
+        WriterEpochFence epoch = new WriterEpochFence();
+        epoch.arm(); // solely disposable test: NOT proof of installed 24-JAR writer closure.
+        Class<?> coordinator = Class.forName(
+                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
+                true, PaperSaveProbe.class.getClassLoader());
+        var begin = coordinator.getDeclaredMethod("saveAndSealFirstBatchOnMain",
+                Player.class, GrantLedger.class, GrantLedger.Grant.class,
+                CoinItemCodec.class, WriterEpochFence.class,
+                WorldStorageDiscovery.Manifest.class, int.class, int.class);
+        begin.setAccessible(true);
+        final Object ticket;
+        try {
+            Object prepared = begin.invoke(null, player, ledger, second, codec, epoch,
+                    actualPlayerManifest(), 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(prepared instanceof java.util.Optional<?> pending) || pending.isEmpty())
+                throw new IllegalStateException("Async product failed to save a vacant first batch");
+            ticket = pending.orElseThrow();
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Exception exception) throw exception;
+            if (cause instanceof Error error) throw error;
+            throw new IllegalStateException("Unknown Paper main save failure", cause);
+        }
+        if (epoch.state() != WriterEpochFence.State.SEALED
+                || ledger.pending(ID).size() != 1
+                || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
+                        .completedSequence() != 2)
+            throw new IllegalStateException("Async handoff improperly ACKed before verification");
+        getLogger().info("PAPER_A02_PRODUCT_ASYNC_MAIN_SAVED_BUT_PENDING_PASSED");
+
+        var finish = ticket.getClass().getDeclaredMethod("finishOffMain");
+        finish.setAccessible(true);
+        Thread worker = Thread.ofPlatform().name("a02-product-saved-proof-worker").start(() -> {
+            try {
+                if (Bukkit.isPrimaryThread())
+                    throw new IllegalStateException("Actual verify worker ran on Paper primary thread");
+                SavedGrantDeliveryReadback.Proof proof;
+                try {
+                    proof = (SavedGrantDeliveryReadback.Proof) finish.invoke(ticket);
+                } catch (InvocationTargetException invocation) {
+                    Throwable cause = invocation.getCause();
+                    if (cause instanceof Exception exception) throw exception;
+                    if (cause instanceof Error error) throw error;
+                    throw new IllegalStateException("Unknown off-main proof failure", cause);
+                }
+                if (proof.receipt().active()
+                        || proof.receipt().completedSequence() != 2
+                        || proof.matchedStacks() != 1
+                        || !java.math.BigInteger.valueOf(5000)
+                            .equals(proof.matchedMonetaryValue())
+                        || !ledger.pending(ID).isEmpty())
+                    throw new IllegalStateException("Worker did not prove true saved physical ACK");
+                // A second completion must never re-force old NBT/ACK or produce
+                // another successful grant event.
+                boolean repeatedRejected = false;
+                try {
+                    finish.invoke(ticket);
+                } catch (InvocationTargetException duplicate) {
+                    if (duplicate.getCause() instanceof IllegalStateException)
+                        repeatedRejected = true;
+                    else throw duplicate;
+                }
+                if (!repeatedRejected)
+                    throw new IllegalStateException("A sealed saved proof completed twice");
+                GrantLedger reopened = new GrantLedger(grantDirectory());
+                var disk = readDisk(dataFile());
+                if (reopened.historySnapshot().size() != 2
+                        || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                        || !reopened.pending(ID).isEmpty()
+                        || !java.math.BigInteger.valueOf(5000).equals(
+                            SavedPlayerAssets.extract(disk).get("inventory:0"))
+                        || !java.math.BigInteger.valueOf(5000).equals(
+                            SavedPlayerAssets.extract(disk).get("inventory:1"))
+                        || !proof.receipt().equals(
+                            SavedGrantReceiptNbt.readAndVerify(disk, reopened, ID)))
+                    throw new IllegalStateException("Worker committed phantom/duplicated money");
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        var stone = player.getInventory().getItem(9);
+                        if (stone == null || stone.getType() != Material.STONE
+                                || stone.getAmount() != 2)
+                            throw new IllegalStateException("Main-thread return lost unrelated item");
+                        getLogger().info("PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED"
+                                + " physical=10000 grants=2 pending=0 worker="
+                                + workerThreadNameForDiagnostic());
+                        getLogger().info("PAPER_A02_PRODUCT_ASYNC_REPEATED_FINISH_DENIED_PASSED");
+                    } catch (Throwable failure) {
+                        getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                    } finally {
+                        Bukkit.shutdown();
+                    }
+                });
+            } catch (Throwable failure) {
+                Bukkit.getScheduler().runTask(this, () -> {
+                    getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                    Bukkit.shutdown();
+                });
+            }
+        });
+        if (worker == null) throw new AssertionError("JDK worker was not started");
+    }
+
+    private static String workerThreadNameForDiagnostic() {
+        return "a02-product-saved-proof-worker";
+    }
+
     private void productCoordinatorFullPhase(Player player) throws Exception {
         player.loadData();
         if (player.isOnline() || playerCountIsNonzero())
