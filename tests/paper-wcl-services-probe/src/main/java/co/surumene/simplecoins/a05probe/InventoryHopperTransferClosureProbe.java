@@ -131,6 +131,7 @@ public final class InventoryHopperTransferClosureProbe {
         // at the Paper event boundary, before a cancellation is applied.
         AtomicInteger moveEvents = new AtomicInteger();
         int[] firstAtEvent = {-1, -1};
+        String[] firstNativeTrace = {""};
         if (cancelMoveEvent) {
             Bukkit.getPluginManager().registerEvents(new Listener() {
                 @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -151,6 +152,15 @@ public final class InventoryHopperTransferClosureProbe {
                     if (moveEvents.getAndIncrement() == 0) {
                         firstAtEvent[0] = sourceCoins;
                         firstAtEvent[1] = destinationCoins;
+                        firstNativeTrace[0] = StackWalker.getInstance(
+                                StackWalker.Option.RETAIN_CLASS_REFERENCE).walk(frames ->
+                                        frames.limit(80).map(frame ->
+                                                frame.getClassName() + "#" + frame.getMethodName()
+                                                + frame.getDescriptor() + "@"
+                                                + frame.getLineNumber())
+                                                .collect(java.util.stream.Collectors.joining(" <- ")));
+                        System.out.println("PAPER_A01_REAL_HOPPER_NATIVE_EVENT_STACK "
+                                + firstNativeTrace[0]);
                     }
                     event.setCancelled(true);
                 }
@@ -167,7 +177,8 @@ public final class InventoryHopperTransferClosureProbe {
             try {
                 if (cancelMoveEvent) {
                     finishEventVeto(chest, hopper, codec, hook, fence, seal,
-                            moveEvents.get(), firstAtEvent[0], firstAtEvent[1]);
+                            moveEvents.get(), firstAtEvent[0], firstAtEvent[1],
+                            firstNativeTrace[0]);
                 } else {
                     finish(chest, hopper, codec, hook, fence, seal);
                 }
@@ -189,14 +200,16 @@ public final class InventoryHopperTransferClosureProbe {
 
     private static void finishEventVeto(Inventory chest, Inventory hopper,
             CoinItemCodec codec, Class<?> hook, WriterEpochFence fence,
-            WriterEpochFence.Seal seal, int events, int firstSource, int firstDestination)
-            throws Exception {
+            WriterEpochFence.Seal seal, int events, int firstSource, int firstDestination,
+            String nativeTrace) throws Exception {
         require(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty(),
                 "Hopper move-event veto completion not isolated or on main thread");
         int left = coinsIn(chest, codec);
         int moved = coinsIn(hopper, codec);
         require(events > 0 && firstSource >= 0 && firstDestination >= 0,
                 "No matching authentic Chest to Hopper InventoryMoveItemEvent observed");
+        require(nativeTrace != null && nativeTrace.contains("HopperBlockEntity#"),
+                "Actual HopperBlockEntity pre-event NMS method was not observed in trace");
         require(left >= 0 && moved >= 0 && left + moved == 2,
                 "Hopper event cancellation changed total physical currency");
         String mode = hook.getMethod("mode").invoke(null).toString();

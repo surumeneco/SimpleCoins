@@ -15,6 +15,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md'
       - 'Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md'
+      - 'Lifecycle/Works/simplecoins.a01.hopper-native-entry-trace.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -89,6 +90,7 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.hopper-native-entry-trace.md
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -516,6 +518,8 @@ jobs:
           for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
             grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-hopper-veto.log
           done
+          grep -F 'PAPER_A01_REAL_HOPPER_NATIVE_EVENT_STACK ' agent-actual-hopper-veto.log
+          grep -F 'HopperBlockEntity#' agent-actual-hopper-veto.log
           grep -F 'PAPER_A01_REAL_HOPPER_EVENT_VETO_OBSERVED events=' agent-actual-hopper-veto.log
           if grep -Fq 'PAPER_A01_REAL_HOPPER_EVENT_VETO_PHYSICAL_UNCHANGED_PASS' agent-actual-hopper-veto.log; then
             echo 'PAPER_A01_REAL_HOPPER_EVENT_VETO_ONLY_LOCAL_SUCCESS'
