@@ -76,5 +76,5 @@ TDD: First change the real Paper CI oracle to demand `PAPER_A01_REAL_CHEST_REMOV
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-process.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-tce.md | — | — | — | @work/.cat-flow/cache/a01-removeitem-model.json | @work/.cat-flow/cache/a01-removeitem-vectors.json | @work/.cat-flow/cache/a01-removeitem-queue.json | — | — | @work/.cat-flow/cache/a01-removeitem-obligations.json | — | false |
