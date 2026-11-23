@@ -10,6 +10,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-removeitem-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.craftinventory-additem-prebody.md'
+      - 'Lifecycle/Works/simplecoins.a01.craftinventory-removeitem-prebody.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -71,6 +72,11 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-additem-limited-fence-gap.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-removeitem-limited-fence-gap.md
           work=Lifecycle/Works/simplecoins.a01.craftinventory-additem-prebody.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a01.craftinventory-removeitem-prebody.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
@@ -338,17 +344,14 @@ jobs:
           for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
             grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-removeitem.log
           done
-          if grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-removeitem.log; then
-            echo 'PAPER_A01_REAL_CHEST_REMOVEITEM_PARTIAL_MONETARY_WRITER_OBSERVED'
-          elif grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-removeitem.log; then
-            echo 'PAPER_A01_REAL_CHEST_REMOVEITEM_UNCOVERED_MONETARY_WRITER_OBSERVED'
-          elif grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_INTERCEPTED count=2' agent-actual-removeitem.log; then
-            echo 'PAPER_A01_REAL_CHEST_REMOVEITEM_ALREADY_DENIED_WITHOUT_PHYSICAL_CHANGE'
-          else
-            echo 'Real Paper removeItem did not yield a verified classified result' >&2
+          if grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-removeitem.log \
+              || grep -Fq 'PAPER_A01_REAL_CHEST_REMOVEITEM_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-removeitem.log; then
+            echo 'Real Paper removeItem still mutates currency with sealed product epoch' >&2
             tail -160 agent-actual-removeitem.log
             exit 1
           fi
+          grep -F 'PAPER_A01_REAL_CHEST_REMOVEITEM_INTERCEPTED count=2' agent-actual-removeitem.log
+          echo 'PAPER_A01_REAL_CHEST_REMOVEITEM_PREBODY_ENTRY_DENY_5000C_UNCHANGED_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
