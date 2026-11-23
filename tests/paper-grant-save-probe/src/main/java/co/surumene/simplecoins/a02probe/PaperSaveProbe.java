@@ -556,6 +556,9 @@ public final class PaperSaveProbe extends JavaPlugin {
 
         var finish = ticket.getClass().getDeclaredMethod("finishOffMain");
         finish.setAccessible(true);
+        // Resolve all Bukkit-owned paths/handles BEFORE crossing threads.
+        final Path durableJournalDirectory = grantDirectory();
+        final Path durablePlayerdata = dataFile();
         Thread worker = Thread.ofPlatform().name("a02-product-saved-proof-worker").start(() -> {
             try {
                 if (Bukkit.isPrimaryThread())
@@ -588,8 +591,8 @@ public final class PaperSaveProbe extends JavaPlugin {
                 }
                 if (!repeatedRejected)
                     throw new IllegalStateException("A sealed saved proof completed twice");
-                GrantLedger reopened = new GrantLedger(grantDirectory());
-                var disk = readDisk(dataFile());
+                GrantLedger reopened = new GrantLedger(durableJournalDirectory);
+                var disk = readDisk(durablePlayerdata);
                 if (reopened.historySnapshot().size() != 2
                         || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
                         || !reopened.pending(ID).isEmpty()
