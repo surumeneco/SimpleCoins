@@ -56,4 +56,30 @@ class BlockLockerSavedSignTextTest {
                         "Text3", "", "Text4", "",
                         "front_text", Map.of("messages", FRONT))));
     }
+
+    @Test void invalidModernCompoundKeyIsRejectedForEitherSide() {
+        Map<Object,Object> malformedFront = Map.of(
+                7, "unexpected", "messages", FRONT);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignText.read(
+                Map.of("front_text", malformedFront)));
+
+        Map<Object,Object> malformedBack = Map.of(
+                7, "unexpected", "messages", BACK);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignText.read(
+                Map.of("front_text", Map.of("messages", FRONT),
+                        "back_text", malformedBack)));
+        assertThrows(IOException.class, () -> BlockLockerSavedSignText.read(
+                Map.of("front_text", Map.of("filtered_messages", FRONT))));
+    }
+
+    @Test void presentNullModernSidesAreMalformedNotUnknown() {
+        Map<String,Object> nullFront = new java.util.HashMap<>();
+        nullFront.put("front_text", null);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignText.read(nullFront));
+
+        Map<String,Object> nullBack = new java.util.HashMap<>();
+        nullBack.put("front_text", Map.of("messages", FRONT));
+        nullBack.put("back_text", null);
+        assertThrows(IOException.class, () -> BlockLockerSavedSignText.read(nullBack));
+    }
 }
