@@ -80,5 +80,5 @@ This connects a **real product monetary delivery chain** toward release rather t
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-process.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-tce.md | — | — | — | @work/.cat-flow/cache/a02-product-batch-model.json | @work/.cat-flow/cache/a02-product-batch-vectors.json | @work/.cat-flow/cache/a02-product-batch-queue.json | — | — | @work/.cat-flow/cache/a02-product-batch-obligations.json | — | false |
