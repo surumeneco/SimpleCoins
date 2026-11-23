@@ -1,0 +1,45 @@
+name: Phase5 WCL JSON depth candidate Red
+on:
+  push:
+    branches:
+      - feature/phase5-wcl-json-depth-red-20261105-queue-d
+  workflow_dispatch:
+jobs:
+  expected-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Candidate must fail for uncaught recursion
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_audit_wcl_json_depth_candidate.py' -v > candidate.log 2>&1
+          rc=$?
+          cat candidate.log
+          if [ "$rc" -eq 0 ]; then
+            echo "Unexpected Green: candidate may have been fixed or behavior changed"
+            exit 1
+          fi
+          # A generic failing test or a passing baseline is not evidence of this boundary.
+          if [ "$(grep -c '^ERROR: test_deep_nesting_is_machine_readable_invalid ' candidate.log || true)" -ne 1 ]; then
+            echo "Expected exactly one in-process recursion error" >&2
+            exit 1
+          fi
+          if [ "$(grep -c '^FAIL: test_deep_nesting_subprocess_cli_is_structured_invalid ' candidate.log || true)" -ne 1 ]; then
+            echo "Expected exactly one subprocess CLI failure" >&2
+            exit 1
+          fi
+          if [ "$(grep -c '^RecursionError:' candidate.log || true)" -ne 1 ]; then
+            echo "Expected exactly one uncaught JSON recursion exception" >&2
+            exit 1
+          fi
+          if ! grep -q 'Ran 2 tests' candidate.log || ! grep -q '^FAILED (failures=1, errors=1)' candidate.log; then
+            echo "Unexpected candidate test count or failure shape" >&2
+            exit 1
+          fi
+          echo "Expected Red: in-process RecursionError and CLI exit failure verified"
+      - name: Existing audit regressions
+        run: python -m unittest discover -s tests -p 'test_audit_wcl_service_capture.py' -v
