@@ -208,4 +208,85 @@ final class SavedGrantProtectedAckStageTest {
         assertEquals(WriterEpochFence.State.FAULTED, next.state());
         assertEquals(1, new GrantLedger(journalPath).pending(player).size());
     }
+
+    /**
+     * A02 same-generation exclusion must last across the complete REAL file
+     * readback. The old point-in-time requireDrained checks allow a resume
+     * while we are inside the verified prior receipt decode. This test has
+     * an expected behavioral Red before the protected IO lease exists.
+     */
+    @Test void resumptionCannotEnterBetweenFreshReadbackAndDurableAck() throws Throwable {
+        UUID player = UUID.randomUUID();
+        Path journalPath = temp.resolve("grants-race");
+        GrantLedger ledger = new GrantLedger(journalPath);
+        var grant = ledger.reserveCoins(player, CoinDenomination.FIVE_THOUSAND, 1, "console");
+        var plan = fullPlan(ledger, player, grant);
+        write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+        Map<String, Object> before = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        write(player, plan.nextReceipt(), true, "minecraft:stone");
+        var manifest = discovery();
+
+        java.util.concurrent.CountDownLatch readbackEntered =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch releaseReadback =
+                new java.util.concurrent.CountDownLatch(1);
+        Map<String, Object> pausedBefore = new java.util.AbstractMap<>() {
+            @Override public Set<Map.Entry<String, Object>> entrySet() {
+                return before.entrySet();
+            }
+            @Override public boolean containsKey(Object key) {
+                if ("BukkitValues".equals(key)) {
+                    readbackEntered.countDown();
+                    try {
+                        if (!releaseReadback.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                            throw new IllegalStateException("Test readback hold timed out");
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Readback interrupted", interrupted);
+                    }
+                }
+                return before.containsKey(key);
+            }
+            @Override public Object get(Object key) { return before.get(key); }
+        };
+        WriterEpochFence fence = new WriterEpochFence();
+        fence.arm();
+        var seal = fence.seal();
+        var result = new java.util.concurrent.atomic.AtomicReference<
+                SavedGrantDeliveryReadback.Proof>();
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread delivery = new Thread(() -> {
+            try {
+                result.set(execute(fence, seal, manifest, ledger, player, grant,
+                        plan, pausedBefore));
+            } catch (Throwable fault) {
+                failure.set(fault);
+            }
+        }, "isolated-g3-proof-ack");
+        delivery.start();
+        try {
+            assertTrue(readbackEntered.await(5, java.util.concurrent.TimeUnit.SECONDS),
+                    "Real saved-file transition verification must reach the prior receipt");
+            // The old stage allows resume here and reopens money mutation,
+            // despite having already fsynced/read the same authoritative file.
+            assertThrows(IllegalStateException.class, () -> fence.resume(seal),
+                    "Writer epoch cannot reopen while money and receipt are being verified");
+            assertEquals(WriterEpochFence.State.SEALED, fence.state());
+            assertThrows(IllegalStateException.class, fence::enterRoot,
+                    "No new writer may enter before persistent ACK completes");
+        } finally {
+            releaseReadback.countDown();
+            delivery.join(5000);
+        }
+        assertFalse(delivery.isAlive(), "The protected grant must finish promptly");
+        assertNull(failure.get(), "A failed ACK must not be reported as a successful delivery");
+        assertNotNull(result.get());
+        assertEquals(BigInteger.valueOf(5000), result.get().matchedMonetaryValue());
+        assertEquals(WriterEpochFence.State.SEALED, fence.state());
+        fence.requireDrained(seal);
+        var replay = new GrantLedger(journalPath);
+        assertEquals(0, replay.pending(player).size());
+        assertEquals(1, replay.historySnapshot().size());
+        assertTrue(replay.historySnapshot().getFirst().delivered());
+    }
 }
