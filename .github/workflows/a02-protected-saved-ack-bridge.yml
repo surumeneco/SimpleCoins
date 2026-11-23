@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon test --tests co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest
+          gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest
           grep -F '<testsuite' build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest.xml
       - name: Full domain and Paper adapter JUnit regression
         shell: bash
