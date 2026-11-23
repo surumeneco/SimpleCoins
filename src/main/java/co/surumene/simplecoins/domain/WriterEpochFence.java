@@ -2,6 +2,7 @@ package co.surumene.simplecoins.domain;
 
 import java.util.ArrayDeque;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,6 +67,8 @@ public final class WriterEpochFence {
     private State state = State.DISARMED;
     private long generation;
     private int active;
+    // Only short, synchronous final-publication callbacks may hold this lock.
+    private boolean atomicPublicationActive;
 
     public State state() { synchronized (lock) { return state; } }
 
@@ -146,9 +149,44 @@ public final class WriterEpochFence {
         }
     }
 
+    /**
+     * Run only the short, synchronous FINAL commit of an already staged
+     * candidate while the same monitor excludes both root entry and seal
+     * resumption. A pair of requireDrained calls outside this lock could
+     * otherwise allow OPEN to interleave between the check and commit.
+     *
+     * NO disk scan, NBT IO, Bukkit task dispatch or waiting for another writer
+     * may occur in the callback. The caller must prove complete writer-hook
+     * coverage and external journal readiness independently. This method is
+     * not a whole-world G0 authority or an admission permit.
+     */
+    public <T> T withDrainedSeal(Seal seal, Supplier<T> finalCommit) {
+        Objects.requireNonNull(finalCommit, "atomic final publication");
+        synchronized (lock) {
+            requireSeal(seal);
+            if (active != 0 || atomicPublicationActive)
+                throw new IllegalStateException("Writer epoch not ready for atomic commit");
+            atomicPublicationActive = true;
+            try {
+                T committed = finalCommit.get();
+                requireSeal(seal);
+                if (active != 0)
+                    throw new IllegalStateException("Writer admitted during atomic commit");
+                return committed;
+            } catch (RuntimeException | Error failure) {
+                fault();
+                throw failure;
+            } finally {
+                atomicPublicationActive = false;
+            }
+        }
+    }
+
     /** End a protected interval; the old seal becomes permanently stale. */
     public void resume(Seal seal) {
         synchronized (lock) {
+            if (atomicPublicationActive)
+                throw new IllegalStateException("Cannot resume during atomic publication");
             requireDrained(seal);
             advanceEpoch();
             state = State.OPEN;
