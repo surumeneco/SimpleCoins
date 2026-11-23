@@ -1,0 +1,60 @@
+name: A02 protected partial saved progress no ACK
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a02.protected-partial-saved-progress.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantProtectedPartialStage.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java'
+      - '.github/workflows/a02-protected-partial-saved-progress.yml'
+permissions:
+  contents: read
+jobs:
+  saved-partial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          path: cat-runtime
+          persist-credentials: false
+      - name: Canonical Confirmed A02 process and model checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C cat-runtime rev-parse HEAD)" = '896cae8313a533a3c74073a8c3150daad314ff90'
+          work=Lifecycle/Works/simplecoins.a02.protected-partial-saved-progress.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind vectors --work "$work"
+      - name: Real saved partial 64 coins proof with pending journal
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest
+          grep -F '<testsuite' build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest.xml
+      - name: Full root Java25 regression
+        shell: bash
+        run: gradle --no-daemon :test
+      - name: Preserve CAT and JUnit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a02-saved-partial-evidence
+          path: |
+            build/test-results/test/
+            Lifecycle/Works/.cat-flow/
+          if-no-files-found: ignore
+          retention-days: 14
