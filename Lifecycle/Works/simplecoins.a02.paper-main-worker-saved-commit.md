@@ -76,5 +76,5 @@ Add product-owned **two-stage same-epoch handoff**:
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-process.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-tce.md | — | — | — | @work/.cat-flow/cache/a02-worker-model.json | @work/.cat-flow/cache/a02-worker-vectors.json | @work/.cat-flow/cache/a02-worker-queue.json | — | — | @work/.cat-flow/cache/a02-worker-obligations.json | — | false |
