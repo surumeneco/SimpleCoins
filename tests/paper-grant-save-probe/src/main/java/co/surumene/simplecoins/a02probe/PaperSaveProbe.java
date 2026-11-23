@@ -758,29 +758,52 @@ public final class PaperSaveProbe extends JavaPlugin {
                 || stage.nextReceipt().partialValue() != 640_000)
             throw new IllegalStateException("Incorrect first-batch two-stack plan");
 
-        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(stage,
-                PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
-                player.getInventory().getStorageContents(), codec);
-        player.getInventory().setStorageContents(candidate);
-        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
-        player.saveData();
+        // Use the actual PRODUCT batch orchestration, not test-owned
+        // placement/save/readback steps. Reuse the independently precomputed
+        // plan only as an oracle for the resulting authoritative UUID.dat.
+        WriterEpochFence firstBatchEpoch = new WriterEpochFence();
+        firstBatchEpoch.arm(); // test-only, still NOT installed whole-writer proof
+        var paperCoordinator = Class.forName(
+                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
+                true, PaperSaveProbe.class.getClassLoader());
+        var realBatch = paperCoordinator.getDeclaredMethod("saveAndFinalizeFirstBatch",
+                Player.class, GrantLedger.class, GrantLedger.Grant.class,
+                CoinItemCodec.class, WriterEpochFence.class,
+                WorldStorageDiscovery.Manifest.class, java.util.concurrent.Callable.class,
+                int.class, int.class);
+        realBatch.setAccessible(true);
+        final SavedGrantDeliveryReadback.Proof productPartial;
+        try {
+            Object result = realBatch.invoke(null, player, ledger, grant, codec,
+                    firstBatchEpoch, actualPlayerManifest(),
+                    (java.util.concurrent.Callable<WorldStorageDiscovery.Manifest>)
+                        this::actualPlayerManifest, 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(result instanceof java.util.Optional<?> option) || option.isEmpty()
+                    || !(option.orElseThrow() instanceof SavedGrantDeliveryReadback.Proof))
+                throw new IllegalStateException("Actual Paper first-batch coordinator refused grant");
+            productPartial = (SavedGrantDeliveryReadback.Proof) option.orElseThrow();
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Exception error) throw error;
+            if (cause instanceof Error error) throw error;
+            throw new IllegalStateException("Unexpected partial product failure", cause);
+        }
 
         var partialManifest = actualPlayerManifest();
         var proof = SavedGrantDeliveryFileReadback.verify(partialManifest, ledger, ID,
                 stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
-        if (!proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
+        if (!proof.equals(productPartial)
+                || !proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
                 || proof.matchedStacks() != 2
                 || !proof.matchedMonetaryValue()
-                        .equals(java.math.BigInteger.valueOf(640_000)))
-            throw new IllegalStateException("Partial physical saved receipt did not match");
-        var productPartial = protectedProductSavedStage(
-                "co.surumene.simplecoins.paper.SavedGrantProtectedPartialStage",
-                "verifyPartial", partialManifest, ledger, grant, stage, before);
-        if (!proof.equals(productPartial) || ledger.pending(ID).size() != 1
+                        .equals(java.math.BigInteger.valueOf(640_000))
+                || firstBatchEpoch.state() != WriterEpochFence.State.SEALED
+                || ledger.pending(ID).size() != 1
                 || ledger.historySnapshot().getLast().delivered())
-            throw new IllegalStateException("Product partial stage prematurely ACKed");
+            throw new IllegalStateException("Product first partial saved batch prematurely ACKed");
         getLogger().info("PAPER_A02_PRODUCT_PROTECTED_PARTIAL_REAL_SAVE_640000_PENDING_PASSED"
                 + " TEST_ONLY_NO_INSTALLED_WRITER_CLOSURE");
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_FIRST_PARTIAL_REAL_SAVE_640000_PENDING_PASSED");
         if (PaperGrantInventorySlotPlan.stage(ledger, ID, grant,
                 stage.nextReceipt(), player.getInventory().getStorageContents()).isPresent())
             throw new IllegalStateException("Full storage permitted a duplicate extra batch");
