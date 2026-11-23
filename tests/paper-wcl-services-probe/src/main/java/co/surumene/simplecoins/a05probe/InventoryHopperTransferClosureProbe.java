@@ -5,6 +5,11 @@ import co.surumene.simplecoins.domain.WriterEpochFence;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import java.lang.reflect.Field;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -42,6 +47,14 @@ public final class InventoryHopperTransferClosureProbe {
     }
 
     public static void begin(Plugin probe) throws Exception {
+        begin(probe, false);
+    }
+
+    public static void beginEventVeto(Plugin probe) throws Exception {
+        begin(probe, true);
+    }
+
+    private static void begin(Plugin probe, boolean cancelMoveEvent) throws Exception {
         require(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty()
                 && "127.0.0.1".equals(Bukkit.getServer().getIp()),
                 "Not isolated no-player main-thread real Paper");
@@ -114,6 +127,36 @@ public final class InventoryHopperTransferClosureProbe {
         WriterEpochFence fence = (WriterEpochFence) field.get(simple);
         require(fence.state() == WriterEpochFence.State.DISARMED,
                 "Product unexpectedly armed a writer fence");
+        // Test-only listener records the real item and both physical amounts
+        // at the Paper event boundary, before a cancellation is applied.
+        AtomicInteger moveEvents = new AtomicInteger();
+        int[] firstAtEvent = {-1, -1};
+        if (cancelMoveEvent) {
+            Bukkit.getPluginManager().registerEvents(new Listener() {
+                @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+                public void onMove(InventoryMoveItemEvent event) {
+                    Location source = event.getSource().getLocation();
+                    Location destination = event.getDestination().getLocation();
+                    if (source == null || destination == null
+                            || !source.getBlock().equals(chestBlock)
+                            || !destination.getBlock().equals(hopperBlock))
+                        return;
+                    require(Bukkit.isPrimaryThread(), "Hopper move event not on main thread");
+                    require(codec.identify(event.getItem()).filter(
+                            d -> d == CoinDenomination.FIVE_THOUSAND).isPresent()
+                            && event.getItem().getAmount() > 0,
+                            "Unexpected item in actual Hopper event");
+                    int sourceCoins = coinsIn(chest, codec);
+                    int destinationCoins = coinsIn(hopper, codec);
+                    if (moveEvents.getAndIncrement() == 0) {
+                        firstAtEvent[0] = sourceCoins;
+                        firstAtEvent[1] = destinationCoins;
+                    }
+                    event.setCancelled(true);
+                }
+            }, probe);
+        }
+
         fence.arm(); // Test-only.
         hook.getMethod("beginLimitedFamilyProof").invoke(null);
         WriterEpochFence.Seal seal = fence.seal();
@@ -122,16 +165,72 @@ public final class InventoryHopperTransferClosureProbe {
 
         Bukkit.getScheduler().runTaskLater(probe, () -> {
             try {
-                finish(chest, hopper, codec, hook, fence, seal);
+                if (cancelMoveEvent) {
+                    finishEventVeto(chest, hopper, codec, hook, fence, seal,
+                            moveEvents.get(), firstAtEvent[0], firstAtEvent[1]);
+                } else {
+                    finish(chest, hopper, codec, hook, fence, seal);
+                }
                 Runtime.getRuntime().halt(0);
             } catch (Throwable failure) {
                 probe.getLogger().log(Level.SEVERE,
-                        "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED", failure);
-                System.err.println("PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED");
+                        cancelMoveEvent
+                                ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
+                                : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED",
+                        failure);
+                System.err.println(cancelMoveEvent
+                        ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
+                        : "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED");
                 System.err.flush();
                 Runtime.getRuntime().halt(2);
             }
         }, 60L);
+    }
+
+    private static void finishEventVeto(Inventory chest, Inventory hopper,
+            CoinItemCodec codec, Class<?> hook, WriterEpochFence fence,
+            WriterEpochFence.Seal seal, int events, int firstSource, int firstDestination)
+            throws Exception {
+        require(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty(),
+                "Hopper move-event veto completion not isolated or on main thread");
+        int left = coinsIn(chest, codec);
+        int moved = coinsIn(hopper, codec);
+        require(events > 0 && firstSource >= 0 && firstDestination >= 0,
+                "No matching authentic Chest to Hopper InventoryMoveItemEvent observed");
+        require(left >= 0 && moved >= 0 && left + moved == 2,
+                "Hopper event cancellation changed total physical currency");
+        String mode = hook.getMethod("mode").invoke(null).toString();
+        System.out.println("PAPER_A01_REAL_HOPPER_EVENT_VETO_OBSERVED events=" + events
+                + " sourceAtFirstEvent=" + firstSource
+                + " destinationAtFirstEvent=" + firstDestination
+                + " chestAfter=" + left + " hopperAfter=" + moved
+                + " hookMode=" + mode + " productState=" + fence.state());
+        require("LIMITED_TRACKING".equals(mode)
+                        && fence.state() == WriterEpochFence.State.SEALED && fence.inFlight() == 0,
+                "Hopper event cancellation left unexpected shared product epoch");
+        fence.requireDrained(seal);
+        try {
+            chest.setItem(0, codec.create(CoinDenomination.FIVE_THOUSAND, 3));
+            throw new IllegalStateException("Positive-control setter was not denied");
+        } catch (IllegalStateException expected) {
+            require("FAULTED".equals(hook.getMethod("mode").invoke(null).toString())
+                            && fence.state() == WriterEpochFence.State.FAULTED,
+                    "Known covered setter did not invalidate both fences");
+        }
+        require(coinsIn(chest, codec) == left && coinsIn(hopper, codec) == moved,
+                "Positive-control setter unexpectedly changed physical money");
+        if (left == 2 && moved == 0) {
+            System.out.println("PAPER_A01_REAL_HOPPER_EVENT_VETO_PHYSICAL_UNCHANGED_PASS"
+                    + " sourceAtFirstEvent=" + firstSource
+                    + " destinationAtFirstEvent=" + firstDestination
+                    + " matchingEvents=" + events
+                    + " sameSealDrained=true coveredSetterDenied=true");
+        } else {
+            System.out.println("PAPER_A01_REAL_HOPPER_EVENT_VETO_MONETARY_CHANGE_OBSERVED"
+                    + " chestAfter=" + left + " hopperAfter=" + moved
+                    + " matchingEvents=" + events
+                    + " sameSealDrained=true coveredSetterDenied=true");
+        }
     }
 
     private static void finish(Inventory chest, Inventory hopper, CoinItemCodec codec,
