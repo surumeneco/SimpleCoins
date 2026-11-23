@@ -112,8 +112,14 @@ final class SettlementProtectedPublisher {
                 return evaluateAndPublish(generation, staged.pending(), evidence);
 
             var witness = staged.savedContentWitness();
-            if (manifest.origin() == null || witness == null)
-                throw new IOException("No original authoritative SAVED traversal evidence");
+            if (manifest.origin() == null || witness == null
+                    || !staged.issuedByVerifiedTraversal())
+                throw new IOException("Missing authentic source-runner origin for saved settlement");
+
+            // The original source traversal, not a caller-provided record
+            // attaching a genuine witness to a different accumulator, must
+            // have produced these monetary values. Other full-G0 evidence is
+            // still independently unproven at runtime.
 
             return fence.withDrainedLease(seal, () -> {
                 witness.requireOriginalManifest(manifest);
