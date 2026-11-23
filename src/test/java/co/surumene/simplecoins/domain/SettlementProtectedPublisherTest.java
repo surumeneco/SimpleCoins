@@ -4,7 +4,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.zip.GZIPOutputStream;
+import org.junit.jupiter.api.io.TempDir;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -18,6 +24,7 @@ import org.junit.jupiter.api.Test;
 
 /** Bounded A01 product composition, not a certificate for all Paper/Plugin writers. */
 final class SettlementProtectedPublisherTest {
+    @TempDir Path temp;
     private static final UUID PLAYER = UUID.fromString(
             "00000000-0000-0000-0000-000000000101");
 
@@ -68,6 +75,23 @@ final class SettlementProtectedPublisherTest {
                 throw exception.getCause();
             }
         }
+        SettlementWriterEpochDecision.Verdict staged(
+                long generation, SettlementScanRunner.Staged stage,
+                WorldStorageDiscovery.Manifest manifest,
+                SettlementWriterEpochDecision.Evidence evidence) throws Throwable {
+            var method = delegate.getClass().getDeclaredMethod("evaluateAndPublishStaged",
+                    long.class, SettlementScanRunner.Staged.class,
+                    WorldStorageDiscovery.Manifest.class,
+                    SettlementWriterEpochDecision.Evidence.class);
+            method.setAccessible(true);
+            try {
+                return (SettlementWriterEpochDecision.Verdict) method.invoke(
+                        delegate, generation, stage, manifest, evidence);
+            } catch (InvocationTargetException failure) {
+                throw failure.getCause();
+            }
+        }
+
         @SuppressWarnings("unchecked")
         Optional<SettlementAccumulator.Result> current() throws Throwable {
             try { return (Optional<SettlementAccumulator.Result>) current.invoke(delegate); }
@@ -229,5 +253,117 @@ final class SettlementProtectedPublisherTest {
             allowFinish.countDown();
             commit.join(5000);
         }
+    }
+
+    /** Actual source NBT, not a fabricated marked-as-complete Staged. */
+    private Path savedCoin(UUID player, boolean coin) throws IOException {
+        Path data = temp.resolve("world").resolve("playerdata").resolve(player + ".dat");
+        Files.createDirectories(data.getParent());
+        try (var gzip = new GZIPOutputStream(Files.newOutputStream(data));
+             var out = new DataOutputStream(gzip)) {
+            out.writeByte(10); out.writeUTF("");
+            out.writeByte(9); out.writeUTF("Inventory");
+            out.writeByte(10); out.writeInt(coin ? 1 : 0);
+            if (coin) {
+                out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
+                out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
+                out.writeByte(3); out.writeUTF("count"); out.writeInt(1);
+                out.writeByte(10); out.writeUTF("components");
+                out.writeByte(8); out.writeUTF("minecraft:item_model");
+                out.writeUTF("simplecoins:coin_5000");
+                out.writeByte(10); out.writeUTF("minecraft:custom_data");
+                out.writeByte(10); out.writeUTF("PublicBukkitValues");
+                out.writeByte(3); out.writeUTF("simplecoins:coin_denomination");
+                out.writeInt(5000);
+                out.writeByte(0); out.writeByte(0); out.writeByte(0); out.writeByte(0);
+            }
+            out.writeByte(9); out.writeUTF("EnderItems");
+            out.writeByte(10); out.writeInt(0);
+            out.writeByte(0);
+        }
+        return data;
+    }
+
+    private record ActualDiskStage(WorldStorageDiscovery.Manifest manifest,
+                                   SettlementScanRunner.Staged staged) {}
+
+    private ActualDiskStage realStage() throws IOException {
+        var scope = new WorldScope(true, Set.of(), Set.of());
+        var manifest = WorldStorageDiscovery.discover(
+                Map.of("world", temp.resolve("world")), scope, 256);
+        var staged = SettlementScanRunner.stage(manifest, scope, Set.of(),
+                (world, pos) -> {
+                    throw new IOException("No saved chunks; unexpected block owner read");
+                },
+                (world, nbt) -> Map.of(), 65536, 65536);
+        assertNotNull(staged.savedContentWitness());
+        return new ActualDiskStage(manifest, staged);
+    }
+
+    @Test void stagedRealSavedCoinPublishesOnlyFromOriginalContentWitness() throws Throwable {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        assertEquals(1, disk.staged().report().playerFiles());
+        var gate = new AdmissionBarrier();
+        long generation = gate.begin();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        var publisher = new Subject(fence, seal, gate, () -> true, () -> true);
+        assertEquals(SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH,
+                publisher.staged(generation, disk.staged(), disk.manifest(), allEvidence()));
+        var balance = publisher.current().orElseThrow();
+        assertEquals(BigInteger.valueOf(5000), balance.statistics().worldTotal());
+        assertEquals(BigInteger.valueOf(5000), balance.personalBalances().get(PLAYER));
+        assertTrue(publisher.mayAdmit(), "Only this isolated domain gate is READY");
+        assertEquals(WriterEpochFence.State.SEALED, fence.state());
+    }
+
+    @Test void staleSavedFileRevokesBeforePublish() throws Throwable {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        savedCoin(PLAYER, false); // external file changed AFTER the genuine Stage
+        var gate = new AdmissionBarrier(); long generation = gate.begin();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        var publisher = new Subject(fence, seal, gate, () -> true, () -> true);
+        assertThrows(IOException.class, () ->
+                publisher.staged(generation, disk.staged(), disk.manifest(), allEvidence()));
+        assertEquals(AdmissionBarrier.State.FAILED, gate.state());
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertTrue(publisher.current().isEmpty());
+    }
+
+    @Test void freshDiscoveryCannotReuseOldStage() throws Throwable {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        // Same physical path and bytes, but NOT the original source discovery.
+        var nextManifest = WorldStorageDiscovery.discover(
+                Map.of("world", temp.resolve("world")),
+                new WorldScope(true, Set.of(), Set.of()), 256);
+        assertNotSame(disk.manifest(), nextManifest);
+        var gate = new AdmissionBarrier(); long generation = gate.begin();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        var publisher = new Subject(fence, seal, gate, () -> true, () -> true);
+        assertThrows(IOException.class, () ->
+                publisher.staged(generation, disk.staged(), nextManifest, allEvidence()));
+        assertEquals(AdmissionBarrier.State.FAILED, gate.state());
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertTrue(publisher.current().isEmpty());
+    }
+
+    @Test void incompleteEvidenceHoldsGenuineStagedCandidateUnconsumed() throws Throwable {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        var gate = new AdmissionBarrier(); long generation = gate.begin();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        var publisher = new Subject(fence, seal, gate, () -> true, () -> true);
+        var missingWriterCoverage = new SettlementWriterEpochDecision.Evidence(
+                true, false, true, true, true, true, true, false);
+        assertEquals(SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED,
+                publisher.staged(generation, disk.staged(), disk.manifest(), missingWriterCoverage));
+        assertEquals(AdmissionBarrier.State.SCANNING, gate.state());
+        assertFalse(publisher.mayAdmit());
+        assertEquals(SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH,
+                publisher.staged(generation, disk.staged(), disk.manifest(), allEvidence()));
+        assertEquals(BigInteger.valueOf(5000),
+                publisher.current().orElseThrow().statistics().worldTotal());
     }
 }

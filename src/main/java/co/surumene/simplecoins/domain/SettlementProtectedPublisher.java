@@ -1,5 +1,6 @@
 package co.surumene.simplecoins.domain;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
@@ -81,6 +82,47 @@ final class SettlementProtectedPublisher {
                 return verdict;
             });
         } catch (RuntimeException | Error failure) {
+            revoke();
+            throw failure;
+        }
+    }
+
+    /**
+     * Accept an actual source-staged SAVED generation (also used by the
+     * one-shot PaperCapturedHybridSettlement), not just a bare accumulator.
+     *
+     * The content witness and its EXACT original source Manifest are rechecked
+     * while this same already drained epoch is LEASED, preventing independent
+     * resume while source files are hashed. The final accumulator publish is
+     * the existing short atomic callback under the SAME seal and lock.
+     *
+     * A real loaded-world/WCL/BAN/Journals/installed-writers attestation is
+     * still independently required before any runtime call: these immutable
+     * input records alone are not G0 authorization.
+     */
+    synchronized SettlementWriterEpochDecision.Verdict evaluateAndPublishStaged(
+            long generation, SettlementScanRunner.Staged staged,
+            WorldStorageDiscovery.Manifest manifest,
+            SettlementWriterEpochDecision.Evidence evidence) throws IOException {
+        try {
+            Objects.requireNonNull(staged, "real staged SAVED source candidate");
+            Objects.requireNonNull(manifest, "original source Manifest");
+            var decision = SettlementWriterEpochDecision.evaluate(evidence);
+            if (decision != SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH)
+                return evaluateAndPublish(generation, staged.pending(), evidence);
+
+            var witness = staged.savedContentWitness();
+            if (manifest.origin() == null || witness == null)
+                throw new IOException("No original authoritative SAVED traversal evidence");
+
+            return fence.withDrainedLease(seal, () -> {
+                witness.requireOriginalManifest(manifest);
+                if (!staged.requiredSourceIds().containsAll(manifest.requiredSourceIds()))
+                    throw new IOException("Mandatory saved source omitted from staged settlement");
+                witness.requireUnchanged();
+                return evaluateAndPublish(generation, staged.pending(), evidence);
+            });
+        } catch (IOException | RuntimeException | Error failure) {
             revoke();
             throw failure;
         }
