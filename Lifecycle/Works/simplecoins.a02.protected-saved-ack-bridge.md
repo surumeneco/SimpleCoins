@@ -50,7 +50,7 @@ spec_status: confirmed
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a02.protected-ack.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon test --tests co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest | successfullyFsyncsFreshProofAndAcksWithinOneSeal;refusesOpenUnsealedAndWrongGrantOrPartial;refusesMissingPhysicalCoinOrChangedStorage | src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest.xml | 300 |
+| a02.protected-ack.junit | tests | junit | @repo:SimpleCoins | gradle --no-daemon :test --tests co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest | successfullyFsyncsFreshProofAndAcksWithinOneSeal;refusesOpenUnsealedAndWrongGrantOrPartial;refusesMissingPhysicalCoinOrChangedStorage | src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java | build/test-results/test/TEST-co.surumene.simplecoins.paper.SavedGrantProtectedAckStageTest.xml | 300 |
 
 ## Gates
 | Gate | Status | Evidence |
