@@ -26,6 +26,13 @@ public final class AgentHopperIsolationMain {
                 new net.minecraft.world.item.ItemStack(), 0);
     }
 
+    private static boolean push() {
+        return HopperBlockEntity.hopperPush(
+                new net.minecraft.world.level.Level(),
+                new net.minecraft.world.Container(),
+                new net.minecraft.core.Direction(), null);
+    }
+
     public static void main(String[] args) throws Exception {
         require(WriterEpochHook.class.getClassLoader() == null,
                 "Bootstrap hook must not be system-loaded");
@@ -47,6 +54,8 @@ public final class AgentHopperIsolationMain {
         int passiveBefore = HopperBlockEntity.bodyCount();
         require(pull() && HopperBlockEntity.bodyCount() == passiveBefore + 1,
                 "Passive native Hopper original method and boolean return changed");
+        require(push() && HopperBlockEntity.bodyCount() == passiveBefore + 2,
+                "Passive native Hopper output body or boolean return changed");
         require(WriterEpochHook.mode() == WriterEpochHook.Mode.PASSIVE
                         && WriterEpochHook.inFlight() == 0,
                 "Passive Hopper left a live bridge writer");
@@ -66,6 +75,8 @@ public final class AgentHopperIsolationMain {
             int openBefore = HopperBlockEntity.bodyCount();
             require(pull() && HopperBlockEntity.bodyCount() == openBefore + 1,
                     "Open root Hopper call failed to enter body/return normally");
+            require(push() && HopperBlockEntity.bodyCount() == openBefore + 2,
+                    "Open root Hopper output did not execute or drain normally");
             require((int) fenceType.getMethod("inFlight").invoke(fence) == 0
                             && WriterEpochHook.inFlight() == 0,
                     "Open Hopper writer did not drain both epoch counters");
@@ -73,17 +84,21 @@ public final class AgentHopperIsolationMain {
             var requireDrained = fenceType.getMethod("requireDrained", seal.getClass());
             requireDrained.invoke(fence, seal);
             int bodyBeforeDenied = HopperBlockEntity.bodyCount();
-            require(!pull(), "Sealed Hopper call did not return false on denied entry");
+            // EXPECTED RED on the prior Agent: real Paper's reverse-direction
+            // native hopperPush body is not yet instrumented.
+            require(!push(), "Sealed native hopperPush did not return false before its body");
+            require(!pull(), "Faulted Hopper pull must remain blocked");
             require(HopperBlockEntity.bodyCount() == bodyBeforeDenied,
                     "Sealed native Hopper executed body despite refusal");
             require(WriterEpochHook.mode() == WriterEpochHook.Mode.FAULTED
                             && "FAULTED".equals(fenceType.getMethod("state").invoke(fence).toString()),
                     "Denied native Hopper did not revoke shared product/Agent generation");
-            require(!pull() && HopperBlockEntity.bodyCount() == bodyBeforeDenied,
+            require(!pull() && !push() && HopperBlockEntity.bodyCount() == bodyBeforeDenied,
                     "Already faulted Hopper unexpectedly resumed physical write");
             require(WriterEpochHook.inFlight() == 0,
                     "Denied native Hopper leaked an Agent entry");
         }
         System.out.println("SIMPLECOINS_A01_NATIVE_HOPPER_PREBODY_SHARED_FENCE_GREEN");
+        System.out.println("SIMPLECOINS_A01_NATIVE_HOPPER_OUTPUT_PREBODY_SHARED_FENCE_GREEN");
     }
 }

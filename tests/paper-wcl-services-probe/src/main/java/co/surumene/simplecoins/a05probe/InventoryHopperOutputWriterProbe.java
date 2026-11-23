@@ -46,6 +46,15 @@ public final class InventoryHopperOutputWriterProbe {
     }
 
     public static void begin(Plugin probe) throws Exception {
+        begin(probe, false);
+    }
+
+    /** Demand actual pre-body protection only after the expected-reason Java25 Red. */
+    public static void beginRequirePrebody(Plugin probe) throws Exception {
+        begin(probe, true);
+    }
+
+    private static void begin(Plugin probe, boolean requireProtected) throws Exception {
         check(Bukkit.isPrimaryThread() && Bukkit.getOnlinePlayers().isEmpty()
                 && "127.0.0.1".equals(Bukkit.getServer().getIp()), "Observer not isolated");
         Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
@@ -168,6 +177,20 @@ public final class InventoryHopperOutputWriterProbe {
                             throw new IllegalStateException("Unclassified post-seal push"
                                     + " hopper=" + from + " chest=" + to
                                     + " agent=" + mode + " product=" + productState);
+                        }
+                        if (requireProtected) {
+                            // The original eight-class Agent without an exact output method
+                            // was RED: Hopper 2→0/Chest 0→2 while product SEALED.
+                            check(from == 2 && to == 0
+                                            && mode.equals("FAULTED")
+                                            && productState.equals("FAULTED"),
+                                    "Real Paper hopperPush still executed under sealed generation"
+                                            + " hopper=" + from + " chest=" + to
+                                            + " hook=" + mode + " product=" + productState);
+                            System.out.println("PAPER_A01_REAL_HOPPER_OUTPUT_PREBODY_NO_MUTATION_PASS"
+                                    + " hopperBefore=2 hopperAfter=2"
+                                    + " chestBefore=0 chestAfter=0"
+                                    + " sharedWriterEpochFaulted=true tickSurvived=true");
                         }
                         System.out.flush();
                         Runtime.getRuntime().halt(0);
