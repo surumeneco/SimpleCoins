@@ -96,13 +96,31 @@ public final class WclServicesProbe extends JavaPlugin {
         // A01 bounded investigation: a separate disposable process exercises
         // the product's existing seven-family fence. Never part of normal A05
         // reader proofs, distribution, or production startup.
+        boolean addItemProbe = Boolean.getBoolean("a01.inventoryAddItemClosureProbe");
         boolean removeItemProbe = Boolean.getBoolean("a01.inventoryRemoveItemClosureProbe");
-        if (removeItemProbe || Boolean.getBoolean("a01.inventoryAddItemClosureProbe")) {
+        boolean clearProbe = Boolean.getBoolean("a01.inventoryClearClosureProbe");
+        if (addItemProbe || removeItemProbe || clearProbe) {
+            // A test JVM admits exactly one sealed-writer probe: one product
+            // generation cannot be re-armed after it is faulted or sealed.
+            int modes = (addItemProbe ? 1 : 0) + (removeItemProbe ? 1 : 0)
+                    + (clearProbe ? 1 : 0);
+            if (modes != 1) {
+                getLogger().severe("PAPER_A01_MULTIPLE_CHEST_CLOSURE_PROBES_REJECTED");
+                Runtime.getRuntime().halt(2);
+                return;
+            }
             Bukkit.getScheduler().runTaskLater(this, () -> {
+                String failed = clearProbe
+                        ? "PAPER_A01_REAL_CHEST_CLEAR_CLOSURE_PROBE_FAILED"
+                        : removeItemProbe
+                                ? "PAPER_A01_REAL_CHEST_REMOVEITEM_CLOSURE_PROBE_FAILED"
+                                : "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED";
                 try {
-                    String outcome = removeItemProbe
-                            ? InventoryRemoveItemClosureProbe.execute()
-                            : InventoryAddItemClosureProbe.execute();
+                    String outcome = clearProbe
+                            ? InventoryClearClosureProbe.execute()
+                            : removeItemProbe
+                                    ? InventoryRemoveItemClosureProbe.execute()
+                                    : InventoryAddItemClosureProbe.execute();
                     getLogger().info(outcome);
                     System.out.println(outcome);
                     System.out.flush();
@@ -110,9 +128,8 @@ public final class WclServicesProbe extends JavaPlugin {
                     // or faulted. Do not run later Paper shutdown saves.
                     Runtime.getRuntime().halt(0);
                 } catch (Throwable failure) {
-                    getLogger().log(Level.SEVERE,
-                            "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED", failure);
-                    System.err.println("PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED");
+                    getLogger().log(Level.SEVERE, failed, failure);
+                    System.err.println(failed);
                     System.err.flush();
                     Runtime.getRuntime().halt(2);
                 }
