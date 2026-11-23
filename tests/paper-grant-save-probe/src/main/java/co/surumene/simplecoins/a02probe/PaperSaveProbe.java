@@ -772,6 +772,41 @@ public final class PaperSaveProbe extends JavaPlugin {
                 WorldStorageDiscovery.Manifest.class, java.util.concurrent.Callable.class,
                 int.class, int.class);
         realBatch.setAccessible(true);
+
+        // An actual 36/36-full inventory must neither mint, save, advance
+        // signed receipt nor ACK. The same authentic reservation is then
+        // retried after restoring its two originally empty storage slots.
+        byte[] sourceBeforeNoCapacity = Files.readAllBytes(file);
+        ItemStack[] vacantStorage = player.getInventory().getStorageContents();
+        ItemStack[] allOccupied = vacantStorage.clone();
+        allOccupied[3] = new ItemStack(Material.STONE, 1);
+        allOccupied[4] = new ItemStack(Material.STONE, 1);
+        player.getInventory().setStorageContents(allOccupied);
+        WriterEpochFence noCapacityEpoch = new WriterEpochFence();
+        noCapacityEpoch.arm(); // test-only, not a release writer closure
+        try {
+            Object noSpace = realBatch.invoke(null, player, ledger, grant, codec,
+                    noCapacityEpoch, actualPlayerManifest(),
+                    (java.util.concurrent.Callable<WorldStorageDiscovery.Manifest>)
+                        this::actualPlayerManifest, 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(noSpace instanceof java.util.Optional<?> empty)
+                    || empty.isPresent()
+                    || noCapacityEpoch.state() != WriterEpochFence.State.OPEN
+                    || ledger.pending(ID).size() != 1
+                    || !receipt.equals(
+                            PaperGrantReceiptPdc.read(player.getPersistentDataContainer()))
+                    || !Arrays.equals(sourceBeforeNoCapacity, Files.readAllBytes(file)))
+                throw new IllegalStateException("Full storage caused false physical issuance");
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Exception error) throw error;
+            if (cause instanceof Error error) throw error;
+            throw new IllegalStateException("Unexpected full inventory failure", cause);
+        } finally {
+            player.getInventory().setStorageContents(vacantStorage);
+        }
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_NO_CAPACITY_PENDING_NO_SAVE_PASSED");
+
         final SavedGrantDeliveryReadback.Proof productPartial;
         try {
             Object result = realBatch.invoke(null, player, ledger, grant, codec,
