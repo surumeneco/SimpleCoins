@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarFile;
 
 /**
- * Java 25 startup agent for seven bounded native/Paper/WCL writer families.
+ * Java 25 startup agent for eight bounded native/Paper/WCL writer families.
  * Native PlayerDataStorage and CraftPlayer plus PDC set/remove and inventory
  * setItem/addItem/removeItem are not a complete plugin, NMS, asynchronous or direct-file writer
  * universe. No observed hook count authorizes G0/G3 publication or Admission.
@@ -44,6 +44,11 @@ public final class PaperNativeWriterAgent {
     private static final String HOPPER_PULL = "(Lnet/minecraft/world/level/Level;"
             + "Lnet/minecraft/world/level/block/entity/Hopper;"
             + "Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;I)Z";
+    // Exact official Paper26.2 output writer signature observed in the real
+    // native Hopper→Chest event stack before this production change.
+    private static final String HOPPER_PUSH = "(Lnet/minecraft/world/level/Level;"
+            + "Lnet/minecraft/world/Container;Lnet/minecraft/core/Direction;"
+            + "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z";
     private static final String WWW_SAVE = "(Lorg/bukkit/entity/Wolf;Lco/surumene/www/"
             + "individual/WonderfulWolfIndividual;)V";
 
@@ -55,7 +60,7 @@ public final class PaperNativeWriterAgent {
         EQUIPMENT("beforeEquipment", "afterEquipment", 2),
         WWC("beforeWwc", "afterWwc", 1),
         WWW("beforeWww", "afterWww", 1),
-        HOPPER("beforeHopper", "afterHopper", 1);
+        HOPPER("beforeHopper", "afterHopper", 2);
 
         final String enterHook, returnHook;
         final int expectedMethods;
@@ -80,7 +85,8 @@ public final class PaperNativeWriterAgent {
                         && (desc.equals(EQUIPMENT_SET) || desc.equals(EQUIPMENT_SET_SILENT));
                 case WWC -> name.equals("save") && desc.equals(WWC_SAVE);
                 case WWW -> name.equals("saveAndRegister") && desc.equals(WWW_SAVE);
-                case HOPPER -> name.equals("hopperPull") && desc.equals(HOPPER_PULL);
+                case HOPPER -> (name.equals("hopperPull") && desc.equals(HOPPER_PULL))
+                        || (name.equals("hopperPush") && desc.equals(HOPPER_PUSH));
             };
         }
     }
@@ -135,7 +141,7 @@ public final class PaperNativeWriterAgent {
 
                                         @Override public void atStart(CodeBuilder code) {
                                             if (target == Target.HOPPER) {
-                                                // An unadmitted pull must not debit source
+                                                // An unadmitted native pull or output must not mutate source
                                                 // inventory or crash the ordinary server tick.
                                                 code.invokestatic(BOOTSTRAP, target.enterHook,
                                                         MethodTypeDesc.ofDescriptor("()Z"));
