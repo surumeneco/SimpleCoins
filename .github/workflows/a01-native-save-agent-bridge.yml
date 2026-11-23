@@ -11,6 +11,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.paper-removeitem-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.craftinventory-additem-prebody.md'
       - 'Lifecycle/Works/simplecoins.a01.craftinventory-removeitem-prebody.md'
+      - 'Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -81,6 +82,7 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-runtime/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -352,6 +354,48 @@ jobs:
           fi
           grep -F 'PAPER_A01_REAL_CHEST_REMOVEITEM_INTERCEPTED count=2' agent-actual-removeitem.log
           echo 'PAPER_A01_REAL_CHEST_REMOVEITEM_PREBODY_ENTRY_DENY_5000C_UNCHANGED_PASS'
+      - name: Classify real Paper Chest clear() under sealed known writer epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-clear/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-clear/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-clear/plugins/
+          printf 'eula=true\n' > smoke-actual-clear/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25589\n' \
+            > smoke-actual-clear/server.properties
+          cd smoke-actual-clear
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryClearClosureProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-clear.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_CHEST_CLEAR_CLOSURE_PROBE_FAILED' agent-actual-clear.log; then
+            echo "Real Paper clear classification failed code=$status" >&2
+            tail -220 agent-actual-clear.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_BOOTSTRAP_INSTALLED_PASSIVE' agent-actual-clear.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-clear.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-clear.log
+          grep -F 'PAPER_A01_REAL_CLEAR_METHOD' agent-actual-clear.log
+          for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
+            grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-clear.log
+          done
+          if grep -Fq 'PAPER_A01_REAL_CHEST_CLEAR_PARTIAL_MUTATION_BEFORE_COVERED_HOOK_REFUSAL' agent-actual-clear.log; then
+            echo 'PAPER_A01_REAL_CHEST_CLEAR_PARTIAL_MONETARY_WRITER_OBSERVED'
+          elif grep -Fq 'PAPER_A01_REAL_CHEST_CLEAR_SEALED_SEVEN_FAMILY_BYPASS_OBSERVED' agent-actual-clear.log; then
+            echo 'PAPER_A01_REAL_CHEST_CLEAR_UNCOVERED_MONETARY_WRITER_OBSERVED'
+          elif grep -Fq 'PAPER_A01_REAL_CHEST_CLEAR_INTERCEPTED count=2' agent-actual-clear.log; then
+            echo 'PAPER_A01_REAL_CHEST_CLEAR_ALREADY_DENIED_WITHOUT_PHYSICAL_CHANGE'
+          else
+            echo 'Real Paper clear did not yield a verified classified result' >&2
+            tail -160 agent-actual-clear.log
+            exit 1
+          fi
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -364,5 +408,6 @@ jobs:
             smoke-actual-owners/agent-actual-owner.log
             smoke-actual-additem/agent-actual-additem.log
             smoke-actual-removeitem/agent-actual-removeitem.log
+            smoke-actual-clear/agent-actual-clear.log
           retention-days: 14
           if-no-files-found: ignore
