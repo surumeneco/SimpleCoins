@@ -10,6 +10,8 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
       - 'Lifecycle/Works/simplecoins.a02.real-paper-protected-saved-stages.md'
       - 'Lifecycle/Works/simplecoins.a02.final-partial-protected-ack.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-saved-batch-product-coordinator.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantSavedBatchCoordinator.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStage.java'
       - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java'
       - 'Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md'
@@ -46,6 +48,11 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.real-paper-protected-saved-stages.md
           work=Lifecycle/Works/simplecoins.a02.final-partial-protected-ack.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.paper-saved-batch-product-coordinator.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
@@ -231,6 +238,47 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
+      - name: Alternate fourth Paper JVM executes real product grant save to protected ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a smoke smoke-product-coordinator
+          cd smoke-product-coordinator
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=product-coordinator-full -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-product-coordinator.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Product full save and protected ACK failed (exit=$status)" >&2
+            tail -200 paper-a02-product-coordinator.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-product-coordinator.log
+          grep -F 'PAPER_A02_PRODUCT_COORDINATOR_SAVED_ACK_PASSED physical=10000 completed=2 grants=2 pending=0 TEST_ONLY_FENCE' paper-a02-product-coordinator.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-product-coordinator.log; then exit 1; fi
+          echo 'PAPER_A02_PRODUCT_REAL_SAVED_BATCH_TO_ACK_PASSED'
+      - name: Alternate fifth Paper boot verifies independent durable ACK and no double issuance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-product-coordinator
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=product-coordinator-acked-reload -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-product-coordinator-reload.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Product coordinator cold restart failed (exit=$status)" >&2
+            tail -200 paper-a02-product-coordinator-reload.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-product-coordinator-reload.log
+          grep -F 'PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED total=10000 grants=2 pending=0' paper-a02-product-coordinator-reload.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-product-coordinator-reload.log; then exit 1; fi
+          echo 'PAPER_A02_PRODUCT_COORDINATOR_REAL_RESTART_PASSED'
       - name: Fourth Paper process composes real grant plan, saved-file proof and durable ACK
         shell: bash
         run: |
@@ -533,5 +581,6 @@ jobs:
           path: |
             smoke/*.log
             smoke-protected-final/*.log
+            smoke-product-coordinator/*.log
           if-no-files-found: ignore
           retention-days: 7
