@@ -99,6 +99,10 @@ jobs:
           persist-credentials: false
       - name: Validate A05 work and bounded Confirmed Process/Model gates
         run: |
+          # The new Paper-G1 publication check is verification-only issue-work;
+          # it does not assert any all-writer A01 process closure at runtime.
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
