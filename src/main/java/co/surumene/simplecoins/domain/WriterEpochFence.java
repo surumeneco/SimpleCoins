@@ -1,5 +1,6 @@
 package co.surumene.simplecoins.domain;
 
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -69,6 +70,9 @@ public final class WriterEpochFence {
     private int active;
     // Only short, synchronous final-publication callbacks may hold this lock.
     private boolean atomicPublicationActive;
+    // Exclusive owner can keep the epoch SEALED while slow bounded IO runs
+    // without pinning the monitor required by Agent admission/invalidations.
+    private Thread durableLeaseOwner;
 
     public State state() { synchronized (lock) { return state; } }
 
@@ -149,6 +153,49 @@ public final class WriterEpochFence {
         }
     }
 
+    /** Checked saved-file readback that may fail with genuine storage IO. */
+    @FunctionalInterface
+    public interface DurableLeaseWork<T> {
+        T run() throws IOException;
+    }
+
+    /**
+     * Keep a drained SEAL exclusive across a potentially slow file/receipt
+     * readback without retaining the internal Agent-admission monitor while
+     * filesystem IO is in progress. Root admission stays denied (SEALED),
+     * and any independent resume fails rather than reopening this epoch.
+     *
+     * The owning thread alone may enter withDrainedSeal inside the lease for
+     * the final short durable ACK operation. Neither this lease nor that
+     * operation can prove coverage of unhooked native/Plugin/OS writers.
+     */
+    public <T> T withDrainedLease(Seal seal, DurableLeaseWork<T> action) throws IOException {
+        Objects.requireNonNull(action, "protected saved-file operation");
+        synchronized (lock) {
+            requireSeal(seal);
+            if (active != 0 || durableLeaseOwner != null || atomicPublicationActive)
+                throw new IllegalStateException("Writer epoch cannot begin exclusive IO lease");
+            durableLeaseOwner = Thread.currentThread();
+        }
+        try {
+            T result = action.run();
+            synchronized (lock) {
+                requireSeal(seal);
+                if (active != 0)
+                    throw new IllegalStateException("Admitted writer after exclusive IO lease");
+            }
+            return result;
+        } catch (IOException | RuntimeException | Error failure) {
+            invalidate();
+            throw failure;
+        } finally {
+            synchronized (lock) {
+                durableLeaseOwner = null;
+                lock.notifyAll();
+            }
+        }
+    }
+
     /**
      * Run only the short, synchronous FINAL commit of an already staged
      * candidate while the same monitor excludes both root entry and seal
@@ -164,7 +211,8 @@ public final class WriterEpochFence {
         Objects.requireNonNull(finalCommit, "atomic final publication");
         synchronized (lock) {
             requireSeal(seal);
-            if (active != 0 || atomicPublicationActive)
+            if (active != 0 || atomicPublicationActive ||
+                    (durableLeaseOwner != null && durableLeaseOwner != Thread.currentThread()))
                 throw new IllegalStateException("Writer epoch not ready for atomic commit");
             atomicPublicationActive = true;
             try {
@@ -185,8 +233,8 @@ public final class WriterEpochFence {
     /** End a protected interval; the old seal becomes permanently stale. */
     public void resume(Seal seal) {
         synchronized (lock) {
-            if (atomicPublicationActive)
-                throw new IllegalStateException("Cannot resume during atomic publication");
+            if (atomicPublicationActive || durableLeaseOwner != null)
+                throw new IllegalStateException("Cannot resume an exclusively held writer epoch");
             requireDrained(seal);
             advanceEpoch();
             state = State.OPEN;

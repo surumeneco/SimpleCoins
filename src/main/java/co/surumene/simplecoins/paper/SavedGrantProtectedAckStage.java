@@ -69,6 +69,10 @@ final class SavedGrantProtectedAckStage {
                     || !ledger.pending(player).contains(grant))
                 throw new IllegalStateException(
                         "Grant is not an authentic complete one-batch pending delivery");
+            // The lease is acquired BEFORE all filesystem IO and stays owned
+            // until the actual durable ACK has returned. This is stronger than
+            // point-in-time requireDrained checks around a slow NBT decode.
+            return fence.withDrainedLease(seal, () -> {
             fence.requireDrained(seal);
 
             // The witness requires real origin-backed discovery and rejects
@@ -110,9 +114,24 @@ final class SavedGrantProtectedAckStage {
             // handle. No caller-supplied stale receipt number is used.
             if (!ledger.pending(player).contains(grant))
                 throw new IllegalStateException("Reservation changed before durable ACK");
-            ledger.acknowledge(grant, fresh.receipt().completedSequence());
+            // Retain the SAME monitor against concurrent invalidation through
+            // the ledger's actual atomic, fsynced ACK persistence. This is
+            // intentionally a short protected durable commit, not a file scan.
+            SavedGrantDeliveryReadback.Proof committed =
+                    fence.withDrainedSeal(seal, () -> {
+                        try {
+                            ledger.acknowledge(grant, fresh.receipt().completedSequence());
+                            return fresh;
+                        } catch (IOException persistenceFailure) {
+                            throw new java.io.UncheckedIOException(persistenceFailure);
+                        }
+                    });
             fence.requireDrained(seal);
-            return fresh;
+            return committed;
+            });
+        } catch (java.io.UncheckedIOException wrapped) {
+            fence.invalidate();
+            throw wrapped.getCause();
         } catch (IOException | RuntimeException | Error failure) {
             // No stale seal may ever be reused after a partial file or journal
             // operation. A failure here may still mean durable ACK succeeded:

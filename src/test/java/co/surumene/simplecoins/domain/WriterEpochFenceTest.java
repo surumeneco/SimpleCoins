@@ -99,4 +99,42 @@ final class WriterEpochFenceTest {
         var secondSeal = second.seal();
         assertThrows(IllegalStateException.class, () -> first.requireDrained(secondSeal));
     }
+
+    @Test
+    void exclusiveIoLeaseCannotNestOrResumeUntilOwnerFinishes() throws Exception {
+        var fence = new WriterEpochFence();
+        fence.arm();
+        var seal = fence.seal();
+        String result = fence.withDrainedLease(seal, () -> {
+            assertEquals(WriterEpochFence.State.SEALED, fence.state());
+            assertThrows(IllegalStateException.class, () ->
+                    fence.withDrainedLease(seal, () -> "not reached"));
+            assertThrows(IllegalStateException.class, () -> fence.resume(seal));
+            assertThrows(IllegalStateException.class, fence::enterRoot);
+            assertEquals("durable-ack",
+                    fence.withDrainedSeal(seal, () -> "durable-ack"),
+                    "Only the lease owner may enter the short final commit");
+            return "protected";
+        });
+        assertEquals("protected", result);
+        fence.requireDrained(seal);
+        fence.resume(seal);
+        assertEquals(WriterEpochFence.State.OPEN, fence.state());
+    }
+
+    @Test
+    void failedExclusiveIoLeasePermanentlyInvalidatesEpoch() {
+        var fence = new WriterEpochFence();
+        fence.arm();
+        var seal = fence.seal();
+        var failed = assertThrows(java.io.IOException.class, () ->
+                fence.withDrainedLease(seal, () -> {
+                    throw new java.io.IOException("persistent playerdata changed");
+                }));
+        assertEquals("persistent playerdata changed", failed.getMessage());
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertEquals(0, fence.inFlight());
+        assertThrows(IllegalStateException.class, () -> fence.resume(seal));
+        assertThrows(IllegalStateException.class, fence::enterRoot);
+    }
 }
