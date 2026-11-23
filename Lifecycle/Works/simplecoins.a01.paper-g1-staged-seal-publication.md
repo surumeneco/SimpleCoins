@@ -51,7 +51,6 @@ spec_status: confirmed
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
-| a01.real-paper-g1-stage | verification | external | @repo:SimpleCoins | github-actions-paper-wcl-services-probe | PAPER_A01_G1_REAL_SAVED_STAGE_ATOMIC_PUBLISH_BOUNDED_PASS | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java | Actions run logs | 720 |
 
 ## Gates
 | Gate | Status | Evidence |
