@@ -4,6 +4,8 @@ on:
     branches: [develop]
     paths:
       - 'tests/paper-wcl-services-probe/**'
+      - 'Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/SettlementProtectedPublisher.java'
       - '.github/workflows/paper-wcl-services-probe.yml'
       - 'src/main/resources/plugin.yml'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperWonderfulReaderRegistry.java'
@@ -97,6 +99,10 @@ jobs:
           persist-credentials: false
       - name: Validate A05 work and bounded Confirmed Process/Model gates
         run: |
+          # The new Paper-G1 publication check is verification-only issue-work;
+          # it does not assert any all-writer A01 process closure at runtime.
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a05.live-multiple-provider-registration.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
@@ -572,7 +578,9 @@ jobs:
           for phase in persist reload-saved reload; do
             set +e
             timeout --signal=TERM --kill-after=5s 180s \
-              java -Da05.probe.phase="$phase" -Xms256M -Xmx1024M -jar paper.jar nogui \
+              java -Da05.probe.phase="$phase" \
+                -Da01.probe.realSourcePublish="$([ "$phase" = reload-saved ] && echo true || echo false)" \
+                -Xms256M -Xmx1024M -jar paper.jar nogui \
               </dev/null > "paper-a05-$phase.log" 2>&1
             status=$?
             set -e
@@ -650,6 +658,7 @@ jobs:
                 grep -F 'PAPER_A05_VERIFIED_SAVED_TRAVERSAL_TWO_WCL_PROVIDERS_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_REAL_PAPER_WORLDFOLDER_DISCOVERY_CLOSURE_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A01_G1_REAL_SAVED_STAGE_ATOMIC_PUBLISH_BOUNDED_PASS totalPhysical=55000 personal=0 free=5000 dead=50000' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED' "paper-a05-$phase.log"
@@ -711,6 +720,7 @@ jobs:
             set +e
             timeout --signal=TERM --kill-after=5s 180s \
               java -Da05.probe.phase="$phase" -Da05.probe.blocklocker=true \
+                -Da01.probe.realSourcePublish="$([ "$phase" = reload-saved ] && echo true || echo false)" \
                 -Xms256M -Xmx1024M -jar paper.jar nogui \
               </dev/null > "paper-a04-a05-$phase.log" 2>&1
             status=$?
@@ -749,6 +759,8 @@ jobs:
               grep -F 'PAPER_A06_REAL_IP_BAN_UNKNOWN_UUID_MAPPING_HOLD_PASSED' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A06_REAL_PLAYERDATA_BAN_P25000_D30000_F1000_PASSED' \
+                "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A01_G1_REAL_SAVED_STAGE_ATOMIC_PUBLISH_BOUNDED_PASS totalPhysical=56000 personal=25000 free=1000 dead=30000' \
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A04_A05_REAL_BLOCKLOCKER_WCL_FULL_SAVED_56000_PRIVATE_PERSONAL_EVERYONE_FREE_PASSED' \
                 "paper-a04-a05-$phase.log"

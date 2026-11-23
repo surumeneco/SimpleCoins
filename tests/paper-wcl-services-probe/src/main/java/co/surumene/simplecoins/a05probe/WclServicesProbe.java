@@ -2837,8 +2837,23 @@ public final class WclServicesProbe extends JavaPlugin {
                 this, Map.of(world.getName(), world.getUID()), manifest, scope,
                 covered, terrain, knownNonProtection, nonChestOwners, owners,
                 2 * 1024 * 1024, 16 * 1024 * 1024, noPositiveLive);
+        // Reuse the very same physically verified BlockLocker/WCL/BAN Stage,
+        // not a newly fabricated accumulator, as the source for the bounded
+        // product A01 publisher in this isolated Paper test-only mode.
+        boolean testBoundedPublication = Boolean.getBoolean("a01.probe.realSourcePublish");
+        SettlementAccumulator.Result stagedResult = testBoundedPublication
+                ? BoundedStagedPublicationProbe.commitAndVerify(selected, manifest)
+                : selected.pending().commit(); // old local-only fixture behavior
         verifyCompleteUnpublishedWclCandidate(selected, manifest,
-                chickenId, wolfId, nearChickenId, nearWolfId, protectedMode);
+                chickenId, wolfId, nearChickenId, nearWolfId, protectedMode, stagedResult);
+        if (testBoundedPublication) {
+            getLogger().info("PAPER_A01_G1_REAL_SAVED_STAGE_ATOMIC_PUBLISH_BOUNDED_PASS"
+                    + " totalPhysical=" + stagedResult.statistics().worldTotal().add(stagedResult.dead())
+                    + " personal=" + stagedResult.statistics().personal()
+                    + " free=" + stagedResult.free()
+                    + " dead=" + stagedResult.dead()
+                    + " TEST_ONLY_NO_WRITER_CLOSURE_NO_REAL_ADMISSION");
+        }
         getLogger().info("PAPER_A05_FULL_HYBRID_FOUR_SAVED_WWC_WWW_50000_ONCE_PASSED");
         if (protectedMode) {
             getLogger().info("PAPER_A06_REAL_PLAYERDATA_BAN_P25000_D30000_F1000_PASSED");
@@ -2910,13 +2925,17 @@ public final class WclServicesProbe extends JavaPlugin {
             co.surumene.simplecoins.domain.SettlementScanRunner.Staged selected,
             WorldStorageDiscovery.Manifest manifest,
             UUID chickenId, UUID wolfId, UUID nearChickenId, UUID nearWolfId,
-            boolean protectedMode) throws IOException {
+            boolean protectedMode, SettlementAccumulator.Result result) throws IOException {
+        if (result == null)
+            throw new IOException("Whole hybrid source had no committed monetary result");
         if (selected.savedContentWitness() == null
                 || !selected.requiredSourceIds().containsAll(manifest.requiredSourceIds())
                 || selected.report().regionFiles() != manifest.worldFiles().size()
                 || selected.report().playerFiles() != manifest.playerDataFiles().size())
             throw new IOException("Whole hybrid did not retain all required saved sources");
-        var result = selected.pending().commit(); // local-only, never publish
+        // The same staged accumulator was committed once: locally in the
+        // legacy fixture or through the exact source-attested isolated product
+        // publisher. Never commit the same generation a second time.
         BigInteger expectedDead = BigInteger.valueOf(protectedMode ? 30000 : 50000);
         BigInteger expectedFree = BigInteger.valueOf(protectedMode ? 1000 : 5000);
         BigInteger expectedPersonal = BigInteger.valueOf(protectedMode ? 25000 : 0);
