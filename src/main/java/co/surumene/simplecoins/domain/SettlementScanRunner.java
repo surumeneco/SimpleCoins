@@ -67,22 +67,79 @@ public final class SettlementScanRunner {
 
 
 
-    /** Pending accounting state only; no commit or publication is performed. */
-    public record Staged(SettlementAccumulator pending,
-                         WorldSnapshotTraversal.Report report,
-                         Set<String> requiredSourceIds,
-                         WorldSnapshotTraversal.ContentWitness savedContentWitness) {
-        /** Compatibility for isolated, manually created stage fixtures. */
+    /**
+     * Pending accounting state only; no commit or publication is performed.
+     *
+     * A caller-constructed Staged is permitted for legacy domain fixtures,
+     * but never inherits the producer-origin authority of the actual
+     * SettlementScanRunner traversal. In particular, a copied valid
+     * ContentWitness cannot authenticate an unrelated accumulator.
+     */
+    public static final class Staged {
+        private final SettlementAccumulator pending;
+        private final WorldSnapshotTraversal.Report report;
+        private final Set<String> requiredSourceIds;
+        private final WorldSnapshotTraversal.ContentWitness savedContentWitness;
+        // Only SettlementScanRunner's successful complete source traversal may
+        // set this immutable flag; no public constructor/copy method can do so.
+        private final boolean issuedByVerifiedTraversal;
+
+        /** Legacy isolated fixture; NOT eligible for source-attested publish. */
         public Staged(SettlementAccumulator pending,
                       WorldSnapshotTraversal.Report report,
                       Set<String> requiredSourceIds) {
-            this(pending, report, requiredSourceIds, null);
+            this(pending, report, requiredSourceIds, null, false);
         }
 
-        public Staged {
-            Objects.requireNonNull(pending);
-            Objects.requireNonNull(report);
-            requiredSourceIds = Set.copyOf(requiredSourceIds);
+        /** Public saved-witness fixture; NOT an authenticated source stage. */
+        public Staged(SettlementAccumulator pending,
+                      WorldSnapshotTraversal.Report report,
+                      Set<String> requiredSourceIds,
+                      WorldSnapshotTraversal.ContentWitness savedContentWitness) {
+            this(pending, report, requiredSourceIds, savedContentWitness, false);
+        }
+
+        private Staged(SettlementAccumulator pending,
+                       WorldSnapshotTraversal.Report report,
+                       Set<String> requiredSourceIds,
+                       WorldSnapshotTraversal.ContentWitness savedContentWitness,
+                       boolean issuedByVerifiedTraversal) {
+            this.pending = Objects.requireNonNull(pending, "pending settlement");
+            this.report = Objects.requireNonNull(report, "source traversal report");
+            this.requiredSourceIds = Set.copyOf(requiredSourceIds);
+            this.savedContentWitness = savedContentWitness;
+            this.issuedByVerifiedTraversal = issuedByVerifiedTraversal;
+        }
+
+        /** Package-private origin check for the internal protected publisher. */
+        boolean issuedByVerifiedTraversal() {
+            return issuedByVerifiedTraversal;
+        }
+
+        public SettlementAccumulator pending() { return pending; }
+        public WorldSnapshotTraversal.Report report() { return report; }
+        public Set<String> requiredSourceIds() { return requiredSourceIds; }
+        public WorldSnapshotTraversal.ContentWitness savedContentWitness() {
+            return savedContentWitness;
+        }
+
+        /** Preserve the four original record components' equality semantics. */
+        @Override public boolean equals(Object other) {
+            if (!(other instanceof Staged that)) return false;
+            return pending.equals(that.pending)
+                    && report.equals(that.report)
+                    && requiredSourceIds.equals(that.requiredSourceIds)
+                    && Objects.equals(savedContentWitness, that.savedContentWitness);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(pending, report, requiredSourceIds, savedContentWitness);
+        }
+
+        @Override public String toString() {
+            return "Staged[pending=" + pending + ", report=" + report
+                    + ", requiredSourceIds=" + requiredSourceIds
+                    + ", savedContentWitness=" + savedContentWitness + "]";
         }
     }
 
@@ -369,6 +426,6 @@ public final class SettlementScanRunner {
                     pending.completeSource(sourceId(entry.getValue()));
             }
         }
-        return new Staged(pending, verified.report(), required, verified.witness());
+        return new Staged(pending, verified.report(), required, verified.witness(), true);
     }
 }
