@@ -99,25 +99,30 @@ public final class WclServicesProbe extends JavaPlugin {
         boolean addItemProbe = Boolean.getBoolean("a01.inventoryAddItemClosureProbe");
         boolean removeItemProbe = Boolean.getBoolean("a01.inventoryRemoveItemClosureProbe");
         boolean clearProbe = Boolean.getBoolean("a01.inventoryClearClosureProbe");
-        if (addItemProbe || removeItemProbe || clearProbe) {
+        boolean clearSlotProbe = Boolean.getBoolean("a01.inventoryClearSlotClosureProbe");
+        if (addItemProbe || removeItemProbe || clearProbe || clearSlotProbe) {
             // A test JVM admits exactly one sealed-writer probe: one product
             // generation cannot be re-armed after it is faulted or sealed.
             int modes = (addItemProbe ? 1 : 0) + (removeItemProbe ? 1 : 0)
-                    + (clearProbe ? 1 : 0);
+                    + (clearProbe ? 1 : 0) + (clearSlotProbe ? 1 : 0);
             if (modes != 1) {
                 getLogger().severe("PAPER_A01_MULTIPLE_CHEST_CLOSURE_PROBES_REJECTED");
                 Runtime.getRuntime().halt(2);
                 return;
             }
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                String failed = clearProbe
-                        ? "PAPER_A01_REAL_CHEST_CLEAR_CLOSURE_PROBE_FAILED"
+                String failed = clearSlotProbe
+                        ? "PAPER_A01_REAL_CHEST_CLEAR_SLOT_CLOSURE_PROBE_FAILED"
+                        : clearProbe
+                                ? "PAPER_A01_REAL_CHEST_CLEAR_CLOSURE_PROBE_FAILED"
                         : removeItemProbe
                                 ? "PAPER_A01_REAL_CHEST_REMOVEITEM_CLOSURE_PROBE_FAILED"
                                 : "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED";
                 try {
-                    String outcome = clearProbe
-                            ? InventoryClearClosureProbe.execute()
+                    String outcome = clearSlotProbe
+                            ? InventoryClearSlotClosureProbe.execute()
+                            : clearProbe
+                                    ? InventoryClearClosureProbe.execute()
                             : removeItemProbe
                                     ? InventoryRemoveItemClosureProbe.execute()
                                     : InventoryAddItemClosureProbe.execute();
