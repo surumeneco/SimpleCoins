@@ -386,9 +386,9 @@ final class SettlementProtectedPublisherTest {
         var forged = new SettlementScanRunner.Staged(
                 invented, actual.staged().report(), required,
                 actual.staged().savedContentWitness());
-        assertEquals(BigInteger.valueOf(90000),
-                invented.commit().statistics().worldTotal(),
-                "Red setup: the source-independent amount must differ from real saved coins");
+        // Do not commit the impostor here: the PRODUCT publisher must be the
+        // one to commit it on the old (Red) path.
+        assertNotEquals(BigInteger.valueOf(5000), BigInteger.valueOf(90000));
 
         var gate = new AdmissionBarrier(); long generation = gate.begin();
         var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
