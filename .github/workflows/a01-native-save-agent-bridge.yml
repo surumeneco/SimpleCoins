@@ -14,6 +14,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md'
       - 'Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md'
+      - 'Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md'
       - 'tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/**'
       - 'Lifecycle/Works/simplecoins.a01.paper-pdc-inventory-agent-writers.md'
       - 'src/main/java/co/surumene/simplecoins/domain/PaperNativeSaveFenceAdapter.java'
@@ -87,6 +88,7 @@ jobs:
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-limited-fence-gap.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.paper-clear-slot-limited-fence-gap.md
           python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.real-hopper-native-writer-boundary.md
+          python cat-runtime/.cat-system/scripts/cat_flow.py validate --work Lifecycle/Works/simplecoins.a01.hopper-event-veto-reachability.md
       - name: Execute product JUnit, build product and separate actual Java Agent jars
         shell: bash
         run: |
@@ -483,6 +485,47 @@ jobs:
             tail -180 agent-actual-hopper.log
             exit 1
           fi
+      - name: Verify real Paper Hopper move-event cancellation against monetary transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-hopper-veto/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-hopper-veto/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-hopper-veto/plugins/
+          printf 'eula=true\n' > smoke-actual-hopper-veto/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25592\n' \
+            > smoke-actual-hopper-veto/server.properties
+          cd smoke-actual-hopper-veto
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryHopperMoveEventVetoProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-hopper-veto.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED' agent-actual-hopper-veto.log; then
+            echo "Real Paper Hopper event-veto probe failed code=$status" >&2
+            tail -220 agent-actual-hopper-veto.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_WRITER_AGENT_BOOTSTRAP_INSTALLED_PASSIVE' agent-actual-hopper-veto.log
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-hopper-veto.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-hopper-veto.log
+          grep -F 'PAPER_A01_REAL_HOPPER_SOURCE' agent-actual-hopper-veto.log
+          for target in CRAFT NMS PDC INVENTORY EQUIPMENT WWC WWW; do
+            grep -F "SIMPLECOINS_WRITER_AGENT_${target}_EXACT_ENTRY_INSTRUMENTED" agent-actual-hopper-veto.log
+          done
+          grep -F 'PAPER_A01_REAL_HOPPER_EVENT_VETO_OBSERVED events=' agent-actual-hopper-veto.log
+          if grep -Fq 'PAPER_A01_REAL_HOPPER_EVENT_VETO_PHYSICAL_UNCHANGED_PASS' agent-actual-hopper-veto.log; then
+            echo 'PAPER_A01_REAL_HOPPER_EVENT_VETO_ONLY_LOCAL_SUCCESS'
+          elif grep -Fq 'PAPER_A01_REAL_HOPPER_EVENT_VETO_MONETARY_CHANGE_OBSERVED' agent-actual-hopper-veto.log; then
+            echo 'PAPER_A01_REAL_HOPPER_EVENT_CANCEL_UNRELIABLE_NEGATIVE_OBSERVED'
+          else
+            echo 'Hopper event veto not independently classified' >&2
+            tail -180 agent-actual-hopper-veto.log
+            exit 1
+          fi
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -498,5 +541,6 @@ jobs:
             smoke-actual-clear/agent-actual-clear.log
             smoke-actual-clear-slot/agent-actual-clear-slot.log
             smoke-actual-hopper/agent-actual-hopper.log
+            smoke-actual-hopper-veto/agent-actual-hopper-veto.log
           retention-days: 14
           if-no-files-found: ignore
