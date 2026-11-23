@@ -58,6 +58,9 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("reload".equals(phase)) reloadPhase(player);
                 else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
                 else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
+                else if ("product-coordinator-full".equals(phase)) productCoordinatorFullPhase(player);
+                else if ("product-coordinator-acked-reload".equals(phase))
+                    productCoordinatorAckedReloadPhase(player);
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
@@ -482,6 +485,118 @@ public final class PaperSaveProbe extends JavaPlugin {
         return !Bukkit.getOnlinePlayers().isEmpty();
     }
 
+    /**
+     * Alternate fourth JVM on a copy of the actual third-boot baseline: this
+     * must exercise the PRODUCT coordinator from plan through real Paper
+     * saveData, sealed fresh readback and durable ACK, not test glue.
+     */
+    private void productCoordinatorFullPhase(Player player) throws Exception {
+        player.loadData();
+        if (player.isOnline() || playerCountIsNonzero())
+            throw new IllegalStateException("Coordinator requires detached player and denied admission");
+        GrantLedger ledger = activeProductLedger();
+        var prior = ledger.historySnapshot();
+        if (prior.size() != 1 || !prior.getFirst().delivered()
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Coordinator input is not previous durable grant1");
+        var receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (receipt.active() || receipt.completedSequence() != 1)
+            throw new IllegalStateException("Coordinator prior PDC not completed seq1");
+        var before = readDisk(dataFile());
+        if (!SavedGrantReceiptNbt.readAndVerify(before, ledger, ID).equals(receipt))
+            throw new IllegalStateException("Coordinator persisted receipt not authentic");
+        var originalCoin = player.getInventory().getItem(0);
+        var stone = player.getInventory().getItem(9);
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        if (originalCoin == null || originalCoin.getAmount() != 1
+                || codec.identify(originalCoin).orElse(null) != CoinDenomination.FIVE_THOUSAND
+                || stone == null || stone.getType() != Material.STONE || stone.getAmount() != 2
+                || player.getInventory().getItem(1) != null)
+            throw new IllegalStateException("Coordinator prior inventory incorrect");
+        var grant = ledger.reserveCoins(ID, CoinDenomination.FIVE_THOUSAND, 1,
+                "a02-product-coordinator-real-save");
+        WriterEpochFence boundedTestOnly = new WriterEpochFence();
+        boundedTestOnly.arm(); // Isolated test only. NOT installed full writer closure.
+        var manifest = actualPlayerManifest();
+        var coordinatorClass = Class.forName(
+                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
+                true, PaperSaveProbe.class.getClassLoader());
+        var entry = coordinatorClass.getDeclaredMethod("saveAndFinalizeFirstBatch",
+                Player.class, GrantLedger.class, GrantLedger.Grant.class,
+                CoinItemCodec.class, WriterEpochFence.class,
+                WorldStorageDiscovery.Manifest.class, java.util.concurrent.Callable.class,
+                int.class, int.class);
+        entry.setAccessible(true);
+        final Object result;
+        try {
+            result = entry.invoke(null, player, ledger, grant, codec, boundedTestOnly,
+                    manifest, (java.util.concurrent.Callable<WorldStorageDiscovery.Manifest>)
+                        this::actualPlayerManifest, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        } catch (InvocationTargetException failure) {
+            Throwable root = failure.getCause();
+            if (root instanceof Exception cause) throw cause;
+            if (root instanceof Error cause) throw cause;
+            throw new IllegalStateException("Unexpected coordinator failure", root);
+        }
+        if (!(result instanceof java.util.Optional<?> option) || option.isEmpty()
+                || !(option.orElseThrow() instanceof SavedGrantDeliveryReadback.Proof proof)
+                || proof.receipt().active() || proof.receipt().completedSequence() != 2
+                || !java.math.BigInteger.valueOf(5000).equals(proof.matchedMonetaryValue())
+                || boundedTestOnly.state() != WriterEpochFence.State.SEALED
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Product coordinator failed to physically save/ACK");
+        GrantLedger reopened = new GrantLedger(grantDirectory());
+        var saved = readDisk(dataFile());
+        var money = SavedPlayerAssets.extract(saved);
+        if (reopened.historySnapshot().size() != 2
+                || reopened.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                || !reopened.pending(ID).isEmpty()
+                || !java.math.BigInteger.valueOf(5000).equals(money.get("inventory:0"))
+                || !java.math.BigInteger.valueOf(5000).equals(money.get("inventory:1"))
+                || !SavedGrantReceiptNbt.readAndVerify(saved, reopened, ID)
+                    .equals(proof.receipt())
+                || player.getInventory().getItem(9).getAmount() != 2)
+            throw new IllegalStateException("Product coordinator ACK disagrees with saved NBT");
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_SAVED_ACK_PASSED"
+                + " physical=10000 completed=2 grants=2 pending=0 TEST_ONLY_FENCE");
+    }
+
+    /** New independent JVM readback on the copied real Paper saved world. */
+    private void productCoordinatorAckedReloadPhase(Player player) throws Exception {
+        byte[] sourceBefore = Files.readAllBytes(dataFile());
+        byte[] journalBefore = Files.readAllBytes(grantDirectory().resolve("2.grant"));
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 2 || history.stream().anyMatch(g -> !g.delivered())
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Coordinator durable ACK missing after real restart");
+        var receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (receipt.active() || receipt.completedSequence() != 2
+                || !SavedGrantReceiptNbt.readAndVerify(readDisk(dataFile()), ledger, ID)
+                        .equals(receipt))
+            throw new IllegalStateException("Coordinator PDC missing after real restart");
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        for (int slot : new int[] {0, 1}) {
+            ItemStack item = player.getInventory().getItem(slot);
+            if (item == null || item.getAmount() != 1
+                    || coins.identify(item).orElse(null) != CoinDenomination.FIVE_THOUSAND)
+                throw new IllegalStateException("Coordinator physical coin missing after reboot");
+        }
+        var unrelated = player.getInventory().getItem(9);
+        if (unrelated == null || unrelated.getType() != Material.STONE
+                || unrelated.getAmount() != 2
+                || !java.math.BigInteger.valueOf(10_000).equals(
+                        SavedPlayerAssets.extract(readDisk(dataFile())).values().stream()
+                            .reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add))
+                || !Arrays.equals(sourceBefore, Files.readAllBytes(dataFile()))
+                || !Arrays.equals(journalBefore,
+                        Files.readAllBytes(grantDirectory().resolve("2.grant"))))
+            throw new IllegalStateException("Coordinator restarted money or unrelated bytes changed");
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED"
+                + " total=10000 grants=2 pending=0");
+    }
+
     private void verifiedDeliveryPhase(Player player) throws Exception {
         Path file = dataFile();
         if (!Files.isRegularFile(file))
@@ -643,29 +758,87 @@ public final class PaperSaveProbe extends JavaPlugin {
                 || stage.nextReceipt().partialValue() != 640_000)
             throw new IllegalStateException("Incorrect first-batch two-stack plan");
 
-        ItemStack[] candidate = PaperGrantInventoryMaterializer.buildCopy(stage,
-                PaperGrantReceiptPdc.read(player.getPersistentDataContainer()),
-                player.getInventory().getStorageContents(), codec);
-        player.getInventory().setStorageContents(candidate);
-        PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
-        player.saveData();
+        // Use the actual PRODUCT batch orchestration, not test-owned
+        // placement/save/readback steps. Reuse the independently precomputed
+        // plan only as an oracle for the resulting authoritative UUID.dat.
+        WriterEpochFence firstBatchEpoch = new WriterEpochFence();
+        firstBatchEpoch.arm(); // test-only, still NOT installed whole-writer proof
+        var paperCoordinator = Class.forName(
+                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
+                true, PaperSaveProbe.class.getClassLoader());
+        var realBatch = paperCoordinator.getDeclaredMethod("saveAndFinalizeFirstBatch",
+                Player.class, GrantLedger.class, GrantLedger.Grant.class,
+                CoinItemCodec.class, WriterEpochFence.class,
+                WorldStorageDiscovery.Manifest.class, java.util.concurrent.Callable.class,
+                int.class, int.class);
+        realBatch.setAccessible(true);
+
+        // An actual 36/36-full inventory must neither mint, save, advance
+        // signed receipt nor ACK. The same authentic reservation is then
+        // retried after restoring its two originally empty storage slots.
+        byte[] sourceBeforeNoCapacity = Files.readAllBytes(file);
+        ItemStack[] vacantStorage = player.getInventory().getStorageContents();
+        ItemStack[] allOccupied = vacantStorage.clone();
+        allOccupied[3] = new ItemStack(Material.STONE, 1);
+        allOccupied[4] = new ItemStack(Material.STONE, 1);
+        player.getInventory().setStorageContents(allOccupied);
+        WriterEpochFence noCapacityEpoch = new WriterEpochFence();
+        noCapacityEpoch.arm(); // test-only, not a release writer closure
+        try {
+            Object noSpace = realBatch.invoke(null, player, ledger, grant, codec,
+                    noCapacityEpoch, actualPlayerManifest(),
+                    (java.util.concurrent.Callable<WorldStorageDiscovery.Manifest>)
+                        this::actualPlayerManifest, 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(noSpace instanceof java.util.Optional<?> empty)
+                    || empty.isPresent()
+                    || noCapacityEpoch.state() != WriterEpochFence.State.OPEN
+                    || ledger.pending(ID).size() != 1
+                    || !receipt.equals(
+                            PaperGrantReceiptPdc.read(player.getPersistentDataContainer()))
+                    || !Arrays.equals(sourceBeforeNoCapacity, Files.readAllBytes(file)))
+                throw new IllegalStateException("Full storage caused false physical issuance");
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Exception error) throw error;
+            if (cause instanceof Error error) throw error;
+            throw new IllegalStateException("Unexpected full inventory failure", cause);
+        } finally {
+            player.getInventory().setStorageContents(vacantStorage);
+        }
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_NO_CAPACITY_PENDING_NO_SAVE_PASSED");
+
+        final SavedGrantDeliveryReadback.Proof productPartial;
+        try {
+            Object result = realBatch.invoke(null, player, ledger, grant, codec,
+                    firstBatchEpoch, actualPlayerManifest(),
+                    (java.util.concurrent.Callable<WorldStorageDiscovery.Manifest>)
+                        this::actualPlayerManifest, 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(result instanceof java.util.Optional<?> option) || option.isEmpty()
+                    || !(option.orElseThrow() instanceof SavedGrantDeliveryReadback.Proof))
+                throw new IllegalStateException("Actual Paper first-batch coordinator refused grant");
+            productPartial = (SavedGrantDeliveryReadback.Proof) option.orElseThrow();
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Exception error) throw error;
+            if (cause instanceof Error error) throw error;
+            throw new IllegalStateException("Unexpected partial product failure", cause);
+        }
 
         var partialManifest = actualPlayerManifest();
         var proof = SavedGrantDeliveryFileReadback.verify(partialManifest, ledger, ID,
                 stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
-        if (!proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
+        if (!proof.equals(productPartial)
+                || !proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
                 || proof.matchedStacks() != 2
                 || !proof.matchedMonetaryValue()
-                        .equals(java.math.BigInteger.valueOf(640_000)))
-            throw new IllegalStateException("Partial physical saved receipt did not match");
-        var productPartial = protectedProductSavedStage(
-                "co.surumene.simplecoins.paper.SavedGrantProtectedPartialStage",
-                "verifyPartial", partialManifest, ledger, grant, stage, before);
-        if (!proof.equals(productPartial) || ledger.pending(ID).size() != 1
+                        .equals(java.math.BigInteger.valueOf(640_000))
+                || firstBatchEpoch.state() != WriterEpochFence.State.SEALED
+                || ledger.pending(ID).size() != 1
                 || ledger.historySnapshot().getLast().delivered())
-            throw new IllegalStateException("Product partial stage prematurely ACKed");
+            throw new IllegalStateException("Product first partial saved batch prematurely ACKed");
         getLogger().info("PAPER_A02_PRODUCT_PROTECTED_PARTIAL_REAL_SAVE_640000_PENDING_PASSED"
                 + " TEST_ONLY_NO_INSTALLED_WRITER_CLOSURE");
+        getLogger().info("PAPER_A02_PRODUCT_COORDINATOR_FIRST_PARTIAL_REAL_SAVE_640000_PENDING_PASSED");
         if (PaperGrantInventorySlotPlan.stage(ledger, ID, grant,
                 stage.nextReceipt(), player.getInventory().getStorageContents()).isPresent())
             throw new IllegalStateException("Full storage permitted a duplicate extra batch");
