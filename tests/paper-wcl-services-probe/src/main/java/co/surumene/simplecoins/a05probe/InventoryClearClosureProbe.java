@@ -76,7 +76,8 @@ public final class InventoryClearClosureProbe {
                 "net.minecraft.world.level.storage.PlayerDataStorage",
                 "org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer",
                 "org.bukkit.craftbukkit.inventory.CraftInventory",
-                "org.bukkit.craftbukkit.inventory.CraftEntityEquipment"}) {
+                "org.bukkit.craftbukkit.inventory.CraftEntityEquipment",
+                "net.minecraft.world.level.block.entity.HopperBlockEntity"}) {
             Class.forName(name, false, craftLoader);
         }
         Class.forName("co.surumene.whatawonderfulchicken.service.WonderfulChickenStore",
@@ -91,7 +92,7 @@ public final class InventoryClearClosureProbe {
         Set<String> targets = (Set<String>) hook.getMethod("instrumentedTargets")
                 .invoke(null);
         require(targets.equals(Set.of(
-                "CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW")),
+                "CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW", "HOPPER")),
                 "Exact installed Agent class/descriptor set incomplete: " + targets);
         require(hook.getMethod("mode").invoke(null).toString().equals("PASSIVE")
                 && ((Number) hook.getMethod("inFlight").invoke(null)).intValue() == 0,

@@ -23,7 +23,7 @@ public final class WriterEpochHook {
     private static final Object LOCK = new Object();
     private static final ThreadLocal<ArrayDeque<Frame>> STACK =
             ThreadLocal.withInitial(ArrayDeque::new);
-    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW");
+    private static final Set<String> TARGETS = Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW", "HOPPER");
     private static final Set<String> TRANSFORMED = new HashSet<>();
     private static Mode mode = Mode.PASSIVE;
     private static int passiveActive;
@@ -121,6 +121,28 @@ public final class WriterEpochHook {
     public static void beforeWww() { before("WWW"); }
     public static void afterWww() { after("WWW"); }
 
+    /**
+     * A denied pull is an absent native movement, not a thrown exception
+     * escaping through the ordinary Paper tick loop. Product and bridge have
+     * already been invalidated by the refused writer admission.
+     */
+    public static boolean beforeHopper() {
+        synchronized (LOCK) {
+            if (mode == Mode.FAULTED) return false;
+        }
+        try {
+            before("HOPPER");
+            return true;
+        } catch (IllegalStateException refused) {
+            synchronized (LOCK) {
+                if (mode != Mode.FAULTED) throw refused;
+            }
+            return false;
+        }
+    }
+
+    public static void afterHopper() { after("HOPPER"); }
+
     private static void before(String target) {
         synchronized (LOCK) {
             if (mode == Mode.FAULTED)
@@ -135,7 +157,7 @@ public final class WriterEpochHook {
                 boolean nativeSaveChild = "NMS".equals(target)
                         && "CRAFT".equals(stack.peekLast().target());
                 boolean lowerLevelMutation = "PDC".equals(target) || "INVENTORY".equals(target)
-                        || "EQUIPMENT".equals(target);
+                        || "EQUIPMENT".equals(target) || "HOPPER".equals(target);
                 if (!nativeSaveChild && !lowerLevelMutation) {
                     faultLocked();
                     throw new IllegalStateException("Unrecognized nested writer ancestry");

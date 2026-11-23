@@ -40,6 +40,10 @@ public final class PaperNativeWriterAgent {
             + "whatawonderfulchicken/data/WonderfulChickenData;)V";
     private static final String EQUIPMENT_SET = "(Lorg/bukkit/inventory/ItemStack;)V";
     private static final String EQUIPMENT_SET_SILENT = "(Lorg/bukkit/inventory/ItemStack;Z)V";
+    // Exact actual Paper26.2 NMS call observed before InventoryMoveItemEvent.
+    private static final String HOPPER_PULL = "(Lnet/minecraft/world/level/Level;"
+            + "Lnet/minecraft/world/level/block/entity/Hopper;"
+            + "Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;I)Z";
     private static final String WWW_SAVE = "(Lorg/bukkit/entity/Wolf;Lco/surumene/www/"
             + "individual/WonderfulWolfIndividual;)V";
 
@@ -50,7 +54,8 @@ public final class PaperNativeWriterAgent {
         INVENTORY("beforeInventory", "afterInventory", 3),
         EQUIPMENT("beforeEquipment", "afterEquipment", 2),
         WWC("beforeWwc", "afterWwc", 1),
-        WWW("beforeWww", "afterWww", 1);
+        WWW("beforeWww", "afterWww", 1),
+        HOPPER("beforeHopper", "afterHopper", 1);
 
         final String enterHook, returnHook;
         final int expectedMethods;
@@ -75,6 +80,7 @@ public final class PaperNativeWriterAgent {
                         && (desc.equals(EQUIPMENT_SET) || desc.equals(EQUIPMENT_SET_SILENT));
                 case WWC -> name.equals("save") && desc.equals(WWC_SAVE);
                 case WWW -> name.equals("saveAndRegister") && desc.equals(WWW_SAVE);
+                case HOPPER -> name.equals("hopperPull") && desc.equals(HOPPER_PULL);
             };
         }
     }
@@ -90,6 +96,7 @@ public final class PaperNativeWriterAgent {
             case "org/bukkit/craftbukkit/inventory/CraftEntityEquipment" -> Target.EQUIPMENT;
             case "co/surumene/whatawonderfulchicken/service/WonderfulChickenStore" -> Target.WWC;
             case "co/surumene/www/persistence/WonderfulWolfLoadedIndividuals" -> Target.WWW;
+            case "net/minecraft/world/level/block/entity/HopperBlockEntity" -> Target.HOPPER;
             default -> null;
         };
     }
@@ -127,8 +134,20 @@ public final class PaperNativeWriterAgent {
                                         private Label admitted, originalEnd, onException;
 
                                         @Override public void atStart(CodeBuilder code) {
-                                            code.invokestatic(BOOTSTRAP, target.enterHook,
-                                                    MethodTypeDesc.ofDescriptor("()V"));
+                                            if (target == Target.HOPPER) {
+                                                // An unadmitted pull must not debit source
+                                                // inventory or crash the ordinary server tick.
+                                                code.invokestatic(BOOTSTRAP, target.enterHook,
+                                                        MethodTypeDesc.ofDescriptor("()Z"));
+                                                Label enterBody = code.newLabel();
+                                                code.ifne(enterBody);
+                                                code.iconst_0();
+                                                code.ireturn();
+                                                code.labelBinding(enterBody);
+                                            } else {
+                                                code.invokestatic(BOOTSTRAP, target.enterHook,
+                                                        MethodTypeDesc.ofDescriptor("()V"));
+                                            }
                                             // Entry callback faults independently if it throws.
                                             admitted = code.newBoundLabel();
                                             originalEnd = code.newLabel();

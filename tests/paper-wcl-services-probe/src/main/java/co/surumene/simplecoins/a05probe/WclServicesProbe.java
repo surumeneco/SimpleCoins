@@ -102,21 +102,25 @@ public final class WclServicesProbe extends JavaPlugin {
         boolean clearSlotProbe = Boolean.getBoolean("a01.inventoryClearSlotClosureProbe");
         boolean hopperProbe = Boolean.getBoolean("a01.inventoryHopperTransferClosureProbe");
         boolean hopperEventVetoProbe = Boolean.getBoolean("a01.inventoryHopperMoveEventVetoProbe");
+        boolean hopperPrebodyProbe = Boolean.getBoolean("a01.inventoryHopperPrebodyProbe");
         if (addItemProbe || removeItemProbe || clearProbe || clearSlotProbe
-                || hopperProbe || hopperEventVetoProbe) {
+                || hopperProbe || hopperEventVetoProbe || hopperPrebodyProbe) {
             // A test JVM admits exactly one sealed-writer probe: one product
             // generation cannot be re-armed after it is faulted or sealed.
             int modes = (addItemProbe ? 1 : 0) + (removeItemProbe ? 1 : 0)
                     + (clearProbe ? 1 : 0) + (clearSlotProbe ? 1 : 0)
-                    + (hopperProbe ? 1 : 0) + (hopperEventVetoProbe ? 1 : 0);
+                    + (hopperProbe ? 1 : 0) + (hopperEventVetoProbe ? 1 : 0)
+                    + (hopperPrebodyProbe ? 1 : 0);
             if (modes != 1) {
                 getLogger().severe("PAPER_A01_MULTIPLE_CHEST_CLOSURE_PROBES_REJECTED");
                 Runtime.getRuntime().halt(2);
                 return;
             }
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                String failed = hopperEventVetoProbe
-                        ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
+                String failed = hopperPrebodyProbe
+                        ? "PAPER_A01_REAL_HOPPER_PREBODY_PROBE_FAILED"
+                        : hopperEventVetoProbe
+                                ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
                         : hopperProbe
                                 ? "PAPER_A01_REAL_HOPPER_TRANSFER_CLOSURE_PROBE_FAILED"
                         : clearSlotProbe
@@ -127,6 +131,10 @@ public final class WclServicesProbe extends JavaPlugin {
                                 ? "PAPER_A01_REAL_CHEST_REMOVEITEM_CLOSURE_PROBE_FAILED"
                                 : "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED";
                 try {
+                    if (hopperPrebodyProbe) {
+                        InventoryHopperTransferClosureProbe.beginPrebody(this);
+                        return; // Classify 60 actual ordinary server ticks.
+                    }
                     if (hopperEventVetoProbe) {
                         InventoryHopperTransferClosureProbe.beginEventVeto(this);
                         return; // Real ticks complete before JVM exit.

@@ -34,9 +34,17 @@ public final class AgentBridgeIsolationMain {
         new co.surumene.www.persistence.WonderfulWolfLoadedIndividuals().saveAndRegister(
                 new org.bukkit.entity.Wolf(),
                 new co.surumene.www.individual.WonderfulWolfIndividual());
+        // Load the exact synthetic NMS Hopper method before the transformer
+        // roster is verified. Its full sealed behavior has an independent JVM.
+        check(net.minecraft.world.level.block.entity.HopperBlockEntity.hopperPull(
+                        new net.minecraft.world.level.Level(),
+                        new net.minecraft.world.level.block.entity.Hopper(),
+                        new net.minecraft.world.Container(),
+                        new net.minecraft.world.item.ItemStack(), 0),
+                "passive NMS Hopper fixture refused a normal body");
         check(WriterEpochHook.mode() == WriterEpochHook.Mode.PASSIVE, "passive by default");
         check(WriterEpochHook.instrumentedTargets().equals(
-                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW")),
+                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW", "HOPPER")),
                 "missing native, PDC, inventory, equipment or WCL-owner transform/descriptor");
         check(WriterEpochHook.inFlight() == 0, "passive save leaked");
 
