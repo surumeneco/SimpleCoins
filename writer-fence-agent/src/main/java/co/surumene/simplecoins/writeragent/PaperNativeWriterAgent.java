@@ -21,7 +21,7 @@ import java.util.jar.JarFile;
 /**
  * Java 25 startup agent for seven bounded native/Paper/WCL writer families.
  * Native PlayerDataStorage and CraftPlayer plus PDC set/remove and inventory
- * setItem/addItem are not a complete plugin, NMS, asynchronous or direct-file writer
+ * setItem/addItem/removeItem are not a complete plugin, NMS, asynchronous or direct-file writer
  * universe. No observed hook count authorizes G0/G3 publication or Admission.
  */
 public final class PaperNativeWriterAgent {
@@ -34,6 +34,8 @@ public final class PaperNativeWriterAgent {
     private static final String INVENTORY_SET = "(ILorg/bukkit/inventory/ItemStack;)V";
     private static final String INVENTORY_ADD =
             "([Lorg/bukkit/inventory/ItemStack;)Ljava/util/HashMap;";
+    private static final String INVENTORY_REMOVE =
+            "([Lorg/bukkit/inventory/ItemStack;)Ljava/util/HashMap;";
     private static final String WWC_SAVE = "(Lorg/bukkit/entity/Chicken;Lco/surumene/"
             + "whatawonderfulchicken/data/WonderfulChickenData;)V";
     private static final String EQUIPMENT_SET = "(Lorg/bukkit/inventory/ItemStack;)V";
@@ -45,7 +47,7 @@ public final class PaperNativeWriterAgent {
         CRAFT("beforeCraft", "afterCraft", 1),
         NMS("beforeNms", "afterNms", 1),
         PDC("beforePdc", "afterPdc", 2),
-        INVENTORY("beforeInventory", "afterInventory", 2),
+        INVENTORY("beforeInventory", "afterInventory", 3),
         EQUIPMENT("beforeEquipment", "afterEquipment", 2),
         WWC("beforeWwc", "afterWwc", 1),
         WWW("beforeWww", "afterWww", 1);
@@ -67,7 +69,8 @@ public final class PaperNativeWriterAgent {
                 case PDC -> name.equals("set") && desc.equals(PDC_SET)
                         || name.equals("remove") && desc.equals(PDC_REMOVE);
                 case INVENTORY -> name.equals("setItem") && desc.equals(INVENTORY_SET)
-                        || name.equals("addItem") && desc.equals(INVENTORY_ADD);
+                        || name.equals("addItem") && desc.equals(INVENTORY_ADD)
+                        || name.equals("removeItem") && desc.equals(INVENTORY_REMOVE);
                 case EQUIPMENT -> name.equals("setItemInMainHand")
                         && (desc.equals(EQUIPMENT_SET) || desc.equals(EQUIPMENT_SET_SILENT));
                 case WWC -> name.equals("save") && desc.equals(WWC_SAVE);
