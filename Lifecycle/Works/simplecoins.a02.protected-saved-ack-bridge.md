@@ -82,5 +82,5 @@ This independent bounded implementation introduces an **internal package-private
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-process.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a02-grant-delivery-tce.md | — | — | — | @work/.cat-flow/cache/a02-protected-ack-model.json | @work/.cat-flow/cache/a02-protected-ack-vectors.json | @work/.cat-flow/cache/a02-protected-ack-queue.json | — | — | @work/.cat-flow/cache/a02-protected-ack-obligations.json | — | false |
