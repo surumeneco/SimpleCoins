@@ -11,6 +11,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.real-paper-protected-saved-stages.md'
       - 'Lifecycle/Works/simplecoins.a02.final-partial-protected-ack.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-saved-batch-product-coordinator.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantSavedBatchCoordinator.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStage.java'
       - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java'
@@ -53,6 +54,12 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.final-partial-protected-ack.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
@@ -238,6 +245,48 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
+      - name: Alternate Paper JVM hands off product saved ACK from main to worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a smoke smoke-product-async
+          cd smoke-product-async
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=product-async-commit -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-async-commit.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Product async real Paper stage failed (exit=$status)" >&2
+            tail -180 paper-a02-async-commit.log
+            exit 1
+          fi
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-async-commit.log
+          grep -F 'PAPER_A02_PRODUCT_ASYNC_MAIN_SAVED_BUT_PENDING_PASSED' paper-a02-async-commit.log
+          grep -F 'PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED physical=10000 grants=2 pending=0 worker=a02-product-saved-proof-worker' paper-a02-async-commit.log
+          grep -F 'PAPER_A02_PRODUCT_ASYNC_REPEATED_FINISH_DENIED_PASSED' paper-a02-async-commit.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-async-commit.log; then exit 1; fi
+          echo 'PAPER_A02_PRODUCT_MAIN_WORKER_REAL_SAVED_ACK_PASSED'
+      - name: Independent Paper reboot verifies off-main ACK survived without reissue
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke-product-async
+          set +e
+          timeout --signal=TERM --kill-after=10s 200s \
+            java -Da02.probe.phase=product-coordinator-acked-reload -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > paper-a02-async-reload.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Product off-main ACK cold reboot failed (exit=$status)" >&2
+            tail -180 paper-a02-async-reload.log
+            exit 1
+          fi
+          grep -F 'PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED total=10000 grants=2 pending=0' paper-a02-async-reload.log
+          if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-async-reload.log; then exit 1; fi
+          echo 'PAPER_A02_PRODUCT_MAIN_WORKER_COLD_RESTART_PASSED'
       - name: Alternate fourth Paper JVM executes real product grant save to protected ACK
         shell: bash
         run: |
@@ -584,5 +633,6 @@ jobs:
             smoke/*.log
             smoke-protected-final/*.log
             smoke-product-coordinator/*.log
+            smoke-product-async/*.log
           if-no-files-found: ignore
           retention-days: 7
