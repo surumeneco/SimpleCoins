@@ -37,19 +37,12 @@ final class PaperGrantSavedBatchCoordinator {
     private PaperGrantSavedBatchCoordinator() {}
 
     /**
-     * Physically place one authentic pending grant batch, persist real Paper
-     * playerdata, and perform the correct protected saved proof and ACK/no-ACK
-     * using the SAME externally installed, previously OPEN writer generation.
+     * Existing synchronous internal integration contract. Real runtime code
+     * MUST use saveAndSealFirstBatchOnMain() and finishOffMain(): discovery,
+     * forcing saved files and ACK are too expensive for the Paper main thread.
      *
-     * <p>Returns empty only when no storage slot is available, without touching
-     * the player or advancing receipt/journal. Any exception faults this epoch:
-     * the saved outcome may be indeterminate and the caller must cold-recover
-     * from genuine saved NBT and journal, never repeat issuance blindly.</p>
-     *
-     * <p>This synchronous entrypoint is currently exercised only with an
-     * isolated detached player and tiny disposable saved source. Large-world
-     * runtime scheduling must split main-thread Bukkit save from bounded async
-     * disk verification/drain; do not call it in normal player admission.</p>
+     * This legacy path remains unregistered and exists only to preserve the
+     * independently exercised historical Paper regression.
      */
     static Optional<SavedGrantDeliveryReadback.Proof> saveAndFinalizeFirstBatch(
             Player detached, GrantLedger ledger, GrantLedger.Grant grant,
@@ -57,14 +50,35 @@ final class PaperGrantSavedBatchCoordinator {
             WorldStorageDiscovery.Manifest beforeManifest,
             Callable<WorldStorageDiscovery.Manifest> discoverAfterSave,
             int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
+        Objects.requireNonNull(discoverAfterSave, "real saved source discovery");
+        Optional<SealedFirstBatch> saved = saveAndSealFirstBatchOnMain(
+                detached, ledger, grant, coins, fence, beforeManifest,
+                maximumCompressedBytes, maximumInflatedBytes);
+        return saved.isEmpty() ? Optional.empty()
+                : Optional.of(saved.orElseThrow().finishLegacyMainOnly(discoverAfterSave));
+    }
+
+    /**
+     * Phase one: only the real detached CraftPlayer's PDC/Inventory changes
+     * and Paper's own saveData() require the Paper primary thread. This
+     * stage never ACKs a grant; an asynchronous bounded verifier MUST finish
+     * the returned sealed result before this generation may be resumed.
+     *
+     * A full inventory returns Optional.empty() with no money/PDC save.
+     * The already-open installed writer epoch is supplied, never armed here.
+     */
+    static Optional<SealedFirstBatch> saveAndSealFirstBatchOnMain(
+            Player detached, GrantLedger ledger, GrantLedger.Grant grant,
+            CoinItemCodec coins, WriterEpochFence fence,
+            WorldStorageDiscovery.Manifest beforeManifest,
+            int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
         Objects.requireNonNull(fence, "externally audited writer fence");
         try {
             Objects.requireNonNull(detached, "real Paper detached player");
             Objects.requireNonNull(ledger, "durable grant ledger");
             Objects.requireNonNull(grant, "authentic reservation");
             Objects.requireNonNull(coins, "canonical coin codec");
-            Objects.requireNonNull(beforeManifest, "original source discovery");
-            Objects.requireNonNull(discoverAfterSave, "new authoritative discovery");
+            Objects.requireNonNull(beforeManifest, "origin-backed source discovery");
             if (!Bukkit.isPrimaryThread() || detached.isOnline()
                     || !Bukkit.getOnlinePlayers().isEmpty())
                 throw new IllegalStateException(
@@ -79,7 +93,6 @@ final class PaperGrantSavedBatchCoordinator {
                     || grant.denomination() == null
                     || !ledger.pending(player).contains(grant))
                 throw new IllegalStateException("Not a genuine pending typed grant");
-            // A full-world manifest made up by a caller is insufficient.
             if (beforeManifest.origin() == null)
                 throw new IOException("Saved playerdata discovery is not origin-backed");
             beforeManifest.requireUnchangedDiscovery();
@@ -105,7 +118,6 @@ final class PaperGrantSavedBatchCoordinator {
                     PaperGrantInventorySlotPlan.stage(
                             ledger, player, grant, savedReceipt, originalStorage);
             if (planned.isEmpty()) {
-                // No new physical money, receipt or journal ACK on a full inventory.
                 beforeWitness.requireUnchanged();
                 return Optional.empty();
             }
@@ -117,46 +129,137 @@ final class PaperGrantSavedBatchCoordinator {
                     detached.getInventory().getStorageContents());
             beforeWitness.requireUnchanged();
 
-            // The ONLY mutation in this coordinator, and the real Paper
-            // persistence call. The void return does not mean durability.
             detached.getInventory().setStorageContents(candidate);
             PaperGrantReceiptPdc.write(
                     detached.getPersistentDataContainer(), plan.nextReceipt());
-            detached.saveData();
+            detached.saveData(); // void return MUST NOT be interpreted as durable success
 
-            // No point-in-time file hash or event callback may authorize ACK.
-            // From here on new roots must be excluded, all admitted work
-            // completed, and file/dir fsync + physical readback guarded until
-            // the actual durable ledger commit returns.
+            // The transition to SEALED occurs immediately after real Paper
+            // saveData. No subsequent filesystem traversal or ACK on main.
             WriterEpochFence.Seal seal = fence.seal();
-            fence.requireDrained(seal);
-            WorldStorageDiscovery.Manifest afterManifest;
-            try {
-                afterManifest = discoverAfterSave.call();
-            } catch (Exception external) {
-                throw new IOException("Authoritative discovery failed after Paper save", external);
-            }
-            if (afterManifest == null || afterManifest.origin() == null
-                    || !file.equals(afterManifest.playerDataFiles().get(player)))
-                throw new IOException("Paper saved playerdata source changed identity");
-
-            SavedGrantDeliveryReadback.Proof proof = plan.nextReceipt().active()
-                    ? SavedGrantProtectedPartialStage.verifyPartial(
-                            fence, seal, afterManifest, ledger, player, grant,
-                            plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes)
-                    : SavedGrantProtectedAckStage.finish(
-                            fence, seal, afterManifest, ledger, player, grant,
-                            plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes);
-            fence.requireDrained(seal);
-            if (plan.nextReceipt().active() == ledger.pending(player).isEmpty())
-                throw new IllegalStateException(
-                        "Partial/complete grant acknowledgement differs from saved receipt");
-            return Optional.of(proof);
+            fence.requireDrained(seal); // never await other writers on main
+            return Optional.of(new SealedFirstBatch(fence, seal, beforeManifest,
+                    file, ledger, player, grant, plan, savedBefore,
+                    maximumCompressedBytes, maximumInflatedBytes));
         } catch (IOException | RuntimeException | Error failure) {
-            // A failed save/readback/ACK is not a permission to roll back
-            // only the in-memory half and then issue another batch.
+            // A physical/PDC save may have partially persisted. No in-memory
+            // rewind or blind reissue is allowed after an exception.
             fence.invalidate();
             throw failure;
+        }
+    }
+
+    /**
+     * Opaque one-shot custody of a post-save SEALED writer generation.
+     * The coordinator never retains a Bukkit Player or World object here;
+     * only immutable discovery inputs, the staged saved NBT transition and
+     * the authentic ledger/epoch can cross the main/worker boundary.
+     */
+    static final class SealedFirstBatch {
+        private final WriterEpochFence fence;
+        private final WriterEpochFence.Seal seal;
+        private final WorldStorageDiscovery.Manifest original;
+        private final Path playerdataFile;
+        private final GrantLedger ledger;
+        private final UUID player;
+        private final GrantLedger.Grant grant;
+        private final PaperGrantInventorySlotPlan plan;
+        private final Map<String, Object> before;
+        private final int compressedLimit;
+        private final int inflatedLimit;
+        private final java.util.concurrent.atomic.AtomicBoolean attempted =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        private SealedFirstBatch(WriterEpochFence fence, WriterEpochFence.Seal seal,
+                WorldStorageDiscovery.Manifest original, Path playerdataFile,
+                GrantLedger ledger, UUID player, GrantLedger.Grant grant,
+                PaperGrantInventorySlotPlan plan, Map<String, Object> before,
+                int compressedLimit, int inflatedLimit) {
+            this.fence = fence;
+            this.seal = seal;
+            this.original = original;
+            this.playerdataFile = playerdataFile;
+            this.ledger = ledger;
+            this.player = player;
+            this.grant = grant;
+            this.plan = plan;
+            this.before = before;
+            this.compressedLimit = compressedLimit;
+            this.inflatedLimit = inflatedLimit;
+        }
+
+        /**
+         * Phase two: must run off Paper's primary thread. Rediscovers the
+         * authoritative source set strictly from already captured path/scope
+         * inputs, not from off-thread Bukkit access or a caller-supplied path.
+         * No source contains a mutable Paper object or Player reference.
+         *
+         * On success the caller still owns a SEALED epoch; policy for later
+         * resumption and full writer coverage are not established here.
+         */
+        SavedGrantDeliveryReadback.Proof finishOffMain() throws IOException {
+            return finish(false, null);
+        }
+
+        /** Unregistered legacy test-only synchronous callback compatibility. */
+        private SavedGrantDeliveryReadback.Proof finishLegacyMainOnly(
+                Callable<WorldStorageDiscovery.Manifest> discoverAfterSave)
+                throws IOException {
+            return finish(true, discoverAfterSave);
+        }
+
+        private SavedGrantDeliveryReadback.Proof finish(
+                boolean legacyMainThread,
+                Callable<WorldStorageDiscovery.Manifest> callback) throws IOException {
+            // Both successful completion and ambiguous failure are terminal.
+            // An accidental second caller may not redo the ACK from old NBT.
+            if (!attempted.compareAndSet(false, true)) {
+                fence.invalidate();
+                throw new IllegalStateException("Saved grant batch already attempted");
+            }
+            try {
+                if (Bukkit.isPrimaryThread() != legacyMainThread)
+                    throw new IllegalStateException(
+                            "Wrong execution thread for protected saved commit");
+                fence.requireDrained(seal);
+                WorldStorageDiscovery.Manifest fresh;
+                try {
+                    if (legacyMainThread) {
+                        fresh = Objects.requireNonNull(callback, "legacy test discovery").call();
+                    } else {
+                        WorldStorageDiscovery.DiscoveryOrigin source =
+                                original.origin();
+                        if (source == null)
+                            throw new IOException("Saved grant lacks immutable origin");
+                        fresh = WorldStorageDiscovery.discover(
+                                source.worldFolders(), source.scope(),
+                                source.maximumEntries(), source.sharedPlayerRoots());
+                    }
+                } catch (IOException failure) {
+                    throw failure;
+                } catch (Exception failure) {
+                    throw new IOException("Fresh playerdata discovery failed after Paper save", failure);
+                }
+                if (fresh == null || !Objects.equals(original.origin(), fresh.origin())
+                        || !playerdataFile.equals(fresh.playerDataFiles().get(player)))
+                    throw new IOException("Protected grant saved source changed identity or origin");
+
+                SavedGrantDeliveryReadback.Proof proof = plan.nextReceipt().active()
+                        ? SavedGrantProtectedPartialStage.verifyPartial(
+                                fence, seal, fresh, ledger, player, grant, plan, before,
+                                compressedLimit, inflatedLimit)
+                        : SavedGrantProtectedAckStage.finish(
+                                fence, seal, fresh, ledger, player, grant, plan, before,
+                                compressedLimit, inflatedLimit);
+                fence.requireDrained(seal);
+                if (plan.nextReceipt().active() == ledger.pending(player).isEmpty())
+                    throw new IllegalStateException(
+                            "Partial/complete grant acknowledgement differs from saved receipt");
+                return proof;
+            } catch (IOException | RuntimeException | Error failure) {
+                fence.invalidate();
+                throw failure;
+            }
         }
     }
 }
