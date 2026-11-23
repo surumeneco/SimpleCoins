@@ -8,6 +8,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-save-commit-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md'
+      - 'Lifecycle/Works/simplecoins.a02.real-paper-protected-saved-stages.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-before-save-sigkill-recovery.md'
@@ -38,6 +39,8 @@ jobs:
             --work Lifecycle/Works/simplecoins.a02.after-ack-crash-replay-verification.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-real-plan-save-readback.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
+            --work Lifecycle/Works/simplecoins.a02.real-paper-protected-saved-stages.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a02.paper-partial-receipt-restart.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
@@ -239,6 +242,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-verified-delivery.log
           grep -F 'PAPER_A02_UNSAVED_PLAN_FILE_READBACK_REJECTED_PASSED' paper-a02-verified-delivery.log
           grep -F 'PAPER_A02_REAL_PLAN_MATERIALIZER_SAVE_FILE_PROOF_PASSED' paper-a02-verified-delivery.log
+          grep -F 'PAPER_A02_PRODUCT_PROTECTED_FULL_REAL_SAVE_5000_ACK_PASSED' paper-a02-verified-delivery.log
           grep -F 'PAPER_A02_VERIFIED_FILE_PROOF_BEFORE_ACK_PASSED durableGrants=2 pending=0' paper-a02-verified-delivery.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-verified-delivery.log; then exit 1; fi
           echo 'PAPER_A02_REAL_PLAN_SAVE_PROOF_ACK_REAL_PAPER_PASSED'
@@ -280,6 +284,7 @@ jobs:
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-partial-save.log
           grep -F 'PAPER_A02_PARTIAL_640000_SAVED_NO_ACK_PASSED activeSequence=3 completed=2 slots=2' paper-a02-partial-save.log
+          grep -F 'PAPER_A02_PRODUCT_PROTECTED_PARTIAL_REAL_SAVE_640000_PENDING_PASSED' paper-a02-partial-save.log
           if grep -Fq 'Saving worlds' paper-a02-partial-save.log; then
             echo 'Paper began clean shutdown before partial-state SIGKILL' >&2
             exit 1
