@@ -77,6 +77,21 @@ final class PaperNativeSaveFenceAdapterTest {
     }
 
     @Test
+    void nativeHopperRootAndNestedMutationShareASealableProductEpoch() throws Exception {
+        WriterEpochFence fence = new WriterEpochFence();
+        PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);
+        fence.arm();
+        Object hopper = adapter.enter("HOPPER", null);
+        Object inventory = adapter.enter("INVENTORY", hopper);
+        assertEquals(2, fence.inFlight());
+        WriterEpochFence.Seal seal = fence.seal();
+        adapter.normalReturn(inventory);
+        adapter.normalReturn(hopper);
+        assertTrue(fence.awaitDrained(seal, 100));
+        assertThrows(IllegalStateException.class, () -> adapter.enter("HOPPER", null));
+    }
+
+    @Test
     void directNmsRootAndExceptionInvalidateOneEpoch() {
         WriterEpochFence fence = new WriterEpochFence();
         PaperNativeSaveFenceAdapter adapter = new PaperNativeSaveFenceAdapter(fence);
