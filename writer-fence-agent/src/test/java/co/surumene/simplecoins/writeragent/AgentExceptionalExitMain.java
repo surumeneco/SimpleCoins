@@ -31,8 +31,14 @@ public final class AgentExceptionalExitMain {
         new co.surumene.www.persistence.WonderfulWolfLoadedIndividuals().saveAndRegister(
                 new org.bukkit.entity.Wolf(),
                 new co.surumene.www.individual.WonderfulWolfIndividual());
+        require(net.minecraft.world.level.block.entity.HopperBlockEntity.hopperPull(
+                        new net.minecraft.world.level.Level(),
+                        new net.minecraft.world.level.block.entity.Hopper(),
+                        new net.minecraft.world.Container(),
+                        new net.minecraft.world.item.ItemStack(), 0),
+                "passive Hopper writer returned false");
         require(WriterEpochHook.instrumentedTargets().equals(
-                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW")),
+                Set.of("CRAFT", "NMS", "PDC", "INVENTORY", "EQUIPMENT", "WWC", "WWW", "HOPPER")),
                 "incomplete exact target registration");
         require(WriterEpochHook.inFlight() == 0, "prior normal writer leaked");
 
