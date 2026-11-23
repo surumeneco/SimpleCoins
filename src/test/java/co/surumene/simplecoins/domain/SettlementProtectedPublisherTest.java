@@ -366,4 +366,39 @@ final class SettlementProtectedPublisherTest {
         assertEquals(BigInteger.valueOf(5000),
                 publisher.current().orElseThrow().statistics().worldTotal());
     }
+
+    /**
+     * An authentic saved byte witness is not an authorization to substitute
+     * an unrelated accumulator. The original A01 stage API was a public
+     * record, so this impostor had every source stamp yet invented 90,000C.
+     */
+    @Test void rejectsForgedAccumulatorWithAuthenticSourceWitness() throws Throwable {
+        savedCoin(PLAYER, true); // actual physical value: exactly 5,000C
+        var actual = realStage();
+        var required = actual.staged().requiredSourceIds();
+        var invented = new SettlementAccumulator(
+                new WorldScope(true, Set.of(), Set.of()), required);
+        String firstSource = required.stream().findFirst().orElseThrow();
+        invented.accept(new SettlementAccumulator.Asset(firstSource,
+                "injected/artificial/coin", null, PLAYER, false, false,
+                true, BigInteger.valueOf(90000), "unverified/value"));
+        for (String source : required) invented.completeSource(source);
+        var forged = new SettlementScanRunner.Staged(
+                invented, actual.staged().report(), required,
+                actual.staged().savedContentWitness());
+        // Do not commit the impostor here: the PRODUCT publisher must be the
+        // one to commit it on the old (Red) path.
+        assertNotEquals(BigInteger.valueOf(5000), BigInteger.valueOf(90000));
+
+        var gate = new AdmissionBarrier(); long generation = gate.begin();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        var publisher = new Subject(fence, seal, gate, () -> true, () -> true);
+        assertThrows(IOException.class, () ->
+                publisher.staged(generation, forged, actual.manifest(), allEvidence()),
+                "A genuine file hash cannot authenticate an unrelated constructed accumulator");
+        assertEquals(AdmissionBarrier.State.FAILED, gate.state());
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertFalse(publisher.mayAdmit());
+        assertTrue(publisher.current().isEmpty());
+    }
 }
