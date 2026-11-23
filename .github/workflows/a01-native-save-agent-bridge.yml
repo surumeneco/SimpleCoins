@@ -526,6 +526,37 @@ jobs:
           grep -F 'PAPER_A01_REAL_HOPPER_OUTPUT_PASSIVE_BASELINE' agent-actual-hopper-output.log
           grep -E 'PAPER_A01_REAL_HOPPER_OUTPUT_(UNCOVERED_WRITER|PARTIAL_BEFORE_FAULT|EXISTING_HOOK_REFUSED)' agent-actual-hopper-output.log
           echo 'PAPER_A01_REAL_HOPPER_OUTPUT_CLASSIFIED_NOT_GLOBAL_G0_CLOSURE'
+      - name: Demand real Paper Hopper output prebody exclusion before physical money movement
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-actual-hopper-output-prebody/plugins
+          cp smoke-native-agent/paper.jar smoke-actual-hopper-output-prebody/paper.jar
+          cp smoke-actual-owners/plugins/*.jar smoke-actual-hopper-output-prebody/plugins/
+          printf 'eula=true\n' > smoke-actual-hopper-output-prebody/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25595\n' \
+            > smoke-actual-hopper-output-prebody/server.properties
+          cd smoke-actual-hopper-output-prebody
+          set +e
+          timeout --signal=TERM --kill-after=10s 190s \
+            java -Dsimplecoins.writerAgent.bootstrapJar="$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceBootstrap.jar" \
+              -javaagent:"$GITHUB_WORKSPACE/writer-fence-agent/build/libs/SimpleCoinsWriterFenceAgent.jar" \
+              -Da01.inventoryHopperOutputPrebodyProbe=true -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > agent-actual-hopper-output-prebody.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || grep -Fq 'PAPER_A01_REAL_HOPPER_OUTPUT_PROBE_FAILED' agent-actual-hopper-output-prebody.log; then
+            echo "Actual Hopper output observation failed status=$status" >&2
+            tail -180 agent-actual-hopper-output-prebody.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound=true' agent-actual-hopper-output-prebody.log
+          grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' agent-actual-hopper-output-prebody.log
+          grep -F 'PAPER_A01_REAL_HOPPER_OUTPUT_NATIVE_STACK' agent-actual-hopper-output-prebody.log
+          grep -F 'PAPER_A01_REAL_HOPPER_OUTPUT_PASSIVE_BASELINE' agent-actual-hopper-output-prebody.log
+          grep -E 'PAPER_A01_REAL_HOPPER_OUTPUT_(UNCOVERED_WRITER|PARTIAL_BEFORE_FAULT|EXISTING_HOOK_REFUSED)' agent-actual-hopper-output-prebody.log
+          grep -F 'PAPER_A01_REAL_HOPPER_OUTPUT_PREBODY_NO_MUTATION_PASS' agent-actual-hopper-output-prebody.log
+          echo 'PAPER_A01_REAL_HOPPER_OUTPUT_PREBODY_FAILCLOSED_PASS'
       - name: Preserve exact execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -543,5 +574,6 @@ jobs:
             smoke-actual-clear-slot/agent-actual-clear-slot.log
             smoke-actual-hopper-prebody/agent-actual-hopper-prebody.log
             smoke-actual-hopper-output/agent-actual-hopper-output.log
+            smoke-actual-hopper-output-prebody/agent-actual-hopper-output-prebody.log
           retention-days: 14
           if-no-files-found: ignore
