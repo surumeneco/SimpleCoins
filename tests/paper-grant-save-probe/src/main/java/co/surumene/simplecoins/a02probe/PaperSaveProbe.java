@@ -9,6 +9,9 @@ import co.surumene.simplecoins.domain.PlayerDataReader;
 import co.surumene.simplecoins.domain.SavedPlayerAssets;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
+import co.surumene.simplecoins.domain.WriterEpochFence;
+import co.surumene.simplecoins.paper.SavedGrantDeliveryReadback;
+import java.lang.reflect.InvocationTargetException;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
 import co.surumene.simplecoins.paper.PaperGrantInventoryMaterializer;
@@ -435,6 +438,49 @@ public final class PaperSaveProbe extends JavaPlugin {
      *
      * This is a CI-only caller, NOT an enabled production delivery path.
      */
+    /**
+     * Test-only invocation of the REAL unregistered product saved-stage
+     * classes. All writer admission proof here is fixture-local: these
+     * barriers were NOT installed around Paper's preceding save operation.
+     */
+    private SavedGrantDeliveryReadback.Proof protectedProductSavedStage(
+            String productClass, String operation,
+            WorldStorageDiscovery.Manifest savedManifest, GrantLedger ledger,
+            GrantLedger.Grant grant, PaperGrantInventorySlotPlan stage,
+            Map<String, Object> savedBefore) throws Exception {
+        if (!Bukkit.isPrimaryThread() || playerCountIsNonzero())
+            throw new IllegalStateException("Product-stage Paper probe is not isolated");
+        WriterEpochFence boundedTestOnly = new WriterEpochFence();
+        boundedTestOnly.arm();
+        WriterEpochFence.Seal seal = boundedTestOnly.seal();
+        Class<?> stageClass = Class.forName(productClass, true,
+                PaperSaveProbe.class.getClassLoader());
+        var finish = stageClass.getDeclaredMethod(operation, WriterEpochFence.class,
+                WriterEpochFence.Seal.class, WorldStorageDiscovery.Manifest.class,
+                GrantLedger.class, UUID.class, GrantLedger.Grant.class,
+                PaperGrantInventorySlotPlan.class, Map.class, int.class, int.class);
+        finish.setAccessible(true);
+        final SavedGrantDeliveryReadback.Proof result;
+        try {
+            result = (SavedGrantDeliveryReadback.Proof) finish.invoke(null,
+                    boundedTestOnly, seal, savedManifest, ledger, ID, grant, stage,
+                    savedBefore, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        } catch (InvocationTargetException failure) {
+            Throwable underlying = failure.getCause();
+            if (underlying instanceof Exception error) throw error;
+            if (underlying instanceof Error error) throw error;
+            throw new IllegalStateException("Unknown product protected stage failure", underlying);
+        }
+        if (boundedTestOnly.state() != WriterEpochFence.State.SEALED)
+            throw new IllegalStateException("Bounded product stage did not retain sealed epoch");
+        boundedTestOnly.requireDrained(seal);
+        return result;
+    }
+
+    private static boolean playerCountIsNonzero() {
+        return !Bukkit.getOnlinePlayers().isEmpty();
+    }
+
     private void verifiedDeliveryPhase(Player player) throws Exception {
         Path file = dataFile();
         if (!Files.isRegularFile(file))
@@ -527,7 +573,16 @@ public final class PaperSaveProbe extends JavaPlugin {
                 + " retainedPriorCoin=true retainedOtherStorage=true"
                 + " savedReceipt=" + proof.receipt().completedSequence());
 
-        ledger.acknowledge(nextGrant, proof.receipt().completedSequence());
+        // Use the actual package-private product saved+ACK implementation
+        // instead of a direct low-level acknowledge from a stale Proof.
+        var actualProductProof = protectedProductSavedStage(
+                "co.surumene.simplecoins.paper.SavedGrantProtectedAckStage",
+                "finish", afterManifest, ledger, nextGrant, stage, before);
+        if (!actualProductProof.equals(proof)
+                || ledger.pending(ID).size() != 0)
+            throw new IllegalStateException("Protected real Paper 5000C proof/ACK was inconsistent");
+        getLogger().info("PAPER_A02_PRODUCT_PROTECTED_FULL_REAL_SAVE_5000_ACK_PASSED"
+                + " TEST_ONLY_NO_INSTALLED_WRITER_CLOSURE");
         GrantLedger fresh = new GrantLedger(grantDirectory());
         if (fresh.historySnapshot().size() != 2 || !fresh.pending(ID).isEmpty()
                 || fresh.historySnapshot().stream().anyMatch(g -> !g.delivered()))
@@ -594,13 +649,22 @@ public final class PaperSaveProbe extends JavaPlugin {
         PaperGrantReceiptPdc.write(player.getPersistentDataContainer(), stage.nextReceipt());
         player.saveData();
 
-        var proof = SavedGrantDeliveryFileReadback.verify(actualPlayerManifest(), ledger, ID,
+        var partialManifest = actualPlayerManifest();
+        var proof = SavedGrantDeliveryFileReadback.verify(partialManifest, ledger, ID,
                 stage, before, 16 * 1024 * 1024, 64 * 1024 * 1024);
         if (!proof.receipt().equals(stage.nextReceipt()) || !proof.receipt().active()
                 || proof.matchedStacks() != 2
                 || !proof.matchedMonetaryValue()
                         .equals(java.math.BigInteger.valueOf(640_000)))
             throw new IllegalStateException("Partial physical saved receipt did not match");
+        var productPartial = protectedProductSavedStage(
+                "co.surumene.simplecoins.paper.SavedGrantProtectedPartialStage",
+                "verifyPartial", partialManifest, ledger, grant, stage, before);
+        if (!proof.equals(productPartial) || ledger.pending(ID).size() != 1
+                || ledger.historySnapshot().getLast().delivered())
+            throw new IllegalStateException("Product partial stage prematurely ACKed");
+        getLogger().info("PAPER_A02_PRODUCT_PROTECTED_PARTIAL_REAL_SAVE_640000_PENDING_PASSED"
+                + " TEST_ONLY_NO_INSTALLED_WRITER_CLOSURE");
         if (PaperGrantInventorySlotPlan.stage(ledger, ID, grant,
                 stage.nextReceipt(), player.getInventory().getStorageContents()).isPresent())
             throw new IllegalStateException("Full storage permitted a duplicate extra batch");
