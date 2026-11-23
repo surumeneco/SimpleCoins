@@ -42,6 +42,14 @@ final class SavedGrantProtectedAckStageTest {
 
     private void write(UUID player, GrantReceiptState receipt, boolean hasCoin,
                        String unrelatedItem) throws IOException {
+        write(player, receipt, hasCoin ? 1 : 0, unrelatedItem);
+    }
+
+    /** Save the real canonical 64-coin partial stack, not a receipt-only claim. */
+    private void write(UUID player, GrantReceiptState receipt, int coinCount,
+                       String unrelatedItem) throws IOException {
+        if (coinCount < 0 || coinCount > 64)
+            throw new IllegalArgumentException("Invalid test-only saved coin stack size");
         try (var gzip = new GZIPOutputStream(Files.newOutputStream(playerFile(player)));
              var out = new DataOutputStream(gzip)) {
             out.writeByte(10); out.writeUTF("");
@@ -51,11 +59,11 @@ final class SavedGrantProtectedAckStageTest {
             out.writeInt(savedReceipt.length); out.write(savedReceipt);
             out.writeByte(0);
             out.writeByte(9); out.writeUTF("Inventory");
-            out.writeByte(10); out.writeInt(hasCoin ? 2 : 1);
-            if (hasCoin) {
+            out.writeByte(10); out.writeInt(coinCount > 0 ? 2 : 1);
+            if (coinCount > 0) {
                 out.writeByte(1); out.writeUTF("Slot"); out.writeByte(0);
                 out.writeByte(8); out.writeUTF("id"); out.writeUTF("minecraft:paper");
-                out.writeByte(3); out.writeUTF("count"); out.writeInt(1);
+                out.writeByte(3); out.writeUTF("count"); out.writeInt(coinCount);
                 out.writeByte(10); out.writeUTF("components");
                 out.writeByte(8); out.writeUTF("minecraft:item_model");
                 out.writeUTF("simplecoins:coin_5000");
@@ -288,5 +296,85 @@ final class SavedGrantProtectedAckStageTest {
         assertEquals(0, replay.pending(player).size());
         assertEquals(1, replay.historySnapshot().size());
         assertTrue(replay.historySnapshot().getFirst().delivered());
+    }
+
+    /** Real partial product stage must NOT silently call GrantLedger ACK. */
+    private static SavedGrantDeliveryReadback.Proof executePartial(
+            WriterEpochFence fence, WriterEpochFence.Seal seal,
+            WorldStorageDiscovery.Manifest manifest, GrantLedger ledger,
+            UUID player, GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
+            Map<String, Object> savedBefore) throws Throwable {
+        Class<?> stage = Class.forName(
+                "co.surumene.simplecoins.paper.SavedGrantProtectedPartialStage");
+        var operation = stage.getDeclaredMethod("verifyPartial",
+                WriterEpochFence.class, WriterEpochFence.Seal.class,
+                WorldStorageDiscovery.Manifest.class, GrantLedger.class, UUID.class,
+                GrantLedger.Grant.class, PaperGrantInventorySlotPlan.class,
+                Map.class, int.class, int.class);
+        operation.setAccessible(true);
+        try {
+            return (SavedGrantDeliveryReadback.Proof) operation.invoke(null, fence, seal,
+                    manifest, ledger, player, grant, plan, savedBefore, 65536, 65536);
+        } catch (InvocationTargetException failure) {
+            throw failure.getCause();
+        }
+    }
+
+    @Test void partialRealSavedBatchMaintainsPendingNoAck() throws Throwable {
+        UUID player = UUID.randomUUID();
+        Path journalPath = temp.resolve("grants-partial-authentic");
+        GrantLedger ledger = new GrantLedger(journalPath);
+        var grant = ledger.reserveCoins(player, CoinDenomination.FIVE_THOUSAND,
+                65, "console");
+        var plan = fullPlan(ledger, player, grant);
+        assertTrue(plan.nextReceipt().active(), "Only first 64 of 65 coins may be delivered");
+        assertEquals(grant.sequence(), plan.nextReceipt().activeSequence());
+        assertEquals(320000L, plan.nextReceipt().partialValue());
+        assertEquals(1, plan.placements().size());
+        assertEquals(64, plan.placements().getFirst().count());
+
+        write(player, GrantReceiptState.empty(), 0, "minecraft:stone");
+        var before = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        write(player, plan.nextReceipt(), 64, "minecraft:stone");
+        var manifest = discovery();
+        var fence = new WriterEpochFence();
+        fence.arm();
+        var seal = fence.seal();
+        var proof = executePartial(fence, seal, manifest,
+                ledger, player, grant, plan, before);
+        assertEquals(plan.nextReceipt(), proof.receipt());
+        assertEquals(BigInteger.valueOf(320000), proof.matchedMonetaryValue());
+        assertEquals(1, proof.matchedStacks());
+        assertEquals(WriterEpochFence.State.SEALED, fence.state());
+        fence.requireDrained(seal);
+        var persisted = new GrantLedger(journalPath);
+        assertEquals(1, persisted.pending(player).size());
+        assertFalse(persisted.historySnapshot().getFirst().delivered(),
+                "A correct partial physical delivery must NOT acknowledge the entire grant");
+        var after = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        assertEquals(plan.nextReceipt(),
+                SavedGrantReceiptNbt.readAndVerify(after, persisted, player));
+        assertEquals(64, ((Number) ((Map<?, ?>) ((java.util.List<?>) after
+                .get("Inventory")).getFirst()).get("count")).intValue());
+    }
+
+    @Test void partialSavedCoinMissingFaultsAndKeepsPending() throws Throwable {
+        UUID player = UUID.randomUUID();
+        Path journalPath = temp.resolve("grants-partial-missing");
+        GrantLedger ledger = new GrantLedger(journalPath);
+        var grant = ledger.reserveCoins(player, CoinDenomination.FIVE_THOUSAND,
+                65, "console");
+        var plan = fullPlan(ledger, player, grant);
+        write(player, GrantReceiptState.empty(), 0, "minecraft:stone");
+        var before = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        write(player, plan.nextReceipt(), 0, "minecraft:stone");
+        var manifest = discovery();
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        assertThrows(IOException.class, () ->
+                executePartial(fence, seal, manifest, ledger, player, grant, plan, before));
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        var persisted = new GrantLedger(journalPath);
+        assertEquals(1, persisted.pending(player).size());
+        assertFalse(persisted.historySnapshot().getFirst().delivered());
     }
 }
