@@ -103,21 +103,24 @@ public final class WclServicesProbe extends JavaPlugin {
         boolean hopperProbe = Boolean.getBoolean("a01.inventoryHopperTransferClosureProbe");
         boolean hopperEventVetoProbe = Boolean.getBoolean("a01.inventoryHopperMoveEventVetoProbe");
         boolean hopperPrebodyProbe = Boolean.getBoolean("a01.inventoryHopperPrebodyProbe");
+        boolean hopperOutputProbe = Boolean.getBoolean("a01.inventoryHopperOutputWriterProbe");
         if (addItemProbe || removeItemProbe || clearProbe || clearSlotProbe
-                || hopperProbe || hopperEventVetoProbe || hopperPrebodyProbe) {
+                || hopperProbe || hopperEventVetoProbe || hopperPrebodyProbe || hopperOutputProbe) {
             // A test JVM admits exactly one sealed-writer probe: one product
             // generation cannot be re-armed after it is faulted or sealed.
             int modes = (addItemProbe ? 1 : 0) + (removeItemProbe ? 1 : 0)
                     + (clearProbe ? 1 : 0) + (clearSlotProbe ? 1 : 0)
                     + (hopperProbe ? 1 : 0) + (hopperEventVetoProbe ? 1 : 0)
-                    + (hopperPrebodyProbe ? 1 : 0);
+                    + (hopperPrebodyProbe ? 1 : 0) + (hopperOutputProbe ? 1 : 0);
             if (modes != 1) {
                 getLogger().severe("PAPER_A01_MULTIPLE_CHEST_CLOSURE_PROBES_REJECTED");
                 Runtime.getRuntime().halt(2);
                 return;
             }
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                String failed = hopperPrebodyProbe
+                String failed = hopperOutputProbe
+                        ? "PAPER_A01_REAL_HOPPER_OUTPUT_PROBE_FAILED"
+                        : hopperPrebodyProbe
                         ? "PAPER_A01_REAL_HOPPER_PREBODY_PROBE_FAILED"
                         : hopperEventVetoProbe
                                 ? "PAPER_A01_REAL_HOPPER_EVENT_VETO_PROBE_FAILED"
@@ -131,6 +134,10 @@ public final class WclServicesProbe extends JavaPlugin {
                                 ? "PAPER_A01_REAL_CHEST_REMOVEITEM_CLOSURE_PROBE_FAILED"
                                 : "PAPER_A01_REAL_CHEST_ADDITEM_CLOSURE_PROBE_FAILED";
                 try {
+                    if (hopperOutputProbe) {
+                        InventoryHopperOutputWriterProbe.begin(this);
+                        return; // Two genuine tick intervals: PASSIVE then bounded SEALED.
+                    }
                     if (hopperPrebodyProbe) {
                         InventoryHopperTransferClosureProbe.beginPrebody(this);
                         return; // Classify 60 actual ordinary server ticks.
