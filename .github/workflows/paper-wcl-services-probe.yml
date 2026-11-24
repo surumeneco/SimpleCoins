@@ -720,7 +720,8 @@ jobs:
           ]
           BANNED_IP
           mkdir -p smoke-blocklocker/plugins/SimpleCoins
-          printf 'settlement:\n  diagnostic-only: true\n' > smoke-blocklocker/plugins/SimpleCoins/config.yml
+          unzip -p smoke-blocklocker/plugins/SimpleCoins.jar config.yml > smoke-blocklocker/plugins/SimpleCoins/config.yml
+          sed -i 's/diagnostic-only: false/diagnostic-only: true/' smoke-blocklocker/plugins/SimpleCoins/config.yml
           cd smoke-blocklocker
           for phase in persist reload-saved reload; do
             set +e
@@ -794,7 +795,7 @@ jobs:
           cd smoke-product-startup
           rm -f plugins/StorageProbe.jar
           printf '[]\n' > banned-ips.json
-          printf 'settlement:\n  diagnostic-only: false\n' > plugins/SimpleCoins/config.yml
+          sed -i 's/diagnostic-only: true/diagnostic-only: false/' plugins/SimpleCoins/config.yml
           set +e
           timeout --signal=TERM --kill-after=10s 300s \
             java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > product-startup.log 2>&1
