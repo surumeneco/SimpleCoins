@@ -316,7 +316,8 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
                             throw new IOException("Protection change did not reclassify actual asset: "+shared);
                         getLogger().info("PAPER_BLOCKLOCKER_LOCAL_PROTECTION_CHANGE_PASSED dead=0 free=10000");
                         cancel();
-                        Bukkit.shutdown();
+                        org.bukkit.event.HandlerList.unregisterAll(tracking);
+                        verifyMinecartAccounting(world);
                     } else if (++ticks >= 240) throw new IOException("Hopper fixture timed out: source="+h+" destination="+c+" events="+observed.get());
                 } catch (Throwable failure) {
                     getLogger().log(Level.SEVERE, "PAPER_BLOCKLOCKER_115_RELOAD_FAILED", failure);
@@ -325,6 +326,82 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
                 }
             }
         }.runTaskTimer(this, 1L, 1L);
+    }
+
+    /** Real hopper minecart pulls physical coins from a protected chest.
+     * The source must be read before Paper's temporarily debited move event;
+     * combine the block and entity delta in one operation, just like product. */
+    private void verifyMinecartAccounting(World world) throws IOException {
+        int x=34,y=120,z=34;
+        world.getChunkAt(x>>4,z>>4).setForceLoaded(true);
+        world.getBlockAt(x,y-1,z).setType(Material.STONE,false);
+        world.getBlockAt(x,y,z).setType(Material.RAIL,false);
+        Block source=placeChest(world,x,y+1,z,"ProbeOwner#"+OWNER,"[Redstone]");
+        var chest=((org.bukkit.block.Chest)source.getState()).getBlockInventory();
+        chest.clear();
+        chest.setItem(0,new CoinItemCodec(CoinItemCodec.defaultNames())
+                .create(CoinDenomination.FIVE_THOUSAND,2));
+        var cart=world.spawn(new org.bukkit.Location(world,x+0.5,y+0.1,z+0.5),
+                org.bukkit.entity.minecart.HopperMinecart.class);
+        cart.setVelocity(new org.bukkit.util.Vector(0,0,0));
+        var endpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(OWNER,
+                co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,
+                "world/"+world.getName()+"/"+x+","+(y+1)+","+z+":0");
+        var ledger=new co.surumene.simplecoins.domain.MemoryAccounting(Map.of(),BigInteger.ZERO,
+                Map.of(endpoint,BigInteger.valueOf(10000)));
+        var failed=new java.util.concurrent.atomic.AtomicReference<Exception>();
+        var movements=new java.util.ArrayList<co.surumene.simplecoins.domain.MemoryAccounting.Movement>();
+        var scope=new co.surumene.simplecoins.domain.WorldScope(true,Set.of(),Set.of());
+        var entities=new PaperEntityAccounting(this,scope,()->failed.get()==null,movements::addAll,failed::set);
+        var blocks=new PaperHopperAccounting(scope,()->failed.get()==null,movements::addAll,failed::set,
+                ignored->{},entities::observeInventory,entities::hasImage);
+        var cancel=new java.util.concurrent.atomic.AtomicBoolean(true);
+        var attempts=new java.util.concurrent.atomic.AtomicInteger();
+        Bukkit.getPluginManager().registerEvents(new org.bukkit.event.Listener(){
+            @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.HIGHEST)
+            public void cancelFirst(org.bukkit.event.inventory.InventoryMoveItemEvent event){
+                if(cart.equals(event.getDestination().getHolder())){
+                    attempts.incrementAndGet();
+                    if(cancel.get())event.setCancelled(true);
+                }
+            }
+        },this);
+        Bukkit.getPluginManager().registerEvents(entities,this);
+        Bukkit.getPluginManager().registerEvents(blocks,this);
+        new org.bukkit.scheduler.BukkitRunnable(){
+            private int ticks;
+            @Override public void run(){
+                try{
+                    blocks.flush();entities.flush();
+                    if(failed.get()!=null)throw failed.get();
+                    if(!movements.isEmpty()){
+                        if(ledger.recordNext(java.util.List.copyOf(movements),Set.of())
+                                !=co.surumene.simplecoins.domain.MemoryAccounting.Outcome.APPLIED)
+                            throw new IOException("Minecart transfer delta rejected");
+                        movements.clear();
+                    }
+                    BigInteger remaining=PaperLiveItemValue.inventory(chest,54,2*1024*1024,16*1024*1024);
+                    BigInteger received=PaperLiveItemValue.inventory(cart.getInventory(),5,2*1024*1024,16*1024*1024);
+                    if(cancel.get()&&attempts.get()>0){
+                        if(!remaining.equals(BigInteger.valueOf(10000))||received.signum()!=0
+                                ||ledger.snapshot().sequence()!=0)
+                            throw new IOException("Cancelled minecart move changed physical or accounting value");
+                        cancel.set(false);
+                    }
+                    if(received.equals(BigInteger.valueOf(10000))){
+                        var snapshot=ledger.snapshot();
+                        if(remaining.signum()!=0||!snapshot.free().equals(received)||!snapshot.dead().isEmpty())
+                            throw new IOException("Actual minecart transfer accounting mismatch: "+snapshot);
+                        getLogger().info("PAPER_HOPPER_MINECART_ACCOUNTING_PASSED dead=0 free=10000 cancelledUnchanged=true");
+                        cancel();Bukkit.shutdown();
+                    }else if(++ticks>=240)throw new IOException("Minecart fixture timed out: remaining="+remaining
+                            +" received="+received+" attempts="+attempts.get());
+                }catch(Throwable failure){
+                    getLogger().log(Level.SEVERE,"PAPER_BLOCKLOCKER_115_RELOAD_FAILED",failure);
+                    cancel();Bukkit.shutdown();
+                }
+            }
+        }.runTaskTimer(this,1L,1L);
     }
 
     private static void configureChestHalf(Block block,
