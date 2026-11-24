@@ -14,10 +14,11 @@ import java.util.function.BooleanSupplier;
  * certificate is wired to bootstrap. Therefore this class cannot be invoked
  * from SimpleCoinsPlugin or registered as an AdmissionPermit provider yet.
  *
- * Its sole local guarantee is that an already proven, completely drained
- * writer epoch stays SEALED through the final atomic accumulator snapshot
- * replacement and barrier READY transition. Other A01 evidence is supplied
- * by a separately accountable authoritative observer, not inferred here.
+ * The legacy isolated path retains its sealed-only publication contract.
+ * The normal handoff binds a complete immutable baseline and actual journal
+ * cut before switching the epoch and exposing READY, with roots excluded
+ * throughout. Other A01 evidence comes from the accountable external
+ * observer; neither route is a complete writer/normal tracking certificate.
  */
 final class SettlementProtectedPublisher {
     private final WriterEpochFence fence;
@@ -228,8 +229,7 @@ final class SettlementProtectedPublisher {
                         if (!journalActive.getAsBoolean() || !noOnlinePlayers.getAsBoolean())
                             throw new IllegalStateException("Normal handoff prerequisites changed");
                         prepared.journal.requireInMemoryCursor(prepared.cut);
-                        barrier.complete(generation, true, true);
-                    });
+                    }, () -> barrier.complete(generation, true, true));
                     outstanding = null;
                 }
             }
@@ -275,7 +275,10 @@ final class SettlementProtectedPublisher {
         synchronized (barrier) {
             publication.revoke();
             normal = null;
-            fence.invalidate();
         }
+        // Do not hold the barrier while waiting for the legacy SEALED
+        // publication callback's fence lock. Revocation has already made
+        // the gate terminal, so it cannot publish after this point.
+        fence.invalidate();
     }
 }

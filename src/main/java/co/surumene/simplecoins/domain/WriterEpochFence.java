@@ -101,7 +101,7 @@ public final class WriterEpochFence {
     /** Root admission always fails once the seal has been acquired. */
     public Entry enterRoot() {
         synchronized (lock) {
-            if (state != State.OPEN || !ancestry.get().isEmpty())
+            if (state != State.OPEN || atomicPublicationActive || !ancestry.get().isEmpty())
                 throw new IllegalStateException("New or recursive writer root not admitted");
             return beginEntry();
         }
@@ -241,17 +241,20 @@ public final class WriterEpochFence {
     }
 
     /**
-     * Commit the prepared normal journal session before reopening roots, in
-     * one writer-admission critical section. The caller also holds the
-     * publication barrier so readers cannot see READY before OPEN.
+     * Bind the prepared normal journal session, switch the generation, and
+     * publish READY before reopening roots, in one writer-admission critical
+     * section. The caller also holds the publication barrier. Both callbacks
+     * must be short and synchronous; the latter only publishes readiness.
      *
      * The callback is short, synchronous, and must not run disk IO or wait
      * for another writer. The future token cannot authorize roots by itself.
      * Only the caller's independently established G0 evidence can justify
      * this handoff; an OPEN generation is not a complete tracking certificate.
      */
-    void handoffDrainedSeal(Seal seal, java.util.function.Consumer<OpenEpoch> commit) {
-        Objects.requireNonNull(commit, "normal journal handoff");
+    void handoffDrainedSeal(Seal seal, java.util.function.Consumer<OpenEpoch> bindSession,
+                            Runnable publishReady) {
+        Objects.requireNonNull(bindSession, "normal journal handoff");
+        Objects.requireNonNull(publishReady, "normal journal publication");
         synchronized (lock) {
             requireDrained(seal);
             if (atomicPublicationActive || durableLeaseOwner != null)
@@ -259,10 +262,18 @@ public final class WriterEpochFence {
             atomicPublicationActive = true;
             try {
                 long next = Math.addExact(generation, 1);
-                commit.accept(new OpenEpoch(this, next));
+                var normalEpoch = new OpenEpoch(this, next);
+                bindSession.accept(normalEpoch);
                 requireDrained(seal);
                 generation = next;
                 state = State.OPEN;
+                // READY is not visible even through the bare barrier before
+                // OPEN. No root may enter until this callback returns and
+                // the same monitor is released (including reentrant entry).
+                publishReady.run();
+                requireOpenEpoch(normalEpoch);
+                if (active != 0)
+                    throw new IllegalStateException("Writer admitted during normal handoff");
             } catch (RuntimeException | Error failure) {
                 fault();
                 throw failure;
