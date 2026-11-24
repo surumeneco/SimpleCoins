@@ -295,6 +295,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             entities.setOwnerResolver(ownerReconciliation::accountedOwner);
             hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
             getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
+            getServer().getPluginManager().registerEvents(ownerReconciliation,this);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
                     java.util.random.RandomGenerator.getDefault(), groundFailure), this);

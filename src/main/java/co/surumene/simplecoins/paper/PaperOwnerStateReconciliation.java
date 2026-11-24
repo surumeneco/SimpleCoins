@@ -10,7 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Re-read one changed owner at a time. Status observation is separate from
  * classification of normal movement endpoints, so a partially changed owner
  * never splits the ledger between old and new P/D classes. */
-public final class PaperOwnerStateReconciliation {
+public final class PaperOwnerStateReconciliation implements org.bukkit.event.Listener {
     @FunctionalInterface public interface Resolver { AssetOwner.Result resolve(UUID owner,boolean everyone)throws IOException; }
     private final JavaPlugin plugin;
     private final SettlementRuntime runtime;
@@ -71,6 +71,28 @@ public final class PaperOwnerStateReconciliation {
             lastFailure=null;retryAfter=0;
             return true;
         }catch(IOException|RuntimeException failure){failure(failure);return false;}
+    }
+    /** A previously dead saved account must be reconciled before its owner
+     * can spend the saved balance after unban or playerdata restoration.
+     * A genuinely missing, unbanned new player may join and create playerdata. */
+    @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.HIGHEST)
+    public void preLogin(org.bukkit.event.player.AsyncPlayerPreLoginEvent event){
+        if(event.getLoginResult()!=org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.ALLOWED||!runtime.memoryAccountingReady())return;
+        boolean allowed=false;
+        try{
+            if(Bukkit.isPrimaryThread())allowed=loginReady(event.getUniqueId());
+            else allowed=Bukkit.getScheduler().callSyncMethod(plugin,()->loginReady(event.getUniqueId())).get(3,java.util.concurrent.TimeUnit.SECONDS);
+        }catch(Exception unavailable){if(unavailable instanceof InterruptedException)Thread.currentThread().interrupt();}
+        if(!allowed)event.disallow(org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                "Server accounting is updating. Please retry shortly.");
+    }
+    private boolean loginReady(UUID owner)throws IOException{
+        if(!runtime.memoryAccountingReady())return false;
+        var current=state(owner,bans());
+        if(current.banned())return false;
+        var accounted=runtime.accountedOwnerState(owner);
+        if(accounted==null||current.equals(accounted))return true;
+        fresh();return false;
     }
     private void apply(SettlementRuntime.OwnerReadPlan plan,SettlementRuntime.OwnerState expected,PaperOwnerAssetReader.Disk disk){
         try{
