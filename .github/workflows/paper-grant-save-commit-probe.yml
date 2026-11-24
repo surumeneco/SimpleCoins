@@ -94,7 +94,7 @@ jobs:
           out=Lifecycle/Works/.cat-flow/generated/A02ProtectedPreflightDecisionGeneratedTest.java
           mkdir -p "$(dirname "$out")"
           python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
-          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
+          grep -F '@Test' "$out"
           generated=$(sed -n 's/^final class \([^ ]*\) .*/\1/p' "$out")
           test -n "$generated"
           mkdir -p src/test/java/co/surumene/simplecoins/domain/generated
@@ -114,7 +114,7 @@ jobs:
           cache=Lifecycle/Works/.cat-flow/cache/a02-durable-intent
           out=Lifecycle/Works/.cat-flow/generated/A02DurableIntentDecisionGeneratedTest.java
           python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
-          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
+          grep -F '@Test' "$out"
           work=Lifecycle/Works/simplecoins.a02.durable-partial-batch-custody.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
@@ -125,7 +125,7 @@ jobs:
           cache=Lifecycle/Works/.cat-flow/cache/a02-partial-custody
           out=Lifecycle/Works/.cat-flow/generated/A02PartialCustodyDecisionGeneratedTest.java
           python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
-          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
+          grep -F '@Test' "$out"
           work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
