@@ -53,6 +53,9 @@ public final class PaperHopperAccounting implements Listener {
     private final Consumer<Set<UUID>> register;
     private final Consumer<Inventory> observeEntity;
     private final java.util.function.Predicate<Inventory> entityImage;
+    private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
+    private PaperOwnerStateReconciliation.Resolver ownerResolver=PaperOwnerStateReconciliation::currentOwner;
+    public void setOwnerResolver(PaperOwnerStateReconciliation.Resolver resolver){ownerResolver=Objects.requireNonNull(resolver);}
     private final Map<Position, Image> before = new HashMap<>();
     private final Set<Position> touched = new HashSet<>();
     private static final int COMPRESSED = 16 * 1024 * 1024;
@@ -71,6 +74,13 @@ public final class PaperHopperAccounting implements Listener {
             Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
             Consumer<Set<UUID>> register, Consumer<Inventory> observeEntity,
             java.util.function.Predicate<Inventory> entityImage) {
+        this(scope,ready,sink,fatal,register,observeEntity,entityImage,ignored->{});
+    }
+    public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
+            Consumer<Set<UUID>> register, Consumer<Inventory> observeEntity,
+            java.util.function.Predicate<Inventory> entityImage, Consumer<List<OwnerStorageIndex.Change>> ownerLocations) {
+        this.ownerLocations=Objects.requireNonNull(ownerLocations);
         this.scope = Objects.requireNonNull(scope);
         this.register = Objects.requireNonNull(register);
         this.observeEntity=Objects.requireNonNull(observeEntity);
@@ -85,6 +95,25 @@ public final class PaperHopperAccounting implements Listener {
         if (state instanceof Chest chest) return chest.getBlockInventory();
         if (state instanceof Container container) return container.getInventory();
         return null;
+    }
+
+    /** Read the actual physical half, not a double chest's combined inventory. */
+    static Map<String,BigInteger> readOwnerStorage(Block block,UUID owner,Set<UUID> wallets) throws IOException {
+        if(!Bukkit.isPrimaryThread()||!block.getWorld().isChunkLoaded(block.getX()>>4,block.getZ()>>4))throw new IOException("Owned block is not loaded");
+        var settings=PaperBlockLockerSettings.capture();
+        if(!settings.containers().contains(block.getType().getKey().toString()))throw new IOException("Indexed protected storage no longer exists");
+        var protection=BlockLockerLiveEvidence.observe(block);
+        if(protection.everyoneProtected()||!owner.equals(protection.owner()))throw new IOException("Indexed block owner changed");
+        var inventory=physical(block);
+        if(inventory==null)throw new IOException("Indexed block inventory is missing");
+        var out=new HashMap<String,BigInteger>();
+        var pos=Position.of(block);
+        var items=inventory.getContents();
+        for(int slot=0;slot<items.length;slot++){
+            var value=PaperLiveItemValue.stack(items[slot],COMPRESSED,INFLATED,wallets);
+            if(value.signum()>0)out.put(pos.location(block,slot),value);
+        }
+        return Map.copyOf(out);
     }
 
     private static List<Position> positions(Inventory inventory) throws IOException {
@@ -127,9 +156,7 @@ public final class PaperHopperAccounting implements Listener {
             owner=protection.owner();
             everyone=protection.everyoneProtected();
         }
-        var bans=PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
-        return AssetOwner.resolve(owner,everyone,owner!=null&&bans.currentlyBanned(owner),
-                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+        return ownerResolver.resolve(owner,everyone);
     }
 
     private void capture(Position p) throws IOException {
@@ -264,7 +291,7 @@ public final class PaperHopperAccounting implements Listener {
     }
 
     private Map<MemoryAccounting.Endpoint, BigInteger> balances(boolean initial,
-            Set<UUID> registrations) throws IOException {
+            Set<UUID> registrations, List<OwnerStorageIndex.Change> locations) throws IOException {
         Map<MemoryAccounting.Endpoint, BigInteger> result = new HashMap<>();
         Set<UUID> wallets = new HashSet<>();
         for (Position p : touched) {
@@ -273,11 +300,16 @@ public final class PaperHopperAccounting implements Listener {
             var image=before.get(p);
             if(image==null)throw new IOException("Block before-image missing");
             Inventory inventory=initial?null:physical(b);
-            if(!initial&&inventory==null)continue; // destroyed container: ground events own the drops
+            var holder=OwnerStorageIndex.Holder.block(b.getWorld().getName(),p.x(),p.y(),p.z());
+            if(!initial&&inventory==null){locations.add(OwnerStorageIndex.Change.remove(holder));continue;} // ground events own the drops
             ItemStack[] items=initial?image.contents():inventory.getContents();
             var resolved=initial?image.owner():resolve(b);
-            if(!initial&&resolved.kind()==AssetOwner.Kind.PERSONAL)
-                registrations.add(resolved.player());
+            if(!initial) {
+                if(resolved.kind()==AssetOwner.Kind.PERSONAL) registrations.add(resolved.player());
+                if(resolved.player()==null) locations.add(OwnerStorageIndex.Change.remove(holder));
+                else locations.add(OwnerStorageIndex.Change.replace(resolved.player(),new OwnerStorageIndex.Location(holder,b.getWorld().getName(),
+                        SavedLiveSourcePartition.liveChunkSourceId(new SavedLiveSourcePartition.Chunk(b.getWorld().getName(),p.x()>>4,p.z()>>4)))));
+            }
             for (int slot = 0; slot < items.length; slot++) {
                 BigInteger value = PaperLiveItemValue.stack(items[slot], COMPRESSED, INFLATED, wallets);
                 if (value.signum() == 0) continue;
@@ -298,10 +330,12 @@ public final class PaperHopperAccounting implements Listener {
         try {
             if (!ready.getAsBoolean() || touched.isEmpty()) return;
             var registrations=new HashSet<UUID>();
-            var changes = InventoryAccountingDelta.between(balances(true, registrations),
-                    balances(false, registrations));
+            var locations=new ArrayList<OwnerStorageIndex.Change>();
+            var changes = InventoryAccountingDelta.between(balances(true, registrations, locations),
+                    balances(false, registrations, locations));
             if (!changes.isEmpty()) sink.accept(changes);
             if (!registrations.isEmpty()) register.accept(Set.copyOf(registrations));
+            if (!locations.isEmpty()) ownerLocations.accept(List.copyOf(locations));
         } catch (IOException | RuntimeException failure) { fail(failure); }
         finally { before.clear(); touched.clear(); }
     }

@@ -268,27 +268,34 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             };
             var tickMovements = new java.util.ArrayList<MemoryAccounting.Movement>();
             var tickRegistrations = new java.util.HashSet<UUID>();
+            var tickOwnerLocations = new java.util.ArrayList<co.surumene.simplecoins.domain.OwnerStorageIndex.Change>();
             var entities = new co.surumene.simplecoins.paper.PaperEntityAccounting(this, sourceScope.scope(),
-                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure);
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickOwnerLocations::addAll);
             var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickRegistrations::addAll,
-                    entities::observeInventory, entities::hasImage);
+                    entities::observeInventory, entities::hasImage, tickOwnerLocations::addAll);
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
                     inventory -> { hopper.observeInventory(inventory); entities.observeInventory(inventory); });
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
             getServer().getPluginManager().registerEvents(entities, this);
-            getServer().getScheduler().runTaskTimer(this, () -> {
+            Runnable flushAccounting=() -> {
                 try {
                     ground.flush();
                     hopper.flush();
                     entities.flush();
-                    if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()))
-                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations));
+                    if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()||!tickOwnerLocations.isEmpty()))
+                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations),java.util.List.copyOf(tickOwnerLocations));
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
-                finally { tickMovements.clear(); tickRegistrations.clear(); }
-            },1L,1L);
+                finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
+            };
+            getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
+            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure);
+            entities.setOwnerResolver(ownerReconciliation::accountedOwner);
+            hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
+            getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
+            getServer().getPluginManager().registerEvents(ownerReconciliation,this);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
                     java.util.random.RandomGenerator.getDefault(), groundFailure), this);
@@ -310,6 +317,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             });
             var admin = new PaperAdminCommand(this, publication, issuanceGrants, liveDelivery,
                     walletCodec, sourceScope.scope(), names, unit);
+            admin.setQueryFreshness(ownerReconciliation::fresh);
             var command = java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command");
             command.setExecutor(admin);
             command.setTabCompleter(admin);

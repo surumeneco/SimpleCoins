@@ -202,6 +202,13 @@ public final class SettlementAccumulator {
                 balances, free, dead, List.copyOf(deadLocations));
     }
 
+    /** Only a completed authoritative settlement may seed the locator index.
+     * Normal per-location amounts are not retained in that index. */
+    public OwnerStorageIndex ownerStorageIndex() {
+        if (!committed) throw new IllegalStateException("Settlement is not committed");
+        return OwnerStorageIndex.fromAssets(occupiedSlots.values(), worldScope);
+    }
+
     private Set<String> missingSources() {
         Set<String> missing = new HashSet<>(required);
         missing.removeAll(completed);

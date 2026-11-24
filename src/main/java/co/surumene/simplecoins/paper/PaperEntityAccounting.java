@@ -33,6 +33,11 @@ public final class PaperEntityAccounting implements Listener {
     private final BooleanSupplier ready;
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
+    private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
+    private PaperOwnerStateReconciliation.Resolver ownerResolver=PaperOwnerStateReconciliation::currentOwner;
+    public void setOwnerResolver(PaperOwnerStateReconciliation.Resolver resolver){ownerResolver=Objects.requireNonNull(resolver);}
+    private final Map<UUID,OwnerStorageIndex.Location> unloadedLocations=new HashMap<>();
+    private final List<OwnerStorageIndex.Change> pendingLocations=new ArrayList<>();
     private final Map<UUID,Entity> touched=new HashMap<>();
     private final Map<UUID,Inventory> openCargo=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> before=new HashMap<>();
@@ -56,6 +61,12 @@ public final class PaperEntityAccounting implements Listener {
 
     public PaperEntityAccounting(Plugin consumer,WorldScope scope,BooleanSupplier ready,
             Consumer<List<MemoryAccounting.Movement>> sink,Consumer<Exception> fatal) {
+        this(consumer,scope,ready,sink,fatal,ignored->{});
+    }
+    public PaperEntityAccounting(Plugin consumer,WorldScope scope,BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink,Consumer<Exception> fatal,
+            Consumer<List<OwnerStorageIndex.Change>> ownerLocations) {
+        this.ownerLocations=Objects.requireNonNull(ownerLocations);
         this.consumer=Objects.requireNonNull(consumer);this.scope=Objects.requireNonNull(scope);
         this.ready=Objects.requireNonNull(ready);this.sink=Objects.requireNonNull(sink);
         this.fatal=Objects.requireNonNull(fatal);
@@ -86,13 +97,23 @@ public final class PaperEntityAccounting implements Listener {
         };
     }
     private Map<MemoryAccounting.Endpoint,BigInteger> image(Entity entity) throws IOException {
+        return image(entity,null,null,null);
+    }
+
+    /** Read one actual owned holder with physical slot identities, before classification. */
+    Map<String,BigInteger> readOwnerStorage(Entity entity,UUID owner,Set<UUID> wallets) throws IOException {
+        var values = new HashMap<String,BigInteger>();
+        image(entity,owner,values,wallets);
+        return Map.copyOf(values);
+    }
+    private Map<MemoryAccounting.Endpoint,BigInteger> image(Entity entity,UUID requestedOwner,Map<String,BigInteger> raw,Set<UUID> sharedWallets) throws IOException {
         if(!Bukkit.isPrimaryThread())throw new IOException("Entity accounting off primary");
         if(!scope.includes(entity.getWorld().getName()))return Map.of();
         if(!entity.isValid())throw new IOException("Entity image not loaded: "+entity.getUniqueId());
         String prefix="world/"+entity.getWorld().getName()+"/";
         String path="entity/"+entity.getUniqueId()+"/";
         Map<String,BigInteger> values=new HashMap<>();
-        Set<UUID> wallets=new HashSet<>();
+        Set<UUID> wallets=sharedWallets==null?new HashSet<>():sharedWallets;
         Map<String,ItemStack> nativeStacks=new HashMap<>();
         if(entity instanceof LivingEntity living){
             var gear=living.getEquipment();
@@ -143,16 +164,34 @@ public final class PaperEntityAccounting implements Listener {
                 }
             }
         }
+        if(raw!=null){
+            if(!Objects.equals(owner,requestedOwner))throw new IOException("Indexed entity owner changed: "+entity.getUniqueId());
+            values.forEach((key,value)->{if(value.signum()>0)raw.put(prefix+key,value);});
+            return Map.of();
+        }
         if(values.values().stream().noneMatch(v->v.signum()>0))return Map.of();
-        boolean banned=owner!=null&&PaperProfileBanSource.captureCompleteStandard(
-                Set.of("paper-profile","paper-ip"),Map.of()).currentlyBanned(owner);
-        AssetOwner.Result resolved=AssetOwner.resolve(owner,false,banned,
-                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+        AssetOwner.Result resolved=ownerResolver.resolve(owner,false);
         var out=new HashMap<MemoryAccounting.Endpoint,BigInteger>();
         values.forEach((key,value)->{
             if(value.signum()>0)out.merge(endpoint(resolved,prefix+key),value,BigInteger::add);
         });
         return Map.copyOf(out);
+    }
+
+    private static OwnerStorageIndex.Location location(Entity entity) {
+        var pos=entity.getLocation();
+        String world=entity.getWorld().getName();
+        return new OwnerStorageIndex.Location(OwnerStorageIndex.Holder.entity(entity.getUniqueId()),world,
+                SavedLiveSourcePartition.liveChunkSourceId(new SavedLiveSourcePartition.Chunk(world,pos.getBlockX()>>4,pos.getBlockZ()>>4)));
+    }
+    private void noteLocation(OwnerStorageIndex.Location location, Map<MemoryAccounting.Endpoint,BigInteger> image) throws IOException {
+        UUID owner=null;
+        for(var endpoint:image.keySet()) {
+            if(endpoint.owner().player()==null) continue;
+            if(owner!=null&&!owner.equals(endpoint.owner().player()))throw new IOException("Conflicting entity ownership");
+            owner=endpoint.owner().player();
+        }
+        pendingLocations.add(owner==null?OwnerStorageIndex.Change.remove(location.holder()):OwnerStorageIndex.Change.replace(owner,location));
     }
 
     public void observeEntity(Entity entity){
@@ -263,12 +302,16 @@ public final class PaperEntityAccounting implements Listener {
         if(!ready.getAsBoolean())return;
         try{
             for(var entity:event.getEntities()){
-                if(!scope.includes(entity.getWorld().getName())||provider(entity).isEmpty())continue;
+                if(!scope.includes(entity.getWorld().getName())||!eligible(entity))continue;
+                boolean wcl=provider(entity).isPresent();
+                if(!wcl&&!(entity instanceof Tameable tame&&tame.getOwner()!=null))continue;
                 UUID id=entity.getUniqueId();
                 // The saved physical holder is already in the journal. Loading is not issuance.
                 // If it unloaded earlier in the same tick, preserve the original before image.
-                if(unloaded.remove(id)!=null){touched.put(id,entity);continue;}
-                if(tracked.putIfAbsent(id,new Tracked(entity,image(entity)))!=null)
+                if(unloaded.remove(id)!=null){unloadedLocations.remove(id);touched.put(id,entity);continue;}
+                var actual=image(entity);
+                noteLocation(location(entity),actual);
+                if(wcl&&tracked.putIfAbsent(id,new Tracked(entity,actual))!=null)
                     throw new IOException("Duplicate WCL holder load "+id);
             }
         }catch(IOException|RuntimeException failure){fail(failure);}
@@ -280,10 +323,22 @@ public final class PaperEntityAccounting implements Listener {
             for(var e:event.getEntities()){
                 UUID id=e.getUniqueId();
                 if(tracked.containsKey(id))observeEntity(e);
-                if(before.containsKey(id))unloaded.put(id,image(e));
+                if(before.containsKey(id)) {
+                    unloaded.put(id,image(e));unloadedLocations.put(id,location(e));
+                } else if(scope.includes(e.getWorld().getName())&&eligible(e)&&e instanceof Tameable tame&&tame.getOwner()!=null) {
+                    noteLocation(location(e),image(e));
+                }
                 openCargo.remove(id);
             }
         }catch(IOException|RuntimeException failure){fail(failure);}
+    }
+    void rebaseOwner(UUID owner)throws IOException {
+        if(!Bukkit.isPrimaryThread()||!before.isEmpty()||!touched.isEmpty())throw new IOException("Owner rebase outside flush boundary");
+        for(var entry:tracked.entrySet()){
+            Tracked prior=entry.getValue();
+            if(prior.accounted().keySet().stream().anyMatch(e->owner.equals(e.owner().player())))
+                entry.setValue(new Tracked(prior.entity(),image(prior.entity())));
+        }
     }
     public void flush(){
         if(!ready.getAsBoolean()){clear();openCargo.clear();tracked.clear();return;}
@@ -306,14 +361,18 @@ public final class PaperEntityAccounting implements Listener {
                 Map<MemoryAccounting.Endpoint,BigInteger> after=unloaded.containsKey(id)?unloaded.get(id):
                         entity.isValid()?image(entity):Map.of();
                 changes.addAll(InventoryAccountingDelta.between(before.get(id),after));
+                if(unloadedLocations.containsKey(id))noteLocation(unloadedLocations.get(id),after);
+                else if(entity.isValid()&&scope.includes(entity.getWorld().getName()))noteLocation(location(entity),after);
+                else pendingLocations.add(OwnerStorageIndex.Change.remove(OwnerStorageIndex.Holder.entity(id)));
                 if(entity.isValid()&&!unloaded.containsKey(id)&&provider(entity).isPresent()){
                     tracked.remove(id);tracked.put(id,new Tracked(entity,after));
                 }else{tracked.remove(id);if(!entity.isValid())openCargo.remove(id);}
             }
             if(!changes.isEmpty())sink.accept(List.copyOf(changes));
+            if(!pendingLocations.isEmpty())ownerLocations.accept(List.copyOf(pendingLocations));
         }catch(IOException|RuntimeException failure){fail(failure);}
         finally{clear();}
     }
-    private void clear(){before.clear();touched.clear();unloaded.clear();}
+    private void clear(){before.clear();touched.clear();unloaded.clear();unloadedLocations.clear();pendingLocations.clear();}
     private void fail(Exception failure){clear();openCargo.clear();tracked.clear();fatal.accept(failure);}
 }
