@@ -122,7 +122,17 @@ public final class PaperGrantInventorySlotPlan {
 
         // Exactly one full durable journal scan for this read-only plan.
         // The saved playerdata/ACK path must independently verify current evidence.
-        GrantLedger.VerifiedPlayerSnapshot view = ledger.verifiedPlayerSnapshot(player);
+        return stage(ledger.verifiedPlayerSnapshot(player), grant, savedReceipt, storage);
+    }
+
+    /** Pure planning using the very same independently verified saved receipt view. */
+    static Optional<PaperGrantInventorySlotPlan> stage(
+            GrantLedger.VerifiedPlayerSnapshot view, GrantLedger.Grant grant,
+            GrantReceiptState savedReceipt, StorageSnapshot storage) {
+        Objects.requireNonNull(view, "verified planning view");
+        Objects.requireNonNull(grant, "grant");
+        Objects.requireNonNull(savedReceipt, "saved receipt");
+        Objects.requireNonNull(storage, "storage snapshot");
         savedReceipt.verify(view);
         GrantReceiptState current = savedReceipt.active()
                 ? savedReceipt : savedReceipt.begin(view, grant);

@@ -539,24 +539,53 @@ public final class PaperSaveProbe extends JavaPlugin {
         Class<?> coordinator = Class.forName(
                 "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
                 true, PaperSaveProbe.class.getClassLoader());
-        var begin = coordinator.getDeclaredMethod("saveAndSealFirstBatchOnMain",
+        var begin = coordinator.getDeclaredMethod("schedulePreflightOnMain",
                 Player.class, GrantLedger.class, GrantLedger.Grant.class,
-                CoinItemCodec.class, WriterEpochFence.class,
-                WorldStorageDiscovery.Manifest.class, int.class, int.class);
+                WriterEpochFence.class, WorldStorageDiscovery.DiscoveryOrigin.class,
+                SavedGrantCommitWorker.class, long.class, int.class, int.class);
         begin.setAccessible(true);
-        final Object ticket;
-        try {
-            Object prepared = begin.invoke(null, player, ledger, second, codec, epoch,
-                    actualPlayerManifest(), 16 * 1024 * 1024, 64 * 1024 * 1024);
-            if (!(prepared instanceof java.util.Optional<?> pending) || pending.isEmpty())
-                throw new IllegalStateException("Async product failed to save a vacant first batch");
-            ticket = pending.orElseThrow();
-        } catch (InvocationTargetException failure) {
-            Throwable cause = failure.getCause();
-            if (cause instanceof Exception exception) throw exception;
-            if (cause instanceof Error error) throw error;
-            throw new IllegalStateException("Unknown Paper main save failure", cause);
-        }
+        Object preflight = begin.invoke(null, player, ledger, second, epoch,
+                actualPlayerOrigin(), productCommitWorker, 90000L, 16 * 1024 * 1024, 64 * 1024 * 1024);
+        if (epoch.state() != WriterEpochFence.State.SEALED
+                || player.getInventory().getItem(1) != null
+                || !priorReceipt.equals(PaperGrantReceiptPdc.read(player.getPersistentDataContainer())))
+            throw new IllegalStateException("Worker preflight mutated physical money on primary");
+        var status = preflight.getClass().getDeclaredMethod("status"); status.setAccessible(true);
+        var save = preflight.getClass().getDeclaredMethod("saveOnMain", Player.class, CoinItemCodec.class);
+        save.setAccessible(true);
+        Thread.ofPlatform().name("a02-probe-preflight-assertions").start(() -> {
+            try {
+                while (status.invoke(preflight) == SavedGrantCommitWorker.Status.RUNNING) Thread.sleep(1);
+                if (status.invoke(preflight) != SavedGrantCommitWorker.Status.SUCCEEDED)
+                    throw new IllegalStateException("Protected off-main preflight failed: " + status.invoke(preflight));
+                boolean denied = false;
+                try { epoch.enterRoot(); } catch (IllegalStateException expected) { denied = true; }
+                if (!denied || epoch.state() != WriterEpochFence.State.SEALED)
+                    throw new IllegalStateException("Writer entered between preflight and main save");
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        if (player.getInventory().getItem(1) != null
+                                || !priorReceipt.equals(PaperGrantReceiptPdc.read(player.getPersistentDataContainer())))
+                            throw new IllegalStateException("Off-main preflight mutated physical money");
+                        Object prepared = save.invoke(preflight, player, codec);
+                        if (!(prepared instanceof java.util.Optional<?> pending) || pending.isEmpty())
+                            throw new IllegalStateException("Async product failed to save a vacant first batch");
+                        getLogger().info("PAPER_A02_PRODUCT_PROTECTED_OFF_MAIN_PREFLIGHT_PASSED");
+                        finishAsyncProductSave(player, ledger, epoch, pending.orElseThrow());
+                    } catch (Throwable failure) {
+                        getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                        Bukkit.shutdown();
+                    }
+                });
+            } catch (Throwable failure) {
+                getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+            }
+        });
+    }
+
+    private void finishAsyncProductSave(Player player, GrantLedger ledger, WriterEpochFence epoch,
+                                        Object ticket) throws Exception {
         if (epoch.state() != WriterEpochFence.State.SEALED
                 || ledger.pending(ID).size() != 1
                 || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
@@ -1614,16 +1643,21 @@ public final class PaperSaveProbe extends JavaPlugin {
     }
 
     /** Only Paper's genuine shared level saved UUID file can supply the proof. */
-    private WorldStorageDiscovery.Manifest actualPlayerManifest() throws Exception {
+    private WorldStorageDiscovery.DiscoveryOrigin actualPlayerOrigin() throws Exception {
         World world = getServer().getWorld("world");
         if (world == null) throw new IllegalStateException("Real Paper world missing");
         Path file = dataFile().toAbsolutePath().normalize();
         Path dimension = world.getWorldFolder().toPath().toAbsolutePath().normalize();
         Path levelRoot = file.getParent().getParent().getParent();
-        var manifest = WorldStorageDiscovery.discover(
-                Map.of(world.getName(), dimension),
-                new WorldScope(true, Set.of(), Set.of(world.getName())),
-                100000, Set.of(levelRoot));
+        return new WorldStorageDiscovery.DiscoveryOrigin(Map.of(world.getName(), dimension),
+                new WorldScope(true, Set.of(), Set.of(world.getName())), 100000, Set.of(levelRoot));
+    }
+
+    private WorldStorageDiscovery.Manifest actualPlayerManifest() throws Exception {
+        var origin = actualPlayerOrigin();
+        var manifest = WorldStorageDiscovery.discover(origin.worldFolders(), origin.scope(),
+                origin.maximumEntries(), origin.sharedPlayerRoots());
+        Path file = dataFile().toAbsolutePath().normalize();
         if (!file.equals(manifest.playerDataFiles().get(ID))
                 || manifest.playerDataFiles().size() != 1)
             throw new IllegalStateException("Real shared Paper playerdata not discovered");

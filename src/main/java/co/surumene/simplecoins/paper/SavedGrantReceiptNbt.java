@@ -26,6 +26,18 @@ public final class SavedGrantReceiptNbt {
                                                   UUID expectedPlayer) throws IOException {
         if (savedRoot == null || issuance == null || expectedPlayer == null)
             throw new IOException("Missing authoritative playerdata or issuance journal");
+        try {
+            return readAndVerify(savedRoot, issuance.verifiedPlayerSnapshot(expectedPlayer));
+        } catch (IllegalArgumentException | IllegalStateException invalid) {
+            throw new IOException("Saved grant receipt disagrees with durable issuance evidence", invalid);
+        }
+    }
+
+    /** Decode and verify against the same full-journal-checked read-only view used by planning. */
+    static GrantReceiptState readAndVerify(Map<String, Object> savedRoot,
+            GrantLedger.VerifiedPlayerSnapshot view) throws IOException {
+        if (savedRoot == null || view == null)
+            throw new IOException("Missing authoritative playerdata or verified issuance view");
         GrantReceiptState receipt = GrantReceiptState.empty();
         if (savedRoot.containsKey(BUKKIT_VALUES)) {
             Object stored = savedRoot.get(BUKKIT_VALUES);
@@ -43,7 +55,7 @@ public final class SavedGrantReceiptNbt {
             }
         }
         try {
-            receipt.verify(issuance, expectedPlayer);
+            receipt.verify(view);
         } catch (IllegalArgumentException | IllegalStateException invalid) {
             throw new IOException("Saved grant receipt disagrees with durable issuance evidence", invalid);
         }

@@ -38,8 +38,142 @@ final class PaperGrantSavedBatchCoordinator {
     private PaperGrantSavedBatchCoordinator() {}
 
     /**
+     * Product pre-save handoff. Capture only Paper-owned memory on primary;
+     * the complete filesystem and ledger preflight runs on the bounded worker.
+     * The enclosing runtime must supply actual captured roots and complete
+     * writer coverage (including all grant journal writers) before use.
+     */
+    static PendingPreflight schedulePreflightOnMain(Player detached, GrantLedger ledger,
+            GrantLedger.Grant grant, WriterEpochFence fence,
+            WorldStorageDiscovery.DiscoveryOrigin origin, SavedGrantCommitWorker worker,
+            long timeoutMillis, int compressedLimit, int inflatedLimit) {
+        Objects.requireNonNull(fence, "externally audited writer fence");
+        try {
+            requireDetachedPrimary(detached);
+            Objects.requireNonNull(ledger, "durable grant ledger");
+            Objects.requireNonNull(origin, "captured saved source roots");
+            Objects.requireNonNull(grant, "authentic reservation");
+            Objects.requireNonNull(worker, "bounded saved grant worker");
+            if (compressedLimit < 1 || inflatedLimit < 1)
+                throw new IllegalArgumentException("Nonpositive saved playerdata read budget");
+            UUID player = detached.getUniqueId();
+            if (!player.equals(grant.player()) || grant.delivered())
+                throw new IllegalStateException("Not a genuine pending grant");
+            WriterEpochFence.Seal seal = fence.seal();
+            fence.requireDrained(seal); // never await writer drain on primary
+            var receipt = PaperGrantReceiptPdc.read(detached.getPersistentDataContainer());
+            var storage = PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(
+                    detached.getInventory().getStorageContents());
+            var ticket = worker.submit(timeoutMillis, live -> {
+                if (Bukkit.isPrimaryThread())
+                    throw new IllegalStateException("Pre-save disk verification on primary");
+                return fence.withDrainedLease(seal, () -> {
+                    requireLivePreflight(live);
+                    var manifest = WorldStorageDiscovery.discover(origin.worldFolders(), origin.scope(),
+                            origin.maximumEntries(), origin.sharedPlayerRoots());
+                    Path file = manifest.playerDataFiles().get(player);
+                    if (file == null || !file.getFileName().toString().equals(player + ".dat")
+                            || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
+                        throw new IOException("Missing genuine original saved playerdata file");
+                    var witness = SavedPlayerdataContentWitness.capturePlayer(manifest, player, compressedLimit);
+                    var before = PlayerDataReader.read(file, compressedLimit, inflatedLimit);
+                    var view = ledger.verifiedPlayerSnapshot(player);
+                    var saved = SavedGrantReceiptNbt.readAndVerify(before, view);
+                    if (!saved.equals(receipt) || saved.active())
+                        throw new IllegalStateException("Saved/memory receipt drift or unproved partial batch");
+                    var plan = PaperGrantInventorySlotPlan.stage(view, grant, saved, storage);
+                    witness.requireUnchanged();
+                    ledger.requireCurrentPlanningView(view);
+                    requireLivePreflight(live);
+                    return new PreparedPreflight(manifest, file, before, view, plan);
+                });
+            }, fence::invalidate);
+            return new PendingPreflight(fence, seal, ledger, player, grant, receipt, storage,
+                    compressedLimit, inflatedLimit, ticket);
+        } catch (RuntimeException | Error failure) {
+            fence.invalidate();
+            throw failure;
+        }
+    }
+
+    private static void requireDetachedPrimary(Player detached) {
+        Objects.requireNonNull(detached, "real Paper detached player");
+        if (!Bukkit.isPrimaryThread() || detached.isOnline() || !Bukkit.getOnlinePlayers().isEmpty())
+            throw new IllegalStateException("Grant save requires primary thread, detached player and zero admissions");
+    }
+
+    private static void requireLivePreflight(BooleanSupplier live) {
+        if (!live.getAsBoolean()) throw new IllegalStateException("Saved preflight custody expired or abandoned");
+    }
+
+    private record PreparedPreflight(WorldStorageDiscovery.Manifest manifest, Path file,
+            Map<String, Object> before, GrantLedger.VerifiedPlayerSnapshot view,
+            Optional<PaperGrantInventorySlotPlan> plan) {}
+
+    /** One-shot pre-save custody. No live Player, ItemStack or World crosses threads. */
+    static final class PendingPreflight {
+        private final WriterEpochFence fence;
+        private final WriterEpochFence.Seal seal;
+        private final GrantLedger ledger;
+        private final UUID player;
+        private final GrantLedger.Grant grant;
+        private final GrantReceiptState receipt;
+        private final PaperGrantInventorySlotPlan.StorageSnapshot storage;
+        private final int compressedLimit, inflatedLimit;
+        private final SavedGrantCommitWorker.Ticket<PreparedPreflight> ticket;
+
+        private PendingPreflight(WriterEpochFence fence, WriterEpochFence.Seal seal,
+                GrantLedger ledger, UUID player, GrantLedger.Grant grant, GrantReceiptState receipt,
+                PaperGrantInventorySlotPlan.StorageSnapshot storage, int compressedLimit,
+                int inflatedLimit, SavedGrantCommitWorker.Ticket<PreparedPreflight> ticket) {
+            this.fence = fence; this.seal = seal; this.ledger = ledger; this.player = player;
+            this.grant = grant; this.receipt = receipt; this.storage = storage;
+            this.compressedLimit = compressedLimit; this.inflatedLimit = inflatedLimit; this.ticket = ticket;
+        }
+
+        SavedGrantCommitWorker.Status status() { return ticket.status(); }
+
+        /** No discovery, NBT parse, journal scan, wait or ACK on main. */
+        Optional<SealedFirstBatch> saveOnMain(Player detached, CoinItemCodec coins) throws IOException {
+            try {
+                requireDetachedPrimary(detached);
+                if (!player.equals(detached.getUniqueId())) throw new IllegalStateException("Foreign player preflight");
+                Objects.requireNonNull(coins, "canonical coin codec");
+                PreparedPreflight prepared = ticket.result();
+                ticket.claimSuccess(); // expiry, close and duplicate consumption are rejected
+                var result = fence.withDrainedWriter(seal, () -> {
+                    ledger.requireCurrentPlanningView(prepared.view());
+                    var currentReceipt = PaperGrantReceiptPdc.read(detached.getPersistentDataContainer());
+                    var original = detached.getInventory().getStorageContents();
+                    if (!receipt.equals(currentReceipt)
+                            || !storage.equals(PaperGrantInventorySlotPlan.StorageSnapshot.fromPaper(original)))
+                        throw new IllegalStateException("Player state changed after protected preflight");
+                    if (prepared.plan().isEmpty()) return Optional.<SealedFirstBatch>empty();
+                    var plan = prepared.plan().orElseThrow();
+                    var candidate = PaperGrantInventoryMaterializer.buildCopy(plan, currentReceipt, original, coins);
+                    plan.requireUnchanged(PaperGrantReceiptPdc.read(detached.getPersistentDataContainer()),
+                            detached.getInventory().getStorageContents());
+                    ledger.requireCurrentPlanningView(prepared.view());
+                    detached.getInventory().setStorageContents(candidate);
+                    PaperGrantReceiptPdc.write(detached.getPersistentDataContainer(), plan.nextReceipt());
+                    detached.saveData(); // no success claim until the post-save worker proves durable state
+                    ledger.requireCurrentPlanningView(prepared.view());
+                    return Optional.of(new SealedFirstBatch(fence, seal, prepared.manifest(), prepared.file(),
+                            ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit));
+                });
+                if (result.isEmpty()) fence.resume(seal); // no physical progress or ACK
+                return result;
+            } catch (IOException | RuntimeException | Error failure) {
+                ticket.abandon();
+                fence.invalidate();
+                throw failure;
+            }
+        }
+    }
+
+    /**
      * Existing synchronous internal integration contract. Real runtime code
-     * MUST use saveAndSealFirstBatchOnMain() and finishOffMain(): discovery,
+     * MUST use schedulePreflightOnMain(), PendingPreflight.saveOnMain() and scheduleOffMain(): discovery,
      * forcing saved files and ACK are too expensive for the Paper main thread.
      *
      * This legacy path remains unregistered and exists only to preserve the
@@ -60,8 +194,8 @@ final class PaperGrantSavedBatchCoordinator {
     }
 
     /**
-     * Phase one: only the real detached CraftPlayer's PDC/Inventory changes
-     * and Paper's own saveData() require the Paper primary thread. This
+     * Legacy unregistered integration probe: performs synchronous preflight,
+     * PDC/Inventory changes and Paper saveData on the primary thread. This
      * stage never ACKs a grant; an asynchronous bounded verifier MUST finish
      * the returned sealed result before this generation may be resumed.
      *
