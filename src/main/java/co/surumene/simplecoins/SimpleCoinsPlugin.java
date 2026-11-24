@@ -124,9 +124,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // not display name, currency suffix or newly lowered wallet caps.
             saveDefaultConfig();
             // Validate the approved 10%/nine-denomination trader policy now.
-            // The death listener is intentionally NOT registered until real
-            // issuance and physical world settlement can be reconciled.
-            WanderingTraderDropConfigReader.read(getConfig());
+            var traderDrops = WanderingTraderDropConfigReader.read(getConfig());
             WorldScopeConfigReader.Loaded sourceScope = WorldScopeConfigReader.read(getConfig());
             EnumMap<CoinDenomination, String> names = new EnumMap<>(CoinDenomination.class);
             Map<CoinDenomination, String> fallback = CoinItemCodec.defaultNames();
@@ -223,6 +221,18 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         "Cannot stage verified JE/BE currency resources", invalidPack);
             }
             CoinItemCodec coinCodec = new CoinItemCodec(names);
+            java.util.function.Consumer<Exception> groundFailure = failure -> {
+                publication.revoke();
+                getLogger().log(Level.SEVERE, "Ground item accounting failed", failure);
+            };
+            var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
+                    publication::memoryAccountingReady,
+                    movements -> publication.recordConfirmedMemory(movements, java.util.Set.of()), groundFailure);
+            getServer().getPluginManager().registerEvents(ground, this);
+            getServer().getScheduler().runTaskTimer(this, ground::flush, 1L, 1L);
+            getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
+                    traderDrops, coinCodec, publication::memoryAccountingReady,
+                    java.util.random.RandomGenerator.getDefault(), groundFailure), this);
             // Own the real saved-grant lifecycle, but never start it before
             // the complete installed writer coverage and startup gate exist.
             savedGrantDelivery = new PaperSavedGrantDeliveryService(this, admission,

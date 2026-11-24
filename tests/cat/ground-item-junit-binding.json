@@ -1,0 +1,7 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.accounting.ground-item",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedGroundItemMovementTest",
+  "driver_class": "co.surumene.simplecoins.domain.GroundItemMovementDriver"
+}

@@ -94,7 +94,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 if(runtime.mayAdmit() || fence.state()!=WriterEpochFence.State.FAULTED) throw new AssertionError("Close did not revoke");
                 task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
                 runGrantProbe(player,grants,false);
-                Bukkit.shutdown();
+                runTraderProbe(product);
             } catch(Throwable failure) { task.cancel(); fail(failure); }
         },1L,1L);
     }
@@ -144,6 +144,48 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 throw new AssertionError("Partial floor not persisted");
             getLogger().info("PAPER_A02_MINIMAL_PLAYER_GRANT_PARTIAL_PASSED total=5064 remaining=1");
         }
+    }
+
+    private void runTraderProbe(org.bukkit.plugin.Plugin product) {
+        var handlers=org.bukkit.event.HandlerList.getRegisteredListeners(product);
+        if(handlers.stream().noneMatch(h->h.getListener() instanceof co.surumene.simplecoins.paper.TraderDeathIssuanceListener)
+                ||handlers.stream().noneMatch(h->h.getListener() instanceof co.surumene.simplecoins.paper.PaperGroundItemAccounting))
+            throw new AssertionError("Actual product trader/ground listeners not registered");
+        var accounting=new MemoryAccounting(Map.of(),BigInteger.ZERO,Map.of());
+        var scope=new WorldScope(true,Set.of(),Set.of());
+        var ground=new co.surumene.simplecoins.paper.PaperGroundItemAccounting(scope,()->true,
+                moves->{if(accounting.recordNext(moves,Set.of())!=MemoryAccounting.Outcome.APPLIED)
+                    throw new AssertionError("Ground movement rejected");},this::fail);
+        var codec=new CoinItemCodec(CoinItemCodec.defaultNames());
+        var policy=new WanderingTraderDropPolicy(true,1,1,1,Map.of(CoinDenomination.HUNDRED,1));
+        var trader=new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
+                new co.surumene.simplecoins.paper.WanderingTraderDropConfigReader.Loaded(policy,1),
+                codec,()->true,new java.util.Random(42),this::fail);
+        Bukkit.getPluginManager().registerEvents(ground,this);
+        Bukkit.getPluginManager().registerEvents(trader,this);
+        var world=Bukkit.getWorlds().getFirst();
+        var pos=world.getSpawnLocation().add(0,4,0);
+        // No real player is connected: retain this chunk until the physical
+        // readback, otherwise Paper may unload it immediately after spawning.
+        var chunk=pos.getChunk();
+        chunk.addPluginChunkTicket(this);
+        world.spawn(pos,org.bukkit.entity.WanderingTrader.class).setHealth(0.0);
+        Bukkit.getScheduler().runTaskLater(this,()->{
+            try{
+                ground.flush();
+                BigInteger observed=BigInteger.ZERO;
+                for(var item:world.getEntitiesByClass(org.bukkit.entity.Item.class)){
+                    var denomination=codec.identify(item.getItemStack());
+                    if(denomination.isPresent())observed=observed.add(BigInteger.valueOf(
+                            (long)denomination.orElseThrow().value()*item.getItemStack().getAmount()));
+                }
+                if(!observed.equals(BigInteger.valueOf(100))||!accounting.snapshot().free().equals(observed))
+                    throw new AssertionError("Real trader spawn mismatch: "+observed+" / "+accounting.snapshot().free());
+                getLogger().info("PAPER_NORMAL_TRADER_SPAWN_PASSED total=100");
+                chunk.removePluginChunkTicket(this);
+                Bukkit.shutdown();
+            }catch(Throwable failure){fail(failure);}
+        },2L);
     }
 
     private static SettlementWriterEpochDecision.Evidence ready() {return new SettlementWriterEpochDecision.Evidence(true,true,true,true,true,true,true,false);}
