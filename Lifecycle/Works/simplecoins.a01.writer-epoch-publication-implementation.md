@@ -5,9 +5,9 @@ id: simplecoins.a01.writer-epoch-publication-implementation
 status: draft
 process: simplecoins.settlement.writer-epoch-publication
 source_refs:
-  - https://github.com/surumeneco/SimpleCoins/issues/423#issuecomment-7082513010
+  - https://github.com/surumeneco/SimpleCoins/issues/423
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
-decision_ref: user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval
+decision_ref: user-chat:2026-11-24:approved-revised-simplecoins-scope
 refs: []
 entry: confirmed-spec
 mode: implementation
@@ -25,7 +25,7 @@ spec_status: confirmed
 ## Evidence
 | URI |
 | --- |
-| https://github.com/surumeneco/SimpleCoins/issues/423#issuecomment-7082513010 |
+| https://github.com/surumeneco/SimpleCoins/issues/423 |
 | https://github.com/surumeneco/SimpleCoins/issues/423 |
 
 ## Scope
@@ -41,7 +41,7 @@ spec_status: confirmed
 ## Repositories
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.writer-epoch-publication-implementation.md;docs/cat/confirmed/a01-writer-epoch-publication-process.md;docs/cat/confirmed/a01-writer-epoch-publication-pi.md;docs/cat/confirmed/a01-writer-epoch-publication-tce.md;src/main/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecision.java;src/test/java/co/surumene/simplecoins/domain/A01WriterEpochDecisionDriver.java;src/test/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecisionTest.java;tests/cat/a01-writer-epoch-junit-binding.json;.github/workflows/cat-a01-a02-contract-acceptance.yml | src/main/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecision.java | src/test/java/co/surumene/simplecoins/domain/A01WriterEpochDecisionDriver.java;src/test/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecisionTest.java;tests/cat/a01-writer-epoch-junit-binding.json;.github/workflows/cat-a01-a02-contract-acceptance.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.a01.writer-epoch-publication-implementation.md;docs/cat/confirmed/a01-writer-epoch-publication-process.md;docs/cat/confirmed/a01-writer-epoch-publication-pi.md;docs/cat/confirmed/a01-writer-epoch-publication-tce.md;src/main/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecision.java;src/test/java/co/surumene/simplecoins/domain/A01WriterEpochDecisionDriver.java;src/test/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecisionTest.java;src/test/java/co/surumene/simplecoins/domain/SimplifiedDecisionTest.java;tests/cat/a01-writer-epoch-junit-binding.json;.github/workflows/cat-a01-a02-contract-acceptance.yml | src/main/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecision.java | src/test/java/co/surumene/simplecoins/domain/A01WriterEpochDecisionDriver.java;src/test/java/co/surumene/simplecoins/domain/SettlementWriterEpochDecisionTest.java;src/test/java/co/surumene/simplecoins/domain/SimplifiedDecisionTest.java;tests/cat/a01-writer-epoch-junit-binding.json;.github/workflows/cat-a01-a02-contract-acceptance.yml |
 
 ## Checks
 | ID | Stage | Runner | CWD | Command | Test IDs | Inputs | Outputs | Timeout |
@@ -63,9 +63,7 @@ spec_status: confirmed
 | real-use | not-run | — |
 
 ## Authorized meaning and bounded implementation
-利用者による承認判断委任（user-chat:2026-11-23:delegated-A01-A02-CAT-semantic-approval）に基づきDrive02A/02B/03/04/05へ照合したConfirmed A01 Process/PI/TCEを正本とする。
-最初の実装単位は既に真正な証拠であると上位が立証した抽象Boolean PI入力の分類だけとする。製品の全writer入場拒否/既入場排出/世代継続、物理保存/fsync、通常Journal引継、原子公開、永続ACK、Admissionはこの局所分類では立証されない。
-入力のBooleanを任意の呼出元が組み立てるだけで実際のpublish/ackへ接続してはならない。具体的な技術手段の導入形態は別の証拠単位で確定し、証拠不足時は未公開・未ACK・入室拒否を維持する。A02のequipment空/欠損の正規化候補はこの承認に含まない。
+2026-11-24の改訂仕様に対応するConfirmed Process/PI/TCEを正本とする。既存の保護方式は互換アダプターに限定し、全writer閉包・強制fsync・全サーバー排他を独立した必須条件としない。局所判定の成功は実Paper上の観測、決算公開、予約配布、永続ACKや入室解放を証明しない。
 
 ## Compilation
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
