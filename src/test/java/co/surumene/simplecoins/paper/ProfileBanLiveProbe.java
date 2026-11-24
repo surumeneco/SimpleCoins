@@ -39,6 +39,27 @@ public final class ProfileBanLiveProbe extends JavaPlugin {
             getLogger().info("PAPER_A06_IP_BAN_DISTINCT_FROM_PROFILE_UUID_PASSED"
                     + " bannedIp=" + isolatedTestIp + " clearUuid=" + CLEAR);
 
+            var required = java.util.Set.of("paper-profile", "paper-ip");
+            try {
+                PaperProfileBanSource.captureCompleteStandard(required, java.util.Map.of());
+                throw new AssertionError("Unmapped IP ban was accepted");
+            } catch (IOException expected) {
+                if (!expected.getMessage().contains("IP BAN")) throw expected;
+            }
+            Bukkit.unbanIP(isolatedTestIp);
+            var complete = PaperProfileBanSource.captureCompleteStandard(required, java.util.Map.of());
+            if (!complete.currentlyBanned(BANNED) || complete.currentlyBanned(CLEAR)
+                    || complete.currentlyBanned(UUID.randomUUID()))
+                throw new IOException("Complete standard BAN lists disagree with profile membership");
+            try {
+                PaperProfileBanSource.captureCompleteStandard(
+                        java.util.Set.of("paper-profile", "paper-ip", "external:missing"), java.util.Map.of());
+                throw new AssertionError("Missing external provider accepted");
+            } catch (IOException expected) {
+                // Expected: declaration is incomplete.
+            }
+            getLogger().info("PAPER_COMPLETE_STANDARD_BAN_CAPTURE_PASSED");
+
             // Null and non-primary-thread calls MUST fail; they must not become CLEAR.
             try {
                 PaperProfileBanSource.observe(null);

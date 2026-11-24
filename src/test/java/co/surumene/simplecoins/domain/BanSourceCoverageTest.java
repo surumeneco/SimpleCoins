@@ -71,6 +71,23 @@ class BanSourceCoverageTest {
                 Set.of(), Map.of(ALICE, allClear())));
     }
 
+    @Test void completeListsCoverOwnersDiscoveredAfterCapture() throws Exception {
+        var mutable = new java.util.HashSet<>(Set.of(ALICE));
+        var snapshot = BanSourceCoverage.captureCompleteLists(REQUIRED, Map.of(
+                "paper-profile", mutable, "paper-ip", Set.of(),
+                "external:ban", Set.of(BOB)));
+        mutable.clear();
+        assertTrue(snapshot.currentlyBanned(ALICE));
+        assertTrue(snapshot.currentlyBanned(BOB));
+        assertFalse(snapshot.currentlyBanned(UUID.randomUUID()));
+        assertThrows(IOException.class, () -> snapshot.currentlyBanned(null));
+        assertThrows(IOException.class, () -> BanSourceCoverage.captureCompleteLists(REQUIRED,
+                Map.of("paper-profile", Set.of(ALICE), "paper-ip", Set.of())));
+        assertThrows(IOException.class, () -> BanSourceCoverage.captureCompleteLists(REQUIRED,
+                Map.of("paper-profile", Set.of(), "paper-ip", Set.of(),
+                        "external:ban", Set.of(), " PAPER-PROFILE ", Set.of())));
+    }
+
     @Test void retainedSnapshotIsImmutableAgainstCallerMutation() throws Exception {
         var list = new ArrayList<>(allClear());
         var reports = new HashMap<UUID, List<BanEvidence.Source>>();
