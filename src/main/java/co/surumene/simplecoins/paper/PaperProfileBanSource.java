@@ -49,14 +49,24 @@ public final class PaperProfileBanSource {
     public static BanSourceCoverage captureCompleteStandard(
             Set<String> requiredSources, Map<String, Set<UUID>> externalCompleteLists)
             throws IOException {
+        return captureCompleteStandard(requiredSources,externalCompleteLists,null);
+    }
+
+    /** The product supplies the observed UUID/IP association source; the legacy
+     * two-argument boundary still rejects a nonempty IP list without a source. */
+    public static BanSourceCoverage captureCompleteStandard(
+            Set<String> requiredSources, Map<String, Set<UUID>> externalCompleteLists,
+            PaperIpBanAssociations associations)throws IOException {
         if (!Bukkit.isPrimaryThread())
             throw new IOException("Paper BAN access requires the primary thread");
         if (requiredSources == null || externalCompleteLists == null
                 || !requiredSources.contains(SOURCE_ID) || !requiredSources.contains("paper-ip"))
             throw new IOException("Both Paper standard BAN sources must be declared");
         try {
-            if (!Bukkit.getIPBans().isEmpty())
-                throw new IOException("Nonempty IP BAN list requires authenticated UUID mapping");
+            Set<String> ips=Bukkit.getIPBans();
+            if (associations==null&&!ips.isEmpty())
+                throw new IOException("Nonempty IP BAN list requires UUID mapping source");
+            Set<UUID> ipBanned=associations==null?Set.of():associations.bannedPlayers(ips);
             Set<UUID> profiles = new HashSet<>();
             for (OfflinePlayer profile : Bukkit.getBannedPlayers()) {
                 if (profile == null || profile.getUniqueId() == null)
@@ -67,7 +77,7 @@ public final class PaperProfileBanSource {
             if (lists.containsKey(SOURCE_ID) || lists.containsKey("paper-ip"))
                 throw new IOException("External provider cannot replace Paper BAN observations");
             lists.put(SOURCE_ID, profiles);
-            lists.put("paper-ip", Set.of());
+            lists.put("paper-ip", ipBanned);
             return BanSourceCoverage.captureCompleteLists(requiredSources, lists);
         } catch (IOException failure) {
             throw failure;

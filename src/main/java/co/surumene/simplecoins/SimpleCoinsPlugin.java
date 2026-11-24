@@ -291,7 +291,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
             };
             getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
-            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure);
+            final co.surumene.simplecoins.paper.PaperIpBanAssociations ipAssociations;
+            try { ipAssociations=new co.surumene.simplecoins.paper.PaperIpBanAssociations(getDataFolder().toPath()); }
+            catch(IOException invalid){throw new IllegalStateException("Cannot load IP BAN associations",invalid);}
+            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure,ipAssociations);
             entities.setOwnerResolver(ownerReconciliation::accountedOwner);
             hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
             getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
@@ -357,7 +360,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
                 startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
                         this,admission,publication,protectedSettlement,sourceScope.scope(),
-                        () -> false, entities); // ordinary accounting coverage is not complete yet
+                        () -> false, entities, ipAssociations); // ordinary accounting coverage is not complete yet
             }
             sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
                     sourceScope.maxSourceEntries(), () -> {

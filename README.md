@@ -38,6 +38,16 @@ python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guar
 
 実際の配布版、JAR名、ビルド・CIコマンドは当該HEADの`build.gradle.kts`とワークフローで確認してください。**JARのビルド成功だけで本番導入しない**こと。とくにGuard JAR欠損や異常終了時の受付遮断には、サーバー側の独立した起動前検査が必要です（[admission-guard/README.md](admission-guard/README.md)）。
 
+### IP BANの資産分類（開発中）
+
+`plugins/SimpleCoins/last-player-addresses.yml` は参加成功時のUUID別最終IPを自動記録します。手動補正は別の `plugins/SimpleCoins/ip-ban-overrides.yml` に記述します。例（架空UUID・文書用IP）:
+
+```yaml
+"00000000-0000-4000-8000-000000000001": "192.0.2.42"
+```
+
+手動値が優先され、行を削除すると自動記録に戻ります。現在のPaper IP BANリストとの照合時に読み直すため、過去に解除されたBANは資産分類に残りません。対応IPが不明のUUIDを推測で登録しません。これらのファイルは運営者専用であり公開・Git管理対象ではありません。既存プレイヤーの記録は次回参加または手動設定で補います。
+
 ## 開発・検証・リリースの境界
 
 - `feature/*`で独立作業を行い、検証された単位を`develop`へ統合します。利用者のリリース承認前に`main`へマージしません。
