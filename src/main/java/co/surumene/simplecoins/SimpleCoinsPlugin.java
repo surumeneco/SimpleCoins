@@ -269,6 +269,14 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     movements -> publication.recordConfirmedMemory(movements, java.util.Set.of()), groundFailure);
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getScheduler().runTaskTimer(this, ground::flush, 1L, 1L);
+            var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
+                    publication::memoryAccountingReady,
+                    movements -> publication.recordConfirmedMemory(movements, java.util.Set.of()), failure -> {
+                        publication.revoke();
+                        getLogger().log(Level.SEVERE, "Hopper accounting failed", failure);
+                    });
+            getServer().getPluginManager().registerEvents(hopper, this);
+            getServer().getScheduler().runTaskTimer(this, hopper::flush, 1L, 1L);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
                     java.util.random.RandomGenerator.getDefault(), groundFailure), this);
