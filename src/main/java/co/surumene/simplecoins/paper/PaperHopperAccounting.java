@@ -101,6 +101,17 @@ public final class PaperHopperAccounting implements Listener {
             before.put(p, new Image(p, copyContents(physical(p.block()))));
     }
 
+    /** Shared preimage for inventory GUI and ground-to-block pickup. */
+    public void observeInventory(Inventory inventory) {
+        if (!ready.getAsBoolean()) return;
+        try {
+            for (Position position : positions(inventory)) {
+                capture(position);
+                touched.add(position);
+            }
+        } catch (IOException | RuntimeException failure) { fail(failure); }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void search(HopperInventorySearchEvent event) {
         if (!ready.getAsBoolean()) return;

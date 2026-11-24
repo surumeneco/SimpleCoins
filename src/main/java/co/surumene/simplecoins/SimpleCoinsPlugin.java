@@ -264,19 +264,23 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 publication.revoke();
                 getLogger().log(Level.SEVERE, "Ground item accounting failed", failure);
             };
-            var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
-                    publication::memoryAccountingReady,
-                    movements -> publication.recordConfirmedMemory(movements, java.util.Set.of()), groundFailure);
-            getServer().getPluginManager().registerEvents(ground, this);
-            getServer().getScheduler().runTaskTimer(this, ground::flush, 1L, 1L);
+            var tickMovements = new java.util.ArrayList<MemoryAccounting.Movement>();
             var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
-                    publication::memoryAccountingReady,
-                    movements -> publication.recordConfirmedMemory(movements, java.util.Set.of()), failure -> {
-                        publication.revoke();
-                        getLogger().log(Level.SEVERE, "Hopper accounting failed", failure);
-                    });
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure);
+            var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
+                    hopper::observeInventory);
+            getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
-            getServer().getScheduler().runTaskTimer(this, hopper::flush, 1L, 1L);
+            getServer().getScheduler().runTaskTimer(this, () -> {
+                try {
+                    ground.flush();
+                    hopper.flush();
+                    if (publication.memoryAccountingReady() && !tickMovements.isEmpty())
+                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.of());
+                } catch (RuntimeException failure) { groundFailure.accept(failure); }
+                finally { tickMovements.clear(); }
+            },1L,1L);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
                     java.util.random.RandomGenerator.getDefault(), groundFailure), this);
@@ -290,10 +294,12 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         Bukkit.shutdown();
                     });
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
-            var liveDelivery = new PaperPlayerGrantDelivery(issuanceGrants, coinCodec, (id, value) ->
-                    publication.recordConfirmedMemory(java.util.List.of(new MemoryAccounting.Movement(
-                            MemoryAccounting.Endpoint.external(), MemoryAccounting.Endpoint.personal(id),
-                            java.math.BigInteger.valueOf(value))), java.util.Set.of()));
+            var liveDelivery = new PaperPlayerGrantDelivery(issuanceGrants, coinCodec, (id, value) -> {
+                publication.recordConfirmedMemory(java.util.List.of(new MemoryAccounting.Movement(
+                        MemoryAccounting.Endpoint.external(), MemoryAccounting.Endpoint.personal(id),
+                        java.math.BigInteger.valueOf(value))), java.util.Set.of());
+                ground.excludeConfirmedGrant(id,value);
+            });
             var admin = new PaperAdminCommand(this, publication, issuanceGrants, liveDelivery,
                     walletCodec, sourceScope.scope(), names, unit);
             var command = java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command");
