@@ -508,6 +508,74 @@ public final class WclServicesProbe extends JavaPlugin {
                         + " DEAD=" + result.dead()
                         + " worldTotal=" + result.statistics().worldTotal());
             getLogger().info("PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED");
+            // The protected persistence fixture deliberately installs an
+            // unmapped IP BAN, for which normal accounting must fail closed.
+            // Keep the ordinary GUI scenario in the baseline without that fixture.
+            if (!withBlockLocker()) {
+                // WWW persists the GUI cargo only on close. Test the real
+                // distributed holder, actual live provider, and committed store.
+                var hidden=coins.create(CoinDenomination.ONE,1);
+                var ability=co.surumene.www.domain.Ability.INVENTORY;
+                var cargoFixture=individual.withAdminAbilityOverrides(Map.of(ability,4.0));
+                www.loadedIndividuals().saveAndRegister(wolf,cargoFixture);
+                www.abilityRuntime().refresh(wolf);
+                // The admin override is further modified by personality, age and
+                // injury. Build the real fixture from effective capacity, not the
+                // requested override value or rounded GUI row size.
+                int capacity=(int)Math.round(www.abilityRuntime().find(wolf.getUniqueId())
+                        .orElseThrow().canonical(ability));
+                if(capacity<1||capacity>=9)throw new IOException("Unexpected WWW fixture capacity: "+capacity);
+                int visible=capacity-1;
+                var cargoIndividual=cargoFixture.withStorage(individual.weapon(),
+                        Map.of(visible,new ItemStackSnapshot(cargo.serializeAsBytes()),
+                                capacity,new ItemStackSnapshot(hidden.serializeAsBytes())));
+                www.loadedIndividuals().saveAndRegister(wolf,cargoIndividual);
+                var cargoHolder=new co.surumene.www.ui.WonderfulWolfInventoryHolder(wolf.getUniqueId());
+                var cargoGui=Bukkit.createInventory(cargoHolder,18);
+                cargoHolder.inventory(cargoGui);
+                cargoGui.setItem(9+visible,cargo.clone());
+                cargoGui.setItem(9+capacity,ItemStack.of(Material.BLACK_STAINED_GLASS_PANE));
+                String cargoLocation="world/"+world.getName()+"/entity/"+wolf.getUniqueId()+"/wcl/www/cargo:"+visible;
+                String weaponLocation="world/"+world.getName()+"/entity/"+wolf.getUniqueId()+"/equipment/mainhand";
+                var cargoEndpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(commander,
+                        co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,cargoLocation);
+                var weaponEndpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(commander,
+                        co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,weaponLocation);
+                var hiddenEndpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(commander,
+                        co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,
+                        "world/"+world.getName()+"/entity/"+wolf.getUniqueId()+"/wcl/www/cargo:"+capacity);
+                var ledger=new co.surumene.simplecoins.domain.MemoryAccounting(Map.of(),BigInteger.ZERO,
+                        Map.of(cargoEndpoint,BigInteger.valueOf(5000),weaponEndpoint,BigInteger.valueOf(10000),
+                                hiddenEndpoint,BigInteger.ONE));
+                var fault=new java.util.concurrent.atomic.AtomicReference<Exception>();
+                var local=new co.surumene.simplecoins.paper.PaperEntityAccounting(this,
+                        new WorldScope(true,Set.of(),Set.of()),()->true,
+                        moves->{if(ledger.recordNext(moves,Set.of())!=co.surumene.simplecoins.domain.MemoryAccounting.Outcome.APPLIED)
+                            throw new IllegalStateException("WWW GUI delta rejected");},fault::set);
+                local.openCargo(cargoGui);
+                local.observeInventory(cargoGui);
+                var smaller=coins.create(CoinDenomination.THOUSAND,2);
+                cargoGui.setItem(9+visible,smaller);
+                local.flush();
+                if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(cargoEndpoint,BigInteger.valueOf(2000),weaponEndpoint,BigInteger.valueOf(10000),hiddenEndpoint,BigInteger.ONE)))
+                    throw new IOException("WWW open cargo did not reflect actual value: "+ledger.snapshot(),fault.get());
+                local.observeInventory(cargoGui);
+                cargoGui.clear(9+visible);
+                local.flush();
+                if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(weaponEndpoint,BigInteger.valueOf(10000),hiddenEndpoint,BigInteger.ONE)))
+                    throw new IOException("WWW empty cargo lost hidden storage or retained stale visible cargo: "+ledger.snapshot(),fault.get());
+                local.observeInventory(cargoGui);
+                www.loadedIndividuals().saveAndRegister(wolf,cargoIndividual.withStorage(cargoIndividual.weapon(),
+                        Map.of(capacity,new ItemStackSnapshot(hidden.serializeAsBytes()))));
+                local.closeCargo(cargoGui);
+                local.flush();
+                if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(weaponEndpoint,BigInteger.valueOf(10000),hiddenEndpoint,BigInteger.ONE)))
+                    throw new IOException("WWW close counted already observed cargo again: "+ledger.snapshot(),fault.get());
+                www.loadedIndividuals().saveAndRegister(wolf,individual);
+                www.abilityRuntime().refresh(wolf);
+                getLogger().info("PAPER_A05_WWW_OPEN_CARGO_ACCOUNTED_ONCE_PASSED");
+            }
+
             if (Boolean.getBoolean("a01.moneyOwnerWriterProbe")) {
                 if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty())
                     throw new IOException("Real WWW writer requires zero-player Paper main thread");
@@ -1252,6 +1320,51 @@ public final class WclServicesProbe extends JavaPlugin {
                     new co.surumene.simplecoins.domain.WorldScope(true,Set.of(),Set.of()),()->true,
                     moves->{if(accounting.recordNext(moves,Set.of())!=co.surumene.simplecoins.domain.MemoryAccounting.Outcome.APPLIED)
                         throw new IllegalStateException("Normal WCL delta rejected");},observedFailure::set);
+            // Run ordinary cargo regression BEFORE the separate Agent deliberately
+            // closes its writer gate. Its negative control must remain unchanged.
+            var holder=new co.surumene.whatawonderfulchicken.gui.WonderfulChickenInventoryHolder(chicken.getUniqueId());
+            var gui=Bukkit.createInventory(holder,36);
+            holder.inventory(gui);
+            var coinCodec=new CoinItemCodec(CoinItemCodec.defaultNames());
+            ItemStack originalBox=data.shulkerBox().clone();
+            var initialMeta=(BlockStateMeta)originalBox.getItemMeta();
+            var initialBox=(ShulkerBox)initialMeta.getBlockState();
+            for(int i=0;i<27;i++)gui.setItem(9+i,initialBox.getInventory().getItem(i));
+            local.openCargo(gui);
+            local.observeInventory(gui);
+            // Replace all visible cargo with 5000C while the persisted box is
+            // still 10000C. The live GUI, not the stored bytes, owns the value.
+            for(int i=9;i<36;i++)gui.clear(i);
+            gui.setItem(9,coinCodec.create(CoinDenomination.FIVE_THOUSAND,1));
+            local.flush();
+            if(observedFailure.get()!=null||!accounting.snapshot().dead().equals(Map.of(oldEndpoint,BigInteger.valueOf(5000))))
+                throw new IOException("WWC deferred cargo not observed in live GUI",observedFailure.get());
+            local.observeInventory(gui);
+            gui.clear(9);
+            local.flush();
+            if(observedFailure.get()!=null||!accounting.snapshot().dead().isEmpty())
+                throw new IOException("WWC empty live cargo still counted persisted coins",observedFailure.get());
+            local.observeInventory(gui);
+            ItemStack emptyBox=originalBox.clone();
+            var emptyMeta=(BlockStateMeta)emptyBox.getItemMeta();
+            var emptyState=(ShulkerBox)emptyMeta.getBlockState();
+            emptyState.getInventory().clear();
+            emptyMeta.setBlockState(emptyState);
+            emptyBox.setItemMeta(emptyMeta);
+            data.shulkerBox(emptyBox);
+            store.save(chicken,data);
+            local.closeCargo(gui);
+            local.flush();
+            if(observedFailure.get()!=null||!accounting.snapshot().dead().isEmpty())
+                throw new IOException("WWC cargo close duplicated or lost storage",observedFailure.get());
+            // Restore the initial genuine fixture before testing the owner move.
+            local.observeEntity(chicken);
+            data.shulkerBox(originalBox);
+            store.save(chicken,data);
+            local.flush();
+            if(observedFailure.get()!=null||!accounting.snapshot().dead().equals(Map.of(oldEndpoint,BigInteger.valueOf(10000))))
+                throw new IOException("WWC restored fixture was not accounted",observedFailure.get());
+            getLogger().info("PAPER_A05_WWC_OPEN_CARGO_ACCOUNTED_ONCE_PASSED");
             local.observeEntity(chicken);
             data.followTarget(secondOwner);
             writeWithAlreadyAdmittedOwnerProof("WWC", () -> store.save(chicken, data));
@@ -1260,6 +1373,7 @@ public final class WclServicesProbe extends JavaPlugin {
             if(!accounting.snapshot().dead().equals(Map.of(newEndpoint,BigInteger.valueOf(10000))))
                 throw new IOException("Normal WCL owner move not conserved: "+accounting.snapshot());
             getLogger().info("PAPER_A05_WWC_NORMAL_OWNER_MOVEMENT_PASSED");
+
             var after = success(readers.get("wwc").readStored(
                     chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
                     "WWC genuine store after owner move");
