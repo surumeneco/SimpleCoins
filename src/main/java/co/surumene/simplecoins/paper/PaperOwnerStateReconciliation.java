@@ -59,10 +59,6 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
                 UUID owner=entry.getKey();var current=state(owner,coverage);
                 if(current.equals(entry.getValue()))continue;
                 if(System.nanoTime()<retryAfter)return false;
-                // Do not publish a dead classification for an active player;
-                // Paper normally disconnects a player when a BAN is applied.
-                // Until that source is settled, withhold current statistics.
-                if(Bukkit.getPlayer(owner)!=null&&current.classification(owner).kind()==AssetOwner.Kind.DEAD)return false;
                 var ledgerPlan=runtime.planOwnerRead(owner);var diskPlan=reader.capture(ledgerPlan);
                 pending=true;
                 Bukkit.getScheduler().runTaskAsynchronously(plugin,()->{
@@ -85,41 +81,34 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
         if(event.getLoginResult()!=org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.ALLOWED||!runtime.memoryAccountingReady())return;
         boolean allowed=false;
         try{
-            if(Bukkit.isPrimaryThread())allowed=loginReady(event.getUniqueId(),event.getAddress());
-            else allowed=Bukkit.getScheduler().callSyncMethod(plugin,()->loginReady(event.getUniqueId(),event.getAddress())).get(3,java.util.concurrent.TimeUnit.SECONDS);
+            if(Bukkit.isPrimaryThread())allowed=loginReady(event.getUniqueId());
+            else allowed=Bukkit.getScheduler().callSyncMethod(plugin,()->loginReady(event.getUniqueId())).get(3,java.util.concurrent.TimeUnit.SECONDS);
         }catch(Exception unavailable){if(unavailable instanceof InterruptedException)Thread.currentThread().interrupt();}
         if(!allowed)event.disallow(org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                 "Server accounting is updating. Please retry shortly.");
     }
-    private boolean loginReady(UUID owner,java.net.InetAddress incoming)throws IOException{
+    private boolean loginReady(UUID owner)throws IOException{
         if(!runtime.memoryAccountingReady())return false;
-        var current=state(owner,bans());
-        if(current.banned()){
-            // A former IP can still be banned after the player changes network.
-            // Never make that stale address a permanent login block. The real
-            // join updates it; any old dead balance is reconciled offline before play.
-            if(ipAssociations!=null&&PaperProfileBanSource.observe(owner).status()!=BanEvidence.Status.BANNED
-                    &&!ipAssociations.wouldBeBanned(owner,incoming,Bukkit.getIPBans()))return true;
-            return false;
-        }
-        var accounted=runtime.accountedOwnerState(owner);
+        // The BAN lists classify accounting, not native admission. Paper owns
+        // actual access. A changed prior accounting class may briefly delay
+        // entry while we reconcile the saved account, regardless of direction.
+        var current=state(owner,bans());var accounted=runtime.accountedOwnerState(owner);
         if(accounted==null||current.equals(accounted))return true;
         fresh();return false;
     }
     @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.MONITOR)
     public void joined(org.bukkit.event.player.PlayerJoinEvent event){
         if(ipAssociations==null)return;
-        var player=event.getPlayer();
+        var player=event.getPlayer();UUID id=player.getUniqueId();
         try{
             var address=player.getAddress();
-            if(address==null||address.getAddress()==null){
-                plugin.getLogger().warning("Cannot observe a joined player's numeric IP; retaining existing association.");return;
-            }
-            ipAssociations.record(player.getUniqueId(),address.getAddress());
-            var old=runtime.accountedOwnerState(player.getUniqueId());
-            if(old!=null&&old.classification(player.getUniqueId()).kind()==AssetOwner.Kind.DEAD
-                    &&!old.equals(state(player.getUniqueId(),bans()))){
-                player.kick(net.kyori.adventure.text.Component.text("Server accounting is updating your assets. Please reconnect shortly."));
+            if(address==null||address.getAddress()==null)
+                plugin.getLogger().warning("Cannot observe a joined player's numeric IP; retaining existing association.");
+            else ipAssociations.record(id,address.getAddress());
+            // An unregistered player has no prior balance. Keep an explicit
+            // D class if a manual association marks the player banned.
+            if(runtime.memoryAccountingReady()&&runtime.accountedOwnerState(id)==null){
+                var current=state(id,bans());if(current.banned())runtime.rememberOwnerState(id,current);
             }
         }catch(IOException|RuntimeException failure){fatal.accept(failure);}
     }

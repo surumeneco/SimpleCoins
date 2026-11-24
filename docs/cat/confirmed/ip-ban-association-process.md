@@ -8,7 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
 decision_ref: https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view#IP-BANのUUID帰属（2026-11-25確定）
-refs: []
+refs:
   - simplecoins.accounting.ip-ban-association.pi.resolve
 semantic_contract: markdown-v2
 language: ja

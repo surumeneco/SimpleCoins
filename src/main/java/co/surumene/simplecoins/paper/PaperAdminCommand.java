@@ -126,7 +126,9 @@ public final class PaperAdminCommand implements TabExecutor, Listener {
         }
         if(remaining!=0)throw new IllegalStateException("Wallet capacity changed");
         player.getInventory().setStorageContents(next);
-        runtime.recordConfirmedMemory(List.of(),Set.of(player.getUniqueId()));
+        var state=runtime.accountedOwnerState(player.getUniqueId());
+        if(state==null||state.classification(player.getUniqueId()).kind()==AssetOwner.Kind.PERSONAL)
+            runtime.recordConfirmedMemory(List.of(),Set.of(player.getUniqueId()));
     }
 
     private CoinDenomination denomination(String item) {

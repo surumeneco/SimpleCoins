@@ -277,6 +277,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
                     inventory -> { hopper.observeInventory(inventory); entities.observeInventory(inventory); });
+            ground.setAccountingRuntime(publication);
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
             getServer().getPluginManager().registerEvents(entities, this);
@@ -313,6 +314,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     });
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
             var liveDelivery = new PaperPlayerGrantDelivery(issuanceGrants, coinCodec, (id, value) -> {
+                try {
+                    if(ground.observeConfirmedDeadGrant(id,Bukkit.getPlayer(id))) {
+                        flushAccounting.run();
+                        if(!publication.memoryAccountingReady())throw new IllegalStateException("Dead grant accounting failed");
+                        return;
+                    }
+                }catch(IOException failure){groundFailure.accept(failure);throw new IllegalStateException("Cannot account confirmed dead grant",failure);}
                 publication.recordConfirmedMemory(java.util.List.of(new MemoryAccounting.Movement(
                         MemoryAccounting.Endpoint.external(), MemoryAccounting.Endpoint.personal(id),
                         java.math.BigInteger.valueOf(value))), java.util.Set.of());

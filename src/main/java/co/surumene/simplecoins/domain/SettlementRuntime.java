@@ -291,6 +291,12 @@ public final class SettlementRuntime {
             return accountedOwnerStates.computeIfAbsent(owner,ignored->observed);
         }
     }
+    public Map<MemoryAccounting.Endpoint,BigInteger> deadPlayerAssets(UUID owner){
+        synchronized(barrier){
+            if(!memoryAccountingReady())throw new IllegalStateException("Normal memory accounting is unavailable");
+            return memory.deadPlayerAssets(owner);
+        }
+    }
     public Map<UUID,OwnerState> accountedOwnerStates(){
         synchronized(barrier){return Map.copyOf(accountedOwnerStates);}
     }

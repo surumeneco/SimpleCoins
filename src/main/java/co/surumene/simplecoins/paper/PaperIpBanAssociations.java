@@ -73,11 +73,4 @@ public final class PaperIpBanAssociations {
         return IpBanAssociations.bannedPlayers(last,read(overrideFile),currentBans);
     }
 
-    /** A real new address can supersede the old one on successful join, but
-     * an operator's explicit override continues to take precedence. */
-    public boolean wouldBeBanned(UUID owner,InetAddress incoming,Set<String> currentBans)throws IOException {
-        if(incoming==null)return bannedPlayers(currentBans).contains(owner);
-        var observed=Map.of(owner,incoming.getHostAddress().split("%",2)[0]);
-        return IpBanAssociations.bannedPlayers(observed,read(overrideFile),currentBans).contains(owner);
-    }
 }

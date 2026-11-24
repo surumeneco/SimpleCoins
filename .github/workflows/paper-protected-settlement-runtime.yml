@@ -60,6 +60,7 @@ jobs:
           grep -F 'PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED' paper.log
           grep -F 'PAPER_DYNAMIC_OWNER_BAN_DELETE_RESTORE_PASSED total=5000' paper.log
           grep -F 'PAPER_DYNAMIC_IP_BAN_OVERRIDE_PASSED total=5000' paper.log
+          grep -F 'PAPER_DEAD_PLAYER_LOCATION_MOVEMENT_PASSED' paper.log
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_PARTIAL_PASSED total=5064 remaining=1' paper.log
           grep -F 'PAPER_NORMAL_TRADER_SPAWN_PASSED' paper.log || { tail -150 paper.log; exit 1; }
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper.log; then tail -150 paper.log; exit 1; fi
