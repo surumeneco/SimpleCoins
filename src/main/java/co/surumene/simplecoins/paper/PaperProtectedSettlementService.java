@@ -34,6 +34,8 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
     private boolean memoryMode;
     private BukkitTask task;
     private Supplier<SettlementWriterEpochDecision.Evidence> evidence;
+    private Consumer<SettlementRuntime.MemoryPrepared> onMemoryPrepared = prepared -> {};
+    private Runnable afterPublish = () -> {};
     public PaperProtectedSettlementService(JavaPlugin owner, SettlementRuntime runtime,
             NormalMutationJournal journal, Consumer<Throwable> failStop) {
         this.owner=Objects.requireNonNull(owner); this.runtime=Objects.requireNonNull(runtime);
@@ -58,12 +60,20 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
      * The actual source owner must resolve ordinary world/plugin mutations before finalEvidence. */
     public void startMemory(SettlementRuntime.SourceStage source, BooleanSupplier normalTracking,
             Supplier<SettlementWriterEpochDecision.Evidence> finalEvidence, long timeoutMillis) {
+        startMemory(source, normalTracking, finalEvidence, timeoutMillis, prepared -> {}, () -> {});
+    }
+
+    public void startMemory(SettlementRuntime.SourceStage source, BooleanSupplier normalTracking,
+            Supplier<SettlementWriterEpochDecision.Evidence> finalEvidence, long timeoutMillis,
+            Consumer<SettlementRuntime.MemoryPrepared> onPrepared, Runnable onPublished) {
         primary();
         if (closed || started) throw new IllegalStateException("Settlement service closed or used");
         Objects.requireNonNull(source); Objects.requireNonNull(normalTracking); Objects.requireNonNull(finalEvidence);
         if (timeoutMillis < 1 || timeoutMillis > 300_000)
             throw new IllegalArgumentException("Bounded settlement timeout required");
         var attempt = runtime.beginMemory(normalTracking, () -> Bukkit.getOnlinePlayers().isEmpty());
+        this.onMemoryPrepared = Objects.requireNonNull(onPrepared);
+        this.afterPublish = Objects.requireNonNull(onPublished);
         started = true; memoryMode = true; evidence = finalEvidence;
         deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         try {
@@ -79,6 +89,7 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
             if (!Bukkit.getOnlinePlayers().isEmpty()) throw new IllegalStateException("Players arrived during protected settlement");
             if (!future.isDone()) return;
             var prepared=future.get(); // only after isDone, never waits on disk work
+            if (memoryMode) onMemoryPrepared.accept((SettlementRuntime.MemoryPrepared) prepared);
             var observed=Objects.requireNonNull(evidence.get());
             if (System.nanoTime()-deadline>=0) throw new IllegalStateException("Final evidence exceeded settlement deadline");
             var verdict = memoryMode
@@ -86,6 +97,7 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
                     : runtime.complete((SettlementRuntime.Prepared) prepared, observed);
             if (verdict != SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH)
                 throw new IllegalStateException("Incomplete protected settlement evidence");
+            afterPublish.run();
             stopPolling(); executor.shutdown();
         } catch(Exception | Error failure) { fail(failure); }
     }

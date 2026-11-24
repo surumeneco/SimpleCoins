@@ -92,6 +92,9 @@ public final class SettlementRuntimeChecks {
         var attempt = runtime.beginMemory(tracking::get, () -> true);
         var prepared = runtime.prepareMemory(attempt, () -> capture(dir.resolve("memory")));
         check(!runtime.mayAdmit() && runtime.current().isEmpty());
+        check(prepared.summary().personal().equals(Map.of(PLAYER, BigInteger.valueOf(5000))));
+        check(prepared.summary().free().signum() == 0);
+        check(prepared.summary().dead().isEmpty());
         var hold = new SettlementWriterEpochDecision.Evidence(true,true,false,true,true,false);
         check(runtime.completeMemory(prepared, hold) == SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED);
         check(runtime.current().isEmpty());

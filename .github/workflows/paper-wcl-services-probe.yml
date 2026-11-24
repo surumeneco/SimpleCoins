@@ -719,6 +719,9 @@ jobs:
             }
           ]
           BANNED_IP
+          mkdir -p smoke-blocklocker/plugins/SimpleCoins
+          unzip -p smoke-blocklocker/plugins/SimpleCoins.jar config.yml > smoke-blocklocker/plugins/SimpleCoins/config.yml
+          sed -i 's/diagnostic-only: false/diagnostic-only: true/' smoke-blocklocker/plugins/SimpleCoins/config.yml
           cd smoke-blocklocker
           for phase in persist reload-saved reload; do
             set +e
@@ -782,6 +785,34 @@ jobs:
             fi
           done
           echo 'PAPER_A04_A05_REAL_DISTRIBUTED_BLOCKLOCKER_WCL_SAVED_GENERATION_PASSED'
+      - name: Actual SimpleCoins product startup with complete real providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reuse the saved world, not the diagnostic probe plugin or its
+          # deliberately unmapped IP ban. Product startup itself owns scanning.
+          cp -a smoke-blocklocker smoke-product-startup
+          cd smoke-product-startup
+          rm -f plugins/StorageProbe.jar
+          printf '[]\n' > banned-ips.json
+          sed -i 's/diagnostic-only: true/diagnostic-only: false/' plugins/SimpleCoins/config.yml
+          set +e
+          timeout --signal=TERM --kill-after=10s 300s \
+            java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > product-startup.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            tail -180 product-startup.log
+            exit 1
+          fi
+          grep -F 'SIMPLECOINS_STARTUP_STATIC_WINDOW_BEGIN' product-startup.log
+          grep -F 'SIMPLECOINS_PRODUCT_SETTLEMENT_WORKER_BEGIN' product-startup.log
+          grep -F 'SIMPLECOINS_PRODUCT_SETTLEMENT_PREPARED_UNPUBLISHED personal=25000 free=1000 dead=30000' product-startup.log
+          grep -F 'SIMPLECOINS_STARTUP_NORMAL_TRACKING_INCOMPLETE' product-startup.log
+          if grep -Fq 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED' product-startup.log; then
+            echo 'Incomplete tracking must not permit publication' >&2
+            exit 1
+          fi
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -790,6 +821,7 @@ jobs:
           path: |
             smoke/*.log
             smoke-blocklocker/*.log
+            smoke-product-startup/product-startup.log
             smoke-pdc-negative/*.log
             smoke-equipment-negative/*.log
             smoke-inventory-negative/*.log

@@ -103,6 +103,12 @@ public final class BanSourceCoverage {
         return new BanSourceCoverage(evaluated);
     }
 
+    /** Compare classification universes, only when both observations are complete. */
+    public boolean sameCompleteBannedPlayers(BanSourceCoverage current) {
+        return current != null && completeBannedUnion != null
+                && completeBannedUnion.equals(current.completeBannedUnion);
+    }
+
     public boolean currentlyBanned(UUID player) throws IOException {
         if (player == null)
             throw new IOException("Missing UUID for BAN coverage");

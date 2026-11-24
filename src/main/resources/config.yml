@@ -37,6 +37,8 @@ statistics:
   enabled-worlds: []
   disabled-worlds: []
 settlement:
+  # Diagnostics only: never permits login. Normal startup uses the managed full scan.
+  diagnostic-only: false
   # Bounds the entire saved-source directory walk at each guarded startup.
   # An exhausted budget fails closed; increase only after monitoring the VPS.
   max-source-entries: 1000000

@@ -517,6 +517,12 @@ public final class PaperCapturedHybridSettlement {
      * stores a source-backed initial candidate; fromObservedWithWcl is a test
      * seam and must not masquerade as a successful Paper source recheck.
      */
+    /** Final main-thread startup readback, after per-provider worker checks. */
+    void requireCurrentWclPrimary(int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        if (!Bukkit.isPrimaryThread()) throw new IOException("WCL readback requires primary");
+        requireSelectedWclStillCurrent(maxSerializedBytes, maxInflatedBytes, SettlementReadDispatch.direct());
+    }
+
     private void requireSelectedWclStillCurrent(
             int maxSerializedBytes, int maxInflatedBytes, SettlementReadDispatch reads) throws IOException {
         if (selectedWcl.isEmpty() || capturedWorlds.isEmpty()) return;

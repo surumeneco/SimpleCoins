@@ -44,6 +44,11 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     private final int maxSourceEntries;
     private final Runnable safeStop;
     private final GrantLedger issuanceLedger;
+    private final java.util.function.LongSupplier beforeDiscovery;
+    @FunctionalInterface public interface Discovered {
+        void accept(WorldStorageDiscovery.Manifest manifest) throws IOException;
+    }
+    private final Discovered afterDiscovery;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean launched = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
@@ -63,7 +68,17 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
     public PaperSavedSourceDiscovery(JavaPlugin plugin, WorldScope scope,
                                      int maxSourceEntries, Runnable safeStop,
                                      GrantLedger issuanceLedger) {
+        this(plugin, scope, maxSourceEntries, safeStop, issuanceLedger, () -> 0L, manifest -> {});
+    }
+
+    public PaperSavedSourceDiscovery(JavaPlugin plugin, WorldScope scope,
+                                     int maxSourceEntries, Runnable safeStop,
+                                     GrantLedger issuanceLedger,
+                                     java.util.function.LongSupplier beforeDiscovery,
+                                     Discovered afterDiscovery) {
         this.plugin = Objects.requireNonNull(plugin, "Paper plugin");
+        this.beforeDiscovery = Objects.requireNonNull(beforeDiscovery);
+        this.afterDiscovery = Objects.requireNonNull(afterDiscovery);
         this.scope = Objects.requireNonNull(scope, "world inclusion");
         if (maxSourceEntries < 1)
             throw new IllegalArgumentException("Invalid discovery maximum");
@@ -107,10 +122,21 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         if (closed.get()) return;
                         try {
-                            WorldRoots roots = captureWorldRoots();
-                            plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY");
-                            launchDiscovery(roots);
-                        } catch (IOException | RuntimeException | Error fail) {
+                            long delay = beforeDiscovery.getAsLong();
+                            if (delay < 0) throw new IllegalStateException("Invalid startup wait");
+                            Runnable launch = () -> {
+                                if (closed.get() || finished.get()) return;
+                                try {
+                                    WorldRoots roots = captureWorldRoots();
+                                    plugin.getLogger().info("SIMPLECOINS_SAVED_DISCOVERY_SERVER_READY");
+                                    launchDiscovery(roots);
+                                } catch (IOException | RuntimeException | Error fail) {
+                                    signalFailure(fail);
+                                }
+                            };
+                            if (delay == 0) launch.run();
+                            else Bukkit.getScheduler().runTaskLater(plugin, launch, delay);
+                        } catch (RuntimeException | Error fail) {
                             signalFailure(fail);
                         }
                     });
@@ -262,7 +288,7 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                             throw new IOException("Paper shared playerdata roots changed during discovery");
                         capturedIdentities.requireDiscoveredManifest(manifest);
                         diskWorldIds.requireUnchanged();
-                        if (closed.get() || !finished.compareAndSet(false, true)) return;
+                        if (closed.get() || finished.get()) return;
                         observed.set(manifest);
                         var report = observation.receipts();
                         if (report != null) {
@@ -286,6 +312,8 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                                 + " authoritativeFiles=" + manifest.worldFiles().size()
                                 + " playerdataFiles=" + manifest.playerDataFiles().size()
                                 + " (UNPUBLISHED; admission remains disabled)");
+                        afterDiscovery.accept(manifest);
+                        finished.set(true);
                     } catch (IOException | RuntimeException | Error changed) {
                         signalFailure(changed);
                     }

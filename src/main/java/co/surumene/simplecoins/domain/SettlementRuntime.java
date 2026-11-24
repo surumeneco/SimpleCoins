@@ -56,6 +56,8 @@ public final class SettlementRuntime {
         private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting) {
             this.attempt = attempt; this.accounting = accounting;
         }
+        /** Completed reconstruction, not a published statistic or admission permit. */
+        public MemoryAccounting.Snapshot summary() { return accounting.snapshot(); }
     }
     private volatile MemoryAttempt memoryAttempt;
     private volatile MemoryAccounting memory;
