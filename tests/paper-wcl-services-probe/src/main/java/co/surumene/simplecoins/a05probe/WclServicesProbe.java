@@ -2958,6 +2958,19 @@ public final class WclServicesProbe extends JavaPlugin {
         manifest.requireUnchangedDiscovery();
         getLogger().info("PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED");
         if (Boolean.getBoolean("a01.probe.offMainHybrid")) {
+            // This fixture deliberately scopes coverage to the real profile list;
+            // production still requires the separate IP and external provider evidence.
+            var fullProfile = protectedMode
+                    ? co.surumene.simplecoins.domain.BanSourceCoverage.captureCompleteLists(
+                            Set.of(fixtureProvider), Map.of(fixtureProvider,
+                                    Bukkit.getBannedPlayers().stream()
+                                            .filter(org.bukkit.OfflinePlayer::isBanned)
+                                            .map(org.bukkit.OfflinePlayer::getUniqueId)
+                                            .collect(java.util.stream.Collectors.toSet())))
+                    : covered;
+            var actualStartup = protectedMode
+                    ? co.surumene.simplecoins.paper.PaperStartupSettlementSource.capturePrimary(
+                            this, List.of(world), manifest, scope, fullProfile, budgets, 4096) : null;
             var workerCapture = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
             workerCapture.includeDiscoveredLoadedWcl(this);
             var settings = protectedMode
@@ -2972,7 +2985,9 @@ public final class WclServicesProbe extends JavaPlugin {
                                     manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
                                     4096, Set.of("[Private]"), Set.of("[More Users]"),
                                     Set.of("Everyone"), raw -> raw);
-                    var staged = workerCapture.stageCombinedOffMain(this,
+                    var staged = actualStartup != null
+                            ? actualStartup.capture().staged()
+                            : workerCapture.stageCombinedOffMain(this,
                             Map.of(sourceWorldName, sourceWorldId), manifest, scope, covered,
                             workerTerrain, knownNonProtection, nonChestOwners, owners,
                             2 * 1024 * 1024, 16 * 1024 * 1024, (source, value) -> {

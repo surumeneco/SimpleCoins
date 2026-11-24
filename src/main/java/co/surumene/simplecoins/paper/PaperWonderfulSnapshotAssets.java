@@ -44,6 +44,21 @@ public final class PaperWonderfulSnapshotAssets {
             PaperWonderfulLoadedEvidence.Snapshot source,
             int maxSerializedBytes, int maxInflatedBytes,
             Set<UUID> seenWalletIds) throws IOException {
+        return slotValues(source, maxSerializedBytes, maxInflatedBytes, seenWalletIds, false);
+    }
+
+    /** A native equipment mirror is valued separately; the verified native
+     * stack is the only participant in the shared wallet identity set. The
+     * caller must prove full item equality before accepting any mirror. */
+    static Map<String, BigInteger> slotValuesForHybrid(
+            PaperWonderfulLoadedEvidence.Snapshot source, int maxSerializedBytes,
+            int maxInflatedBytes, Set<UUID> seenWalletIds) throws IOException {
+        return slotValues(source, maxSerializedBytes, maxInflatedBytes, seenWalletIds, true);
+    }
+
+    private static Map<String, BigInteger> slotValues(
+            PaperWonderfulLoadedEvidence.Snapshot source, int maxSerializedBytes,
+            int maxInflatedBytes, Set<UUID> seenWalletIds, boolean nativeMirrors) throws IOException {
         Objects.requireNonNull(source, "WCL source snapshot");
         Objects.requireNonNull(seenWalletIds, "shared physical wallet UUID generation");
         Set<String> slots = new HashSet<>();
@@ -52,8 +67,12 @@ public final class PaperWonderfulSnapshotAssets {
             if (item == null || item.slot() == null || item.slot().isBlank()
                     || !slots.add(item.slot()))
                 throw new IOException("Invalid or duplicate WCL source slot");
+            boolean mirror = nativeMirrors &&
+                    (("www".equals(source.providerId()) && "weapon".equals(item.slot()))
+                    || ("wwc".equals(source.providerId()) && "head".equals(item.slot())));
             BigInteger amount = PaperLiveItemValue.serialized(
-                    item.bytes(), maxSerializedBytes, maxInflatedBytes, seenWalletIds);
+                    item.bytes(), maxSerializedBytes, maxInflatedBytes,
+                    mirror ? new HashSet<>() : seenWalletIds);
             amounts.put(item.slot(), amount);
         }
         return Map.copyOf(amounts);

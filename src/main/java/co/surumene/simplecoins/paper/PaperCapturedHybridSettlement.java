@@ -190,7 +190,7 @@ public final class PaperCapturedHybridSettlement {
                 throw new IOException("Repeated WCL Entity in one captured generation: " + id);
             if (selectedWclReader != null && selectedWclReader != consumer)
                 throw new IOException("Different WCL consumer in one LIVE capture");
-            var candidate = PaperWonderfulLiveCandidates.collect(
+            var candidate = PaperWonderfulLiveCandidates.collectForHybrid(
                     consumer, entity, providerId, walletIds,
                     maxSerializedBytes, maxInflatedBytes);
             // The provider can call external code. Recheck current paper
@@ -260,6 +260,12 @@ public final class PaperCapturedHybridSettlement {
         var capture = fromObserved(verifiedObserved, liveWalletIds);
         capture.selectedWcl.addAll(List.copyOf(selections));
         return capture;
+    }
+
+    /** Authoritative WCL owner from the same provider read as the captured LIVE money. */
+    public synchronized java.util.Optional<WclOwnerEvidence.Decision> capturedWclOwner(UUID entity) {
+        return selectedWcl.stream().filter(wcl -> wcl.entityId().equals(entity))
+                .map(WclHybridLiveOverlay.Selected::ownerEvidence).findFirst();
     }
 
     public PaperLiveUniverseAssets.Observed observed() {

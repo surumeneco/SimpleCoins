@@ -111,6 +111,23 @@ public final class PaperWonderfulSavedChunkCandidates {
             Plugin consumer, WorldStorageDiscovery.SourceFile source, UUID worldId,
             AnvilRegionReader.Chunk chunk, Set<UUID> seenEntityIds,
             Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        return collect(consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
+                maxSerializedBytes, maxInflatedBytes, false);
+    }
+
+    static List<Candidate> collectForHybrid(
+            Plugin consumer, WorldStorageDiscovery.SourceFile source, UUID worldId,
+            AnvilRegionReader.Chunk chunk, Set<UUID> seenEntityIds,
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        return collect(consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
+                maxSerializedBytes, maxInflatedBytes, true);
+    }
+
+    private static List<Candidate> collect(
+            Plugin consumer, WorldStorageDiscovery.SourceFile source, UUID worldId,
+            AnvilRegionReader.Chunk chunk, Set<UUID> seenEntityIds,
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes,
+            boolean nativeMirrors) throws IOException {
         Objects.requireNonNull(consumer, "plugin");
         Objects.requireNonNull(source, "saved source");
         Objects.requireNonNull(worldId, "world UUID");
@@ -168,8 +185,11 @@ public final class PaperWonderfulSavedChunkCandidates {
                         + provider + "/" + entityId + " status=" + result.status()
                         + " reason=" + result.reason());
             var snapshot = result.snapshot().orElseThrow();
-            Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
-                    snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
+            Map<String, BigInteger> values = nativeMirrors
+                    ? PaperWonderfulSnapshotAssets.slotValuesForHybrid(
+                            snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds)
+                    : PaperWonderfulSnapshotAssets.slotValues(
+                            snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
             Map<String, PaperWonderfulLoadedEvidence.StoredItem> sameRead =
                     new java.util.LinkedHashMap<>();
             for (var item : snapshot.items()) {

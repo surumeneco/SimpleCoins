@@ -83,6 +83,19 @@ public final class PaperWonderfulLiveCandidates {
             Plugin consumer, Entity entity, String providerId,
             Set<UUID> seenWalletIds, int maxSerializedBytes,
             int maxInflatedBytes) throws IOException {
+        return collect(consumer, entity, providerId, seenWalletIds,
+                maxSerializedBytes, maxInflatedBytes, false);
+    }
+
+    static Candidate collectForHybrid(Plugin consumer, Entity entity, String providerId,
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+        return collect(consumer, entity, providerId, seenWalletIds,
+                maxSerializedBytes, maxInflatedBytes, true);
+    }
+
+    private static Candidate collect(Plugin consumer, Entity entity, String providerId,
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes,
+            boolean nativeMirrors) throws IOException {
         Objects.requireNonNull(consumer, "consumer plugin");
         Objects.requireNonNull(entity, "selected LIVE Entity");
         Objects.requireNonNull(providerId, "expected WCL provider");
@@ -106,8 +119,11 @@ public final class PaperWonderfulLiveCandidates {
                 PaperWonderfulLiveOwnerEvidence.fromVerifiedLoadedSnapshot(
                         entity, providerId, snapshot);
 
-        Map<String, BigInteger> values = PaperWonderfulSnapshotAssets.slotValues(
-                snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
+        Map<String, BigInteger> values = nativeMirrors
+                ? PaperWonderfulSnapshotAssets.slotValuesForHybrid(
+                        snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds)
+                : PaperWonderfulSnapshotAssets.slotValues(
+                        snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds);
         Map<String, String> aliases = WclPhysicalSlotIdentity.keys(
                 snapshot.entityId(), providerId, values.keySet());
 

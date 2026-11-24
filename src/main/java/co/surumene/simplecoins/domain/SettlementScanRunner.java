@@ -59,6 +59,13 @@ public final class SettlementScanRunner {
      */
     @FunctionalInterface
     public interface SavedEntitySupplement {
+        default Map<String, ResolvedEntitySettlementImport.Ownership> resolveNativeOwners(
+                WorldStorageDiscovery.SourceFile source, AnvilRegionReader.Chunk chunk,
+                Set<UUID> sharedWalletIds,
+                Map<String, ResolvedEntitySettlementImport.Ownership> fallback) throws IOException {
+            return fallback;
+        }
+
         void stage(WorldStorageDiscovery.SourceFile source,
                    AnvilRegionReader.Chunk chunk,
                    SettlementAccumulator pending, Set<UUID> sharedWalletIds)
@@ -388,6 +395,8 @@ public final class SettlementScanRunner {
                                     entityOwners.resolve(source.world(), chunk.nbt());
                             if (owners == null)
                                 throw new IOException("Saved Entity ownership resolver returned null");
+                            if (savedSupplement != null)
+                                owners = savedSupplement.resolveNativeOwners(source, chunk, seenSavedWallets, owners);
                             ResolvedEntitySettlementImport.stageChunk(
                                     pending, id, source.world(), chunk.nbt(), owners,
                                     seenSavedWallets);
