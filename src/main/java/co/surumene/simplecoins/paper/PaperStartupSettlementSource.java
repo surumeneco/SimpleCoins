@@ -123,6 +123,11 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
             throw new IOException("LIVE monetary attribution changed during settlement");
     }
 
+    /** Must be called directly after the successful final readback, before publication. */
+    public void seedNormalWcl(PaperEntityAccounting accounting) throws IOException {
+        accounting.seedLoadedWcl(initialWcl.holders());
+    }
+
     /** Positive slot values are not the only basis for registration: an
      * existing non-shared protected empty inventory also qualifies. */
     private Set<UUID> protectedOwners(PaperLiveUniverseAssets.Observed observed) throws IOException {

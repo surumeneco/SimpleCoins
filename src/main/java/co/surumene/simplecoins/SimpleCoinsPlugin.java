@@ -349,7 +349,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
                 startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
                         this,admission,publication,protectedSettlement,sourceScope.scope(),
-                        () -> false); // ordinary accounting coverage is not complete yet
+                        () -> false, entities); // ordinary accounting coverage is not complete yet
             }
             sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
                     sourceScope.maxSourceEntries(), () -> {
