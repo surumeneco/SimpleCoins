@@ -139,6 +139,29 @@ public final class SavedGrantDeliveryReadback {
         return next;
     }
 
+    /** Reconstruct canonical first-batch vacancies from the actual prior NBT. */
+    static PaperGrantInventorySlotPlan.StorageSnapshot savedStorageForIntent(
+            Map<String, Object> savedRoot) throws IOException {
+        SavedPlayerAssets.extract(savedRoot);
+        Map<Integer, Map<?, ?>> occupied = inventoryBySlot(savedRoot);
+        var slots = new java.util.ArrayList<String>(PaperGrantInventorySlotPlan.STORAGE_SLOTS);
+        for (int i = 0; i < PaperGrantInventorySlotPlan.STORAGE_SLOTS; i++)
+            slots.add(occupied.containsKey(i) ? "occupied" : null);
+        // Not an ItemStack fingerprint and never used for the live unchanged check.
+        return new PaperGrantInventorySlotPlan.StorageSnapshot(slots);
+    }
+
+    /** A retry before any save must still preserve the whole original storage. */
+    static void requireSameIntentStorage(Map<String, Object> before,
+            Map<String, Object> current) throws IOException {
+        SavedPlayerAssets.extract(before);
+        SavedPlayerAssets.extract(current);
+        if (!sameNbt(inventoryBySlot(before), inventoryBySlot(current))
+                || !sameNbt(before.get("EnderItems"), current.get("EnderItems"))
+                || !sameNbt(before.get("equipment"), current.get("equipment")))
+            throw new IOException("Saved storage changed from durable first-batch intent");
+    }
+
     /** Compare decoded NBT, including primitive payload arrays by value. */
     private static boolean sameNbt(Object a, Object b) {
         if (a == b) return true;

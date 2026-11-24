@@ -76,16 +76,51 @@ final class PaperGrantSavedBatchCoordinator {
                             || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
                         throw new IOException("Missing genuine original saved playerdata file");
                     var witness = SavedPlayerdataContentWitness.capturePlayer(manifest, player, compressedLimit);
-                    var before = PlayerDataReader.read(file, compressedLimit, inflatedLimit);
+                    byte[] captured = PlayerDataReader.readCompressed(file, compressedLimit);
+                    var current = PlayerDataReader.decodeCompressed(captured, compressedLimit, inflatedLimit);
                     var view = ledger.verifiedPlayerSnapshot(player);
-                    var saved = SavedGrantReceiptNbt.readAndVerify(before, view);
-                    if (!saved.equals(receipt) || saved.active())
-                        throw new IllegalStateException("Saved/memory receipt drift or unproved partial batch");
-                    var plan = PaperGrantInventorySlotPlan.stage(view, grant, saved, storage);
+                    var saved = SavedGrantReceiptNbt.readAndVerify(current, view);
+                    if (!saved.equals(receipt))
+                        throw new IllegalStateException("Saved/memory receipt drift");
+                    var intent = ledger.readFirstBatchIntent(view, grant, file, compressedLimit);
+                    Map<String, Object> before;
+                    Optional<PaperGrantInventorySlotPlan> plan;
+                    boolean recoveryOnly = false;
+                    if (intent.isPresent()) {
+                        before = PlayerDataReader.decodeCompressed(intent.orElseThrow(), compressedLimit, inflatedLimit);
+                        var prior = SavedGrantReceiptNbt.readAndVerify(before, view);
+                        if (prior.active()) throw new IOException("First-batch intent already has a partial prior receipt");
+                        var intended = PaperGrantInventorySlotPlan.stage(view, grant, prior,
+                                SavedGrantDeliveryReadback.savedStorageForIntent(before)).orElseThrow(
+                                        () -> new IOException("Durable intent has no physical placement"));
+                        if (saved.equals(intended.nextReceipt())) {
+                            // Crash after real save but before ACK: never mint again.
+                            SavedGrantDeliveryReadback.verifyTransition(before, current, ledger, player, intended);
+                            plan = Optional.of(intended);
+                            recoveryOnly = true;
+                        } else if (saved.equals(prior)) {
+                            SavedGrantDeliveryReadback.requireSameIntentStorage(before, current);
+                            plan = PaperGrantInventorySlotPlan.stage(view, grant, saved, storage);
+                            requireSameIntentPlan(intended, plan);
+                        } else throw new IOException("Saved receipt is not either durable intent boundary");
+                    } else {
+                        if (saved.active() || saved.completedSequence() >= grant.sequence())
+                            throw new IOException("Saved progress has no durable first-batch intent");
+                        before = current;
+                        plan = PaperGrantInventorySlotPlan.stage(view, grant, saved, storage);
+                        var diskPlan = PaperGrantInventorySlotPlan.stage(view, grant, saved,
+                                SavedGrantDeliveryReadback.savedStorageForIntent(before));
+                        if (plan.isPresent() != diskPlan.isPresent())
+                            throw new IOException("Saved and live grant capacity disagree");
+                        if (diskPlan.isPresent()) requireSameIntentPlan(diskPlan.orElseThrow(), plan);
+                        witness.requireUnchanged();
+                        requireLivePreflight(live);
+                        if (plan.isPresent()) ledger.writeFirstBatchIntent(view, grant, file, captured, compressedLimit);
+                    }
                     witness.requireUnchanged();
                     ledger.requireCurrentPlanningView(view);
                     requireLivePreflight(live);
-                    return new PreparedPreflight(manifest, file, before, view, plan);
+                    return new PreparedPreflight(manifest, file, before, view, plan, recoveryOnly);
                 });
             }, fence::invalidate);
             return new PendingPreflight(fence, seal, ledger, player, grant, receipt, storage,
@@ -94,6 +129,14 @@ final class PaperGrantSavedBatchCoordinator {
             fence.invalidate();
             throw failure;
         }
+    }
+
+    private static void requireSameIntentPlan(PaperGrantInventorySlotPlan intended,
+            Optional<PaperGrantInventorySlotPlan> actual) throws IOException {
+        if (actual.isEmpty() || !intended.previousReceipt().equals(actual.orElseThrow().previousReceipt())
+                || !intended.nextReceipt().equals(actual.orElseThrow().nextReceipt())
+                || !intended.placements().equals(actual.orElseThrow().placements()))
+            throw new IOException("Paper placement differs from durable prior-state plan");
     }
 
     private static void requireDetachedPrimary(Player detached) {
@@ -108,7 +151,7 @@ final class PaperGrantSavedBatchCoordinator {
 
     private record PreparedPreflight(WorldStorageDiscovery.Manifest manifest, Path file,
             Map<String, Object> before, GrantLedger.VerifiedPlayerSnapshot view,
-            Optional<PaperGrantInventorySlotPlan> plan) {}
+            Optional<PaperGrantInventorySlotPlan> plan, boolean recoveryOnly) {}
 
     /** One-shot pre-save custody. No live Player, ItemStack or World crosses threads. */
     static final class PendingPreflight {
@@ -150,6 +193,9 @@ final class PaperGrantSavedBatchCoordinator {
                         throw new IllegalStateException("Player state changed after protected preflight");
                     if (prepared.plan().isEmpty()) return Optional.<SealedFirstBatch>empty();
                     var plan = prepared.plan().orElseThrow();
+                    if (prepared.recoveryOnly())
+                        return Optional.of(new SealedFirstBatch(fence, seal, prepared.manifest(), prepared.file(),
+                                ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit));
                     var candidate = PaperGrantInventoryMaterializer.buildCopy(plan, currentReceipt, original, coins);
                     plan.requireUnchanged(PaperGrantReceiptPdc.read(detached.getPersistentDataContainer()),
                             detached.getInventory().getStorageContents());
@@ -455,7 +501,13 @@ final class PaperGrantSavedBatchCoordinator {
                 if (plan.nextReceipt().active() != targetStillPending)
                     throw new IllegalStateException(
                             "Target grant acknowledgement differs from saved receipt");
-                if (!plan.nextReceipt().active()) verifiedComplete.set(true);
+                if (!plan.nextReceipt().active()) {
+                    // The actual durable ACK was independently checked above.
+                    ledger.removeAcknowledgedFirstBatchIntent(grant);
+                    requireLive(live);
+                    fence.requireDrained(seal);
+                    verifiedComplete.set(true);
+                }
                 return proof;
             } catch (IOException | RuntimeException | Error failure) {
                 fence.invalidate();
