@@ -4,6 +4,7 @@ import co.surumene.simplecoins.domain.*;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperProtectedSettlementService;
 import co.surumene.simplecoins.paper.PaperPlayerGrantDelivery;
+import co.surumene.simplecoins.paper.SavedGrantReceiptNbt;
 import co.surumene.simplecoins.paper.PaperAdminCommand;
 import java.util.List;
 import org.bukkit.Material;
@@ -20,7 +21,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /** Disposable real Paper scheduler and save path; never arms the actual product fence. */
 public final class RuntimeSettlementProbe extends JavaPlugin {
-    private static final UUID ID=UUID.fromString("00000000-0000-0000-0000-000000000660");
+    private static final String NAME="ProbeSettlement";
+    private static final boolean NETWORK=Boolean.getBoolean("a02.liveClientProbe");
+    private static final UUID ID=NETWORK?UUID.nameUUIDFromBytes(("OfflinePlayer:"+NAME).getBytes(java.nio.charset.StandardCharsets.UTF_8)):
+            UUID.fromString("00000000-0000-0000-0000-000000000660");
+    private com.janboerman.invsee.spigot.api.MainSpectatorInventory retainedInvsee;
     private NormalMutationJournal journal;
     private PaperProtectedSettlementService service;
     @Override public void onEnable() {
@@ -57,11 +62,23 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
         if(command==null||!(command.getExecutor() instanceof PaperAdminCommand))
             throw new AssertionError("Product give command is not registered");
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(),"sc give "+ID+" 5200");
+        if(NETWORK) {
+            runNetworkClientProbe(product,real,player,grants);
+            return;
+        }
+        if(Boolean.getBoolean("a02.liveGrantCrash")) {
+            runGrantCrashProbe(player,grants);
+            throw new AssertionError("Crash injection returned");
+        }
         if(Boolean.getBoolean("a02.liveGrantReload")) {
             if(grants.pending(ID).size()!=1)throw new AssertionError("Unexpected grant on reload");
             player.loadData();
-            runGrantProbe(player,grants,true);
-            Bukkit.shutdown();
+            // A new Paper process has no cached pre-login spectator. Verify
+            // an ordinary post-restart offline save before the final grant.
+            runInvseeRoundTrip(player,grants,5064,Material.DIRT,()->{
+                try{runGrantProbe(player,grants,true);Bukkit.shutdown();}
+                catch(Throwable failure){fail(failure);}
+            });
             return;
         }
         if(!grants.historySnapshot().isEmpty())throw new AssertionError("Guarded command issued before settlement");
@@ -94,8 +111,10 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 if(runtime.mayAdmit() || fence.state()!=WriterEpochFence.State.FAULTED) throw new AssertionError("Close did not revoke");
                 task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
                 runOwnerProbe(root,player,()->{
-                    try{runGrantProbe(player,grants,false);runTraderProbe(product);}
-                    catch(Throwable failure){fail(failure);}
+                    try{runInvseeRoundTrip(player,grants,5000,Material.STONE,()->{
+                        try{runGrantProbe(player,grants,false);runTraderProbe(product);}
+                        catch(Throwable failure){fail(failure);}
+                    });}catch(Throwable failure){fail(failure);}
                 });
             } catch(Throwable failure) { task.cancel(); fail(failure); }
         },1L,1L);
@@ -199,6 +218,129 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
         });
     }
 
+    /** A real loopback JE client, not a fabricated PlayerJoinEvent. Only the
+     * disposable probe publishes a verified one-player fixture baseline;
+     * production startup remains HOLD pending complete ordinary tracking. */
+    private void runNetworkClientProbe(org.bukkit.plugin.Plugin product,SettlementRuntime runtime,
+            Player detached,GrantLedger grants)throws Exception {
+        if(!grants.historySnapshot().isEmpty()||runtime.mayAdmit())throw new AssertionError("Network fixture is not fresh");
+        var codec=new CoinItemCodec(CoinItemCodec.defaultNames());
+        detached.getInventory().setItem(0,codec.create(CoinDenomination.FIVE_THOUSAND,1));
+        for(int i=2;i<36;i++)detached.getInventory().setItem(i,new ItemStack(Material.STONE,64));
+        detached.saveData();grants.reserveCoins(ID,CoinDenomination.ONE,65,"real network fixture");
+        runInvseeRoundTrip(detached,grants,5000,Material.STONE,()->{
+            try{
+                var root=getDataFolder().toPath().resolve("network-fixture-world");
+                var target=root.resolve("playerdata/"+ID+".dat");Files.createDirectories(target.getParent());
+                Files.copy(PaperPlayerGrantDelivery.playerdata(ID),target);
+                var scope=new WorldScope(true,Set.of(),Set.of());
+                var coverage=co.surumene.simplecoins.paper.PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
+                var attempt=runtime.beginMemory(()->true,()->Bukkit.getOnlinePlayers().isEmpty());
+                Bukkit.getScheduler().runTaskAsynchronously(this,()->{
+                    try{
+                        var manifest=WorldStorageDiscovery.discover(Map.of("fixture",root),scope,256);
+                        var prepared=runtime.prepareMemory(attempt,()->new SettlementRuntime.Captured(
+                            SettlementScanRunner.stageWithBanCoverage(manifest,scope,coverage,(w,pos)->{throw new java.io.IOException("Unexpected tile");},
+                                (w,nbt)->Map.of(),16*1024*1024,64*1024*1024),manifest,coverage));
+                        Bukkit.getScheduler().runTask(this,()->{
+                            try{
+                                runtime.completeMemory(prepared,ready());
+                                if(!runtime.mayAdmit()||retainedInvsee==null)throw new AssertionError("Fixture admission or retained view unavailable");
+                                getLogger().info("PAPER_NETWORK_GRANT_FIXTURE_READY");
+                                waitForNetworkGrant(product,runtime,detached,grants,codec);
+                            }catch(Throwable failure){fail(failure);}
+                        });
+                    }catch(Throwable failure){Bukkit.getScheduler().runTask(this,()->fail(failure));}
+                });
+            }catch(Throwable failure){fail(failure);}
+        });
+    }
+
+    private void waitForNetworkGrant(org.bukkit.plugin.Plugin product,SettlementRuntime runtime,
+            Player detached,GrantLedger grants,CoinItemCodec codec){
+        long deadline=System.nanoTime()+java.time.Duration.ofSeconds(70).toNanos();
+        Bukkit.getScheduler().runTaskTimer(this,task->{
+            try{
+                if(System.nanoTime()>deadline)throw new AssertionError("Actual client join/grant timed out");
+                var player=Bukkit.getPlayer(ID);
+                if(player==null||grants.pending(ID).size()!=1||grants.pending(ID).getFirst().confirmedPartial()!=64)return;
+                var data=PlayerDataReader.read(PaperPlayerGrantDelivery.playerdata(ID),16*1024*1024,64*1024*1024);
+                var total=SavedPlayerAssets.extract(data).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
+                if(!total.equals(BigInteger.valueOf(5064))||!runtime.current().orElseThrow().personalBalances().get(ID).equals(total))
+                    throw new AssertionError("Actual join delivery disagrees with saved/player accounting");
+                long retained=0;for(var item:retainedInvsee.getStorageContents())if(item!=null){var coin=codec.identify(item);if(coin.isPresent())retained+=((long)coin.get().value())*item.getAmount();}
+                if(retained!=5064)throw new AssertionError("Retained real InvSee join cache did not follow live grant: "+retained);
+                var addresses=org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(new java.io.File(product.getDataFolder(),"last-player-addresses.yml"));
+                if(!"127.0.0.1".equals(addresses.getString(ID.toString())))throw new AssertionError("Real successful connection IP not saved");
+                getLogger().info("PAPER_NETWORK_GRANT_JOIN_AND_IP_PASSED total=5064 pending=1");
+                task.cancel();player.kick(net.kyori.adventure.text.Component.text("SimpleCoins probe complete"));
+                Bukkit.getScheduler().runTaskTimer(this,quitTask->{
+                    try{
+                        if(System.nanoTime()>deadline)throw new AssertionError("Actual client quit timed out");
+                        if(Bukkit.getPlayer(ID)!=null)return;
+                        quitTask.cancel();runInvseeRoundTrip(detached,grants,5064,Material.DIRT,()->{
+                            getLogger().info("PAPER_NETWORK_RETAINED_INVSEE_SAVE_PASSED total=5064");Bukkit.shutdown();
+                        });
+                    }catch(Throwable failure){quitTask.cancel();fail(failure);}
+                },2L,2L);
+            }catch(Throwable failure){task.cancel();fail(failure);}
+        },2L,2L);
+    }
+
+    /** Normal offline InvSee save before delivery and after a fresh Paper boot.
+     * Use the distributed plugin, a real UUID.dat and ordinary main-thread scheduler;
+     * no native Agent, artificial stale-proof callback or global writer seal. */
+    private void runInvseeRoundTrip(Player player,GrantLedger grants,long expected,Material change,Runnable next)throws Exception {
+        var installed=Bukkit.getPluginManager().getPlugin("InvSeePlusPlus");
+        if(!(installed instanceof com.janboerman.invsee.spigot.api.InvseePlusPlus invsee))
+            throw new AssertionError("Actual distributed InvSee++ unavailable");
+        var file=PaperPlayerGrantDelivery.playerdata(ID);
+        var before=PlayerDataReader.read(file,16*1024*1024,64*1024*1024);
+        var receipt=SavedGrantReceiptNbt.readAndVerify(before,grants,ID);
+        var api=invsee.getApi();
+        api.mainSpectatorInventory(ID,"ProbeSettlement").whenComplete((response,error)->
+            Bukkit.getScheduler().runTask(this,()->{
+                try{
+                    if(error!=null)throw new IllegalStateException("InvSee capture failed",error);
+                    if(response==null||!response.isSuccess())throw new AssertionError("InvSee capture unavailable");
+                    var inventory=response.getInventory();
+                    if(NETWORK&&expected==5000)retainedInvsee=inventory;
+                    var contents=inventory.getStorageContents();
+                    if(contents.length!=36)throw new AssertionError("Unexpected storage layout");
+                    contents[35]=new ItemStack(change,1);inventory.setStorageContents(contents);
+                    var saved=api.saveInventory(inventory);
+                    if(!saved.isDone()||!saved.join().isSaved())throw new AssertionError("Ordinary Paper InvSee save did not complete inline");
+                    var after=PlayerDataReader.read(file,16*1024*1024,64*1024*1024);
+                    var value=SavedPlayerAssets.extract(after).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
+                    if(!value.equals(BigInteger.valueOf(expected))||!receipt.equals(SavedGrantReceiptNbt.readAndVerify(after,grants,ID)))
+                        throw new AssertionError("InvSee changed monetary value or delivery cursor: "+value);
+                    player.loadData();
+                    if(player.getInventory().getItem(35)==null||player.getInventory().getItem(35).getType()!=change)
+                        throw new AssertionError("InvSee noncurrency save did not survive native load");
+                    getLogger().info("PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total="+expected);
+                    next.run();
+                }catch(Throwable failure){fail(failure);}
+            }));
+    }
+
+    /** Kill an isolated real Paper JVM after native saved readback, but before
+     * the product delivery ACK. The next boot must use the saved receipt,
+     * not issue the 64C batch again. */
+    private void runGrantCrashProbe(Player player,GrantLedger grants)throws Exception {
+        if(!grants.historySnapshot().isEmpty())throw new AssertionError("Crash fixture is not fresh");
+        var coins=new CoinItemCodec(CoinItemCodec.defaultNames());
+        player.getInventory().setItem(0,coins.create(CoinDenomination.FIVE_THOUSAND,1));
+        for(int i=2;i<36;i++)player.getInventory().setItem(i,new ItemStack(Material.STONE,64));
+        player.saveData();grants.reserveCoins(ID,CoinDenomination.ONE,65,"crash fixture");
+        var delivery=new PaperPlayerGrantDelivery(grants,coins,(id,value)->{
+            if(!id.equals(ID)||value!=64||grants.pending(ID).getFirst().confirmedPartial()!=0)
+                throw new AssertionError("Unexpected crash window");
+            System.out.println("PAPER_A02_ACTUAL_GRANT_SAVED_BEFORE_ACK_HALT total=5064 ledgerFloor=0");
+            System.out.flush();System.err.flush();Runtime.getRuntime().halt(73);
+        });
+        delivery.deliver(player);
+    }
+
     /** Actual physical inventory, real saved file and real product ledger.
      * A detached player is used instead of a networked client; no product admission bypass. */
     private void runGrantProbe(Player player,GrantLedger grants,boolean reload) throws Exception {
@@ -220,8 +362,9 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 throw new AssertionError("Full storage unexpectedly issued");
             player.getInventory().setItem(1,null);
         } else {
-            if(grants.pending(ID).getFirst().confirmedPartial()!=64)
-                throw new AssertionError("Saved partial amount lost on restart");
+            long prior=Boolean.getBoolean("a02.liveGrantCrashReload")?0:64;
+            if(grants.pending(ID).getFirst().confirmedPartial()!=prior)
+                throw new AssertionError("Unexpected durable ledger floor before recovery");
             player.getInventory().setItem(2,null);
         }
         var result=delivery.deliver(player);
