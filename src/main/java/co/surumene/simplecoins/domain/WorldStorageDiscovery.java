@@ -33,6 +33,49 @@ import java.util.UUID;
 public final class WorldStorageDiscovery {
     private WorldStorageDiscovery() {}
 
+    /**
+     * Both discovery passes completed but disagreed about the source set.
+     * Only an unpublished startup candidate may be discarded and retried.
+     * Protected settlement and grant callers still fail immediately.
+     */
+    public static final class SourceSetChangedException extends IOException {
+        private SourceSetChangedException() {
+            super("Authoritative saved source set changed during traversal");
+        }
+    }
+
+    @FunctionalInterface
+    public interface DiscoveryAttempt<T> {
+        T run() throws IOException;
+    }
+
+    @FunctionalInterface
+    public interface BeforeRediscovery {
+        void run(int failedAttempt, SourceSetChangedException drift) throws IOException;
+    }
+
+    /**
+     * Retry an entire unpublished startup observation, not an individual
+     * failed source read. A different IO failure, invalid lifecycle, or
+     * exhausted bound propagates immediately. The caller owns cancellation,
+     * asynchronous backoff and the original world lifecycle witness.
+     */
+    public static <T> T retryUnpublishedDiscovery(int maximumAttempts,
+            DiscoveryAttempt<T> attempt, BeforeRediscovery beforeRetry) throws IOException {
+        if (maximumAttempts < 1 || maximumAttempts > 5)
+            throw new IllegalArgumentException("Startup discovery requires one to five attempts");
+        Objects.requireNonNull(attempt);
+        Objects.requireNonNull(beforeRetry);
+        for (int index = 1; ; index++) {
+            try {
+                return Objects.requireNonNull(attempt.run());
+            } catch (SourceSetChangedException drift) {
+                if (index == maximumAttempts) throw drift;
+                beforeRetry.run(index, drift);
+            }
+        }
+    }
+
     public enum Kind { REGION, ENTITY }
 
     public record SourceFile(String world, Path path, Kind kind) {
@@ -91,7 +134,7 @@ public final class WorldStorageDiscovery {
                     origin.maximumEntries(), origin.sharedPlayerRoots());
             if (!worldFiles.equals(after.worldFiles()) ||
                     !playerDataFiles.equals(after.playerDataFiles()))
-                throw new IOException("Authoritative saved source set changed during traversal");
+                throw new SourceSetChangedException();
         }
 
         /** Canonical closure keys for all mandatory settlement sources. */
