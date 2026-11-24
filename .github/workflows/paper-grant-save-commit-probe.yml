@@ -15,6 +15,8 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md'
       - 'Lifecycle/Works/simplecoins.a02.bounded-saved-commit-worker.md'
       - 'Lifecycle/Works/simplecoins.a02.protected-off-main-preflight.md'
+      - 'Lifecycle/Works/simplecoins.a02.paper-scheduled-delivery-lifecycle.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperSavedGrantDeliveryService.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WriterEpochFence.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantReceiptNbt.java'
       - 'src/test/java/co/surumene/simplecoins/domain/ProtectedGrantPreflight*.java'
@@ -91,6 +93,11 @@ jobs:
           test -n "$generated"
           mkdir -p src/test/java/co/surumene/simplecoins/domain/generated
           cp "$out" "src/test/java/co/surumene/simplecoins/domain/generated/$generated.java"
+          work=Lifecycle/Works/simplecoins.a02.paper-scheduled-delivery-lifecycle.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
@@ -307,6 +314,8 @@ jobs:
               else
                 expected='total=10200 grants=2 pending=0'
               fi
+              grep -F "PAPER_A02_PRODUCT_SCHEDULED_DISARMED_DENY_PASSED" "paper-a02-${case}-commit.log" || exit 1
+              grep -F "PAPER_A02_PRODUCT_SCHEDULED_LIFECYCLE_PASSED" "paper-a02-${case}-commit.log" || exit 1
               grep -F "PAPER_A02_PRODUCT_ORDERED_GRANTS_COMPLETE_PASSED $expected" "paper-a02-${case}-commit.log" || exit 1
               if grep -Fq 'PAPER_A02_PROBE_FAILED' "paper-a02-${case}-commit.log"; then exit 1; fi
               timeout --signal=TERM --kill-after=10s 200s \
