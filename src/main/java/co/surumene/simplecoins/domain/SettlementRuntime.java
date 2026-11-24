@@ -16,7 +16,11 @@ import java.util.function.BooleanSupplier;
  * Does not arm a fence, establish writer coverage, or supply A01 evidence. */
 public final class SettlementRuntime {
     public record Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest,
-                           BanSourceCoverage bans, Set<UUID> protectedRegistrations) {
+                           BanSourceCoverage bans, Set<UUID> protectedRegistrations, List<OwnerStorageIndex.Change> liveProtectedLocations) {
+        public Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest,
+                BanSourceCoverage bans, Set<UUID> protectedRegistrations) {
+            this(staged,manifest,bans,protectedRegistrations,List.of());
+        }
         public Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest) {
             this(staged, manifest, null, Set.of());
         }
@@ -27,6 +31,7 @@ public final class SettlementRuntime {
         public Captured {
             Objects.requireNonNull(staged); Objects.requireNonNull(manifest);
             protectedRegistrations=Set.copyOf(protectedRegistrations);
+            liveProtectedLocations=List.copyOf(liveProtectedLocations);
         }
     }
     @FunctionalInterface public interface SourceStage { Captured capture() throws IOException; }
@@ -60,14 +65,16 @@ public final class SettlementRuntime {
     public static final class MemoryPrepared {
         private final MemoryAttempt attempt;
         private final MemoryAccounting accounting;
-        private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting) {
-            this.attempt = attempt; this.accounting = accounting;
+        private final OwnerStorageIndex locations;
+        private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting, OwnerStorageIndex locations) {
+            this.attempt = attempt; this.accounting = accounting; this.locations = locations;
         }
         /** Completed reconstruction, not a published statistic or admission permit. */
         public MemoryAccounting.Snapshot summary() { return accounting.snapshot(); }
     }
     private volatile MemoryAttempt memoryAttempt;
     private volatile MemoryAccounting memory;
+    private volatile OwnerStorageIndex ownerLocations;
     private final AdmissionBarrier barrier;
     private final WriterEpochFence fence;
     private final RegisteredPlayerHistory registrationHistory;
@@ -166,7 +173,9 @@ public final class SettlementRuntime {
             }
             var accounting = new MemoryAccounting(balances, baseline.free(), dead);
             requireMemoryScanning(attempt);
-            return new MemoryPrepared(attempt, accounting);
+            var locations = staged.pending().ownerStorageIndex();
+            locations.apply(captured.liveProtectedLocations());
+            return new MemoryPrepared(attempt, accounting, locations);
         } catch (IOException | RuntimeException | Error failure) {
             revoke();
             throw failure;
@@ -190,6 +199,7 @@ public final class SettlementRuntime {
                     throw new IllegalStateException("Memory settlement handoff prerequisites lost");
                 rememberRegistrations(prepared.accounting.snapshot().personal().keySet());
                 memory = prepared.accounting;
+                ownerLocations = prepared.locations;
                 barrier.complete(prepared.attempt.generation, true, true);
                 return verdict;
             } catch (RuntimeException | Error failure) {
@@ -234,14 +244,47 @@ public final class SettlementRuntime {
         synchronized (barrier) { return memoryAttempt != null && memoryReady(); }
     }
     public void recordConfirmedMemory(List<MemoryAccounting.Movement> movements, Set<UUID> registered) {
+        recordConfirmedMemory(movements, registered, List.of());
+    }
+    public void recordConfirmedMemory(List<MemoryAccounting.Movement> movements, Set<UUID> registered,
+            List<OwnerStorageIndex.Change> locations) {
+        var observed = List.copyOf(locations);
         synchronized (barrier) {
             if (!memoryAccountingReady())
                 throw new IllegalStateException("Normal memory accounting is unavailable");
-            if (memory.recordNext(movements, registered) != MemoryAccounting.Outcome.APPLIED) {
+            boolean newRegistration = registered.stream().anyMatch(id -> !memory.isRegistered(id));
+            if ((!movements.isEmpty() || newRegistration) && memory.recordNext(movements, registered) != MemoryAccounting.Outcome.APPLIED) {
                 revoke();
                 throw new IllegalStateException("Confirmed physical operation disagrees with accounting");
             }
+            ownerLocations.apply(observed);
             rememberConfirmedParticipants(movements, registered);
+        }
+    }
+
+    public record OwnerReadPlan(UUID owner, Set<OwnerStorageIndex.Location> locations, long indexRevision, long ledgerSequence) {}
+
+    /** Snapshot identity for an asynchronous targeted physical re-read. */
+    public OwnerReadPlan planOwnerRead(UUID owner) {
+        synchronized (barrier) {
+            if (!memoryAccountingReady()) throw new IllegalStateException("Normal memory accounting is unavailable");
+            return new OwnerReadPlan(owner, ownerLocations.locations(owner), ownerLocations.revision(), memory.sequence());
+        }
+    }
+
+    /** Apply a complete observation only to the exact still-current ledger/index generation.
+     * A changed generation is a retry, not permission to publish a stale observation. */
+    public boolean reconcileOwner(OwnerReadPlan plan, boolean banned, boolean hasPlayerdata,
+            boolean registrationBasis, Map<String, BigInteger> observed) {
+        synchronized (barrier) {
+            if (!memoryAccountingReady() || plan.indexRevision() != ownerLocations.revision()
+                    || plan.ledgerSequence() != memory.sequence()
+                    || !plan.locations().equals(ownerLocations.locations(plan.owner()))) return false;
+            boolean historical = registrationHistory != null && registrationHistory.snapshot().contains(plan.owner());
+            if (memory.reconcileOwner(plan.owner(),true,banned,hasPlayerdata,registrationBasis || historical,observed)
+                    != MemoryAccounting.Outcome.APPLIED) return false;
+            if (memory.isRegistered(plan.owner())) rememberRegistrations(Set.of(plan.owner()));
+            return true;
         }
     }
 
@@ -297,6 +340,7 @@ public final class SettlementRuntime {
     public void revoke() {
         barrier.fatalFailure();
         memory = null;
+        ownerLocations = null;
         if (memoryAttempt == null) fence.invalidate();
     }
 }

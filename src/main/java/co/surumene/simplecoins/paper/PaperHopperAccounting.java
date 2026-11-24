@@ -53,6 +53,7 @@ public final class PaperHopperAccounting implements Listener {
     private final Consumer<Set<UUID>> register;
     private final Consumer<Inventory> observeEntity;
     private final java.util.function.Predicate<Inventory> entityImage;
+    private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
     private final Map<Position, Image> before = new HashMap<>();
     private final Set<Position> touched = new HashSet<>();
     private static final int COMPRESSED = 16 * 1024 * 1024;
@@ -71,6 +72,13 @@ public final class PaperHopperAccounting implements Listener {
             Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
             Consumer<Set<UUID>> register, Consumer<Inventory> observeEntity,
             java.util.function.Predicate<Inventory> entityImage) {
+        this(scope,ready,sink,fatal,register,observeEntity,entityImage,ignored->{});
+    }
+    public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
+            Consumer<Set<UUID>> register, Consumer<Inventory> observeEntity,
+            java.util.function.Predicate<Inventory> entityImage, Consumer<List<OwnerStorageIndex.Change>> ownerLocations) {
+        this.ownerLocations=Objects.requireNonNull(ownerLocations);
         this.scope = Objects.requireNonNull(scope);
         this.register = Objects.requireNonNull(register);
         this.observeEntity=Objects.requireNonNull(observeEntity);
@@ -264,7 +272,7 @@ public final class PaperHopperAccounting implements Listener {
     }
 
     private Map<MemoryAccounting.Endpoint, BigInteger> balances(boolean initial,
-            Set<UUID> registrations) throws IOException {
+            Set<UUID> registrations, List<OwnerStorageIndex.Change> locations) throws IOException {
         Map<MemoryAccounting.Endpoint, BigInteger> result = new HashMap<>();
         Set<UUID> wallets = new HashSet<>();
         for (Position p : touched) {
@@ -273,11 +281,16 @@ public final class PaperHopperAccounting implements Listener {
             var image=before.get(p);
             if(image==null)throw new IOException("Block before-image missing");
             Inventory inventory=initial?null:physical(b);
-            if(!initial&&inventory==null)continue; // destroyed container: ground events own the drops
+            var holder=OwnerStorageIndex.Holder.block(b.getWorld().getName(),p.x(),p.y(),p.z());
+            if(!initial&&inventory==null){locations.add(OwnerStorageIndex.Change.remove(holder));continue;} // ground events own the drops
             ItemStack[] items=initial?image.contents():inventory.getContents();
             var resolved=initial?image.owner():resolve(b);
-            if(!initial&&resolved.kind()==AssetOwner.Kind.PERSONAL)
-                registrations.add(resolved.player());
+            if(!initial) {
+                if(resolved.kind()==AssetOwner.Kind.PERSONAL) registrations.add(resolved.player());
+                if(resolved.player()==null) locations.add(OwnerStorageIndex.Change.remove(holder));
+                else locations.add(OwnerStorageIndex.Change.replace(resolved.player(),new OwnerStorageIndex.Location(holder,b.getWorld().getName(),
+                        SavedLiveSourcePartition.liveChunkSourceId(new SavedLiveSourcePartition.Chunk(b.getWorld().getName(),p.x()>>4,p.z()>>4)))));
+            }
             for (int slot = 0; slot < items.length; slot++) {
                 BigInteger value = PaperLiveItemValue.stack(items[slot], COMPRESSED, INFLATED, wallets);
                 if (value.signum() == 0) continue;
@@ -298,10 +311,12 @@ public final class PaperHopperAccounting implements Listener {
         try {
             if (!ready.getAsBoolean() || touched.isEmpty()) return;
             var registrations=new HashSet<UUID>();
-            var changes = InventoryAccountingDelta.between(balances(true, registrations),
-                    balances(false, registrations));
+            var locations=new ArrayList<OwnerStorageIndex.Change>();
+            var changes = InventoryAccountingDelta.between(balances(true, registrations, locations),
+                    balances(false, registrations, locations));
             if (!changes.isEmpty()) sink.accept(changes);
             if (!registrations.isEmpty()) register.accept(Set.copyOf(registrations));
+            if (!locations.isEmpty()) ownerLocations.accept(List.copyOf(locations));
         } catch (IOException | RuntimeException failure) { fail(failure); }
         finally { before.clear(); touched.clear(); }
     }

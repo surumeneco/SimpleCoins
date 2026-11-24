@@ -571,6 +571,15 @@ public final class WclServicesProbe extends JavaPlugin {
                 local.flush();
                 if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(weaponEndpoint,BigInteger.valueOf(10000),hiddenEndpoint,BigInteger.ONE)))
                     throw new IOException("WWW close counted already observed cargo again: "+ledger.snapshot(),fault.get());
+                // A real provider-owned save outside the inventory event path.
+                www.loadedIndividuals().saveAndRegister(wolf,cargoIndividual);
+                local.flush();
+                if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(cargoEndpoint,BigInteger.valueOf(5000),weaponEndpoint,BigInteger.valueOf(10000),hiddenEndpoint,BigInteger.ONE)))
+                    throw new IOException("WWW unnotified cargo save was not accounted: "+ledger.snapshot(),fault.get());
+                var confirmed=ledger.snapshot();
+                local.flush();
+                if(!ledger.snapshot().equals(confirmed))
+                    throw new IOException("WWW unchanged holder produced a duplicate journal");
                 www.loadedIndividuals().saveAndRegister(wolf,individual);
                 www.abilityRuntime().refresh(wolf);
                 getLogger().info("PAPER_A05_WWW_OPEN_CARGO_ACCOUNTED_ONCE_PASSED");
@@ -1357,21 +1366,24 @@ public final class WclServicesProbe extends JavaPlugin {
             local.flush();
             if(observedFailure.get()!=null||!accounting.snapshot().dead().isEmpty())
                 throw new IOException("WWC cargo close duplicated or lost storage",observedFailure.get());
-            // Restore the initial genuine fixture before testing the owner move.
-            local.observeEntity(chicken);
+            // Restore the genuine fixture through the real provider save, without an event or explicit observe call.
             data.shulkerBox(originalBox);
             store.save(chicken,data);
             local.flush();
             if(observedFailure.get()!=null||!accounting.snapshot().dead().equals(Map.of(oldEndpoint,BigInteger.valueOf(10000))))
                 throw new IOException("WWC restored fixture was not accounted",observedFailure.get());
             getLogger().info("PAPER_A05_WWC_OPEN_CARGO_ACCOUNTED_ONCE_PASSED");
-            local.observeEntity(chicken);
+            // A direct owner change must use the already accounted holder image.
             data.followTarget(secondOwner);
             writeWithAlreadyAdmittedOwnerProof("WWC", () -> store.save(chicken, data));
             local.flush();
             if(observedFailure.get()!=null)throw new IOException("Normal WCL read failed",observedFailure.get());
             if(!accounting.snapshot().dead().equals(Map.of(newEndpoint,BigInteger.valueOf(10000))))
                 throw new IOException("Normal WCL owner move not conserved: "+accounting.snapshot());
+            var confirmed=accounting.snapshot();
+            local.flush();
+            if(!accounting.snapshot().equals(confirmed))
+                throw new IOException("WWC unchanged holder produced a duplicate journal");
             getLogger().info("PAPER_A05_WWC_NORMAL_OWNER_MOVEMENT_PASSED");
 
             var after = success(readers.get("wwc").readStored(

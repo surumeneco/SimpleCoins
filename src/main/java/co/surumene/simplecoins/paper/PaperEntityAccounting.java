@@ -17,13 +17,15 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 /** First actual image and last confirmed image of a locally touched entity.
  * A verified open WCL cargo GUI replaces only its writable stored cargo.
- * This listener does not claim coverage of unnotified plugin mutations. */
+ * Known loaded WCL holders are also reconciled in a bounded round-robin.
+ * These transient images are not a persisted balance cache. */
 public final class PaperEntityAccounting implements Listener {
     private static final int COMPRESSED=16*1024*1024, INFLATED=64*1024*1024;
     private final Plugin consumer;
@@ -31,13 +33,38 @@ public final class PaperEntityAccounting implements Listener {
     private final BooleanSupplier ready;
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
+    private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
+    private final Map<UUID,OwnerStorageIndex.Location> unloadedLocations=new HashMap<>();
+    private final List<OwnerStorageIndex.Change> pendingLocations=new ArrayList<>();
     private final Map<UUID,Entity> touched=new HashMap<>();
     private final Map<UUID,Inventory> openCargo=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> before=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> unloaded=new HashMap<>();
+    private record Tracked(Entity entity, Map<MemoryAccounting.Endpoint,BigInteger> accounted) {}
+    private final LinkedHashMap<UUID,Tracked> tracked=new LinkedHashMap<>();
+    private static final int WCL_READS_PER_TICK=16;
+
+    /** Seed already-accounted live holders at the final, still-frozen startup readback. */
+    public void seedLoadedWcl(Collection<PaperWonderfulLiveEntityDiscovery.Holder> holders) throws IOException {
+        if(!Bukkit.isPrimaryThread()||!tracked.isEmpty()||!before.isEmpty())
+            throw new IOException("Invalid WCL accounting seed boundary");
+        for(var holder:holders){
+            Entity entity=holder.entity();
+            if(!provider(entity).filter(holder.providerId()::equals).isPresent()
+                    ||!scope.includes(entity.getWorld().getName())
+                    ||tracked.putIfAbsent(entity.getUniqueId(),new Tracked(entity,image(entity)))!=null)
+                throw new IOException("Invalid already-accounted WCL holder "+entity.getUniqueId());
+        }
+    }
 
     public PaperEntityAccounting(Plugin consumer,WorldScope scope,BooleanSupplier ready,
             Consumer<List<MemoryAccounting.Movement>> sink,Consumer<Exception> fatal) {
+        this(consumer,scope,ready,sink,fatal,ignored->{});
+    }
+    public PaperEntityAccounting(Plugin consumer,WorldScope scope,BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink,Consumer<Exception> fatal,
+            Consumer<List<OwnerStorageIndex.Change>> ownerLocations) {
+        this.ownerLocations=Objects.requireNonNull(ownerLocations);
         this.consumer=Objects.requireNonNull(consumer);this.scope=Objects.requireNonNull(scope);
         this.ready=Objects.requireNonNull(ready);this.sink=Objects.requireNonNull(sink);
         this.fatal=Objects.requireNonNull(fatal);
@@ -137,10 +164,28 @@ public final class PaperEntityAccounting implements Listener {
         return Map.copyOf(out);
     }
 
+    private static OwnerStorageIndex.Location location(Entity entity) {
+        var pos=entity.getLocation();
+        String world=entity.getWorld().getName();
+        return new OwnerStorageIndex.Location(OwnerStorageIndex.Holder.entity(entity.getUniqueId()),world,
+                SavedLiveSourcePartition.liveChunkSourceId(new SavedLiveSourcePartition.Chunk(world,pos.getBlockX()>>4,pos.getBlockZ()>>4)));
+    }
+    private void noteLocation(OwnerStorageIndex.Location location, Map<MemoryAccounting.Endpoint,BigInteger> image) throws IOException {
+        UUID owner=null;
+        for(var endpoint:image.keySet()) {
+            if(endpoint.owner().player()==null) continue;
+            if(owner!=null&&!owner.equals(endpoint.owner().player()))throw new IOException("Conflicting entity ownership");
+            owner=endpoint.owner().player();
+        }
+        pendingLocations.add(owner==null?OwnerStorageIndex.Change.remove(location.holder()):OwnerStorageIndex.Change.replace(owner,location));
+    }
+
     public void observeEntity(Entity entity){
         if(!ready.getAsBoolean()||!eligible(entity)||before.containsKey(entity.getUniqueId()))return;
         try {
-            before.put(entity.getUniqueId(),image(entity));touched.put(entity.getUniqueId(),entity);
+            UUID id=entity.getUniqueId();
+            Tracked prior=tracked.get(id);
+            before.put(id,prior==null?image(entity):prior.accounted());touched.put(id,entity);
         }catch(IOException|RuntimeException failure){fail(failure);}
     }
     /** Recognize only the actual distributed provider holder class and entity. */
@@ -225,31 +270,87 @@ public final class PaperEntityAccounting implements Listener {
     public void destroy(VehicleDestroyEvent event){observeEntity(event.getVehicle());}
     @EventHandler(priority=EventPriority.LOWEST)
     public void hanging(HangingBreakEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void spawn(CreatureSpawnEvent event){
+        Entity entity=event.getEntity();
+        if(!ready.getAsBoolean()||!(entity instanceof Chicken||entity instanceof Wolf)
+                ||!scope.includes(entity.getWorld().getName()))return;
+        UUID id=entity.getUniqueId();
+        if(tracked.containsKey(id)||before.containsKey(id)){
+            fail(new IOException("Duplicate new WCL candidate "+id));return;
+        }
+        // Actual creation is not a saved-holder load. The provider can set its marker
+        // and cargo after the spawn event, so read the final image at the tick boundary.
+        before.put(id,Map.of());touched.put(id,entity);
+    }
+    @EventHandler(priority=EventPriority.MONITOR)
+    public void load(EntitiesLoadEvent event){
+        if(!ready.getAsBoolean())return;
+        try{
+            for(var entity:event.getEntities()){
+                if(!scope.includes(entity.getWorld().getName())||!eligible(entity))continue;
+                boolean wcl=provider(entity).isPresent();
+                if(!wcl&&!(entity instanceof Tameable tame&&tame.getOwner()!=null))continue;
+                UUID id=entity.getUniqueId();
+                // The saved physical holder is already in the journal. Loading is not issuance.
+                // If it unloaded earlier in the same tick, preserve the original before image.
+                if(unloaded.remove(id)!=null){unloadedLocations.remove(id);touched.put(id,entity);continue;}
+                var actual=image(entity);
+                noteLocation(location(entity),actual);
+                if(wcl&&tracked.putIfAbsent(id,new Tracked(entity,actual))!=null)
+                    throw new IOException("Duplicate WCL holder load "+id);
+            }
+        }catch(IOException|RuntimeException failure){fail(failure);}
+    }
     @EventHandler(priority=EventPriority.LOWEST)
     public void unload(EntitiesUnloadEvent event){
         if(!ready.getAsBoolean())return;
         try{
             for(var e:event.getEntities()){
-                if(before.containsKey(e.getUniqueId()))unloaded.put(e.getUniqueId(),image(e));
-                openCargo.remove(e.getUniqueId());
+                UUID id=e.getUniqueId();
+                if(tracked.containsKey(id))observeEntity(e);
+                if(before.containsKey(id)) {
+                    unloaded.put(id,image(e));unloadedLocations.put(id,location(e));
+                } else if(scope.includes(e.getWorld().getName())&&eligible(e)&&e instanceof Tameable tame&&tame.getOwner()!=null) {
+                    noteLocation(location(e),image(e));
+                }
+                openCargo.remove(id);
             }
         }catch(IOException|RuntimeException failure){fail(failure);}
     }
     public void flush(){
-        if(!ready.getAsBoolean()){clear();openCargo.clear();return;}
+        if(!ready.getAsBoolean()){clear();openCargo.clear();tracked.clear();return;}
         try{
+            // Poll only known loaded WCL holders, never enumerate worlds or chunks here.
+            // Explicit events still take priority and use the same last-accounted preimage.
+            int budget=Math.min(WCL_READS_PER_TICK,tracked.size());
+            for(int i=0;i<budget;i++){
+                var first=tracked.pollFirstEntry();
+                UUID id=first.getKey(); Tracked prior=first.getValue();
+                tracked.put(id,prior);
+                if(touched.containsKey(id))continue;
+                if(!prior.entity().isValid())throw new IOException("Unobserved WCL holder disappearance "+id);
+                before.put(id,prior.accounted());touched.put(id,prior.entity());
+            }
             List<MemoryAccounting.Movement> changes=new ArrayList<>();
             for(var entry:touched.entrySet()){
                 Entity entity=entry.getValue();
-                Map<MemoryAccounting.Endpoint,BigInteger> after=entity.isValid()?image(entity):
-                        unloaded.getOrDefault(entry.getKey(),Map.of());
-                changes.addAll(InventoryAccountingDelta.between(before.get(entry.getKey()),after));
-                if(!entity.isValid())openCargo.remove(entry.getKey());
+                UUID id=entry.getKey();
+                Map<MemoryAccounting.Endpoint,BigInteger> after=unloaded.containsKey(id)?unloaded.get(id):
+                        entity.isValid()?image(entity):Map.of();
+                changes.addAll(InventoryAccountingDelta.between(before.get(id),after));
+                if(unloadedLocations.containsKey(id))noteLocation(unloadedLocations.get(id),after);
+                else if(entity.isValid()&&scope.includes(entity.getWorld().getName()))noteLocation(location(entity),after);
+                else pendingLocations.add(OwnerStorageIndex.Change.remove(OwnerStorageIndex.Holder.entity(id)));
+                if(entity.isValid()&&!unloaded.containsKey(id)&&provider(entity).isPresent()){
+                    tracked.remove(id);tracked.put(id,new Tracked(entity,after));
+                }else{tracked.remove(id);if(!entity.isValid())openCargo.remove(id);}
             }
             if(!changes.isEmpty())sink.accept(List.copyOf(changes));
-        }catch(IOException|RuntimeException failure){fatal.accept(failure);}
+            if(!pendingLocations.isEmpty())ownerLocations.accept(List.copyOf(pendingLocations));
+        }catch(IOException|RuntimeException failure){fail(failure);}
         finally{clear();}
     }
-    private void clear(){before.clear();touched.clear();unloaded.clear();}
-    private void fail(Exception failure){clear();openCargo.clear();fatal.accept(failure);}
+    private void clear(){before.clear();touched.clear();unloaded.clear();unloadedLocations.clear();pendingLocations.clear();}
+    private void fail(Exception failure){clear();openCargo.clear();tracked.clear();fatal.accept(failure);}
 }

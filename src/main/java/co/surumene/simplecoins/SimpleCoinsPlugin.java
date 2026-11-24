@@ -268,11 +268,12 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             };
             var tickMovements = new java.util.ArrayList<MemoryAccounting.Movement>();
             var tickRegistrations = new java.util.HashSet<UUID>();
+            var tickOwnerLocations = new java.util.ArrayList<co.surumene.simplecoins.domain.OwnerStorageIndex.Change>();
             var entities = new co.surumene.simplecoins.paper.PaperEntityAccounting(this, sourceScope.scope(),
-                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure);
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickOwnerLocations::addAll);
             var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickRegistrations::addAll,
-                    entities::observeInventory, entities::hasImage);
+                    entities::observeInventory, entities::hasImage, tickOwnerLocations::addAll);
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
                     inventory -> { hopper.observeInventory(inventory); entities.observeInventory(inventory); });
@@ -284,10 +285,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     ground.flush();
                     hopper.flush();
                     entities.flush();
-                    if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()))
-                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations));
+                    if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()||!tickOwnerLocations.isEmpty()))
+                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations),java.util.List.copyOf(tickOwnerLocations));
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
-                finally { tickMovements.clear(); tickRegistrations.clear(); }
+                finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
             },1L,1L);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
@@ -349,7 +350,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
                 startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
                         this,admission,publication,protectedSettlement,sourceScope.scope(),
-                        () -> false); // ordinary accounting coverage is not complete yet
+                        () -> false, entities); // ordinary accounting coverage is not complete yet
             }
             sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
                     sourceScope.maxSourceEntries(), () -> {

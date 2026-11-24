@@ -24,7 +24,8 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
     private final PaperBlockLockerSettings settings;
     private final PaperCapturedHybridSettlement live;
     private final PaperWonderfulLiveEntityDiscovery.Report initialWcl;
-    private final Set<UUID> protectedRegistrations;
+    private record ProtectedOwners(Set<UUID> owners, List<OwnerStorageIndex.Change> locations) {}
+    private final ProtectedOwners protectedRegistrations;
     private final Map<String, SettlementAccumulator.Asset> initialOwners = new HashMap<>();
 
     private PaperStartupSettlementSource(Plugin plugin, Collection<World> registered,
@@ -89,7 +90,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                         throw new IOException("Repeated LIVE attribution key");
                     return asset;
                 }, 120000);
-        return new SettlementRuntime.Captured(staged, manifest, bans, protectedRegistrations);
+        return new SettlementRuntime.Captured(staged, manifest, bans, protectedRegistrations.owners(), protectedRegistrations.locations());
     }
 
     /** Verify the actual selected LIVE values and provider inputs at handoff.
@@ -123,11 +124,17 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
             throw new IOException("LIVE monetary attribution changed during settlement");
     }
 
+    /** Must be called directly after the successful final readback, before publication. */
+    public void seedNormalWcl(PaperEntityAccounting accounting) throws IOException {
+        accounting.seedLoadedWcl(initialWcl.holders());
+    }
+
     /** Positive slot values are not the only basis for registration: an
      * existing non-shared protected empty inventory also qualifies. */
-    private Set<UUID> protectedOwners(PaperLiveUniverseAssets.Observed observed) throws IOException {
+    private ProtectedOwners protectedOwners(PaperLiveUniverseAssets.Observed observed) throws IOException {
         if(!Bukkit.isPrimaryThread())throw new IOException("Protected registration requires primary");
         var result=new HashSet<UUID>();
+        var locations=new ArrayList<OwnerStorageIndex.Change>();
         int tiles=0;
         for(var source:observed.sources()) {
             if(!(source instanceof HybridLiveSourceStage.ChunkSource chunk)) continue;
@@ -139,10 +146,15 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                 if(!(tile instanceof org.bukkit.block.Container)
                         || !settings.containers().contains(tile.getType().getKey().toString()))continue;
                 var ownership=BlockLockerLiveEvidence.observe(tile.getBlock());
-                if(ownership.owner()!=null&&!ownership.everyoneProtected())result.add(ownership.owner());
+                if(ownership.owner()!=null&&!ownership.everyoneProtected()) {
+                    result.add(ownership.owner());
+                    var holder=OwnerStorageIndex.Holder.block(world.getName(),tile.getX(),tile.getY(),tile.getZ());
+                    locations.add(OwnerStorageIndex.Change.replace(ownership.owner(),new OwnerStorageIndex.Location(holder,world.getName(),source.id())));
+                }
             }
         }
-        return Set.copyOf(result);
+        locations.sort(Comparator.comparing((OwnerStorageIndex.Change c)->c.location().world()).thenComparing(c->c.holder().identity()));
+        return new ProtectedOwners(Set.copyOf(result),List.copyOf(locations));
     }
 
     private static Map<String, Set<HybridLiveSourceStage.Value>> sourceValues(

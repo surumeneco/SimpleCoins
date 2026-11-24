@@ -135,6 +135,8 @@ public final class MemoryAccounting {
         return Outcome.APPLIED;
     }
 
+    public synchronized long sequence() { return sequence; }
+
     public synchronized boolean isRegistered(UUID player) {
         return personal.containsKey(player);
     }

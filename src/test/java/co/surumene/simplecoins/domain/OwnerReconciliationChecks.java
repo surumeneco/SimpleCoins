@@ -29,6 +29,24 @@ public final class OwnerReconciliationChecks {
         equal(Map.of(a,n(6),b,n(20)),account.snapshot().personal()); equal(Map.of(),account.snapshot().dead()); equal(n(30),account.snapshot().free());
         var before = account.snapshot();
         equal(MemoryAccounting.Outcome.REJECTED,account.reconcileOwner(a,true,false,true,true,Map.of("bad",n(-1)))); equal(before,account.snapshot());
+        var scope = new WorldScope(true, java.util.Set.of(), java.util.Set.of("excluded"));
+        var index = OwnerStorageIndex.fromAssets(List.of(
+            new SettlementAccumulator.Asset("saved:r.0.0", "a", "world", a, false, false, true, n(5), "world/world/1,2,3:0"),
+            new SettlementAccumulator.Asset("saved:r.0.0", "b", "world", a, false, false, true, n(7), "world/world/1,2,3:1"),
+            new SettlementAccumulator.Asset("saved:r.0.0", "c", "world", a, false, false, true, n(0), "world/world/1,2,4:container"),
+            new SettlementAccumulator.Asset("saved:r.0.0", "d", "world", a, true, false, true, n(9), "world/world/1,2,5:0"),
+            new SettlementAccumulator.Asset("saved:r.0.0", "e", "excluded", a, false, false, true, n(9), "world/excluded/1,2,5:0")),scope);
+        equal(2,index.locations(a).size());
+        equal(0,index.locations(b).size());
+        var entity = OwnerStorageIndex.Holder.entity(UUID.randomUUID());
+        var original = OwnerStorageIndex.Change.replace(a,new OwnerStorageIndex.Location(entity,"world","live:chunk/world/0/0"));
+        index.apply(List.of(original));
+        long version=index.revision();
+        index.apply(List.of(original)); equal(version,index.revision());
+        var moved=OwnerStorageIndex.Change.replace(b,new OwnerStorageIndex.Location(entity,"world2","live:chunk/world2/1/0"));
+        index.apply(List.of(moved)); equal(2,index.locations(a).size()); equal(java.util.Set.of(moved.location()),index.locations(b));
+        index.apply(List.of(OwnerStorageIndex.Change.remove(entity))); equal(0,index.locations(b).size());
+        System.out.println("Owner locator deduplication, zero container, excluded/shared storage, idempotence and cross-world transfer passed");
         System.out.println("32 classifications and sequential P->D->D->P, deleted storage, malformed observation, unrelated accounts passed");
     }
 }
