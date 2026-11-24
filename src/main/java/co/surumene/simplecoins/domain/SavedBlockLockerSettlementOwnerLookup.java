@@ -189,7 +189,7 @@ public final class SavedBlockLockerSettlementOwnerLookup
         }
         if (holder.everyoneEffective())
             return new BlockEntitySettlementImport.Ownership(null,true,false,false);
-        if (holder.verifiedNonProtection())
+        if (holder.verifiedNonProtection() || holder.unidentifiedPrimary())
             return new BlockEntitySettlementImport.Ownership(null,false,false,false);
         throw new IOException("Unrecognized SAVED physical ownership candidate");
     }

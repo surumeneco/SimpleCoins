@@ -24,12 +24,17 @@ public final class SavedBlockLockerPhysicalOwnerIndex {
     }
 
     public record Holder(Optional<UUID> verifiedOwner, boolean everyoneEffective,
-                         boolean verifiedNonProtection) {
+                         boolean verifiedNonProtection, boolean unidentifiedPrimary) {
+        public Holder(Optional<UUID> verifiedOwner, boolean everyoneEffective,
+                      boolean verifiedNonProtection) {
+            this(verifiedOwner, everyoneEffective, verifiedNonProtection, false);
+        }
         public Holder {
             Objects.requireNonNull(verifiedOwner);
             int exclusive = (verifiedOwner.isPresent() ? 1 : 0)
                     + (everyoneEffective ? 1 : 0)
-                    + (verifiedNonProtection ? 1 : 0);
+                    + (verifiedNonProtection ? 1 : 0)
+                    + (unidentifiedPrimary ? 1 : 0);
             if (exclusive != 1)
                 throw new IllegalArgumentException("Unpublished holder must have exactly one reason");
         }
@@ -105,7 +110,10 @@ public final class SavedBlockLockerPhysicalOwnerIndex {
                         && independentProof.nonProtectionVerified();
                 Holder holder;
                 try {
-                    holder=new Holder(candidate.verifiedOwner(),everyone,unprotected);
+                    boolean legacy = candidate.verdict() == BlockLockerSavedOwnerVerdict.Verdict.FREE_UNPUBLISHED
+                            && summary.protectionSignObserved() && summary.everyoneAbsent()
+                            && summary.verifiedMainOwner().isEmpty() && !summary.mainOwnerConflict();
+                    holder=new Holder(candidate.verifiedOwner(),everyone,unprotected,legacy);
                 } catch (IllegalArgumentException invalid) {
                     throw new IOException("Contradictory saved physical holder evidence",invalid);
                 }
