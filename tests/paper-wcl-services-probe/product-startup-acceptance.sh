@@ -18,8 +18,8 @@ cleanup() {
 }
 trap cleanup EXIT
 wait_for() {
-  local log=$1 marker=$2
-  for ((i=0;i<150;i++)); do
+  local log=$1 marker=$2 limit=${3:-150}
+  for ((i=0;i<limit;i++)); do
     if grep -Fq "$marker" "$log" 2>/dev/null; then return 0; fi
     if ! kill -0 "$server" 2>/dev/null; then break; fi
     sleep 1
@@ -60,12 +60,35 @@ command_to_server "sc balance $uuid"
 wait_for product-startup.log "Personal balance $uuid: 5200 C"
 command_to_server 'sc stats'
 wait_for product-startup.log 'Personal P: 30200 C; free F: 1000 C; world T=P+F: 31200 C'
+# A count-only clear must not mutate or create a debit.
+command_to_server 'minecraft:clear ProbeSettlement minecraft:paper 0'
+sleep 2
+command_to_server "sc balance $uuid"
+# Use the last response (not the earlier, identical 5200C line).
+for ((i=0;i<15;i++)); do
+  [[ $(grep -Fc "Personal balance $uuid: 5200 C" product-startup.log || true) -ge 2 ]] && break
+  sleep 1
+done
+[[ $(grep -Fc "Personal balance $uuid: 5200 C" product-startup.log || true) -ge 2 ]]
 # A real ordinary vanilla clear must remove issued monetary value, not just items.
 command_to_server 'minecraft:clear ProbeSettlement minecraft:paper'
 # Give the console command time to finish and ordinary accounting to flush.
 sleep 2
 command_to_server "sc balance $uuid"
-wait_for product-startup.log "Personal balance $uuid: 0 C"
+wait_for product-startup.log "Personal balance $uuid: 0 C" 20
+# Exercise a different entry point and target context on the actual server.
+command_to_server 'sc give ProbeSettlement 100'
+wait_for product-startup.log 'Delivered now (including earlier reservations): 100C; pending reservations: 0' 15
+command_to_server "sc balance $uuid"
+wait_for product-startup.log "Personal balance $uuid: 100 C" 15
+command_to_server 'minecraft:execute as ProbeSettlement run minecraft:clear @s minecraft:paper'
+sleep 2
+command_to_server "sc balance $uuid"
+for ((i=0;i<15;i++)); do
+  [[ $(grep -Fc "Personal balance $uuid: 0 C" product-startup.log || true) -ge 2 ]] && break
+  sleep 1
+done
+[[ $(grep -Fc "Personal balance $uuid: 0 C" product-startup.log || true) -ge 2 ]]
 command_to_server 'kick ProbeSettlement product acceptance complete'
 wait "$client_pid" || { cat product-client.log; exit 1; }
 client_pid=
