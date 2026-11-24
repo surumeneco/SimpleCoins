@@ -88,6 +88,9 @@ public final class SavedGrantReceiptUniverseAudit {
                             + grant.sequence() + " for " + grant.player());
                 acknowledged = Math.addExact(acknowledged, 1);
             } else {
+                if (grant.confirmedPartial() > 0 && receipt == null)
+                    throw new IOException("Confirmed partial grant has missing playerdata: "
+                            + grant.sequence() + " for " + grant.player());
                 pending = Math.addExact(pending, 1);
                 if (receipt != null && receipt.completedSequence() >= grant.sequence())
                     awaiting = Math.addExact(awaiting, 1);
