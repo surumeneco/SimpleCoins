@@ -10,7 +10,7 @@ import java.util.random.RandomGenerator;
  * Pure selection policy for the optional wandering-trader currency drop.
  *
  * This class never mints ItemStacks or records a ledger transaction. The Paper
- * adapter must commit a unique issuance receipt before exposing any new coin.
+ * adapter records actual spawned coins through normal memory accounting.
  * A draw by itself is not an issuance event.
  */
 public final class WanderingTraderDropPolicy {
@@ -64,6 +64,10 @@ public final class WanderingTraderDropPolicy {
         this.maximumCount = maximumCount;
         this.weights = Map.copyOf(accepted);
         this.totalWeight = sum;
+    }
+
+    public Optional<Drop> drawForDeath(boolean ready, boolean wandering, boolean cancelled, RandomGenerator random) {
+        return ready && wandering && !cancelled ? draw(random) : Optional.empty();
     }
 
     /** Draw exactly one denomination/count, without side effects or issuance. */
