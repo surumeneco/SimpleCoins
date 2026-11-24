@@ -51,6 +51,8 @@ public final class PaperHopperAccounting implements Listener {
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
     private final Consumer<Set<UUID>> register;
+    private final Consumer<Inventory> observeEntity;
+    private final java.util.function.Predicate<Inventory> entityImage;
     private final Map<Position, Image> before = new HashMap<>();
     private final Set<Position> touched = new HashSet<>();
     private static final int COMPRESSED = 16 * 1024 * 1024;
@@ -63,8 +65,16 @@ public final class PaperHopperAccounting implements Listener {
     public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
             Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
             Consumer<Set<UUID>> register) {
+        this(scope,ready,sink,fatal,register,ignored->{},ignored->false);
+    }
+    public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
+            Consumer<Set<UUID>> register, Consumer<Inventory> observeEntity,
+            java.util.function.Predicate<Inventory> entityImage) {
         this.scope = Objects.requireNonNull(scope);
         this.register = Objects.requireNonNull(register);
+        this.observeEntity=Objects.requireNonNull(observeEntity);
+        this.entityImage=Objects.requireNonNull(entityImage);
         this.ready = Objects.requireNonNull(ready);
         this.sink = Objects.requireNonNull(sink);
         this.fatal = Objects.requireNonNull(fatal);
@@ -213,7 +223,7 @@ public final class PaperHopperAccounting implements Listener {
             if (!(event.getBlock().getState() instanceof org.bukkit.block.Hopper)) return;
             if (event.getInventory() == null) return;
             var candidates = positions(event.getInventory());
-            if (candidates.isEmpty()) return;
+            if (candidates.isEmpty()) observeEntity.accept(event.getInventory());
             capture(Position.of(event.getBlock()));
             for (Position p : candidates) capture(p);
         } catch (IOException | RuntimeException failure) { fail(failure); }
@@ -228,7 +238,8 @@ public final class PaperHopperAccounting implements Listener {
             if (PaperLiveItemValue.stack(event.getItem(), COMPRESSED, INFLATED).signum() == 0) return;
             var source = positions(event.getSource());
             var destination = positions(event.getDestination());
-            if (source.isEmpty() || destination.isEmpty())
+            if ((source.isEmpty()&&!entityImage.test(event.getSource()))
+                    ||(destination.isEmpty()&&!entityImage.test(event.getDestination())))
                 throw new IOException("Monetary hopper move has unsupported inventory source");
             for (Position p : source)
                 if (!before.containsKey(p)) throw new IOException("Monetary hopper source lacks pre-search image");

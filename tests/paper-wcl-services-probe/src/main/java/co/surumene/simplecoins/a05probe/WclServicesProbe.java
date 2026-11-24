@@ -1240,8 +1240,26 @@ public final class WclServicesProbe extends JavaPlugin {
                 throw new IOException("WWC genuine first owner/value not observed by product");
             // One genuine plugin-owned LIVE writer changes the monetary owner,
             // without changing coins, their physical slot or any player count.
+            String location="world/"+world.getName()+"/entity/"+chicken.getUniqueId()+"/wcl/wwc/shulker";
+            var oldEndpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(firstOwner,
+                    co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,location);
+            var newEndpoint=co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(secondOwner,
+                    co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,location);
+            var accounting=new co.surumene.simplecoins.domain.MemoryAccounting(Map.of(),BigInteger.ZERO,
+                    Map.of(oldEndpoint,BigInteger.valueOf(10000)));
+            var observedFailure=new java.util.concurrent.atomic.AtomicReference<Exception>();
+            var local=new co.surumene.simplecoins.paper.PaperEntityAccounting(this,
+                    new co.surumene.simplecoins.domain.WorldScope(true,Set.of(),Set.of()),()->true,
+                    moves->{if(accounting.recordNext(moves,Set.of())!=co.surumene.simplecoins.domain.MemoryAccounting.Outcome.APPLIED)
+                        throw new IllegalStateException("Normal WCL delta rejected");},observedFailure::set);
+            local.observeEntity(chicken);
             data.followTarget(secondOwner);
             writeWithAlreadyAdmittedOwnerProof("WWC", () -> store.save(chicken, data));
+            local.flush();
+            if(observedFailure.get()!=null)throw new IOException("Normal WCL read failed",observedFailure.get());
+            if(!accounting.snapshot().dead().equals(Map.of(newEndpoint,BigInteger.valueOf(10000))))
+                throw new IOException("Normal WCL owner move not conserved: "+accounting.snapshot());
+            getLogger().info("PAPER_A05_WWC_NORMAL_OWNER_MOVEMENT_PASSED");
             var after = success(readers.get("wwc").readStored(
                     chicken.getUniqueId(), world.getUID(), Optional.empty(), pdc),
                     "WWC genuine store after owner move");

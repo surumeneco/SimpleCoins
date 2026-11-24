@@ -268,17 +268,22 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             };
             var tickMovements = new java.util.ArrayList<MemoryAccounting.Movement>();
             var tickRegistrations = new java.util.HashSet<UUID>();
+            var entities = new co.surumene.simplecoins.paper.PaperEntityAccounting(this, sourceScope.scope(),
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure);
             var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
-                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickRegistrations::addAll);
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickRegistrations::addAll,
+                    entities::observeInventory, entities::hasImage);
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
-                    hopper::observeInventory);
+                    inventory -> { hopper.observeInventory(inventory); entities.observeInventory(inventory); });
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
+            getServer().getPluginManager().registerEvents(entities, this);
             getServer().getScheduler().runTaskTimer(this, () -> {
                 try {
                     ground.flush();
                     hopper.flush();
+                    entities.flush();
                     if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()))
                         publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations));
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
