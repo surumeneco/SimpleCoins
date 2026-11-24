@@ -147,6 +147,19 @@ public final class SettlementRuntimeChecks {
         check(restarted.current().orElseThrow().personalBalances().equals(Map.of(PLAYER, BigInteger.valueOf(5000), eligibleZero, BigInteger.ZERO)));
         check(restarted.current().orElseThrow().free().equals(BigInteger.ZERO));
         check(restarted.current().orElseThrow().dead().equals(BigInteger.ZERO));
+
+        // An empty LIVE private container is itself a registration reason,
+        // independent of monetary slots and prior registration history.
+        var freshCapture = capture(secondRoot);
+        var fresh = new SettlementRuntime(new AdmissionBarrier(),new WriterEpochFence());
+        var freshAttempt = fresh.beginMemory(() -> true, () -> true);
+        var freshPrepared = fresh.prepareMemory(freshAttempt, () ->
+                new SettlementRuntime.Captured(freshCapture.staged(), freshCapture.manifest(), bans,
+                        Set.of(eligibleZero,bannedZero,missing)));
+        check(freshPrepared.summary().personal().equals(Map.of(PLAYER,BigInteger.valueOf(5000),eligibleZero,BigInteger.ZERO)));
+        check(fresh.completeMemory(freshPrepared,ready)==SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH);
+        check(!fresh.current().orElseThrow().personalBalances().containsKey(neverRegistered));
+
     }
     public static void main(String[] args) throws Exception {
         run(Files.createTempDirectory("settlement-runtime-checks"));

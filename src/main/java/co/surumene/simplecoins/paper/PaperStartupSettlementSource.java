@@ -24,6 +24,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
     private final PaperBlockLockerSettings settings;
     private final PaperCapturedHybridSettlement live;
     private final PaperWonderfulLiveEntityDiscovery.Report initialWcl;
+    private final Set<UUID> protectedRegistrations;
     private final Map<String, SettlementAccumulator.Asset> initialOwners = new HashMap<>();
 
     private PaperStartupSettlementSource(Plugin plugin, Collection<World> registered,
@@ -57,6 +58,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
             throw new IOException("Required WCL provider registration unavailable");
         this.live = PaperCapturedHybridSettlement.capture(worlds.values(), budget);
         initialWcl = live.includeDiscoveredLoadedWcl(plugin);
+        protectedRegistrations = protectedOwners(live.observed());
     }
 
     public static PaperStartupSettlementSource capturePrimary(Plugin plugin, Collection<World> registered,
@@ -87,7 +89,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                         throw new IOException("Repeated LIVE attribution key");
                     return asset;
                 }, 120000);
-        return new SettlementRuntime.Captured(staged, manifest, bans);
+        return new SettlementRuntime.Captured(staged, manifest, bans, protectedRegistrations);
     }
 
     /** Verify the actual selected LIVE values and provider inputs at handoff.
@@ -110,6 +112,8 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                 || !initialWcl.observedEntityIds().equals(wclNow.observedEntityIds()))
             throw new IOException("LIVE holder population changed during settlement");
         live.requireCurrentWclPrimary(budget.maxSerializedBytes(), budget.maxInflatedBytes());
+        if(!protectedRegistrations.equals(protectedOwners(now)))
+            throw new IOException("LIVE protected registration changed during settlement");
         Map<String, SettlementAccumulator.Asset> currentOwners = new HashMap<>();
         for (var source : now.sources()) for (var value : source.values()) {
             if (initialOwners.containsKey(value.physicalKey()))
@@ -117,6 +121,28 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
         }
         if (!initialOwners.equals(currentOwners))
             throw new IOException("LIVE monetary attribution changed during settlement");
+    }
+
+    /** Positive slot values are not the only basis for registration: an
+     * existing non-shared protected empty inventory also qualifies. */
+    private Set<UUID> protectedOwners(PaperLiveUniverseAssets.Observed observed) throws IOException {
+        if(!Bukkit.isPrimaryThread())throw new IOException("Protected registration requires primary");
+        var result=new HashSet<UUID>();
+        int tiles=0;
+        for(var source:observed.sources()) {
+            if(!(source instanceof HybridLiveSourceStage.ChunkSource chunk)) continue;
+            World world=worlds.get(chunk.chunk().world());
+            if(world==null||!world.isChunkLoaded(chunk.chunk().x(),chunk.chunk().z()))
+                throw new IOException("Selected LIVE protected registration chunk unavailable");
+            for(var tile:world.getChunkAt(chunk.chunk().x(),chunk.chunk().z()).getTileEntities()) {
+                if(++tiles>budget.maxTileEntities())throw new IOException("Protected registration tile budget exhausted");
+                if(!(tile instanceof org.bukkit.block.Container)
+                        || !settings.containers().contains(tile.getType().getKey().toString()))continue;
+                var ownership=BlockLockerLiveEvidence.observe(tile.getBlock());
+                if(ownership.owner()!=null&&!ownership.everyoneProtected())result.add(ownership.owner());
+            }
+        }
+        return Set.copyOf(result);
     }
 
     private static Map<String, Set<HybridLiveSourceStage.Value>> sourceValues(
