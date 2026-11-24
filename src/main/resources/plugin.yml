@@ -9,6 +9,7 @@ depend:
 description: SimpleCoins Paper bootstrap - settlement integration is not yet available
 softdepend:
   - Geyser-Spigot
+  - floodgate
   - Nexo
   - BlockLocker
   - WhatAWonderfulChicken
