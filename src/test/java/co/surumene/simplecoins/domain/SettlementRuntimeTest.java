@@ -6,4 +6,5 @@ final class SettlementRuntimeTest {
     @TempDir Path dir;
     @Test void protectedRuntimeUsesOneActualHandoff() throws Exception { SettlementRuntimeChecks.run(dir); }
     @Test void memoryRuntimeUsesCompleteSavedCandidateWithoutAgent() throws Exception { SettlementRuntimeChecks.runMemory(dir); }
+    @Test void registeredZeroBalanceSurvivesRestart() throws Exception { SettlementRuntimeChecks.runRegistrationRestart(dir); }
 }

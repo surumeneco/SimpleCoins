@@ -107,6 +107,10 @@ public final class MemoryAccounting {
         return Outcome.APPLIED;
     }
 
+    public synchronized boolean isRegistered(UUID player) {
+        return personal.containsKey(player);
+    }
+
     public synchronized Snapshot snapshot() {
         return new Snapshot(Map.copyOf(personal), free, Map.copyOf(dead), sequence);
     }
