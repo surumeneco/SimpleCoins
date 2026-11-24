@@ -724,6 +724,7 @@ jobs:
             set +e
             timeout --signal=TERM --kill-after=5s 180s \
               java -Da05.probe.phase="$phase" -Da05.probe.blocklocker=true \
+                -Da01.probe.offMainHybrid=true \
                 -Da01.probe.realSourcePublish="$([ "$phase" = reload-saved ] && echo true || echo false)" \
                 -Xms256M -Xmx1024M -jar paper.jar nogui \
               </dev/null > "paper-a04-a05-$phase.log" 2>&1
@@ -772,6 +773,7 @@ jobs:
                 "paper-a04-a05-$phase.log"
               grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' \
                 "paper-a04-a05-$phase.log"
+              grep -F 'PAPER_A01_G1_OFF_MAIN_HYBRID_STAGE_PASSED' "paper-a04-a05-$phase.log"
             else
               grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' \
                 "paper-a04-a05-$phase.log"
