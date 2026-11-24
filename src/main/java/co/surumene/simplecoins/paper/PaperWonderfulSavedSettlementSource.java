@@ -5,6 +5,9 @@ import co.surumene.simplecoins.domain.BanSourceCoverage;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
+import co.surumene.simplecoins.domain.ResolvedEntitySettlementImport;
+import java.util.HashMap;
+import java.util.List;
 import co.surumene.simplecoins.domain.SettlementReadDispatch;
 import co.surumene.simplecoins.domain.WclSavedSlotSupplement;
 import co.surumene.simplecoins.domain.WclSavedEquipmentMirrorProof;
@@ -96,13 +99,16 @@ public final class PaperWonderfulSavedSettlementSource
         this.maxInflated = maxInflated;
     }
 
-    @Override
-    public void stage(WorldStorageDiscovery.SourceFile source, AnvilRegionReader.Chunk chunk,
-                      SettlementAccumulator pending, Set<UUID> seenWalletIds)
-            throws IOException {
+    private record Readback(List<PaperWonderfulSavedChunkCandidates.Candidate> candidates,
+                            int dataVersion) {}
+    private Readback prepared;
+    private WorldStorageDiscovery.SourceFile preparedSource;
+    private AnvilRegionReader.Chunk preparedChunk;
+
+    private Readback read(WorldStorageDiscovery.SourceFile source, AnvilRegionReader.Chunk chunk,
+                          Set<UUID> seenWalletIds, boolean hybrid) throws IOException {
         Objects.requireNonNull(source);
         Objects.requireNonNull(chunk);
-        Objects.requireNonNull(pending);
         Objects.requireNonNull(seenWalletIds);
         worldWitness.requireUnchanged();
         if (source.kind() != WorldStorageDiscovery.Kind.ENTITY
@@ -113,18 +119,62 @@ public final class PaperWonderfulSavedSettlementSource
             throw new IOException("Missing verified saved WCL World UUID: " + source.world());
         // The worker exclusively owns traversal and pending state. It waits
         // for one read-only provider call on primary, then accounts locally.
-        record Readback(java.util.List<PaperWonderfulSavedChunkCandidates.Candidate> candidates,
-                        int dataVersion) {}
-        var readback = reads.call(() -> {
+        return reads.call(() -> {
             if (!Bukkit.isPrimaryThread()) throw new IOException("SAVED WCL readStored off primary");
             World live = Bukkit.getWorld(source.world());
             if (live != null && !worldId.equals(live.getUID()))
                 throw new IOException("SAVED WCL source World UUID conflicts with loaded World");
-            var candidates = PaperWonderfulSavedChunkCandidates.collect(
-                    consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
-                    maxSerialized, maxInflated);
-            return new Readback(java.util.List.copyOf(candidates), Bukkit.getUnsafe().getDataVersion());
+            var candidates = hybrid
+                    ? PaperWonderfulSavedChunkCandidates.collectForHybrid(
+                            consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
+                            maxSerialized, maxInflated)
+                    : PaperWonderfulSavedChunkCandidates.collect(
+                            consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
+                            maxSerialized, maxInflated);
+            return new Readback(List.copyOf(candidates), Bukkit.getUnsafe().getDataVersion());
         });
+    }
+
+    @Override
+    public Map<String, ResolvedEntitySettlementImport.Ownership> resolveNativeOwners(
+            WorldStorageDiscovery.SourceFile source, AnvilRegionReader.Chunk chunk,
+            Set<UUID> sharedWalletIds,
+            Map<String, ResolvedEntitySettlementImport.Ownership> fallback) throws IOException {
+        if (prepared != null) throw new IOException("Previous WCL source not consumed");
+        var readback = read(source, chunk, sharedWalletIds, true);
+        var owners = new HashMap<>(fallback);
+        for (var candidate : readback.candidates()) {
+            var decision = candidate.savedOwnerEvidence(true, chunk);
+            if (decision.kind() == WclOwnerEvidence.Kind.HOLD)
+                throw new IOException("Unresolved SAVED WCL owner: " + candidate.entityId());
+            UUID owner = decision.owner();
+            boolean isBanned = owner != null && (banSources != null
+                    ? banSources.currentlyBanned(owner) : banned.contains(owner));
+            owners.put(candidate.entityId().toString(), new ResolvedEntitySettlementImport.Ownership(
+                    owner, isBanned, owner != null && manifest.playerDataFiles().containsKey(owner)));
+        }
+        preparedSource = source;
+        preparedChunk = chunk;
+        prepared = readback;
+        return Map.copyOf(owners);
+    }
+
+    @Override
+    public void stage(WorldStorageDiscovery.SourceFile source, AnvilRegionReader.Chunk chunk,
+                      SettlementAccumulator pending, Set<UUID> seenWalletIds) throws IOException {
+        Objects.requireNonNull(pending);
+        Readback readback;
+        if (prepared != null) {
+            if (!source.equals(preparedSource) || chunk != preparedChunk)
+                throw new IOException("WCL owner/slot source mismatch");
+            readback = prepared;
+            prepared = null;
+            preparedSource = null;
+            preparedChunk = null;
+        } else {
+            readback = read(source, chunk, seenWalletIds, false);
+        }
+        UUID worldId = verifiedWorldIds.get(source.world());
         var candidates = readback.candidates();
         String sourceId = source.path().toAbsolutePath().normalize().toString();
         for (var candidate : candidates) {
