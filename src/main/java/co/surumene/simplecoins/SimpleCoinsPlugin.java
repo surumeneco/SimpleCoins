@@ -280,7 +280,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
             getServer().getPluginManager().registerEvents(entities, this);
-            getServer().getScheduler().runTaskTimer(this, () -> {
+            Runnable flushAccounting=() -> {
                 try {
                     ground.flush();
                     hopper.flush();
@@ -289,7 +289,12 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations),java.util.List.copyOf(tickOwnerLocations));
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
                 finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
-            },1L,1L);
+            };
+            getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
+            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure);
+            entities.setOwnerResolver(ownerReconciliation::accountedOwner);
+            hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
+            getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
                     java.util.random.RandomGenerator.getDefault(), groundFailure), this);
@@ -311,6 +316,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             });
             var admin = new PaperAdminCommand(this, publication, issuanceGrants, liveDelivery,
                     walletCodec, sourceScope.scope(), names, unit);
+            admin.setQueryFreshness(ownerReconciliation::fresh);
             var command = java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command");
             command.setExecutor(admin);
             command.setTabCompleter(admin);

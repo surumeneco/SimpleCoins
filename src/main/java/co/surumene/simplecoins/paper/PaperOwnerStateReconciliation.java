@@ -1,0 +1,91 @@
+package co.surumene.simplecoins.paper;
+
+import co.surumene.simplecoins.domain.*;
+import java.io.IOException;
+import java.util.*;
+import java.util.function.Consumer;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.java.JavaPlugin;
+
+/** Re-read one changed owner at a time. Status observation is separate from
+ * classification of normal movement endpoints, so a partially changed owner
+ * never splits the ledger between old and new P/D classes. */
+public final class PaperOwnerStateReconciliation {
+    @FunctionalInterface public interface Resolver { AssetOwner.Result resolve(UUID owner,boolean everyone)throws IOException; }
+    private final JavaPlugin plugin;
+    private final SettlementRuntime runtime;
+    private final PaperEntityAccounting entities;
+    private final PaperOwnerAssetReader reader;
+    private final Runnable flush;
+    private final Consumer<Exception> fatal;
+    private boolean pending;
+    private String lastFailure;
+    private long retryAfter;
+    public PaperOwnerStateReconciliation(JavaPlugin plugin,SettlementRuntime runtime,PaperEntityAccounting entities,Runnable flush,Consumer<Exception> fatal){
+        this.plugin=Objects.requireNonNull(plugin);this.runtime=Objects.requireNonNull(runtime);this.entities=Objects.requireNonNull(entities);
+        this.reader=new PaperOwnerAssetReader(plugin,entities);this.flush=Objects.requireNonNull(flush);this.fatal=Objects.requireNonNull(fatal);
+    }
+    private static BanSourceCoverage bans()throws IOException{
+        return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
+    }
+    private static SettlementRuntime.OwnerState state(UUID owner,BanSourceCoverage coverage)throws IOException{
+        return new SettlementRuntime.OwnerState(coverage.currentlyBanned(owner),PaperPlayerGrantDelivery.playerdata(owner)!=null);
+    }
+    static AssetOwner.Result currentOwner(UUID owner,boolean everyone)throws IOException{
+        if(owner==null||everyone)return AssetOwner.resolve(null,false,false,false);
+        return state(owner,bans()).classification(owner);
+    }
+    public AssetOwner.Result accountedOwner(UUID owner,boolean everyone)throws IOException{
+        if(owner==null||everyone)return AssetOwner.resolve(null,false,false,false);
+        var known=runtime.accountedOwnerState(owner);
+        if(known==null)known=runtime.rememberOwnerState(owner,state(owner,bans()));
+        return known.classification(owner);
+    }
+    /** Call on primary after the ordinary movement batch, or immediately before
+     * a read-only command. A current status mismatch withholds statistics until
+     * the complete physical replacement has been applied. */
+    public boolean fresh(){
+        if(!Bukkit.isPrimaryThread()||!runtime.memoryAccountingReady())return false;
+        flush.run();
+        if(!runtime.memoryAccountingReady()||pending)return false;
+        try{
+            var coverage=bans();
+            for(var entry:runtime.accountedOwnerStates().entrySet()){
+                UUID owner=entry.getKey();var current=state(owner,coverage);
+                if(current.equals(entry.getValue()))continue;
+                if(System.nanoTime()<retryAfter)return false;
+                // Do not publish a dead classification for an active player;
+                // Paper normally disconnects a player when a BAN is applied.
+                // Until that source is settled, withhold current statistics.
+                if(Bukkit.getPlayer(owner)!=null&&current.classification(owner).kind()==AssetOwner.Kind.DEAD)return false;
+                var ledgerPlan=runtime.planOwnerRead(owner);var diskPlan=reader.capture(ledgerPlan);
+                pending=true;
+                Bukkit.getScheduler().runTaskAsynchronously(plugin,()->{
+                    try{
+                        var disk=reader.readDisk(diskPlan);
+                        Bukkit.getScheduler().runTask(plugin,()->apply(ledgerPlan,current,disk));
+                    }catch(IOException|RuntimeException failure){Bukkit.getScheduler().runTask(plugin,()->{pending=false;failure(failure);});}
+                });
+                return false;
+            }
+            lastFailure=null;retryAfter=0;
+            return true;
+        }catch(IOException|RuntimeException failure){failure(failure);return false;}
+    }
+    private void apply(SettlementRuntime.OwnerReadPlan plan,SettlementRuntime.OwnerState expected,PaperOwnerAssetReader.Disk disk){
+        try{
+            flush.run();
+            if(!runtime.memoryAccountingReady()||!expected.equals(state(plan.owner(),bans())))return;
+            var values=reader.finish(disk);
+            if(!runtime.reconcileOwner(plan,expected.banned(),expected.playerdata(),plan.locations().stream().anyMatch(l->l.holder().kind()==OwnerStorageIndex.Kind.BLOCK),values))return;
+            try{entities.rebaseOwner(plan.owner());}catch(IOException|RuntimeException fatalFailure){fatal.accept(fatalFailure);}
+            lastFailure=null;retryAfter=0;
+        }catch(IOException|RuntimeException failure){failure(failure);}
+        finally{pending=false;}
+    }
+    private void failure(Exception failure){
+        String message=failure.getMessage();
+        if(!Objects.equals(message,lastFailure))plugin.getLogger().warning("Owner accounting temporarily unavailable: "+message);
+        lastFailure=message;retryAfter=System.nanoTime()+java.time.Duration.ofSeconds(5).toNanos();
+    }
+}

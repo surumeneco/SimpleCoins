@@ -54,6 +54,8 @@ public final class PaperHopperAccounting implements Listener {
     private final Consumer<Inventory> observeEntity;
     private final java.util.function.Predicate<Inventory> entityImage;
     private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
+    private PaperOwnerStateReconciliation.Resolver ownerResolver=PaperOwnerStateReconciliation::currentOwner;
+    public void setOwnerResolver(PaperOwnerStateReconciliation.Resolver resolver){ownerResolver=Objects.requireNonNull(resolver);}
     private final Map<Position, Image> before = new HashMap<>();
     private final Set<Position> touched = new HashSet<>();
     private static final int COMPRESSED = 16 * 1024 * 1024;
@@ -93,6 +95,25 @@ public final class PaperHopperAccounting implements Listener {
         if (state instanceof Chest chest) return chest.getBlockInventory();
         if (state instanceof Container container) return container.getInventory();
         return null;
+    }
+
+    /** Read the actual physical half, not a double chest's combined inventory. */
+    static Map<String,BigInteger> readOwnerStorage(Block block,UUID owner,Set<UUID> wallets) throws IOException {
+        if(!Bukkit.isPrimaryThread()||!block.getWorld().isChunkLoaded(block.getX()>>4,block.getZ()>>4))throw new IOException("Owned block is not loaded");
+        var settings=PaperBlockLockerSettings.capture();
+        if(!settings.containers().contains(block.getType().getKey().toString()))throw new IOException("Indexed protected storage no longer exists");
+        var protection=BlockLockerLiveEvidence.observe(block);
+        if(protection.everyoneProtected()||!owner.equals(protection.owner()))throw new IOException("Indexed block owner changed");
+        var inventory=physical(block);
+        if(inventory==null)throw new IOException("Indexed block inventory is missing");
+        var out=new HashMap<String,BigInteger>();
+        var pos=Position.of(block);
+        var items=inventory.getContents();
+        for(int slot=0;slot<items.length;slot++){
+            var value=PaperLiveItemValue.stack(items[slot],COMPRESSED,INFLATED,wallets);
+            if(value.signum()>0)out.put(pos.location(block,slot),value);
+        }
+        return Map.copyOf(out);
     }
 
     private static List<Position> positions(Inventory inventory) throws IOException {
@@ -135,9 +156,7 @@ public final class PaperHopperAccounting implements Listener {
             owner=protection.owner();
             everyone=protection.everyoneProtected();
         }
-        var bans=PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
-        return AssetOwner.resolve(owner,everyone,owner!=null&&bans.currentlyBanned(owner),
-                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+        return ownerResolver.resolve(owner,everyone);
     }
 
     private void capture(Position p) throws IOException {

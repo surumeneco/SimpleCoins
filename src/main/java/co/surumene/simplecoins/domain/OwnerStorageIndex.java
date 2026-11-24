@@ -38,6 +38,7 @@ public final class OwnerStorageIndex {
     private final Map<Holder, Change> byHolder = new HashMap<>();
     private final Map<UUID, Map<Holder,Location>> byOwner = new HashMap<>();
     private long revision;
+    private final Map<UUID,Long> ownerRevisions=new HashMap<>();
 
     public static OwnerStorageIndex fromAssets(Collection<SettlementAccumulator.Asset> assets, WorldScope scope) {
         var index = new OwnerStorageIndex();
@@ -83,6 +84,8 @@ public final class OwnerStorageIndex {
                 byOwner.computeIfAbsent(change.owner(),ignored -> new HashMap<>()).put(change.holder(),change.location());
             }
             revision = Math.addExact(revision,1);
+            if(previous!=null)ownerRevisions.put(previous.owner(),revision);
+            if(change.owner()!=null)ownerRevisions.put(change.owner(),revision);
         }
     }
     public synchronized Set<Location> locations(UUID owner) {
@@ -90,4 +93,5 @@ public final class OwnerStorageIndex {
     }
     public synchronized Set<UUID> owners() { return Set.copyOf(byOwner.keySet()); }
     public synchronized long revision() { return revision; }
+    public synchronized long revision(UUID owner){return ownerRevisions.getOrDefault(owner,0L);}
 }

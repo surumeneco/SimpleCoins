@@ -22,6 +22,8 @@ public final class AdminAssetCommand implements CommandExecutor {
     private final SettlementRuntime runtime;
     private final WorldScope scope;
     private final String unit;
+    private java.util.function.BooleanSupplier fresh=()->true;
+    void setFreshness(java.util.function.BooleanSupplier fresh){this.fresh=Objects.requireNonNull(fresh);}
     public AdminAssetCommand(SettlementRuntime runtime, WorldScope scope, String unit) {
         this.runtime = Objects.requireNonNull(runtime);
         this.scope = Objects.requireNonNull(scope);
@@ -50,7 +52,7 @@ public final class AdminAssetCommand implements CommandExecutor {
             }
             default -> { return false; }
         }
-        var published = runtime.current();
+        var published = fresh.getAsBoolean()?runtime.current():java.util.Optional.<SettlementAccumulator.Result>empty();
         UUID player = kind == AdminQuery.Kind.PLAYER && published.isPresent() ? resolve(args[1]) : null;
         boolean registered = player != null && published.isPresent() && published.get().personalBalances().containsKey(player);
         var outcome = AdminQuery.evaluate(true, published.isPresent(), kind, registered);

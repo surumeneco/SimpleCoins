@@ -35,6 +35,8 @@ public final class PaperAdminCommand implements TabExecutor, Listener {
         this.queries=new AdminAssetCommand(runtime,scope,unit);
     }
 
+    public void setQueryFreshness(java.util.function.BooleanSupplier fresh){queries.setFreshness(fresh);}
+
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length==0 || !args[0].equalsIgnoreCase("give"))
             return queries.onCommand(sender,command,label,args);

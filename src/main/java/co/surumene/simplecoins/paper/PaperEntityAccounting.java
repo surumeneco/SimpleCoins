@@ -34,6 +34,8 @@ public final class PaperEntityAccounting implements Listener {
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
     private final Consumer<List<OwnerStorageIndex.Change>> ownerLocations;
+    private PaperOwnerStateReconciliation.Resolver ownerResolver=PaperOwnerStateReconciliation::currentOwner;
+    public void setOwnerResolver(PaperOwnerStateReconciliation.Resolver resolver){ownerResolver=Objects.requireNonNull(resolver);}
     private final Map<UUID,OwnerStorageIndex.Location> unloadedLocations=new HashMap<>();
     private final List<OwnerStorageIndex.Change> pendingLocations=new ArrayList<>();
     private final Map<UUID,Entity> touched=new HashMap<>();
@@ -95,13 +97,23 @@ public final class PaperEntityAccounting implements Listener {
         };
     }
     private Map<MemoryAccounting.Endpoint,BigInteger> image(Entity entity) throws IOException {
+        return image(entity,null,null,null);
+    }
+
+    /** Read one actual owned holder with physical slot identities, before classification. */
+    Map<String,BigInteger> readOwnerStorage(Entity entity,UUID owner,Set<UUID> wallets) throws IOException {
+        var values = new HashMap<String,BigInteger>();
+        image(entity,owner,values,wallets);
+        return Map.copyOf(values);
+    }
+    private Map<MemoryAccounting.Endpoint,BigInteger> image(Entity entity,UUID requestedOwner,Map<String,BigInteger> raw,Set<UUID> sharedWallets) throws IOException {
         if(!Bukkit.isPrimaryThread())throw new IOException("Entity accounting off primary");
         if(!scope.includes(entity.getWorld().getName()))return Map.of();
         if(!entity.isValid())throw new IOException("Entity image not loaded: "+entity.getUniqueId());
         String prefix="world/"+entity.getWorld().getName()+"/";
         String path="entity/"+entity.getUniqueId()+"/";
         Map<String,BigInteger> values=new HashMap<>();
-        Set<UUID> wallets=new HashSet<>();
+        Set<UUID> wallets=sharedWallets==null?new HashSet<>():sharedWallets;
         Map<String,ItemStack> nativeStacks=new HashMap<>();
         if(entity instanceof LivingEntity living){
             var gear=living.getEquipment();
@@ -152,11 +164,13 @@ public final class PaperEntityAccounting implements Listener {
                 }
             }
         }
+        if(raw!=null){
+            if(!Objects.equals(owner,requestedOwner))throw new IOException("Indexed entity owner changed: "+entity.getUniqueId());
+            values.forEach((key,value)->{if(value.signum()>0)raw.put(prefix+key,value);});
+            return Map.of();
+        }
         if(values.values().stream().noneMatch(v->v.signum()>0))return Map.of();
-        boolean banned=owner!=null&&PaperProfileBanSource.captureCompleteStandard(
-                Set.of("paper-profile","paper-ip"),Map.of()).currentlyBanned(owner);
-        AssetOwner.Result resolved=AssetOwner.resolve(owner,false,banned,
-                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+        AssetOwner.Result resolved=ownerResolver.resolve(owner,false);
         var out=new HashMap<MemoryAccounting.Endpoint,BigInteger>();
         values.forEach((key,value)->{
             if(value.signum()>0)out.merge(endpoint(resolved,prefix+key),value,BigInteger::add);
@@ -317,6 +331,14 @@ public final class PaperEntityAccounting implements Listener {
                 openCargo.remove(id);
             }
         }catch(IOException|RuntimeException failure){fail(failure);}
+    }
+    void rebaseOwner(UUID owner)throws IOException {
+        if(!Bukkit.isPrimaryThread()||!before.isEmpty()||!touched.isEmpty())throw new IOException("Owner rebase outside flush boundary");
+        for(var entry:tracked.entrySet()){
+            Tracked prior=entry.getValue();
+            if(prior.accounted().keySet().stream().anyMatch(e->owner.equals(e.owner().player())))
+                entry.setValue(new Tracked(prior.entity(),image(prior.entity())));
+        }
     }
     public void flush(){
         if(!ready.getAsBoolean()){clear();openCargo.clear();tracked.clear();return;}

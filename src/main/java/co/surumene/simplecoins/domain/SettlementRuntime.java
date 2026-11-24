@@ -66,8 +66,9 @@ public final class SettlementRuntime {
         private final MemoryAttempt attempt;
         private final MemoryAccounting accounting;
         private final OwnerStorageIndex locations;
-        private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting, OwnerStorageIndex locations) {
-            this.attempt = attempt; this.accounting = accounting; this.locations = locations;
+        private final Map<UUID,OwnerState> states;
+        private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting, OwnerStorageIndex locations, Map<UUID,OwnerState> states) {
+            this.attempt = attempt; this.accounting = accounting; this.locations = locations; this.states=Map.copyOf(states);
         }
         /** Completed reconstruction, not a published statistic or admission permit. */
         public MemoryAccounting.Snapshot summary() { return accounting.snapshot(); }
@@ -75,6 +76,10 @@ public final class SettlementRuntime {
     private volatile MemoryAttempt memoryAttempt;
     private volatile MemoryAccounting memory;
     private volatile OwnerStorageIndex ownerLocations;
+    public record OwnerState(boolean banned,boolean playerdata) {
+        public AssetOwner.Result classification(UUID id){return AssetOwner.resolve(id,false,banned,playerdata);}
+    }
+    private final Map<UUID,OwnerState> accountedOwnerStates=new HashMap<>();
     private final AdmissionBarrier barrier;
     private final WriterEpochFence fence;
     private final RegisteredPlayerHistory registrationHistory;
@@ -175,7 +180,19 @@ public final class SettlementRuntime {
             requireMemoryScanning(attempt);
             var locations = staged.pending().ownerStorageIndex();
             locations.apply(captured.liveProtectedLocations());
-            return new MemoryPrepared(attempt, accounting, locations);
+            var states=new HashMap<UUID,OwnerState>();
+            var owners=new java.util.HashSet<>(locations.owners());
+            owners.addAll(balances.keySet());
+            for(var endpoint:dead.keySet())owners.add(endpoint.owner().player());
+            if(registrationHistory!=null)owners.addAll(registrationHistory.snapshot());
+            for(UUID id:owners){
+                // Real startup supplies complete BAN evidence. Legacy pure
+                // fixtures without it still derive the admitted baseline only.
+                boolean banned=captured.bans()!=null?captured.bans().currentlyBanned(id):
+                    dead.keySet().stream().anyMatch(e->id.equals(e.owner().player())&&e.owner().reason()==AssetOwner.DeadReason.CURRENT_BAN);
+                states.put(id,new OwnerState(banned,manifest.playerDataFiles().containsKey(id)||balances.containsKey(id)));
+            }
+            return new MemoryPrepared(attempt, accounting, locations,states);
         } catch (IOException | RuntimeException | Error failure) {
             revoke();
             throw failure;
@@ -200,6 +217,7 @@ public final class SettlementRuntime {
                 rememberRegistrations(prepared.accounting.snapshot().personal().keySet());
                 memory = prepared.accounting;
                 ownerLocations = prepared.locations;
+                accountedOwnerStates.clear();accountedOwnerStates.putAll(prepared.states);
                 barrier.complete(prepared.attempt.generation, true, true);
                 return verdict;
             } catch (RuntimeException | Error failure) {
@@ -262,13 +280,27 @@ public final class SettlementRuntime {
         }
     }
 
+    /** Normal movement endpoints use the last fully accounted classification,
+     * not half of a newly changed BAN/playerdata state. */
+    public OwnerState accountedOwnerState(UUID owner){
+        synchronized(barrier){return accountedOwnerStates.get(owner);}
+    }
+    public OwnerState rememberOwnerState(UUID owner,OwnerState observed){
+        synchronized(barrier){
+            if(!memoryAccountingReady())return observed;
+            return accountedOwnerStates.computeIfAbsent(owner,ignored->observed);
+        }
+    }
+    public Map<UUID,OwnerState> accountedOwnerStates(){
+        synchronized(barrier){return Map.copyOf(accountedOwnerStates);}
+    }
     public record OwnerReadPlan(UUID owner, Set<OwnerStorageIndex.Location> locations, long indexRevision, long ledgerSequence) {}
 
     /** Snapshot identity for an asynchronous targeted physical re-read. */
     public OwnerReadPlan planOwnerRead(UUID owner) {
         synchronized (barrier) {
             if (!memoryAccountingReady()) throw new IllegalStateException("Normal memory accounting is unavailable");
-            return new OwnerReadPlan(owner, ownerLocations.locations(owner), ownerLocations.revision(), memory.sequence());
+            return new OwnerReadPlan(owner, ownerLocations.locations(owner), ownerLocations.revision(owner), memory.sequence(owner));
         }
     }
 
@@ -277,20 +309,23 @@ public final class SettlementRuntime {
     public boolean reconcileOwner(OwnerReadPlan plan, boolean banned, boolean hasPlayerdata,
             boolean registrationBasis, Map<String, BigInteger> observed) {
         synchronized (barrier) {
-            if (!memoryAccountingReady() || plan.indexRevision() != ownerLocations.revision()
-                    || plan.ledgerSequence() != memory.sequence()
+            if (!memoryAccountingReady() || plan.indexRevision() != ownerLocations.revision(plan.owner())
+                    || plan.ledgerSequence() != memory.sequence(plan.owner())
                     || !plan.locations().equals(ownerLocations.locations(plan.owner()))) return false;
             boolean historical = registrationHistory != null && registrationHistory.snapshot().contains(plan.owner());
             if (memory.reconcileOwner(plan.owner(),true,banned,hasPlayerdata,registrationBasis || historical,observed)
                     != MemoryAccounting.Outcome.APPLIED) return false;
+            accountedOwnerStates.put(plan.owner(),new OwnerState(banned,hasPlayerdata));
             if (memory.isRegistered(plan.owner())) rememberRegistrations(Set.of(plan.owner()));
             return true;
         }
     }
 
     private void rememberConfirmedParticipants(List<MemoryAccounting.Movement> movements, Set<UUID> registered) {
-        if (registrationHistory == null) return;
         var participants = new java.util.HashSet<>(registered);
+        // Player-only live issuance and zero registration are personal; block
+        // and entity adapters remember their real initial classification.
+        for(UUID id:registered)accountedOwnerStates.putIfAbsent(id,new OwnerState(false,true));
         for (var move : movements) {
             for (var endpoint : List.of(move.from(), move.to())) {
                 if (endpoint.owner() != null && endpoint.owner().kind() == AssetOwner.Kind.PERSONAL)
@@ -298,6 +333,7 @@ public final class SettlementRuntime {
             }
         }
         participants.removeIf(id -> !memory.isRegistered(id));
+        for(UUID id:participants)accountedOwnerStates.putIfAbsent(id,new OwnerState(false,true));
         rememberRegistrations(participants);
     }
 
@@ -341,6 +377,7 @@ public final class SettlementRuntime {
         barrier.fatalFailure();
         memory = null;
         ownerLocations = null;
+        synchronized(barrier){accountedOwnerStates.clear();}
         if (memoryAttempt == null) fence.invalidate();
     }
 }

@@ -43,6 +43,7 @@ public final class MemoryAccounting {
     private final Map<Endpoint, BigInteger> dead;
     private BigInteger free;
     private long sequence;
+    private final Map<UUID,Long> ownerSequences=new HashMap<>();
 
     public MemoryAccounting(Map<UUID, BigInteger> personal, BigInteger free,
                             Map<Endpoint, BigInteger> dead) {
@@ -66,7 +67,7 @@ public final class MemoryAccounting {
         var additions = Set.copyOf(registered);
         var outcome = record(Math.addExact(sequence, 1), movements, Set.of());
         if (outcome == Outcome.APPLIED)
-            additions.forEach(id -> personal.putIfAbsent(id, BigInteger.ZERO));
+            additions.forEach(id -> {if(personal.putIfAbsent(id, BigInteger.ZERO)==null)ownerSequences.put(id,sequence);});
         return outcome;
     }
 
@@ -103,6 +104,8 @@ public final class MemoryAccounting {
             }
         });
         removed.forEach(personal::remove);
+        for(var endpoint:next.keySet())if(endpoint.owner().player()!=null)ownerSequences.put(endpoint.owner().player(),order);
+        removed.forEach(id->ownerSequences.put(id,order));
         sequence = order;
         return Outcome.APPLIED;
     }
@@ -132,10 +135,12 @@ public final class MemoryAccounting {
         dead.putAll(replacement);
         if (register) personal.put(owner, total); else personal.remove(owner);
         sequence = next;
+        ownerSequences.put(owner,next);
         return Outcome.APPLIED;
     }
 
     public synchronized long sequence() { return sequence; }
+    public synchronized long sequence(UUID owner){return ownerSequences.getOrDefault(owner,0L);}
 
     public synchronized boolean isRegistered(UUID player) {
         return personal.containsKey(player);
