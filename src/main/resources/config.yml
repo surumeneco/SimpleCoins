@@ -40,3 +40,9 @@ settlement:
   # Bounds the entire saved-source directory walk at each guarded startup.
   # An exhausted budget fails closed; increase only after monitoring the VPS.
   max-source-entries: 1000000
+
+resource-pack:
+  # Serve plugins/SimpleCoins/SimpleCoins-java.zip at this HTTP(S) URL.
+  # Blank: generate the ZIP without sending a Java pack request.
+  # Ignored when Nexo is enabled; Geyser handles Bedrock separately.
+  public-url: ''

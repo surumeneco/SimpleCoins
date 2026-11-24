@@ -4,12 +4,12 @@ Status: **verification protocol, not evidence of successful real Paper 26.2 or J
 
 ## Environment and immutable evidence
 
-Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffolding versions, SimpleCoins commit SHA, **the externally hosted Java pack URL and the server configuration actually requesting it, if present** (redact signed query tokens), server log and client versions. The current `config.yml` has no `resource-pack.public-url` field; `SimpleCoinsPlugin` builds the JE ZIP but does not publish or request it for clients. Do not claim a product-provided public URL or a successful delivery before the actual hosting/serving path exists. Use a disposable test server with a fresh player profile; never change production resources to run this check.
+Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffolding versions, SimpleCoins commit SHA, **the externally hosted Java pack URL and the server configuration actually requesting it, if present** (redact signed query tokens), server log and client versions. With Nexo absent, `resource-pack.public-url` configures the URL for the generated Java ZIP. SimpleCoins requests that pack on Java login using the ZIP SHA-1 and its own stable pack ID. Host the ZIP at that URL before enabling the request; SimpleCoins does not include an HTTP hosting server. Verify actual hosting and client status rather than inferring successful delivery. Use a disposable test server with a fresh player profile; never change production resources to run this check.
 
 ## Nexo absent — SimpleCoins-owned assets
 
 1. Start Paper 26.2 with SimpleCoins and Geyser/Floodgate, without Nexo. Check `plugins/SimpleCoins/SimpleCoins-java.zip`, `plugins/SimpleCoins/geyser/SimpleCoins.mcpack` and `plugins/SimpleCoins/geyser/simplecoins.json` exist. Check Geyser's managed `packs/simplecoins-generated.mcpack` and `custom_mappings/simplecoins-generated.json` are installed.
-2. **After an actual Java pack distribution path is configured** (external HTTP(S) hosting and the server's real resource-pack request configuration, or a subsequently implemented equivalent), host the **generated** Java ZIP at that verified URL. This is a future acceptance action, not a capability already provided by the current SimpleCoins plugin. From a separate network, download it with the **exact** URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
+2. Host the **generated** Java ZIP at a verified external HTTP(S) URL and set `resource-pack.public-url` to it. Restart SimpleCoins and verify `SIMPLECOINS_JAVA_PACK_DELIVERY_CONFIGURED`. Verify `SIMPLECOINS_JAVA_PACK_REQUESTED` and the corresponding `SIMPLECOINS_JAVA_PACK_STATUS` on JE login. The status must be SUCCESSFULLY_LOADED for client acceptance; Geyser/Floodgate connections must not receive this Java request. From a separate network, download it with the **exact** URL (including any signed query) and compare the bytes, SHA-1 and ZIP integrity against the server-generated archive. Do not paste a signed URL into the report or a logged command. On a disposable Linux verification host with a copy of the generated archive, run:
 
    ```bash
    bash docs/verification/verify-je-pack.sh plugins/SimpleCoins/SimpleCoins-java.zip
@@ -62,7 +62,7 @@ Record each case as pass/fail/not-run with the tested commit, Paper version, jou
 ## Negative cases and release gate
 
 - Missing external Java pack hosting or server resource-pack request: no JE pack delivery; do not mark the JE client check `pass` on generated ZIP alone.
-- Invalid or obsolete Java resource-pack URL in the **actual serving configuration** (e.g. invalid HTTPS/redirect, wrong ZIP): do not claim client delivery; require reachable verified bytes and observable client result. No unimplemented SimpleCoins `public-url` setting or warning message is assumed.
+- Invalid or obsolete Java resource-pack URL in the **actual serving configuration** (e.g. invalid HTTPS/redirect, wrong ZIP): do not claim client delivery; require reachable verified bytes and observable client result. Use the actual `resource-pack.public-url` setting; missing or invalid configuration sends no Java pack request.
 - Public URL points to an old ZIP: compare SHA-1 to the generated ZIP; mismatch is a failed deployment gate even if the client displays cached textures.
 - Interrupted/modified managed Geyser resources: startup must not silently overwrite unowned or modified files.
 

@@ -10,6 +10,8 @@ import co.surumene.simplecoins.domain.WriterEpochFence;
 import co.surumene.simplecoins.domain.PaperNativeSaveFenceAdapter;
 import co.surumene.simplecoins.domain.CoinDenomination;
 import co.surumene.simplecoins.domain.JavaCurrencyPack;
+import co.surumene.simplecoins.domain.JavaPackDelivery;
+import co.surumene.simplecoins.paper.PaperJavaPackDelivery;
 import co.surumene.simplecoins.domain.GeyserResourceInstaller;
 import co.surumene.simplecoins.paper.WalletItemCodec;
 import co.surumene.simplecoins.paper.WalletCrafting;
@@ -162,7 +164,26 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                             + generated.javaArchive().getFileName()
                             + ", Bedrock=" + generated.bedrockArchive().getFileName()
                             + ", mapping=" + generated.bedrockMapping().getFileName()
-                            + "; Java pack not served; client display not yet verified");
+                            + "; client display not yet verified");
+                    // The hosting URL must serve this exact generated archive.
+                    // The request adds a pack without replacing unrelated packs.
+                    Object configuredUrl = getConfig().get("resource-pack.public-url", "");
+                    try {
+                        if (!(configuredUrl instanceof String url))
+                            throw new IOException("Expected a string public URL");
+                        var delivery = JavaPackDelivery.prepare(url, generated.javaArchive());
+                        if (delivery.isPresent()) {
+                            getServer().getPluginManager().registerEvents(
+                                    new PaperJavaPackDelivery(this, delivery.orElseThrow()), this);
+                            getLogger().info("SIMPLECOINS_JAVA_PACK_DELIVERY_CONFIGURED"
+                                    + " (hosting reachability and client acceptance not yet verified)");
+                        } else {
+                            getLogger().warning("Java currency pack generated; configure resource-pack.public-url after hosting the ZIP.");
+                        }
+                    } catch (IOException invalidUrlOrArchive) {
+                        // Signed URLs must not appear in logs.
+                        getLogger().severe("Java pack delivery not configured: invalid URL or unavailable generated archive.");
+                    }
                     if (geyser != null && geyser.isEnabled()) {
                         java.nio.file.Path geyserRoot = geyser.getDataFolder().toPath();
                         java.nio.file.Path config = geyserRoot.resolve("config.yml");
