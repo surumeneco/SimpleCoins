@@ -8,6 +8,7 @@ import co.surumene.simplecoins.domain.SavedBlockLockerSettlementOwnerLookup;
 import co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations;
 import co.surumene.simplecoins.domain.SavedTerrainBlockPalette;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
+import co.surumene.simplecoins.domain.SettlementReadDispatch;
 import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WclHybridLiveOverlay;
@@ -361,8 +362,46 @@ public final class PaperCapturedHybridSettlement {
             SettlementScanRunner.EntityOwnerLookup entityOwners,
             int maximumCompressedBytes, int maximumInflatedBytes,
             HybridLiveSourceStage.Classifier liveOwnership) throws IOException {
+        return stageCombined(consumer, verifiedWorldIds, manifest, scope, banSources, savedTerrain,
+                independentProofs, otherBlockOwners, entityOwners, maximumCompressedBytes,
+                maximumInflatedBytes, liveOwnership, SettlementReadDispatch.direct());
+    }
+
+    /** Actual worker path for a previously captured protected LIVE generation.
+     * SAVED lookups and independent proofs must use immutable source observations;
+     * only the provider and LIVE Paper callbacks are dispatched to primary.
+     * The enclosing runtime must retain its drained writer lease throughout. */
+    public SettlementScanRunner.Staged stageCombinedOffMain(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope, BanSourceCoverage banSources,
+            SavedBlockLockerTerrainObservations.Snapshot savedTerrain,
+            SavedBlockLockerTerrainObservations.Snapshot.IndependentProofs independentProofs,
+            SettlementScanRunner.SourceBlockOwnerLookup otherBlockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners, int maximumCompressedBytes,
+            int maximumInflatedBytes, HybridLiveSourceStage.Classifier liveOwnership,
+            long timeoutMillis) throws IOException {
+        Objects.requireNonNull(consumer);
+        if (Bukkit.isPrimaryThread()) throw new IOException("Combined worker stage on primary");
+        try (var reads = SettlementReadDispatch.bounded(
+                task -> Bukkit.getScheduler().runTask(consumer, task), Bukkit::isPrimaryThread, timeoutMillis)) {
+            return stageCombined(consumer, verifiedWorldIds, manifest, scope, banSources, savedTerrain,
+                    independentProofs, otherBlockOwners, entityOwners, maximumCompressedBytes,
+                    maximumInflatedBytes, liveOwnership, reads);
+        }
+    }
+
+    private SettlementScanRunner.Staged stageCombined(
+            Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope, BanSourceCoverage banSources,
+            SavedBlockLockerTerrainObservations.Snapshot savedTerrain,
+            SavedBlockLockerTerrainObservations.Snapshot.IndependentProofs independentProofs,
+            SettlementScanRunner.SourceBlockOwnerLookup otherBlockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners, int maximumCompressedBytes,
+            int maximumInflatedBytes, HybridLiveSourceStage.Classifier liveOwnership,
+            SettlementReadDispatch reads) throws IOException {
         boolean finished = false;
         try {
+            reads.requireCurrent();
             if (consumed.get())
                 throw new IllegalStateException(
                         "Paper monetary capture was already consumed; acquire a new generation");
@@ -388,16 +427,16 @@ public final class PaperCapturedHybridSettlement {
                             return chestOwners.resolve(source, chunk, position);
                         return otherOwners.resolve(source, chunk, position);
                     };
-            var staged = stageCandidateWithSavedWclAndBanCoverage(
-                    consumer, verifiedWorldIds, manifest, scope, banSources,
-                    allBlocks, entityOwners,
-                    maximumCompressedBytes, maximumInflatedBytes, liveOwnership);
+            var staged = stageCandidateInternal(manifest, scope, null, Objects.requireNonNull(banSources),
+                    allBlocks, entityOwners, maximumCompressedBytes, maximumInflatedBytes, liveOwnership,
+                    Objects.requireNonNull(consumer), Map.copyOf(verifiedWorldIds), reads);
             // Independent local source checks only, not whole-world quiescence.
             savedTerrain.witness().requireUnchanged();
             if (staged.savedContentWitness() == null)
                 throw new IOException("Missing completed SAVED generation witness");
             staged.savedContentWitness().requireUnchanged();
             manifest.requireUnchangedDiscovery();
+            reads.requireCurrent();
             finished = true;
             return staged;
         } finally {
@@ -474,12 +513,20 @@ public final class PaperCapturedHybridSettlement {
      * seam and must not masquerade as a successful Paper source recheck.
      */
     private void requireSelectedWclStillCurrent(
-            int maxSerializedBytes, int maxInflatedBytes) throws IOException {
+            int maxSerializedBytes, int maxInflatedBytes, SettlementReadDispatch reads) throws IOException {
         if (selectedWcl.isEmpty() || capturedWorlds.isEmpty()) return;
+        for (int offset = 0; offset < selectedWcl.size(); offset += 32) {
+            final int start = offset, end = Math.min(offset + 32, selectedWcl.size());
+            reads.call(() -> { requireSelectedWclRangeStillCurrent(maxSerializedBytes, maxInflatedBytes, start, end); return null; });
+        }
+    }
+
+    private void requireSelectedWclRangeStillCurrent(
+            int maxSerializedBytes, int maxInflatedBytes, int start, int end) throws IOException {
         if (!Bukkit.isPrimaryThread() || selectedWclReader == null
                 || selectedWclOriginals.size() != selectedWcl.size())
             throw new IOException("Real LIVE WCL freshness proof is missing or off Paper thread");
-        for (int index = 0; index < selectedWclOriginals.size(); index++) {
+        for (int index = start; index < end; index++) {
             var first = selectedWclOriginals.get(index);
             var originalSelection = selectedWcl.get(index);
             Entity entity = Bukkit.getEntity(first.entityId());
@@ -590,6 +637,18 @@ public final class PaperCapturedHybridSettlement {
             int maximumInflatedBytes,
             HybridLiveSourceStage.Classifier liveOwnership,
             Plugin savedWclConsumer, Map<String, UUID> savedWorldIds) throws IOException {
+        return stageCandidateInternal(manifest, scope, currentlyBanned, banSources, blockOwners, entityOwners,
+                maximumCompressedBytes, maximumInflatedBytes, liveOwnership, savedWclConsumer, savedWorldIds,
+                SettlementReadDispatch.direct());
+    }
+
+    private SettlementScanRunner.Staged stageCandidateInternal(
+            WorldStorageDiscovery.Manifest manifest, WorldScope scope, Set<UUID> currentlyBanned,
+            BanSourceCoverage banSources, SettlementScanRunner.BlockOwnerLookup blockOwners,
+            SettlementScanRunner.EntityOwnerLookup entityOwners, int maximumCompressedBytes,
+            int maximumInflatedBytes, HybridLiveSourceStage.Classifier liveOwnership,
+            Plugin savedWclConsumer, Map<String, UUID> savedWorldIds, SettlementReadDispatch reads) throws IOException {
+        reads.requireCurrent();
         List<WclHybridLiveOverlay.Selected> wclCandidates;
         synchronized (this) {
             if (!consumed.compareAndSet(false, true))
@@ -648,7 +707,7 @@ public final class PaperCapturedHybridSettlement {
                         banSources, wclCandidates.stream()
                                 .map(WclHybridLiveOverlay.Selected::entityId)
                                 .collect(java.util.stream.Collectors.toSet()),
-                        maximumCompressedBytes, maximumInflatedBytes);
+                        maximumCompressedBytes, maximumInflatedBytes, reads);
         SettlementScanRunner.Staged staged = banSources == null
                 ? SettlementScanRunner.stage(
                         manifest, scope, currentlyBanned, blockOwners, entityOwners,
@@ -661,6 +720,8 @@ public final class PaperCapturedHybridSettlement {
 
         // Same physical source keys and balances; explicit ownership MUST be
         // provided. A failure never returns the staged result to the caller.
+        HybridLiveSourceStage.Classifier capturedOwnership = reads.isDispatched()
+                ? capturePrimaryOwnership(overlay, liveOwnership, reads) : liveOwnership;
         HybridLiveSourceStage.Classifier verifiedLive = (source, value) -> {
             WclOwnerEvidence.Decision wcl = overlay.wclOwners().get(value.physicalKey());
             if (wcl != null) {
@@ -675,7 +736,7 @@ public final class PaperCapturedHybridSettlement {
                     // this source. WCL may not silently overwrite the separate
                     // LIVE ownership classification, even for equal money.
                     SettlementAccumulator.Asset nativeAsset =
-                            liveOwnership.classify(source, value);
+                            capturedOwnership.classify(source, value);
                     if (nativeAsset == null
                             || !Objects.equals(owner, nativeAsset.owner())
                             || nativeAsset.everyoneProtected()
@@ -691,7 +752,7 @@ public final class PaperCapturedHybridSettlement {
                         false, banned, playerdata,
                         value.amount(), value.physicalKey());
             }
-            SettlementAccumulator.Asset raw = liveOwnership.classify(source, value);
+            SettlementAccumulator.Asset raw = capturedOwnership.classify(source, value);
             if (raw == null || banSources == null) return raw;
             UUID owner = raw.owner();
             boolean personalOwner = owner != null && !raw.everyoneProtected();
@@ -718,7 +779,41 @@ public final class PaperCapturedHybridSettlement {
         // A changed owner with identical currency bytes must HOLD. This
         // closes a *known local read-to-stage gap only*: it does not establish
         // the global writer epoch through the caller's eventual publication.
-        requireSelectedWclStillCurrent(maximumCompressedBytes, maximumInflatedBytes);
+        requireSelectedWclStillCurrent(maximumCompressedBytes, maximumInflatedBytes, reads);
+        reads.requireCurrent();
         return staged;
+    }
+
+    /** Bound the number of actual LIVE classifications in one primary callback. */
+    private static HybridLiveSourceStage.Classifier capturePrimaryOwnership(
+            WclHybridLiveOverlay.Overlay overlay, HybridLiveSourceStage.Classifier resolver,
+            SettlementReadDispatch reads) throws IOException {
+        // Key by physical key and source id rather than hashing large Source lists repeatedly.
+        record Key(String source, String physical) {}
+        record Request(HybridLiveSourceStage.Source source, HybridLiveSourceStage.Value value) {
+            Key key() { return new Key(source.id(), value.physicalKey()); }
+        }
+        List<Request> requests = new ArrayList<>();
+        for (var source : overlay.sources()) for (var value : source.values()) {
+            if (!overlay.wclOwners().containsKey(value.physicalKey()) || overlay.mirroredPhysicalKeys().contains(value.physicalKey()))
+                requests.add(new Request(source, value));
+        }
+        Map<Key, SettlementAccumulator.Asset> resolved = new java.util.HashMap<>();
+        for (int offset=0; offset<requests.size(); offset+=128) {
+            var batch=List.copyOf(requests.subList(offset, Math.min(offset+128, requests.size())));
+            var result=reads.call(() -> {
+                Map<Key, SettlementAccumulator.Asset> observations = new java.util.HashMap<>();
+                for (var request : batch) {
+                    var asset=resolver.classify(request.source(), request.value());
+                    if (asset==null || observations.putIfAbsent(request.key(),asset)!=null)
+                        throw new IOException("Missing or duplicate LIVE owner observation");
+                }
+                return Map.copyOf(observations);
+            });
+            for (var entry : result.entrySet()) if (resolved.putIfAbsent(entry.getKey(),entry.getValue())!=null)
+                throw new IOException("Repeated LIVE owner request");
+        }
+        var immutable=Map.copyOf(resolved);
+        return (source,value) -> immutable.get(new Key(source.id(),value.physicalKey()));
     }
 }

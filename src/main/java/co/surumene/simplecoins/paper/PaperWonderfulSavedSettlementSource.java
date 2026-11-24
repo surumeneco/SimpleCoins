@@ -5,6 +5,7 @@ import co.surumene.simplecoins.domain.BanSourceCoverage;
 import co.surumene.simplecoins.domain.PaperSavedWorldMetadataWitness;
 import co.surumene.simplecoins.domain.SettlementAccumulator;
 import co.surumene.simplecoins.domain.SettlementScanRunner;
+import co.surumene.simplecoins.domain.SettlementReadDispatch;
 import co.surumene.simplecoins.domain.WclSavedSlotSupplement;
 import co.surumene.simplecoins.domain.WclSavedEquipmentMirrorProof;
 import co.surumene.simplecoins.domain.WclOwnerEvidence;
@@ -35,6 +36,7 @@ public final class PaperWonderfulSavedSettlementSource
     private final Set<UUID> banned;
     private final BanSourceCoverage banSources;
     private final Set<UUID> seenEntityIds;
+    private final SettlementReadDispatch reads;
     private final int maxSerialized;
     private final int maxInflated;
 
@@ -44,32 +46,45 @@ public final class PaperWonderfulSavedSettlementSource
             Set<UUID> banned, BanSourceCoverage banSources,
             Set<UUID> alreadySelectedLiveWclIds,
             int maxSerialized, int maxInflated) throws IOException {
+        this(consumer, verifiedWorldIds, manifest, banned, banSources, alreadySelectedLiveWclIds,
+                maxSerialized, maxInflated, SettlementReadDispatch.direct());
+    }
+
+    PaperWonderfulSavedSettlementSource(Plugin consumer, Map<String, UUID> verifiedWorldIds,
+            WorldStorageDiscovery.Manifest manifest, Set<UUID> banned, BanSourceCoverage banSources,
+            Set<UUID> alreadySelectedLiveWclIds, int maxSerialized, int maxInflated,
+            SettlementReadDispatch reads) throws IOException {
+        this.reads = Objects.requireNonNull(reads);
         this.consumer = Objects.requireNonNull(consumer);
         this.verifiedWorldIds = Map.copyOf(Objects.requireNonNull(verifiedWorldIds));
         this.manifest = Objects.requireNonNull(manifest);
-        if (!Bukkit.isPrimaryThread())
-            throw new IOException("SAVED World metadata capture requires Paper main thread");
+        if (!reads.isDispatched() && !Bukkit.isPrimaryThread())
+            throw new IOException("SAVED World metadata capture requires Paper main thread or bounded worker dispatch");
         this.worldWitness = PaperSavedWorldMetadataWitness.capture(
                 this.manifest, this.verifiedWorldIds);
         // Compare any actually loaded Bukkit World with persisted Paper
         // metadata and the WorldFolder used for saved-source discovery.
-        for (var entry : worldWitness.worldIds().entrySet()) {
-            World live = Bukkit.getWorld(entry.getKey());
-            World byId = Bukkit.getWorld(entry.getValue());
-            if (live == null) {
-                if (byId != null)
-                    throw new IOException("Persisted SAVED World UUID already loaded under a different name");
-            } else if (live.getUID().equals(entry.getValue())
-                    && byId == live
-                    && manifest.origin().worldFolders().get(entry.getKey())
-                            .toAbsolutePath().normalize().equals(
-                                live.getWorldFolder().toPath().toAbsolutePath().normalize())) {
-                // Verified same-world input, not an all-writer freeze.
-            } else {
-                throw new IOException("Bukkit/Paper saved World metadata identity mismatch: "
-                        + entry.getKey());
+        reads.call(() -> {
+            if (!Bukkit.isPrimaryThread()) throw new IOException("World identity read off primary");
+            for (var entry : worldWitness.worldIds().entrySet()) {
+                World live = Bukkit.getWorld(entry.getKey());
+                World byId = Bukkit.getWorld(entry.getValue());
+                if (live == null) {
+                    if (byId != null)
+                        throw new IOException("Persisted SAVED World UUID already loaded under a different name");
+                } else if (live.getUID().equals(entry.getValue())
+                        && byId == live
+                        && manifest.origin().worldFolders().get(entry.getKey())
+                                .toAbsolutePath().normalize().equals(
+                                    live.getWorldFolder().toPath().toAbsolutePath().normalize())) {
+                    // Verified same-world input, not an all-writer freeze.
+                } else {
+                    throw new IOException("Bukkit/Paper saved World metadata identity mismatch: "
+                            + entry.getKey());
+                }
             }
-        }
+            return null;
+        });
         if ((banned == null) == (banSources == null))
             throw new IllegalArgumentException("Exactly one BAN evidence mode is required");
         this.banned = banned == null ? null : Set.copyOf(banned);
@@ -90,21 +105,27 @@ public final class PaperWonderfulSavedSettlementSource
         Objects.requireNonNull(pending);
         Objects.requireNonNull(seenWalletIds);
         worldWitness.requireUnchanged();
-        if (!Bukkit.isPrimaryThread())
-            throw new IOException("SAVED WCL readStored requires Paper main thread");
         if (source.kind() != WorldStorageDiscovery.Kind.ENTITY
                 || !manifest.worldFiles().contains(source))
             throw new IOException("SAVED WCL supplement source not selected by manifest");
         UUID worldId = verifiedWorldIds.get(source.world());
         if (worldId == null)
             throw new IOException("Missing verified saved WCL World UUID: " + source.world());
-        World live = Bukkit.getWorld(source.world());
-        if (live != null && !worldId.equals(live.getUID()))
-            throw new IOException("SAVED WCL source World UUID conflicts with loaded World");
-
-        var candidates = PaperWonderfulSavedChunkCandidates.collect(
-                consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
-                maxSerialized, maxInflated);
+        // The worker exclusively owns traversal and pending state. It waits
+        // for one read-only provider call on primary, then accounts locally.
+        record Readback(java.util.List<PaperWonderfulSavedChunkCandidates.Candidate> candidates,
+                        int dataVersion) {}
+        var readback = reads.call(() -> {
+            if (!Bukkit.isPrimaryThread()) throw new IOException("SAVED WCL readStored off primary");
+            World live = Bukkit.getWorld(source.world());
+            if (live != null && !worldId.equals(live.getUID()))
+                throw new IOException("SAVED WCL source World UUID conflicts with loaded World");
+            var candidates = PaperWonderfulSavedChunkCandidates.collect(
+                    consumer, source, worldId, chunk, seenEntityIds, seenWalletIds,
+                    maxSerialized, maxInflated);
+            return new Readback(java.util.List.copyOf(candidates), Bukkit.getUnsafe().getDataVersion());
+        });
+        var candidates = readback.candidates();
         String sourceId = source.path().toAbsolutePath().normalize().toString();
         for (var candidate : candidates) {
             if (!source.equals(candidate.source())
@@ -138,7 +159,7 @@ public final class PaperWonderfulSavedSettlementSource
                 WclSavedEquipmentMirrorProof.prove(
                         chunk.nbt(), candidate.entityId(), candidate.providerId(),
                         slot.getKey(), stored.bytes(), maxSerialized, maxInflated,
-                        Bukkit.getUnsafe().getDataVersion());
+                        readback.dataVersion());
                 provenEquipmentMirrors.add(slot.getKey());
             }
             WclSavedSlotSupplement.stage(

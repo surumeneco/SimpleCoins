@@ -286,7 +286,8 @@ public final class WclServicesProbe extends JavaPlugin {
                         // that triggers WWC's legacy genome migration while
                         // other expensive fixture checks are in flight.
                         verifyFarUnloadedStoredItems(world, selected);
-                        Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        if (!Boolean.getBoolean("a01.probe.offMainHybrid"))
+                            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
                         return;
                     }
                     case "reload" -> {
@@ -2656,9 +2657,11 @@ public final class WclServicesProbe extends JavaPlugin {
         var scope = new WorldScope(true, Set.of(), Set.of());
         if (!manifest.origin().scope().equals(scope))
             throw new IOException("Whole WCL fixture changed source discovery scope");
+        final String sourceWorldName = world.getName();
+        final UUID sourceWorldId = world.getUID();
         var owners = (co.surumene.simplecoins.domain.SettlementScanRunner.EntityOwnerLookup)
                 (sourceWorld, chunk) -> {
-                    if (!sourceWorld.equals(world.getName()))
+                    if (!sourceWorld.equals(sourceWorldName))
                         throw new IOException("Unexpected saved Entity World source");
                     // Both far and near saved fixtures are mandatory members
                     // of the discovered source universe; never silently
@@ -2827,11 +2830,9 @@ public final class WclServicesProbe extends JavaPlugin {
         var nonChestOwners =
                 (co.surumene.simplecoins.domain.SettlementScanRunner.SourceBlockOwnerLookup)
                 (source, chunk, position) -> {
-                    if ((Bukkit.getPluginManager().getPlugin("BlockLocker") != null)
-                            != protectedMode
-                            || source.kind() != WorldStorageDiscovery.Kind.REGION
+                    if (source.kind() != WorldStorageDiscovery.Kind.REGION
                             || !manifest.worldFiles().contains(source)
-                            || !source.world().equals(world.getName()))
+                            || !source.world().equals(sourceWorldName))
                         throw new IOException("Non-chest SAVED fixture owner lacks declared proof");
                     return new co.surumene.simplecoins.domain.BlockEntitySettlementImport
                             .Ownership(null, false, false, false);
@@ -2934,6 +2935,41 @@ public final class WclServicesProbe extends JavaPlugin {
         terrain.witness().requireUnchanged();
         manifest.requireUnchangedDiscovery();
         getLogger().info("PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED");
+        if (Boolean.getBoolean("a01.probe.offMainHybrid")) {
+            var workerCapture = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
+            workerCapture.includeDiscoveredLoadedWcl(this);
+            Thread worker = new Thread(() -> {
+                try {
+                    if (Bukkit.isPrimaryThread()) throw new IOException("Worker fixture on primary");
+                    var workerTerrain = co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations.capture(
+                            manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
+                            4096, Set.of("[Private]"), Set.of("[More Users]"),
+                            Set.of("Everyone"), raw -> raw);
+                    var staged = workerCapture.stageCombinedOffMain(this,
+                            Map.of(sourceWorldName, sourceWorldId), manifest, scope, covered,
+                            workerTerrain, knownNonProtection, nonChestOwners, owners,
+                            2 * 1024 * 1024, 16 * 1024 * 1024, (source, value) -> {
+                                if (!Bukkit.isPrimaryThread()) throw new IOException("LIVE owner read off primary");
+                                return noPositiveLive.classify(source, value);
+                            }, 120000);
+                    verifyCompleteUnpublishedWclCandidate(staged, manifest, chickenId, wolfId,
+                            nearChickenId, nearWolfId, protectedMode, staged.pending().commit());
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        if (world.isChunkLoaded(FAR_CHUNK, FAR_CHUNK)) {
+                            getLogger().severe("PAPER_A05_SERVICES_PROBE_FAILED: worker stage loaded SAVED-only chunk");
+                        } else {
+                            getLogger().info("PAPER_A01_G1_OFF_MAIN_HYBRID_STAGE_PASSED");
+                        }
+                        Bukkit.shutdown();
+                    });
+                } catch (Throwable failure) {
+                    getLogger().log(java.util.logging.Level.SEVERE, "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                    Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                }
+            }, "simplecoins-hybrid-worker-fixture");
+            worker.setDaemon(true);
+            worker.start();
+        }
     }
 
     private static void verifyCompleteUnpublishedWclCandidate(
