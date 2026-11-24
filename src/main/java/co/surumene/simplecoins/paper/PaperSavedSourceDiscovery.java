@@ -188,6 +188,17 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
 
     }
 
+    private record DiscoveryObservation(WorldStorageDiscovery.Manifest manifest,
+                                        PaperSavedWorldMetadataWitness.Witness diskWorldIds,
+                                        SavedGrantReceiptUniverseAudit.Report receipts) {}
+
+    private void requireDiscoveryActive(WorldRegistryTransitionWitness.Snapshot lifecycle)
+            throws IOException {
+        if (closed.get() || finished.get() || Thread.currentThread().isInterrupted())
+            throw new IOException("Saved discovery no longer active");
+        worldTransitions.requireUnchanged(lifecycle);
+    }
+
     private void launchDiscovery(WorldRoots roots) {
         if (closed.get()) return;
         Map<String, Path> immutableRoots = roots.immutableRoots();
@@ -197,42 +208,48 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                 roots.lifecycleVersion();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                var manifest = WorldStorageDiscovery.discover(
-                        immutableRoots, scope, maxSourceEntries, immutablePlayerRoots);
-                capturedIdentities.requireDiscoveredManifest(manifest);
-                // Bind every original registered World UUID to the actual
-                // Paper 26.2 per-dimension metadata, even with no MCA files.
-                // This IO is deliberately off the Paper main thread.
-                PaperSavedWorldMetadataWitness.Witness diskWorldIds =
-                        PaperSavedWorldMetadataWitness.capture(
-                                manifest, capturedIdentities.worldIds());
-                // A directory that gains a NEW saved file while being walked
-                // must not be reported as an unchanged discovered generation.
-                manifest.requireUnchangedDiscovery();
-                if (issuanceLedger != null) {
-                    // This existing read-only audit compares the *discovered*
-                    // full saved playerdata universe with all authentic grants.
-                    // In particular a journal ACK without playerdata is fatal.
-                    // It cannot deliver currency or make admission eligible.
-                    var report = SavedGrantReceiptUniverseAudit.scan(
-                            manifest, issuanceLedger,
-                            MAX_PLAYERDATA_COMPRESSED_BYTES, MAX_PLAYERDATA_INFLATED_BYTES);
-                    manifest.requireUnchangedDiscovery();
-                    if (closed.get()) return;
-                    plugin.getLogger().info("SIMPLECOINS_SAVED_GRANT_UNIVERSE_AUDITED"
-                            + " players=" + report.playersRead()
-                            + " acknowledged=" + report.acknowledgedGrants()
-                            + " pending=" + report.pendingGrants()
-                            + " awaitingAcknowledgement=" + report.awaitingAcknowledgement()
-                            + " (OBSERVATION ONLY; admission remains blocked)");
-                }
-                // A World may unload then reload with the exact same UUID
-                // and folder, evading a before/after identity-set comparison.
-                worldTransitions.requireUnchanged(capturedLifecycle);
-                // Do not expose a discovered Manifest on the async worker.
-                // The registered Bukkit universe may have changed during the
-                // file walk and receipt audit without changing disk names.
-                diskWorldIds.requireUnchanged();
+                // Paper may finish initial region saves after ServerLoadEvent.
+                // A mismatch between two successful complete discoveries is
+                // retryable ONLY here, before any candidate is published.
+                // Every attempt starts with fresh source, metadata and receipt
+                // evidence, while retaining the original registry generation.
+                DiscoveryObservation observation =
+                        WorldStorageDiscovery.retryUnpublishedDiscovery(5, () -> {
+                            requireDiscoveryActive(capturedLifecycle);
+                            var manifest = WorldStorageDiscovery.discover(
+                                    immutableRoots, scope, maxSourceEntries, immutablePlayerRoots);
+                            capturedIdentities.requireDiscoveredManifest(manifest);
+                            PaperSavedWorldMetadataWitness.Witness diskWorldIds =
+                                    PaperSavedWorldMetadataWitness.capture(
+                                            manifest, capturedIdentities.worldIds());
+                            manifest.requireUnchangedDiscovery();
+                            SavedGrantReceiptUniverseAudit.Report report = issuanceLedger == null
+                                    ? null : SavedGrantReceiptUniverseAudit.scan(
+                                            manifest, issuanceLedger,
+                                            MAX_PLAYERDATA_COMPRESSED_BYTES,
+                                            MAX_PLAYERDATA_INFLATED_BYTES);
+                            manifest.requireUnchangedDiscovery();
+                            requireDiscoveryActive(capturedLifecycle);
+                            diskWorldIds.requireUnchanged();
+                            return new DiscoveryObservation(manifest, diskWorldIds, report);
+                        }, (attempt, drift) -> {
+                            requireDiscoveryActive(capturedLifecycle);
+                            plugin.getLogger().warning(
+                                    "SIMPLECOINS_SAVED_DISCOVERY_RETRY abandonedAttempt="
+                                            + attempt + " maximumAttempts=5; " + drift.getMessage()
+                                            + " (UNPUBLISHED; admission remains disabled)");
+                            // Only this async worker waits; the existing global
+                            // watchdog is not restarted or extended by retries.
+                            try {
+                                Thread.sleep(1000L);
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                throw new IOException("Saved discovery retry interrupted", interrupted);
+                            }
+                            requireDiscoveryActive(capturedLifecycle);
+                        });
+                var manifest = observation.manifest();
+                var diskWorldIds = observation.diskWorldIds();
                 if (closed.get() || finished.get()) return;
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (closed.get() || finished.get()) return;
@@ -247,6 +264,15 @@ public final class PaperSavedSourceDiscovery implements AutoCloseable {
                         diskWorldIds.requireUnchanged();
                         if (closed.get() || !finished.compareAndSet(false, true)) return;
                         observed.set(manifest);
+                        var report = observation.receipts();
+                        if (report != null) {
+                            plugin.getLogger().info("SIMPLECOINS_SAVED_GRANT_UNIVERSE_AUDITED"
+                                    + " players=" + report.playersRead()
+                                    + " acknowledged=" + report.acknowledgedGrants()
+                                    + " pending=" + report.pendingGrants()
+                                    + " awaitingAcknowledgement=" + report.awaitingAcknowledgement()
+                                    + " (OBSERVATION ONLY; admission remains blocked)");
+                        }
                         plugin.getLogger().info(
                                 "SIMPLECOINS_SAVED_WORLD_SOURCE_IDENTITY_VERIFIED"
                                 + " worlds=" + capturedIdentities.worldIds().size()
