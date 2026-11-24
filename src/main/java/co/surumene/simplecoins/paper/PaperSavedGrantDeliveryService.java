@@ -77,7 +77,7 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
             if (flight.commit == null) {
                 var status = flight.preflight.status();
                 if (status == SavedGrantCommitWorker.Status.RUNNING) return;
-                requireSuccess(status);
+                requireSuccess(status, flight.preflight.failure());
                 var saved = flight.preflight.saveOnMain(flight.detached, coins);
                 if (saved.isEmpty()) {
                     finish(flight, new Completion(Optional.empty()));
@@ -89,7 +89,7 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
             }
             var status = flight.commit.status();
             if (status == SavedGrantCommitWorker.Status.RUNNING) return;
-            requireSuccess(status);
+            requireSuccess(status, flight.commit.failure());
             var proof = flight.commit.result();
             flight.saved.resumeAfterVerifiedBatchOnMain();
             finish(flight, new Completion(Optional.of(proof)));
@@ -116,9 +116,9 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
         if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Paper primary thread required");
     }
 
-    private static void requireSuccess(SavedGrantCommitWorker.Status status) {
+    private static void requireSuccess(SavedGrantCommitWorker.Status status, Throwable cause) {
         if (status != SavedGrantCommitWorker.Status.SUCCEEDED)
-            throw new IllegalStateException("Saved grant worker did not succeed: " + status);
+            throw new IllegalStateException("Saved grant worker did not succeed: " + status, cause);
     }
 
     private void stopTask() {

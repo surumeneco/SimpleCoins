@@ -51,7 +51,7 @@ final class SavedGrantProtectedAckStage {
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
         return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
-                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false, () -> true);
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false, () -> true, false);
     }
 
     /** Worker-owned entry; check live custody again immediately before durable ACK. */
@@ -61,8 +61,12 @@ final class SavedGrantProtectedAckStage {
             UUID player, GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
             Map<String, Object> savedBefore, int maximumCompressedBytes,
             int maximumInflatedBytes, BooleanSupplier live) throws IOException {
+        // Only the worker-owned path may resume a durable partial cursor.
+        // The legacy synchronous first-batch entry remains first-batch only.
+        boolean resumed = plan != null && plan.previousReceipt().active();
         return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
-                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false, live);
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes,
+                resumed, live, resumed);
     }
 
     /**
@@ -82,7 +86,7 @@ final class SavedGrantProtectedAckStage {
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
         return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
-                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, true, () -> true);
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, true, () -> true, false);
     }
 
     private static SavedGrantDeliveryReadback.Proof finishVerifiedBatch(
@@ -91,7 +95,7 @@ final class SavedGrantProtectedAckStage {
             UUID player, GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes,
-            boolean finalBatchAfterPartial, BooleanSupplier live) throws IOException {
+            boolean finalBatchAfterPartial, BooleanSupplier live, boolean requireDurablePartial) throws IOException {
         Objects.requireNonNull(fence, "shared installed writer fence");
         try {
             Objects.requireNonNull(manifest, "verified playerdata universe");
@@ -124,6 +128,9 @@ final class SavedGrantProtectedAckStage {
                     || !ledger.pending(player).contains(grant))
                 throw new IllegalStateException(
                         "Grant is not an authentic completed pending delivery batch");
+            if (requireDurablePartial && (grant.confirmedPartial() <= 0
+                    || grant.confirmedPartial() != prior.partialValue()))
+                throw new IllegalStateException("Final worker batch lacks durable prior custody");
             long newPhysicalValue = finalBatchAfterPartial
                     ? Math.subtractExact(grant.amount(), prior.partialValue()) : grant.amount();
             // The lease is acquired BEFORE all filesystem IO and stays owned
@@ -141,6 +148,18 @@ final class SavedGrantProtectedAckStage {
             Path file = manifest.playerDataFiles().get(player);
             if (file == null || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Missing authoritative saved playerdata source");
+            if (requireDurablePartial) {
+                var view = ledger.verifiedPlayerSnapshot(player);
+                var intent = ledger.readBatchIntent(view, grant, file, maximumCompressedBytes)
+                        .orElseThrow(() -> new IOException("Final worker batch lacks durable intent"));
+                if (intent.priorValue() != grant.confirmedPartial())
+                    throw new IOException("Final worker intent differs from confirmed partial floor");
+                var intentBefore = co.surumene.simplecoins.domain.PlayerDataReader.decodeCompressed(
+                        intent.compressedBefore(), maximumCompressedBytes, maximumInflatedBytes);
+                if (!SavedGrantReceiptNbt.readAndVerify(intentBefore, view).equals(prior))
+                    throw new IOException("Final worker intent has different prior receipt");
+                SavedGrantDeliveryReadback.requireSameIntentStorage(intentBefore, savedBefore);
+            }
             // Both file contents and parent directory entry must be durable
             // before a fresh readback. No fake callback or stale proof accepted.
             try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ,

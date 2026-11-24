@@ -191,6 +191,7 @@ final class PaperGrantSavedBatchCoordinator {
         }
 
         SavedGrantCommitWorker.Status status() { return ticket.status(); }
+        Throwable failure() { return ticket.failure(); }
 
         /** No discovery, NBT parse, journal scan, wait or ACK on main. */
         Optional<SealedFirstBatch> saveOnMain(Player detached, CoinItemCodec coins) throws IOException {
