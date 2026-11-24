@@ -100,7 +100,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
                 runOwnerProbe(root,player,()->{
                     try{runInvseeRoundTrip(player,grants,5000,Material.STONE,()->{
-                        try{runGrantProbe(player,grants,false);runInvseeRoundTrip(player,grants,5064,Material.DIRT,()->runTraderProbe(product));}
+                        try{invokeInvseeJoinTransfer(player);runGrantProbe(player,grants,false);runInvseeRoundTrip(player,grants,5064,Material.DIRT,()->runTraderProbe(product));}
                         catch(Throwable failure){fail(failure);}
                     });}catch(Throwable failure){fail(failure);}
                 });
@@ -204,6 +204,22 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 });
             }catch(Throwable failure){Bukkit.getScheduler().runTask(this,()->fail(failure));}
         });
+    }
+
+    /** Run the distributed plugin's real LOW join listener before the grant,
+     * as happens on a normal connection. The detached player has no network
+     * connection, so do not dispatch unrelated product/login listeners. */
+    private void invokeInvseeJoinTransfer(Player player)throws Exception {
+        var join=new org.bukkit.event.player.PlayerJoinEvent(player,(net.kyori.adventure.text.Component)null);
+        int delivered=0;
+        for(var listener:join.getHandlers().getRegisteredListeners()) {
+            if(listener.getPlugin().getName().equals("InvSeePlusPlus")
+                    &&listener.getPriority()==org.bukkit.event.EventPriority.LOW) {
+                listener.callEvent(join);delivered++;
+            }
+        }
+        if(delivered==0)throw new AssertionError("InvSee join transfer listener unavailable");
+        getLogger().info("PAPER_NORMAL_INVSEE_JOIN_TRANSFER_INVOKED");
     }
 
     /** Normal offline InvSee save before delivery and again after a partial ACK.
