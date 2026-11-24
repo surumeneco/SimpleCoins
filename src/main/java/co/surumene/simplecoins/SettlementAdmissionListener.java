@@ -2,6 +2,8 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.AdmissionBarrier;
 import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
+import co.surumene.simplecoins.domain.SettlementRuntime;
+import java.util.function.BooleanSupplier;
 import io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.event.EventHandler;
@@ -21,7 +23,7 @@ public final class SettlementAdmissionListener implements Listener {
             Component.text("Server accounting is initializing. Please retry shortly.");
 
     private final AdmissionBarrier barrier;
-    private final SettlementSnapshotPublisher publication;
+    private final BooleanSupplier permit;
 
     /**
      * Compatibility constructor: without a bound published snapshot, access
@@ -29,7 +31,7 @@ public final class SettlementAdmissionListener implements Listener {
      */
     @Deprecated
     public SettlementAdmissionListener(AdmissionBarrier barrier) {
-        this(barrier, null);
+        this(barrier, (SettlementSnapshotPublisher) null);
     }
 
     public SettlementAdmissionListener(AdmissionBarrier barrier,
@@ -37,7 +39,18 @@ public final class SettlementAdmissionListener implements Listener {
         this.barrier = Objects.requireNonNull(barrier, "barrier");
         if (publication != null && !publication.usesBarrier(barrier))
             throw new IllegalArgumentException("Publication belongs to a different admission barrier");
-        this.publication = publication;
+        this.permit = publication == null ? () -> false : publication::mayAdmit;
+    }
+
+    private SettlementAdmissionListener(AdmissionBarrier barrier, BooleanSupplier permit) {
+        this.barrier = Objects.requireNonNull(barrier);
+        this.permit = Objects.requireNonNull(permit);
+    }
+
+    public static SettlementAdmissionListener forRuntime(AdmissionBarrier barrier, SettlementRuntime runtime) {
+        if (!Objects.requireNonNull(runtime).usesBarrier(barrier))
+            throw new IllegalArgumentException("Runtime belongs to a different admission barrier");
+        return new SettlementAdmissionListener(barrier, runtime::mayAdmit);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -47,7 +60,7 @@ public final class SettlementAdmissionListener implements Listener {
             // Another listener has already rejected admission; preserve its reason.
             return;
         }
-        if (!barrier.mayAdmit() || publication == null || !publication.mayAdmit()) {
+        if (!barrier.mayAdmit() || !permit.getAsBoolean()) {
             event.kickMessage(NOT_READY);
         }
     }

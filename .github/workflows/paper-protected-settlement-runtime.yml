@@ -1,0 +1,66 @@
+name: A01 real Paper scheduled protected settlement handoff
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'tests/paper-protected-settlement-runtime/**'
+      - 'src/main/java/co/surumene/simplecoins/domain/SettlementRuntime.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperProtectedSettlementService.java'
+      - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
+      - '.github/workflows/paper-protected-settlement-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  real-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Build actual product and isolated scheduler probe
+        run: |
+          gradle --no-daemon test :admission-guard:test jar :admission-guard:jar
+          gradle --no-daemon -p tests/paper-protected-settlement-runtime jar
+          python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+      - name: Download and hash-verify official Paper 26.2 build 134
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/plugins
+          curl -fLsS --retry 3 -H 'User-Agent: SimpleCoins-A02-Probe/1.0 (GitHub Actions)' \
+            'https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/134' -o smoke/paper-build.json
+          jq -e '.id == 134 and .channel == "STABLE"' smoke/paper-build.json
+          url=$(jq -r '.downloads["server:default"].url // empty' smoke/paper-build.json)
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' smoke/paper-build.json)
+          case "$url" in https://fill-data.papermc.io/*) ;; *) echo "Unexpected Paper URL" >&2; exit 1 ;; esac
+          [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          curl -fLsS --retry 3 "$url" -o smoke/paper.jar
+          printf '%s  %s\n' "$sha" smoke/paper.jar | sha256sum -c -
+      - name: Install only disposable Paper plugins
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar smoke/plugins/SimpleCoinsGuard.jar
+          cp build/libs/SimpleCoins-1.0.0.jar smoke/plugins/SimpleCoins.jar
+          cp tests/paper-protected-settlement-runtime/build/libs/SimpleCoinsProtectedSettlementProbe.jar smoke/plugins/RuntimeProbe.jar
+          printf 'eula=true\n' > smoke/eula.txt
+          printf 'online-mode=false\nwhite-list=true\nenforce-whitelist=true\nserver-ip=127.0.0.1\nserver-port=25598\n' > smoke/server.properties
+      - name: Run actual Paper scheduler and saved source handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd smoke
+          timeout 180 java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper.log 2>&1 || { tail -150 paper.log; exit 1; }
+          grep -F 'PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED' paper.log
+          if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper.log; then tail -150 paper.log; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-paper-protected-settlement-runtime
+          path: smoke/paper.log

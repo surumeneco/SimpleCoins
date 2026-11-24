@@ -6,13 +6,13 @@ import java.util.Optional;
 import java.util.function.BooleanSupplier;
 
 /**
- * Internal, deliberately unregistered A01/G0 final-publication composition.
+ * Internal A01/G0 final-publication composition owned by SettlementRuntime.
  *
  * NOT a running Paper settlement coordinator. The current eight-family
  * writer Agent does not cover every installed Paper/NMS/Plugin/file/async
  * writer, and no complete LIVE/SAVED attribution and journal handoff
- * certificate is wired to bootstrap. Therefore this class cannot be invoked
- * from SimpleCoinsPlugin or registered as an AdmissionPermit provider yet.
+ * certificate is wired to bootstrap. The runtime must remain idle until an
+ * independently audited source and writer generation can start it.
  *
  * The legacy isolated path retains its sealed-only publication contract.
  * The normal handoff binds a complete immutable baseline and actual journal
