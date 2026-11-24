@@ -220,13 +220,26 @@ public final class PaperHopperAccounting implements Listener {
         if (!ready.getAsBoolean()) return;
         try {
             if (!Bukkit.isPrimaryThread()) throw new IOException("Hopper search off primary");
-            if (!(event.getBlock().getState() instanceof org.bukkit.block.Hopper)) return;
             if (event.getInventory() == null) return;
             var candidates = positions(event.getInventory());
             if (candidates.isEmpty()) observeEntity.accept(event.getInventory());
-            capture(Position.of(event.getBlock()));
+            // Minecart hoppers also search for a source, but their block is
+            // the rail/location, not the initiating inventory.
+            if (event.getBlock().getState() instanceof org.bukkit.block.Hopper)
+                capture(Position.of(event.getBlock()));
             for (Position p : candidates) capture(p);
         } catch (IOException | RuntimeException failure) { fail(failure); }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void observeDestination(InventoryMoveItemEvent event) {
+        observe(()->{
+            // A receiving entity still has its original contents at the
+            // move event. Do not reconstruct a debited source at this stage.
+            if (event.getDestination().getHolder() instanceof org.bukkit.entity.Entity
+                    && PaperLiveItemValue.stack(event.getItem(), COMPRESSED, INFLATED).signum()!=0)
+                observeEntity.accept(event.getDestination());
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
