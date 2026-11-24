@@ -277,6 +277,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
                     inventory -> { hopper.observeInventory(inventory); entities.observeInventory(inventory); });
+            ground.setAccountingRuntime(publication);
             getServer().getPluginManager().registerEvents(ground, this);
             getServer().getPluginManager().registerEvents(hopper, this);
             getServer().getPluginManager().registerEvents(entities, this);
@@ -291,7 +292,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
             };
             getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
-            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure);
+            final co.surumene.simplecoins.paper.PaperIpBanAssociations ipAssociations;
+            try { ipAssociations=new co.surumene.simplecoins.paper.PaperIpBanAssociations(getDataFolder().toPath()); }
+            catch(IOException invalid){throw new IllegalStateException("Cannot load IP BAN associations",invalid);}
+            var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure,ipAssociations);
             entities.setOwnerResolver(ownerReconciliation::accountedOwner);
             hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
             getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
@@ -310,6 +314,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     });
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
             var liveDelivery = new PaperPlayerGrantDelivery(issuanceGrants, coinCodec, (id, value) -> {
+                try {
+                    if(ground.observeConfirmedDeadGrant(id,Bukkit.getPlayer(id))) {
+                        flushAccounting.run();
+                        if(!publication.memoryAccountingReady())throw new IllegalStateException("Dead grant accounting failed");
+                        return;
+                    }
+                }catch(IOException failure){groundFailure.accept(failure);throw new IllegalStateException("Cannot account confirmed dead grant",failure);}
                 publication.recordConfirmedMemory(java.util.List.of(new MemoryAccounting.Movement(
                         MemoryAccounting.Endpoint.external(), MemoryAccounting.Endpoint.personal(id),
                         java.math.BigInteger.valueOf(value))), java.util.Set.of());
@@ -357,7 +368,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
                 startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
                         this,admission,publication,protectedSettlement,sourceScope.scope(),
-                        () -> false, entities); // ordinary accounting coverage is not complete yet
+                        () -> false, entities, ipAssociations); // ordinary accounting coverage is not complete yet
             }
             sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
                     sourceScope.maxSourceEntries(), () -> {

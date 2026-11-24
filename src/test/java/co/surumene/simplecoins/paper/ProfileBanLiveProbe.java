@@ -46,7 +46,30 @@ public final class ProfileBanLiveProbe extends JavaPlugin {
             } catch (IOException expected) {
                 if (!expected.getMessage().contains("IP BAN")) throw expected;
             }
+            var directory=getDataFolder().toPath().resolve("ip-associations");
+            var associations=new PaperIpBanAssociations(directory);
+            var shared=UUID.fromString("7bf1ac01-4b51-4d68-8c6e-982fae4c0003");
+            var bannedAddress=java.net.InetAddress.getByAddress(new byte[]{(byte)203,0,113,42});
+            associations.record(CLEAR,bannedAddress);
+            associations.record(shared,bannedAddress);
+            associations=new PaperIpBanAssociations(directory); // persisted last addresses
+            var ipCoverage=PaperProfileBanSource.captureCompleteStandard(required,java.util.Map.of(),associations);
+            if(!ipCoverage.currentlyBanned(BANNED)||!ipCoverage.currentlyBanned(CLEAR)||!ipCoverage.currentlyBanned(shared))
+                throw new AssertionError("Profile/IP union or shared-address persistence failed");
+            var override=directory.resolve(PaperIpBanAssociations.OVERRIDE_FILE);
+            java.nio.file.Files.writeString(override,CLEAR+": '192.0.2.42'\n");
+            ipCoverage=PaperProfileBanSource.captureCompleteStandard(required,java.util.Map.of(),associations);
+            if(ipCoverage.currentlyBanned(CLEAR)||!ipCoverage.currentlyBanned(shared))throw new AssertionError("Manual IP override ignored");
+            associations.record(CLEAR,java.net.InetAddress.getByAddress(new byte[]{(byte)192,0,2,43}));
+            associations.record(CLEAR,bannedAddress);
+            if(!java.nio.file.Files.readString(override).equals(CLEAR+": '192.0.2.42'\n"))throw new AssertionError("Automatic update overwrote override");
+            java.nio.file.Files.writeString(override,"{}\n");
+            if(!PaperProfileBanSource.captureCompleteStandard(required,java.util.Map.of(),associations).currentlyBanned(CLEAR))
+                throw new AssertionError("Removing override did not restore automatic match");
             Bukkit.unbanIP(isolatedTestIp);
+            if(PaperProfileBanSource.captureCompleteStandard(required,java.util.Map.of(),associations).currentlyBanned(shared))
+                throw new AssertionError("Pardoned IP still treated as banned");
+            getLogger().info("PAPER_IP_BAN_ASSOCIATIONS_PASSED");
             var complete = PaperProfileBanSource.captureCompleteStandard(required, java.util.Map.of());
             if (!complete.currentlyBanned(BANNED) || complete.currentlyBanned(CLEAR)
                     || complete.currentlyBanned(UUID.randomUUID()))
@@ -79,7 +102,7 @@ public final class ProfileBanLiveProbe extends JavaPlugin {
                 throw new IOException("Non-primary-thread BAN observation was not rejected");
 
             getLogger().info("PAPER_PROFILE_BAN_LIVE_PASSED: profile BANNED/CLEAR, "
-                    + "null UUID, and off-thread failure verified; no IP/external evidence");
+                    + "null UUID, off-thread failure and current IP association verified; no external evidence");
         } catch (Exception failure) {
             getLogger().log(Level.SEVERE, "PAPER_PROFILE_BAN_LIVE_FAILED", failure);
             // Probe only: server must not remain online after an invalid observation.

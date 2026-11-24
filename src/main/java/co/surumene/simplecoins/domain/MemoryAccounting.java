@@ -139,6 +139,17 @@ public final class MemoryAccounting {
         return Outcome.APPLIED;
     }
 
+    /** Only the dead player's own inventory/ender locations, not their protected world assets. */
+    public synchronized Map<Endpoint,BigInteger> deadPlayerAssets(UUID id) {
+        String live="player/"+id+"/",saved="playerdata/"+id+"/";
+        Map<Endpoint,BigInteger> result=new HashMap<>();
+        dead.forEach((endpoint,value)->{
+            if(id.equals(endpoint.owner().player())&&(endpoint.location().startsWith(live)||endpoint.location().startsWith(saved)))
+                result.put(endpoint,value);
+        });
+        return Map.copyOf(result);
+    }
+
     public synchronized long sequence() { return sequence; }
     public synchronized long sequence(UUID owner){return ownerSequences.getOrDefault(owner,0L);}
 

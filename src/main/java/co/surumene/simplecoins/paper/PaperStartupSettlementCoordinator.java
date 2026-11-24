@@ -19,6 +19,7 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
     private final WorldScope scope;
     private final BooleanSupplier normalTracking;
     private final PaperEntityAccounting entityAccounting;
+    private final PaperIpBanAssociations ipAssociations;
     private final Map<World, Boolean> originalAutosave = new LinkedHashMap<>();
     private boolean originalFrozen, active;
     private long startedAt;
@@ -26,7 +27,8 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
 
     public PaperStartupSettlementCoordinator(JavaPlugin plugin, AdmissionBarrier admission,
             SettlementRuntime runtime, PaperProtectedSettlementService settlement,
-            WorldScope scope, BooleanSupplier normalTracking, PaperEntityAccounting entityAccounting) {
+            WorldScope scope, BooleanSupplier normalTracking, PaperEntityAccounting entityAccounting,
+            PaperIpBanAssociations ipAssociations) {
         this.plugin=Objects.requireNonNull(plugin);
         this.admission=Objects.requireNonNull(admission);
         this.runtime=Objects.requireNonNull(runtime);
@@ -34,6 +36,7 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
         this.scope=Objects.requireNonNull(scope);
         this.normalTracking=Objects.requireNonNull(normalTracking);
         this.entityAccounting=Objects.requireNonNull(entityAccounting);
+        this.ipAssociations=Objects.requireNonNull(ipAssociations);
     }
 
     /** After ServerLoadEvent and before starting saved discovery. */
@@ -70,10 +73,8 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
             if (world.isAutoSave()) throw new IOException("World autosave reenabled during settlement");
     }
 
-    private static BanSourceCoverage currentBans() throws IOException {
-        // The target server uses standard Paper BAN lists; a nonempty IP
-        // list requires authenticated UUID associations before publication.
-        return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
+    private BanSourceCoverage currentBans() throws IOException {
+        return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of(),ipAssociations);
     }
 
     public void onDiscovered(WorldStorageDiscovery.Manifest manifest) throws IOException {

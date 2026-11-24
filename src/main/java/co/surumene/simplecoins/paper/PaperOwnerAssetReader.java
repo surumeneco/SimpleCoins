@@ -101,6 +101,23 @@ final class PaperOwnerAssetReader {
         for(var e:values.entrySet())if(e.getValue().signum()>0&&target.putIfAbsent(e.getKey(),e.getValue())!=null)
             throw new IOException("Duplicate owner asset slot: "+e.getKey());
     }
+    /** Shared physical slot identities for full owner and ordinary dead-player accounting. */
+    static Map<String,BigInteger> livePlayerLocations(org.bukkit.entity.Player player,Set<UUID> wallets)throws IOException {
+        Map<String,BigInteger> values=new HashMap<>();UUID owner=player.getUniqueId();
+        for(var e:PaperLivePlayerAssets.scan(player,256,COMPRESSED,INFLATED,wallets).entries())
+            putAll(values,Map.of(e.physicalKey(),e.amount()));
+        var view=player.getOpenInventory();String prefix="player/"+owner+"/";
+        putAll(values,Map.of(prefix+"cursor",PaperLiveItemValue.stack(view.getCursor(),COMPRESSED,INFLATED,wallets)));
+        if(TRANSIENT_INPUTS.contains(view.getTopInventory().getType().name()))for(int i=0;i<view.getTopInventory().getSize();i++)
+            if(view.getSlotType(i)!=InventoryType.SlotType.RESULT)putAll(values,Map.of(prefix+"transient/"+i,
+                    PaperLiveItemValue.stack(view.getTopInventory().getItem(i),COMPRESSED,INFLATED,wallets)));
+        return Map.copyOf(values);
+    }
+    static Map<String,BigInteger> savedPlayerLocations(UUID owner,Map<String,Object> nbt,Set<UUID> wallets)throws IOException {
+        Map<String,BigInteger> values=new HashMap<>();
+        for(var e:SavedPlayerAssets.extract(nbt,wallets).entrySet())putAll(values,Map.of("playerdata/"+owner+"/"+e.getKey(),e.getValue()));
+        return Map.copyOf(values);
+    }
     Map<String,BigInteger> finish(Disk disk)throws IOException {
         if(!Bukkit.isPrimaryThread())throw new IOException("Owner physical read off primary");
         Plan plan=disk.plan();UUID owner=plan.owner();
@@ -108,17 +125,8 @@ final class PaperOwnerAssetReader {
         if(plan.online()!=(player!=null)||!Objects.equals(plan.playerdata(),PaperPlayerGrantDelivery.playerdata(owner)))
             throw new IOException("Player source selection changed");
         var values=new HashMap<String,BigInteger>();var wallets=new HashSet<UUID>();
-        if(player!=null){
-            for(var e:PaperLivePlayerAssets.scan(player,256,COMPRESSED,INFLATED,wallets).entries())
-                putAll(values,Map.of(e.physicalKey(),e.amount()));
-            var view=player.getOpenInventory();String prefix="player/"+owner+"/";
-            putAll(values,Map.of(prefix+"cursor",PaperLiveItemValue.stack(view.getCursor(),COMPRESSED,INFLATED,wallets)));
-            if(TRANSIENT_INPUTS.contains(view.getTopInventory().getType().name()))for(int i=0;i<view.getTopInventory().getSize();i++)
-                if(view.getSlotType(i)!=InventoryType.SlotType.RESULT)putAll(values,Map.of(prefix+"transient/"+i,
-                        PaperLiveItemValue.stack(view.getTopInventory().getItem(i),COMPRESSED,INFLATED,wallets)));
-        }else if(plan.playerdata()!=null){
-            for(var e:SavedPlayerAssets.extract(disk.playerdata(),wallets).entrySet())putAll(values,Map.of("playerdata/"+owner+"/"+e.getKey(),e.getValue()));
-        }
+        if(player!=null)putAll(values,livePlayerLocations(player,wallets));
+        else if(plan.playerdata()!=null)putAll(values,savedPlayerLocations(owner,disk.playerdata(),wallets));
         for(var e:plan.live().entrySet()){
             var loc=e.getKey();World w=requireWorld(e.getValue());
             if(!loaded(w,loc.holder()))throw new IOException("Indexed live source unloaded");

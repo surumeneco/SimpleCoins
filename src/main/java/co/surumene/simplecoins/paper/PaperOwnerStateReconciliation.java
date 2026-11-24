@@ -18,22 +18,27 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
     private final PaperOwnerAssetReader reader;
     private final Runnable flush;
     private final Consumer<Exception> fatal;
+    private final PaperIpBanAssociations ipAssociations;
     private boolean pending;
     private String lastFailure;
     private long retryAfter;
     public PaperOwnerStateReconciliation(JavaPlugin plugin,SettlementRuntime runtime,PaperEntityAccounting entities,Runnable flush,Consumer<Exception> fatal){
+        this(plugin,runtime,entities,flush,fatal,null);
+    }
+    public PaperOwnerStateReconciliation(JavaPlugin plugin,SettlementRuntime runtime,PaperEntityAccounting entities,Runnable flush,Consumer<Exception> fatal,PaperIpBanAssociations ipAssociations){
+        this.ipAssociations=ipAssociations;
         this.plugin=Objects.requireNonNull(plugin);this.runtime=Objects.requireNonNull(runtime);this.entities=Objects.requireNonNull(entities);
         this.reader=new PaperOwnerAssetReader(plugin,entities);this.flush=Objects.requireNonNull(flush);this.fatal=Objects.requireNonNull(fatal);
     }
-    private static BanSourceCoverage bans()throws IOException{
-        return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
+    private BanSourceCoverage bans()throws IOException{
+        return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of(),ipAssociations);
     }
     private static SettlementRuntime.OwnerState state(UUID owner,BanSourceCoverage coverage)throws IOException{
         return new SettlementRuntime.OwnerState(coverage.currentlyBanned(owner),PaperPlayerGrantDelivery.playerdata(owner)!=null);
     }
     static AssetOwner.Result currentOwner(UUID owner,boolean everyone)throws IOException{
         if(owner==null||everyone)return AssetOwner.resolve(null,false,false,false);
-        return state(owner,bans()).classification(owner);
+        return state(owner,PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of())).classification(owner);
     }
     public AssetOwner.Result accountedOwner(UUID owner,boolean everyone)throws IOException{
         if(owner==null||everyone)return AssetOwner.resolve(null,false,false,false);
@@ -54,10 +59,6 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
                 UUID owner=entry.getKey();var current=state(owner,coverage);
                 if(current.equals(entry.getValue()))continue;
                 if(System.nanoTime()<retryAfter)return false;
-                // Do not publish a dead classification for an active player;
-                // Paper normally disconnects a player when a BAN is applied.
-                // Until that source is settled, withhold current statistics.
-                if(Bukkit.getPlayer(owner)!=null&&current.classification(owner).kind()==AssetOwner.Kind.DEAD)return false;
                 var ledgerPlan=runtime.planOwnerRead(owner);var diskPlan=reader.capture(ledgerPlan);
                 pending=true;
                 Bukkit.getScheduler().runTaskAsynchronously(plugin,()->{
@@ -88,11 +89,28 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
     }
     private boolean loginReady(UUID owner)throws IOException{
         if(!runtime.memoryAccountingReady())return false;
-        var current=state(owner,bans());
-        if(current.banned())return false;
-        var accounted=runtime.accountedOwnerState(owner);
+        // The BAN lists classify accounting, not native admission. Paper owns
+        // actual access. A changed prior accounting class may briefly delay
+        // entry while we reconcile the saved account, regardless of direction.
+        var current=state(owner,bans());var accounted=runtime.accountedOwnerState(owner);
         if(accounted==null||current.equals(accounted))return true;
         fresh();return false;
+    }
+    @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.MONITOR)
+    public void joined(org.bukkit.event.player.PlayerJoinEvent event){
+        if(ipAssociations==null)return;
+        var player=event.getPlayer();UUID id=player.getUniqueId();
+        try{
+            var address=player.getAddress();
+            if(address==null||address.getAddress()==null)
+                plugin.getLogger().warning("Cannot observe a joined player's numeric IP; retaining existing association.");
+            else ipAssociations.record(id,address.getAddress());
+            // An unregistered player has no prior balance. Keep an explicit
+            // D class if a manual association marks the player banned.
+            if(runtime.memoryAccountingReady()&&runtime.accountedOwnerState(id)==null){
+                var current=state(id,bans());if(current.banned())runtime.rememberOwnerState(id,current);
+            }
+        }catch(IOException|RuntimeException failure){fatal.accept(failure);}
     }
     private void apply(SettlementRuntime.OwnerReadPlan plan,SettlementRuntime.OwnerState expected,PaperOwnerAssetReader.Disk disk){
         try{

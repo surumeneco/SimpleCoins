@@ -93,7 +93,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 service.close();
                 if(runtime.mayAdmit() || fence.state()!=WriterEpochFence.State.FAULTED) throw new AssertionError("Close did not revoke");
                 task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
-                runOwnerProbe(root,()->{
+                runOwnerProbe(root,player,()->{
                     try{runGrantProbe(player,grants,false);runTraderProbe(product);}
                     catch(Throwable failure){fail(failure);}
                 });
@@ -103,7 +103,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
     /** Actual Paper profile BAN and the actual detached player's saved file.
      * Isolated runtime only: the product admission gate remains closed. */
     @SuppressWarnings({"rawtypes","unchecked","deprecation"})
-    private void runOwnerProbe(java.nio.file.Path root,Runnable next)throws Exception{
+    private void runOwnerProbe(java.nio.file.Path root,Player player,Runnable next)throws Exception{
         var scope=new WorldScope(true,Set.of(),Set.of());
         var coverage=co.surumene.simplecoins.paper.PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
         var runtime=new SettlementRuntime(new AdmissionBarrier(),new WriterEpochFence());
@@ -120,7 +120,14 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                         if(!runtime.mayAdmit()||!runtime.current().orElseThrow().personalBalances().get(ID).equals(BigInteger.valueOf(5000)))
                             throw new AssertionError("Incorrect owner baseline");
                         var entities=new co.surumene.simplecoins.paper.PaperEntityAccounting(this,scope,runtime::memoryAccountingReady,moves->{},this::fail);
-                        var refresh=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,runtime,entities,()->{},this::fail);
+                        var ipDirectory=getDataFolder().toPath().resolve("ip-ban-fixture");
+                        var associations=new co.surumene.simplecoins.paper.PaperIpBanAssociations(ipDirectory);
+                        associations.record(ID,java.net.InetAddress.getByAddress(new byte[]{(byte)203,0,113,42}));
+                        var override=ipDirectory.resolve(co.surumene.simplecoins.paper.PaperIpBanAssociations.OVERRIDE_FILE);
+                        var ground=new co.surumene.simplecoins.paper.PaperGroundItemAccounting(scope,runtime::memoryAccountingReady,
+                                moves->runtime.recordConfirmedMemory(moves,Set.of()),this::fail);
+                        ground.setAccountingRuntime(runtime);
+                        var refresh=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,runtime,entities,ground::flush,this::fail,associations);
                         var file=PaperPlayerGrantDelivery.playerdata(ID);
                         var backup=file.resolveSibling(file.getFileName()+".owner-probe-backup");
                         org.bukkit.BanList bans=Bukkit.getBanList(org.bukkit.BanList.Type.PROFILE);
@@ -151,11 +158,40 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                                     case 3 -> {
                                         if(!BigInteger.valueOf(5000).equals(result.personalBalances().get(ID))||result.dead().signum()!=0)
                                             throw new AssertionError("Restored playerdata did not return to P: "+result);
-                                        task.cancel();runtime.revoke();getLogger().info("PAPER_DYNAMIC_OWNER_BAN_DELETE_RESTORE_PASSED total=5000");next.run();
+                                        getLogger().info("PAPER_DYNAMIC_OWNER_BAN_DELETE_RESTORE_PASSED total=5000");
+                                        Bukkit.banIP("203.0.113.42");stage[0]++;
+                                    }
+                                    case 4,6 -> {
+                                        if(result.personalBalances().containsKey(ID)||!result.dead().equals(BigInteger.valueOf(5000)))
+                                            throw new AssertionError("Current IP BAN did not reclassify owner: "+result);
+                                        if(stage[0]==4){
+                                            // The actual persisted player slots change under the D classification.
+                                            // This exercises the same confirmed grant/touched-player replacement path;
+                                            // a detached CraftPlayer does not establish network join behavior.
+                                            player.getInventory().setItem(1,new CoinItemCodec(CoinItemCodec.defaultNames()).create(CoinDenomination.HUNDRED,1));
+                                            player.saveData();
+                                            if(!ground.observeConfirmedDeadGrant(ID,player))throw new AssertionError("D grant was classified P");
+                                            ground.flush();
+                                            if(!runtime.current().orElseThrow().dead().equals(BigInteger.valueOf(5100))||runtime.current().orElseThrow().personalBalances().containsKey(ID))
+                                                throw new AssertionError("Confirmed D grant did not update physical location");
+                                            player.getInventory().setItem(1,null);player.saveData();
+                                            ground.observeConfirmedDeadGrant(ID,player);ground.flush();
+                                            if(!runtime.current().orElseThrow().dead().equals(BigInteger.valueOf(5000)))throw new AssertionError("D slot removal was not accounted");
+                                            getLogger().info("PAPER_DEAD_PLAYER_LOCATION_MOVEMENT_PASSED");
+                                            Files.writeString(override,ID+": '192.0.2.42'\n");
+                                        }
+                                        else Bukkit.unbanIP("203.0.113.42");
+                                        stage[0]++;
+                                    }
+                                    case 5,7 -> {
+                                        if(!BigInteger.valueOf(5000).equals(result.personalBalances().get(ID))||result.dead().signum()!=0)
+                                            throw new AssertionError("IP override/pardon did not restore owner: "+result);
+                                        if(stage[0]==5){Files.writeString(override,"{}\n");stage[0]++;}
+                                        else{task.cancel();runtime.revoke();getLogger().info("PAPER_DYNAMIC_IP_BAN_OVERRIDE_PASSED total=5000");next.run();}
                                     }
                                 }
                                 ticks[0]=0;
-                            }catch(Throwable failure){task.cancel();try{if(Files.exists(backup)&&!Files.exists(file))Files.move(backup,file);bans.pardon(profile);}catch(Exception suppressed){failure.addSuppressed(suppressed);}fail(failure);}
+                            }catch(Throwable failure){task.cancel();try{if(Files.exists(backup)&&!Files.exists(file))Files.move(backup,file);bans.pardon(profile);Bukkit.unbanIP("203.0.113.42");}catch(Exception suppressed){failure.addSuppressed(suppressed);}fail(failure);}
                         },1L,1L);
                     }catch(Throwable failure){fail(failure);}
                 });

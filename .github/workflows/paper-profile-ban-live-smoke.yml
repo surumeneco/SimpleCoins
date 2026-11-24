@@ -5,6 +5,8 @@ on:
     paths:
       - 'build.gradle.kts'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperProfileBanSource.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperIpBanAssociations.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/IpBanAssociations.java'
       - 'src/test/java/co/surumene/simplecoins/paper/ProfileBanLiveProbe.java'
       - 'tests/paper-profile-ban-smoke/**'
       - 'Lifecycle/Works/simplecoins.a06.paper-ipban-profile-source-separation.md'
@@ -121,6 +123,7 @@ jobs:
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper.log
           grep -F 'Settlement engine not connected; player admission remains disabled.' paper.log
           grep -F 'PAPER_PROFILE_BAN_LIVE_PASSED' paper.log
+          grep -F 'PAPER_IP_BAN_ASSOCIATIONS_PASSED' paper.log
           grep -F 'PAPER_A06_IP_BAN_DISTINCT_FROM_PROFILE_UUID_PASSED' paper.log
           printf 'stop\n' >&3
           exec 3>&-

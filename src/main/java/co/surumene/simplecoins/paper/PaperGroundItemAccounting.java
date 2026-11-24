@@ -30,10 +30,10 @@ public final class PaperGroundItemAccounting implements Listener {
     private final Consumer<Inventory> observeBlock;
     private final LocalValueChanges<String> changes=new LocalValueChanges<>();
     private final Map<UUID,Player> players=new HashMap<>();
+    private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> deadBefore=new HashMap<>();
+    private SettlementRuntime accountingRuntime;
     private final Map<UUID,Item> items=new HashMap<>();
     private final Map<UUID,BigInteger> unloaded=new HashMap<>();
-    private static final Set<String> TRANSIENT_INPUTS=Set.of("CRAFTING","WORKBENCH","ANVIL",
-            "SMITHING","MERCHANT","CARTOGRAPHY","GRINDSTONE","LOOM","STONECUTTER","ENCHANTING");
 
     public PaperGroundItemAccounting(WorldScope scope, BooleanSupplier ready,
             Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal) {
@@ -50,6 +50,11 @@ public final class PaperGroundItemAccounting implements Listener {
         this.observeBlock=Objects.requireNonNull(observeBlock);
     }
 
+    public void setAccountingRuntime(SettlementRuntime runtime){this.accountingRuntime=Objects.requireNonNull(runtime);}
+    private AssetOwner.Result deadOwner(UUID id){
+        var state=accountingRuntime==null?null:accountingRuntime.accountedOwnerState(id);
+        return state!=null&&state.classification(id).kind()==AssetOwner.Kind.DEAD?state.classification(id):null;
+    }
     private static String playerKey(UUID id) { return "player/"+id; }
     private static String itemKey(UUID id) { return "item/"+id; }
     private static BigInteger value(ItemStack stack) throws IOException {
@@ -58,22 +63,14 @@ public final class PaperGroundItemAccounting implements Listener {
     private BigInteger groundValue(Item item) throws IOException {
         return scope.includes(item.getWorld().getName()) ? value(item.getItemStack()) : BigInteger.ZERO;
     }
-    private BigInteger playerValue(Player player) throws IOException {
-        if (!player.isOnline()) {
-            var path=PaperPlayerGrantDelivery.playerdata(player.getUniqueId());
-            if(path==null) throw new IOException("Touched offline playerdata unavailable");
-            return SavedPlayerAssets.extract(PlayerDataReader.read(path,COMPRESSED,INFLATED))
-                    .values().stream().reduce(BigInteger.ZERO,BigInteger::add);
-        }
-        var total=PaperLivePlayerAssets.scan(player,256,COMPRESSED,INFLATED).total();
-        var view=player.getOpenInventory();
-        total=total.add(value(view.getCursor()));
-        if(TRANSIENT_INPUTS.contains(view.getTopInventory().getType().name())) {
-            for(int i=0;i<view.getTopInventory().getSize();i++)
-                if(view.getSlotType(i)!=InventoryType.SlotType.RESULT)
-                    total=total.add(value(view.getTopInventory().getItem(i)));
-        }
-        return total;
+    private Map<String,BigInteger> playerLocations(Player player,boolean missingAllowed)throws IOException{
+        if(player.isOnline())return PaperOwnerAssetReader.livePlayerLocations(player,new HashSet<>());
+        var path=PaperPlayerGrantDelivery.playerdata(player.getUniqueId());
+        if(path==null){if(missingAllowed)return Map.of();throw new IOException("Touched offline playerdata unavailable");}
+        return PaperOwnerAssetReader.savedPlayerLocations(player.getUniqueId(),PlayerDataReader.read(path,COMPRESSED,INFLATED),new HashSet<>());
+    }
+    private BigInteger playerValue(Player player)throws IOException{
+        return playerLocations(player,false).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
     }
     @FunctionalInterface private interface Read { void run() throws IOException; }
     private void observe(Read operation) {
@@ -93,11 +90,10 @@ public final class PaperGroundItemAccounting implements Listener {
     }
     private void player(Player player, BigInteger alreadyRemoved) throws IOException {
         UUID id=player.getUniqueId();
-        if(!changes.contains(playerKey(id))) {
-            changes.observe(playerKey(id),MemoryAccounting.Endpoint.personal(id),
-                    playerValue(player).add(alreadyRemoved));
-            players.put(id,player);
-        }
+        if(players.containsKey(id))return;
+        if(deadOwner(id)!=null)deadBefore.put(id,accountingRuntime.deadPlayerAssets(id));
+        else changes.observe(playerKey(id),MemoryAccounting.Endpoint.personal(id),playerValue(player).add(alreadyRemoved));
+        players.put(id,player);
     }
 
     @EventHandler(priority=EventPriority.LOWEST)
@@ -195,19 +191,38 @@ public final class PaperGroundItemAccounting implements Listener {
             player(player,BigInteger.ZERO);observeBlock.accept(event.getView().getTopInventory());
         });
     }
+    @EventHandler(priority=EventPriority.MONITOR)
+    public void join(PlayerJoinEvent event){
+        if(deadOwner(event.getPlayer().getUniqueId())!=null)observe(()->player(event.getPlayer(),BigInteger.ZERO));
+    }
+    @EventHandler(priority=EventPriority.MONITOR)
+    public void quit(PlayerQuitEvent event){
+        if(deadOwner(event.getPlayer().getUniqueId())!=null)observe(()->player(event.getPlayer(),BigInteger.ZERO));
+    }
+    /** A confirmed D grant changes the exact touched player locations, not P. */
+    public boolean observeConfirmedDeadGrant(UUID id,Player player)throws IOException{
+        if(deadOwner(id)==null)return false;
+        if(player==null||!id.equals(player.getUniqueId()))throw new IOException("Confirmed grant player is unavailable");
+        player(player,BigInteger.ZERO);return true;
+    }
     /** Durable grant delivery has already applied its own verified ledger leg. */
     public void excludeConfirmedGrant(UUID id,long amount) {
         changes.excludeAlreadyRecorded(playerKey(id),BigInteger.valueOf(amount));
     }
-    private void clear(){changes.clear();players.clear();items.clear();unloaded.clear();}
+    private void clear(){changes.clear();players.clear();deadBefore.clear();items.clear();unloaded.clear();}
     public void flush(){
         if(!ready.getAsBoolean()){clear();return;}
         try{
+            var deadMovements=new ArrayList<MemoryAccounting.Movement>();
             for(var e:players.entrySet()){
-                var player=e.getValue();
-                if(player.isBanned()||(player.getAddress()!=null&&player.getAddress().getAddress()!=null
-                        &&Bukkit.getIPBans().contains(player.getAddress().getAddress().getHostAddress())))
-                    throw new IOException("Player attribution changed during local movement");
+                var player=e.getValue();var id=e.getKey();
+                if(deadBefore.containsKey(id)){
+                    var owner=deadOwner(id);if(owner==null)throw new IOException("Dead player class changed before flush");
+                    Map<MemoryAccounting.Endpoint,BigInteger> after=new HashMap<>();
+                    playerLocations(player,true).forEach((location,value)->after.put(MemoryAccounting.Endpoint.dead(id,owner.reason(),location),value));
+                    deadMovements.addAll(InventoryAccountingDelta.between(deadBefore.get(id),after));
+                    continue;
+                }
                 BigInteger amount=playerValue(player);
                 if(amount.signum()>0&&PaperPlayerGrantDelivery.playerdata(e.getKey())==null){
                     if(!player.isOnline())throw new IOException("Playerdata missing");
@@ -222,8 +237,8 @@ public final class PaperGroundItemAccounting implements Listener {
                 var amount=item.isValid()?groundValue(item):unloaded.getOrDefault(e.getKey(),BigInteger.ZERO);
                 changes.finish(itemKey(e.getKey()),MemoryAccounting.Endpoint.free(),amount);
             }
-            var movements=changes.movements();
-            if(!movements.isEmpty())sink.accept(movements);
+            var movements=new ArrayList<>(changes.movements());movements.addAll(deadMovements);
+            if(!movements.isEmpty())sink.accept(List.copyOf(movements));
         }catch(IOException|RuntimeException failure){fatal.accept(failure);}
         finally{clear();}
     }
