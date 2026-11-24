@@ -65,6 +65,12 @@ public final class PaperSaveProbe extends JavaPlugin {
                 }
                 else if ("product-coordinator-acked-reload".equals(phase))
                     productCoordinatorAckedReloadPhase(player);
+                else if ("product-queued-commit".equals(phase) || "product-amount-commit".equals(phase)) {
+                    productQueuedCommitPhase(player, "product-amount-commit".equals(phase));
+                    return; // separate worker proves and ACKs each reservation
+                }
+                else if ("product-queued-reload".equals(phase) || "product-amount-reload".equals(phase))
+                    productQueuedReloadPhase(player, "product-amount-reload".equals(phase));
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
@@ -631,6 +637,204 @@ public final class PaperSaveProbe extends JavaPlugin {
 
     private static String workerThreadNameForDiagnostic() {
         return "a02-product-saved-proof-worker";
+    }
+
+    /**
+     * Real product delivery of approved amount-form give reservations. On the
+     * queued path a second reservation is already pending when the first
+     * commits; the same writer fence is reused across BOTH verified grants.
+     * Standalone amount form independently reproduces the untyped rejection.
+     */
+    private void productQueuedCommitPhase(Player player, boolean amountOnly) throws Exception {
+        if (!Bukkit.isPrimaryThread() || player.isOnline() || playerCountIsNonzero())
+            throw new IllegalStateException("Queued proof requires detached primary-thread player");
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        var history = ledger.historySnapshot();
+        if (history.size() != 1 || !history.getFirst().delivered()
+                || !ledger.pending(ID).isEmpty())
+            throw new IllegalStateException("Queued proof needs an earlier durable grant");
+        verifyQueuedStorage(player, 0, false, ledger);
+        var grants = new java.util.ArrayList<GrantLedger.Grant>();
+        if (!amountOnly)
+            grants.add(ledger.reserveCoins(ID, CoinDenomination.FIVE_THOUSAND, 1,
+                    "a02-queued-exact-denomination"));
+        grants.add(ledger.reserve(ID, 5200, "a02-queued-amount-form"));
+        if (!ledger.pending(ID).equals(grants)
+                || grants.getLast().denomination() != null
+                || grants.getLast().amount() != 5200)
+            throw new IllegalStateException("Wrong authentic ordered amount reservation fixture");
+        WriterEpochFence epoch = new WriterEpochFence();
+        epoch.arm(); // isolated fixture only; not installed-writer closure
+        startQueuedProductBatch(player, ledger,
+                new CoinItemCodec(CoinItemCodec.defaultNames()), epoch, List.copyOf(grants), 0);
+    }
+
+    private void startQueuedProductBatch(Player player, GrantLedger ledger, CoinItemCodec coins,
+            WriterEpochFence epoch, List<GrantLedger.Grant> grants, int index) throws Exception {
+        if (!Bukkit.isPrimaryThread() || player.isOnline() || playerCountIsNonzero()
+                || epoch.state() != WriterEpochFence.State.OPEN
+                || !ledger.pending(ID).equals(grants.subList(index, grants.size())))
+            throw new IllegalStateException("Queued next grant not in genuine sequence order");
+        GrantLedger.Grant grant = grants.get(index);
+        boolean amountForm = grant.denomination() == null;
+        Class<?> coordinator = Class.forName(
+                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
+                true, PaperSaveProbe.class.getClassLoader());
+        var begin = coordinator.getDeclaredMethod("saveAndSealFirstBatchOnMain",
+                Player.class, GrantLedger.class, GrantLedger.Grant.class, CoinItemCodec.class,
+                WriterEpochFence.class, WorldStorageDiscovery.Manifest.class, int.class, int.class);
+        begin.setAccessible(true);
+        final Object ticket;
+        try {
+            Object result = begin.invoke(null, player, ledger, grant, coins, epoch,
+                    actualPlayerManifest(), 16 * 1024 * 1024, 64 * 1024 * 1024);
+            if (!(result instanceof java.util.Optional<?> option) || option.isEmpty())
+                throw new IllegalStateException("Queued product denied vacant storage");
+            ticket = option.orElseThrow();
+        } catch (InvocationTargetException failure) {
+            throw actualQueuedFailure(failure);
+        }
+        if (epoch.state() != WriterEpochFence.State.SEALED
+                || !ledger.pending(ID).equals(grants.subList(index, grants.size()))
+                || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
+                        .completedSequence() != grant.sequence())
+            throw new IllegalStateException("Main save ACKed a queued grant prematurely");
+        var finish = ticket.getClass().getDeclaredMethod("finishOffMain");
+        finish.setAccessible(true);
+        final Path data = dataFile(), journal = grantDirectory();
+        Thread.ofPlatform().name("a02-ordered-grant-worker").start(() -> {
+            try {
+                if (Bukkit.isPrimaryThread())
+                    throw new IllegalStateException("Queued verification ran on primary thread");
+                final SavedGrantDeliveryReadback.Proof proof;
+                try {
+                    proof = (SavedGrantDeliveryReadback.Proof) finish.invoke(ticket);
+                } catch (InvocationTargetException failure) {
+                    throw actualQueuedFailure(failure);
+                }
+                List<GrantLedger.Grant> remaining = grants.subList(index + 1, grants.size());
+                var reopened = new GrantLedger(journal);
+                var saved = readDisk(data);
+                var expected = java.math.BigInteger.valueOf(grant.amount());
+                long total = 5000;
+                for (int i = 0; i <= index; i++) total = Math.addExact(total, grants.get(i).amount());
+                if (epoch.state() != WriterEpochFence.State.SEALED
+                        || proof.receipt().active()
+                        || proof.receipt().completedSequence() != grant.sequence()
+                        || proof.matchedStacks() != (amountForm ? 2 : 1)
+                        || !proof.matchedMonetaryValue().equals(expected)
+                        || !ledger.pending(ID).equals(remaining)
+                        || !reopened.pending(ID).equals(remaining)
+                        || reopened.historySnapshot().size() != grants.size() + 1
+                        || reopened.historySnapshot().stream()
+                            .filter(g -> g.sequence() <= grant.sequence()).anyMatch(g -> !g.delivered())
+                        || reopened.historySnapshot().stream()
+                            .filter(g -> g.sequence() > grant.sequence()).anyMatch(GrantLedger.Grant::delivered)
+                        || !proof.receipt().equals(SavedGrantReceiptNbt.readAndVerify(saved, reopened, ID))
+                        || !java.math.BigInteger.valueOf(total).equals(SavedPlayerAssets.extract(saved)
+                            .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
+                    throw new IllegalStateException("Queued physical delta/independent journal did not match exact reservation");
+                final long physicalTotal = total;
+                getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANT_ACK_PASSED"
+                        + " seq=" + grant.sequence() + " newValue=" + grant.amount()
+                        + " physical=" + physicalTotal + " pending=" + remaining.size());
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        int exactCount = grants.size() == 2 ? 1 : 0;
+                        verifyQueuedStorage(player, exactCount, amountForm, ledger);
+                        if (remaining.isEmpty()) {
+                            getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANTS_COMPLETE_PASSED"
+                                    + " total=" + physicalTotal + " grants=" + (grants.size() + 1)
+                                    + " pending=0");
+                            Bukkit.shutdown();
+                            return;
+                        }
+                        // Production ticket—not a newly invented fixture fence—
+                        // must return the SAME drained generation for the next grant.
+                        var resume = ticket.getClass().getDeclaredMethod(
+                                "resumeAfterVerifiedCompleteOnMain");
+                        resume.setAccessible(true);
+                        try { resume.invoke(ticket); }
+                        catch (InvocationTargetException failure) {
+                            throw actualQueuedFailure(failure);
+                        }
+                        if (epoch.state() != WriterEpochFence.State.OPEN)
+                            throw new IllegalStateException("Verified complete grant did not return writer epoch");
+                        getLogger().info("PAPER_A02_PRODUCT_ORDERED_SAME_FENCE_RESUMED_PASSED");
+                        startQueuedProductBatch(player, ledger, coins, epoch, grants, index + 1);
+                    } catch (Throwable failure) {
+                        getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                        Bukkit.shutdown();
+                    }
+                });
+            } catch (Throwable failure) {
+                Bukkit.getScheduler().runTask(this, () -> {
+                    getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                    Bukkit.shutdown();
+                });
+            }
+        });
+    }
+
+    private static Exception actualQueuedFailure(InvocationTargetException invocation) {
+        Throwable cause = invocation.getCause();
+        if (cause instanceof Exception exception) return exception;
+        if (cause instanceof Error error) throw error;
+        return new IllegalStateException("Unknown ordered product stage failure", cause);
+    }
+
+    private void verifyQueuedStorage(Player player, int exactCount, boolean amountDelivered,
+                                     GrantLedger ledger) throws Exception {
+        int expectedReceipt = 1 + exactCount + (amountDelivered ? 1 : 0);
+        var receipt = PaperGrantReceiptPdc.read(player.getPersistentDataContainer());
+        if (receipt.active() || receipt.completedSequence() != expectedReceipt
+                || !receipt.equals(SavedGrantReceiptNbt.readAndVerify(readDisk(dataFile()), ledger, ID)))
+            throw new IllegalStateException("Queued receipt does not describe exact delivered prefix");
+        CoinItemCodec coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        for (int slot = 0; slot < expectedReceipt; slot++) {
+            ItemStack item = player.getInventory().getItem(slot);
+            if (item == null || item.getAmount() != 1
+                    || coins.identify(item).orElse(null) != CoinDenomination.FIVE_THOUSAND)
+                throw new IllegalStateException("Lost or wrong 5000 denomination at slot " + slot);
+        }
+        if (amountDelivered) {
+            ItemStack remainder = player.getInventory().getItem(expectedReceipt);
+            if (remainder == null || remainder.getAmount() != 2
+                    || coins.identify(remainder).orElse(null) != CoinDenomination.ONE_HUNDRED)
+                throw new IllegalStateException("5200 amount was not decomposed into minimum three coins");
+        }
+        int afterMoney = expectedReceipt + (amountDelivered ? 1 : 0);
+        for (int slot = afterMoney; slot < 36; slot++) {
+            if (slot == 9) continue;
+            ItemStack item = player.getInventory().getItem(slot);
+            if (item != null && !item.getType().isAir())
+                throw new IllegalStateException("Queued grant changed unexpected slot " + slot);
+        }
+        ItemStack unrelated = player.getInventory().getItem(9);
+        if (unrelated == null || unrelated.getType() != Material.STONE || unrelated.getAmount() != 2)
+            throw new IllegalStateException("Queued grant changed unrelated storage");
+    }
+
+    private void productQueuedReloadPhase(Player player, boolean amountOnly) throws Exception {
+        byte[] saved = Files.readAllBytes(dataFile());
+        GrantLedger ledger = activeProductLedger();
+        player.loadData();
+        int count = amountOnly ? 2 : 3;
+        long total = amountOnly ? 10200 : 15200;
+        if (ledger.historySnapshot().size() != count
+                || ledger.historySnapshot().stream().anyMatch(g -> !g.delivered())
+                || !ledger.pending(ID).isEmpty()
+                || ledger.historySnapshot().getLast().amount() != 5200
+                || ledger.historySnapshot().getLast().denomination() != null)
+            throw new IllegalStateException("Restart lost authentic ordered reservation or durable ACK");
+        verifyQueuedStorage(player, amountOnly ? 0 : 1, true, ledger);
+        if (!java.math.BigInteger.valueOf(total).equals(SavedPlayerAssets.extract(readDisk(dataFile()))
+                    .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add))
+                || !Arrays.equals(saved, Files.readAllBytes(dataFile())))
+            throw new IllegalStateException("Queued restart changed total or saved bytes");
+        getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANTS_COLD_RESTART_PASSED"
+                + " total=" + total + " grants=" + count + " pending=0");
     }
 
     private void productCoordinatorFullPhase(Player player) throws Exception {
