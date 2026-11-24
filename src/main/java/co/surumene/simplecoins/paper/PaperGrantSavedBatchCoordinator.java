@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.BooleanSupplier;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -169,8 +170,8 @@ final class PaperGrantSavedBatchCoordinator {
         private final Map<String, Object> before;
         private final int compressedLimit;
         private final int inflatedLimit;
-        private final java.util.concurrent.atomic.AtomicBoolean attempted =
-                new java.util.concurrent.atomic.AtomicBoolean();
+        private boolean attempted; // short custody monitor only; never held across IO
+        private volatile SavedGrantCommitWorker.Ticket<SavedGrantDeliveryReadback.Proof> scheduled;
         private final java.util.concurrent.atomic.AtomicBoolean verifiedComplete =
                 new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.atomic.AtomicBoolean handedBack =
@@ -209,6 +210,19 @@ final class PaperGrantSavedBatchCoordinator {
             return finish(false, null);
         }
 
+        /** Product-owned, bounded worker path; must be scheduled on the primary thread. */
+        synchronized SavedGrantCommitWorker.Ticket<SavedGrantDeliveryReadback.Proof> scheduleOffMain(
+                SavedGrantCommitWorker worker, long timeoutMillis) {
+            if (!Bukkit.isPrimaryThread())
+                throw new IllegalStateException("Schedule saved commit on Paper primary thread");
+            if (attempted) throw new IllegalStateException("Saved grant batch already attempted");
+            attempted = true;
+            // If submission fails, this ticket remains sealed and consumed. Never retry issuance.
+            scheduled = Objects.requireNonNull(worker, "saved grant worker").submit(timeoutMillis,
+                    live -> finishOwned(false, null, live), fence::invalidate);
+            return scheduled;
+        }
+
         /**
          * Return the same fence for subsequent work, once, after a verified
          * COMPLETE durable ACK. Never reopen before completion, while partial
@@ -217,15 +231,24 @@ final class PaperGrantSavedBatchCoordinator {
          * runtime still owns the external writer audit and normal journal.
          */
         void resumeAfterVerifiedCompleteOnMain() {
+            var owned = scheduled;
+            boolean claimed = false;
             try {
                 if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
                         || !verifiedComplete.get()
                         || !handedBack.compareAndSet(false, true))
                     throw new IllegalStateException(
                             "Only one fully verified complete grant may return its sealed epoch on main");
+                if (owned != null) {
+                    owned.claimSuccess();
+                    claimed = true;
+                }
                 fence.resume(seal);
             } catch (RuntimeException | Error failure) {
-                fence.invalidate();
+                // An in-flight ACK can hold the fence monitor. Do not wait for
+                // it on primary: abandon custody, leave sealed, recover cold.
+                if (owned != null && !claimed) owned.abandon();
+                else fence.invalidate();
                 throw failure;
             }
         }
@@ -240,16 +263,24 @@ final class PaperGrantSavedBatchCoordinator {
         private SavedGrantDeliveryReadback.Proof finish(
                 boolean legacyMainThread,
                 Callable<WorldStorageDiscovery.Manifest> callback) throws IOException {
-            // Both successful completion and ambiguous failure are terminal.
-            // An accidental second caller may not redo the ACK from old NBT.
-            if (!attempted.compareAndSet(false, true)) {
-                fence.invalidate();
-                throw new IllegalStateException("Saved grant batch already attempted");
+            synchronized (this) {
+                if (attempted) {
+                    if (scheduled == null) fence.invalidate();
+                    else scheduled.abandon();
+                    throw new IllegalStateException("Saved grant batch already attempted");
+                }
+                attempted = true;
             }
+            return finishOwned(legacyMainThread, callback, () -> true);
+        }
+
+        private SavedGrantDeliveryReadback.Proof finishOwned(boolean legacyMainThread,
+                Callable<WorldStorageDiscovery.Manifest> callback, BooleanSupplier live) throws IOException {
             try {
                 if (Bukkit.isPrimaryThread() != legacyMainThread)
                     throw new IllegalStateException(
                             "Wrong execution thread for protected saved commit");
+                requireLive(live);
                 fence.requireDrained(seal);
                 WorldStorageDiscovery.Manifest fresh;
                 try {
@@ -273,13 +304,15 @@ final class PaperGrantSavedBatchCoordinator {
                         || !playerdataFile.equals(fresh.playerDataFiles().get(player)))
                     throw new IOException("Protected grant saved source changed identity or origin");
 
+                requireLive(live);
                 SavedGrantDeliveryReadback.Proof proof = plan.nextReceipt().active()
                         ? SavedGrantProtectedPartialStage.verifyPartial(
                                 fence, seal, fresh, ledger, player, grant, plan, before,
                                 compressedLimit, inflatedLimit)
                         : SavedGrantProtectedAckStage.finish(
                                 fence, seal, fresh, ledger, player, grant, plan, before,
-                                compressedLimit, inflatedLimit);
+                                compressedLimit, inflatedLimit, live);
+                requireLive(live);
                 fence.requireDrained(seal);
                 // A receipt describes THIS grant, not every reservation for
                 // its owner. Later authentic pending reservations must remain
@@ -294,6 +327,10 @@ final class PaperGrantSavedBatchCoordinator {
                 fence.invalidate();
                 throw failure;
             }
+        }
+
+        private static void requireLive(BooleanSupplier live) {
+            if (!live.getAsBoolean()) throw new IllegalStateException("Saved grant custody expired or abandoned");
         }
     }
 }
