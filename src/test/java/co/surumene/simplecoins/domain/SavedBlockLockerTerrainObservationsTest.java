@@ -324,9 +324,9 @@ class SavedBlockLockerTerrainObservationsTest {
                 clear.manifest(), candidate -> null));
         Fixture unresolved = fixture(true);
         var withSign = capture(unresolved);
-        assertThrows(IOException.class, () -> withSign.assembleOwnerIndex(
+        assertDoesNotThrow(() -> withSign.assembleOwnerIndex(
                 unresolved.manifest(), candidate -> syntheticComplete(false)),
-                "Private sign without verified owner UUID must remain HOLD");
+                "Fully read legacy PRIVATE without UUID is Free");
     }
 
     @Test void foreignDiscoveryOrChangedSavedBytesCannotReuseObservedIndex()

@@ -11,8 +11,8 @@ import xml.etree.ElementTree as ET
 
 
 def main(args: list[str]) -> int:
-    if len(args) != 2 or args[1] not in {'case.f0', 'case.f1', 'case.o0', 'case.h0'}:
-        print('usage: run_cat_a04_junit.py <report.xml> case.{f0,f1,o0,h0}', file=sys.stderr)
+    if len(args) != 2 or args[1] not in {'case.f0', 'case.f1', 'case.f2', 'case.o0', 'case.h0'}:
+        print('usage: run_cat_a04_junit.py <report.xml> case.{f0,f1,f2,o0,h0}', file=sys.stderr)
         return 2
     target = Path(args[0]).resolve()
     case_id = args[1]

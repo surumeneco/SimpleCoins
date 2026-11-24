@@ -72,13 +72,9 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
                 throw new IOException("Everyone did not override unknown owner");
 
             Block unknown = placeChest(world, 12, baseY, 4, "UnknownNoUUID", null);
-            try {
-                BlockLockerLiveEvidence.observe(unknown);
-                throw new IOException("Missing UUID unexpectedly accepted as Free");
-            } catch (IOException expected) {
-                if (!expected.getMessage().contains("no verified UUID"))
-                    throw expected;
-            }
+            var legacy = BlockLockerLiveEvidence.observe(unknown);
+            if (legacy.owner() != null || legacy.everyoneProtected())
+                throw new IOException("Legacy UUID-unidentifiable sign is not Free");
             // One BlockLocker sign protects a two-block chest whose halves
             // physically cross a Chunk boundary (x=15 and x=16).
             world.getChunkAt(0, 0);
@@ -117,7 +113,7 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
             Files.createDirectories(getDataFolder().toPath());
             Files.writeString(testWitness(), world.getUID() + "\n" + baseY + "\n");
             getLogger().info("PAPER_BLOCKLOCKER_115_OWNER_PASSED: unprotected Free,"
-                    + " exact UUID owner, Everyone priority, unknown UUID refusal,"
+                    + " exact UUID owner, Everyone priority, verified legacy unknown UUID Free,"
                     + " cross-chunk double chest and back-side Everyone;"
                     + " saved NBT and BAN are not verified");
         } catch (Exception e) {
@@ -169,17 +165,6 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
             if (candidates.size() != 1 || !values[i].equals(candidates.getFirst().amount()))
                 throw new IOException("Original Paper monetary scan omitted real chest coin: " + key);
             var v = candidates.getFirst();
-            if (i == 3) {
-                try {
-                    PaperBlockLockerLiveClassifier.classify(
-                            source, v, world, declaredFixtureBans, Set.of());
-                    throw new IOException("Unresolved BlockLocker owner became Free");
-                } catch (IOException rejected) {
-                    if (!rejected.getMessage().contains("no verified UUID"))
-                        throw rejected;
-                }
-                continue;
-            }
             var asset = PaperBlockLockerLiveClassifier.classify(
                     source, v, world, declaredFixtureBans, Set.of());
             if (!source.id().equals(asset.source())
@@ -200,7 +185,7 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
         getLogger().info("PAPER_A04_LIVE_BLOCKLOCKER_NATIVE_CURRENCY_CLASSIFIED"
                 + " phase=" + (seed ? "create" : "reload")
                 + " privateDead=10000 everyoneFree=5000 unprotectedFree=1000"
-                + " unknownHold=true originalValueUnchanged=true"
+                + " legacyFree=100 originalValueUnchanged=true"
                 + " (BAN observation is test-only; no G0 publication)");
     }
 
@@ -228,13 +213,9 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
         var frontEveryone = BlockLockerLiveEvidence.observe(world.getBlockAt(9, y, 4));
         if (frontEveryone.owner() != null || !frontEveryone.everyoneProtected())
             throw new IOException("BlockLocker saved front Everyone was not restored");
-        try {
-            BlockLockerLiveEvidence.observe(world.getBlockAt(12, y, 4));
-            throw new IOException("Unresolved BlockLocker owner unexpectedly accepted after reload");
-        } catch (IOException expected) {
-            if (!expected.getMessage().contains("no verified UUID"))
-                throw expected;
-        }
+        var legacy = BlockLockerLiveEvidence.observe(world.getBlockAt(12, y, 4));
+        if (legacy.owner() != null || legacy.everyoneProtected())
+            throw new IOException("Legacy UUID-unidentifiable sign is not Free after reload");
         Block west = world.getBlockAt(15, y, 4);
         Block east = world.getBlockAt(16, y, 4);
         if (!(west.getState() instanceof org.bukkit.block.Chest westChest)

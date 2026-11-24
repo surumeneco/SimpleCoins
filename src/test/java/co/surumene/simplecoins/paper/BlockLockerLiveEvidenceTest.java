@@ -28,10 +28,13 @@ class BlockLockerLiveEvidenceTest {
         assertEquals(ALICE, observation.owner());
     }
 
-    @Test void unknownOwnerOrAbsentOwnerIsNeverFreeByAccident() {
+    @Test void fullyReadUnknownOwnerIsFreeButAbsentOrUnreadableOwnerIsNot() throws Exception {
+        var legacy = BlockLockerLiveEvidence.classify(Optional.of("Alice"),
+                List.of("Alice"), EVERYONE, value -> Optional.empty());
+        assertNull(legacy.owner());
+        assertFalse(legacy.everyoneProtected());
         assertThrows(IOException.class, () -> BlockLockerLiveEvidence.classify(
-                Optional.of("Alice"), List.of("Alice"), EVERYONE,
-                value -> Optional.empty()));
+                Optional.of("Alice"), List.of("Alice"), EVERYONE, value -> null));
         assertThrows(IOException.class, () -> BlockLockerLiveEvidence.classify(
                 Optional.empty(), List.of(), EVERYONE,
                 value -> Optional.of(ALICE)));

@@ -8,7 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: user-chat:2026-11-20:A04-saved-BlockLocker-CAT-approved
+decision_ref: https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
 refs: []
 semantic_contract: markdown-v2
 language: ja
@@ -51,5 +51,5 @@ language: ja
 
 - 有効保護・積極的に検証済みの非保護・UNKNOWNを区別する。全看板走査なしに「看板が見当たらない」だけでは非保護とはしない。
 - Everyone有効は、同一収納の適用可能な全看板・全プロフィールに実際に存在すると検証した場合。Everyone不在はその全てを検査して積極的に不在と検証した場合。両方偽ならUNKNOWN、両方真なら矛盾。
-- Everyoneが検証済みであれば主所有者UUIDが不明でもFree。Everyoneが検証済みで不在なら有効PRIVATE主プロフィールの検証済みUUIDだけを所有者候補にする。名前と未照合PDC hintからUUIDを推測しない。UUIDは上位で現在BAN・playerdataを検証しP/D判定する。
+- Everyoneが検証済みであれば主所有者UUIDが不明でもFree。Everyoneが検証済みで不在なら有効PRIVATE主プロフィールの検証済みUUIDだけを所有者候補にする。全関連看板と有効PRIVATE主プロフィールを実際に照合でき、欠損・矛盾なしでUUID特定不能と判明した場合はFree。未読取・主看板欠損・複数主プロフィールの矛盾をUUID不明として扱わない。名前と未照合PDC hintからUUIDを推測しない。UUIDは上位で現在BAN・playerdataを検証しP/D判定する。
 - 所有/Freeは局所の**未公開**候補のみで、全writerの同一会計世代・G0 publish・Admissionを一切示さない。保存源不一致、物理重複、未証明の空保護はHOLD。
