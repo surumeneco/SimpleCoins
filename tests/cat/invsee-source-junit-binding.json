@@ -1,0 +1,7 @@
+{
+  "schema":"cat-junit-driver-binding/v1",
+  "process":"simplecoins.accounting.invsee-source",
+  "test_package":"co.surumene.simplecoins.domain.generated",
+  "test_class":"GeneratedInvseeSourceTest",
+  "driver_class":"co.surumene.simplecoins.domain.InvseeSourceDriver"
+}

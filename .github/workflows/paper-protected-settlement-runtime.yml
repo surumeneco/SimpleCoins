@@ -137,6 +137,7 @@ jobs:
           timeout 75 "$client" > client.log 2>&1 || { cat client.log; tail -150 paper-network.log; exit 1; }
           wait "$server" || { tail -150 paper-network.log; exit 1; }
           grep -F 'NETWORK_CLIENT_PLAY_LOGIN' client.log
+          grep -F 'PAPER_INVSEE_OFFLINE_MONEY_JOURNAL_PASSED 5000->5100->5000' paper-network.log
           grep -F 'PAPER_NETWORK_GRANT_JOIN_AND_IP_PASSED total=5064 pending=1' paper-network.log
           grep -F 'PAPER_NETWORK_RETAINED_INVSEE_SAVE_PASSED total=5064' paper-network.log
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-network.log; then tail -150 paper-network.log; exit 1; fi

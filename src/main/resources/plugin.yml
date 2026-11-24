@@ -12,6 +12,7 @@ softdepend:
   - floodgate
   - Nexo
   - BlockLocker
+  - InvSeePlusPlus
   - WhatAWonderfulChicken
   - WhatAWonderfulWolf
   - WonderfulCoreLibrary

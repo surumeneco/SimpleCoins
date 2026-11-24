@@ -30,6 +30,7 @@ public final class PaperOwnerStateReconciliation implements org.bukkit.event.Lis
         this.plugin=Objects.requireNonNull(plugin);this.runtime=Objects.requireNonNull(runtime);this.entities=Objects.requireNonNull(entities);
         this.reader=new PaperOwnerAssetReader(plugin,entities);this.flush=Objects.requireNonNull(flush);this.fatal=Objects.requireNonNull(fatal);
     }
+    void setInvseeViews(PaperInvseeViews views){reader.setInvseeViews(views);}
     private BanSourceCoverage bans()throws IOException{
         return PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of(),ipAssociations);
     }

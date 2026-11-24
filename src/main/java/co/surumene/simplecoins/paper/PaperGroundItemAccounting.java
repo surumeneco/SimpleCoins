@@ -32,6 +32,10 @@ public final class PaperGroundItemAccounting implements Listener {
     private final Map<UUID,Player> players=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> deadBefore=new HashMap<>();
     private SettlementRuntime accountingRuntime;
+    private PaperInvseeViews invsee;
+    private PaperOwnerStateReconciliation.Resolver ownerResolver;
+    // Only actual open spectator targets, discarded when their view closes.
+    private final Map<UUID,BigInteger> activeLast=new HashMap<>();
     private final Map<UUID,Item> items=new HashMap<>();
     private final Map<UUID,BigInteger> unloaded=new HashMap<>();
 
@@ -51,6 +55,11 @@ public final class PaperGroundItemAccounting implements Listener {
     }
 
     public void setAccountingRuntime(SettlementRuntime runtime){this.accountingRuntime=Objects.requireNonNull(runtime);}
+    public void connectInvsee(org.bukkit.plugin.java.JavaPlugin plugin,PaperOwnerStateReconciliation reconciliation)throws ReflectiveOperationException{
+        ownerResolver=reconciliation::accountedOwner;
+        invsee=PaperInvseeViews.install(plugin,this);
+        reconciliation.setInvseeViews(invsee);
+    }
     private AssetOwner.Result deadOwner(UUID id){
         var state=accountingRuntime==null?null:accountingRuntime.accountedOwnerState(id);
         return state!=null&&state.classification(id).kind()==AssetOwner.Kind.DEAD?state.classification(id):null;
@@ -63,14 +72,17 @@ public final class PaperGroundItemAccounting implements Listener {
     private BigInteger groundValue(Item item) throws IOException {
         return scope.includes(item.getWorld().getName()) ? value(item.getItemStack()) : BigInteger.ZERO;
     }
-    private Map<String,BigInteger> playerLocations(Player player,boolean missingAllowed)throws IOException{
-        if(player.isOnline())return PaperOwnerAssetReader.livePlayerLocations(player,new HashSet<>());
-        var path=PaperPlayerGrantDelivery.playerdata(player.getUniqueId());
-        if(path==null){if(missingAllowed)return Map.of();throw new IOException("Touched offline playerdata unavailable");}
-        return PaperOwnerAssetReader.savedPlayerLocations(player.getUniqueId(),PlayerDataReader.read(path,COMPRESSED,INFLATED),new HashSet<>());
+    private Map<String,BigInteger> playerLocations(UUID id,boolean missingAllowed)throws IOException{
+        Player player=Bukkit.getPlayer(id);
+        if(InvseeSourceSelection.select(player!=null&&player.isOnline(),invsee!=null&&invsee.has(id))==InvseeSourceSelection.Source.LIVE)return PaperOwnerAssetReader.livePlayerLocations(player,new HashSet<>());
+        var path=PaperPlayerGrantDelivery.playerdata(id);
+        if(path==null&&!missingAllowed&&(invsee==null||!invsee.has(id)))throw new IOException("Touched offline playerdata unavailable");
+        var root=path==null?Map.<String,Object>of():PlayerDataReader.read(path,COMPRESSED,INFLATED);
+        if(invsee!=null)return invsee.saved(id,root,new HashSet<>());
+        return path==null?Map.of():PaperOwnerAssetReader.savedPlayerLocations(id,root,new HashSet<>());
     }
-    private BigInteger playerValue(Player player)throws IOException{
-        return playerLocations(player,false).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
+    private BigInteger playerValue(UUID id,boolean missingAllowed)throws IOException{
+        return playerLocations(id,missingAllowed).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
     }
     @FunctionalInterface private interface Read { void run() throws IOException; }
     private void observe(Read operation) {
@@ -89,12 +101,28 @@ public final class PaperGroundItemAccounting implements Listener {
         }
     }
     private void player(Player player, BigInteger alreadyRemoved) throws IOException {
-        UUID id=player.getUniqueId();
+        player(player.getUniqueId(),player,alreadyRemoved);
+    }
+    private void player(UUID id,Player player,BigInteger alreadyRemoved)throws IOException{
         if(players.containsKey(id))return;
         if(deadOwner(id)!=null)deadBefore.put(id,accountingRuntime.deadPlayerAssets(id));
-        else changes.observe(playerKey(id),MemoryAccounting.Endpoint.personal(id),playerValue(player).add(alreadyRemoved));
+        else {
+            BigInteger last=activeLast.get(id);
+            changes.observe(playerKey(id),MemoryAccounting.Endpoint.personal(id),last!=null?last:playerValue(id,player==null).add(alreadyRemoved));
+        }
         players.put(id,player);
     }
+    private void observeInvsee(Inventory inventory,boolean track)throws IOException{
+        if(invsee==null)return;
+        var target=invsee.target(inventory);if(target==null)return;
+        var live=Bukkit.getPlayer(target.owner());
+        if(live==null&&ownerResolver!=null)ownerResolver.resolve(target.owner(),false);
+        player(target.owner(),live,BigInteger.ZERO);
+        if(track)invsee.track(target);
+    }
+    /** Actual InvSee save event is fired before the ordinary main-thread save. */
+    void observeInvseeSave(Inventory inventory){observe(()->observeInvsee(inventory,false));}
+    void invseeFailure(Exception failure){if(ready.getAsBoolean()){clear();fatal.accept(failure);}}
 
     @EventHandler(priority=EventPriority.LOWEST)
     public void spawn(ItemSpawnEvent event) { observe(()->ground(event.getEntity(),true)); }
@@ -169,35 +197,43 @@ public final class PaperGroundItemAccounting implements Listener {
     public void interact(PlayerInteractEntityEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}
     @EventHandler(priority=EventPriority.LOWEST)
     public void interactAt(PlayerInteractAtEntityEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}
-    @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true)
+    @EventHandler(priority=EventPriority.LOWEST)
     public void open(InventoryOpenEvent event){
         if(event.getPlayer() instanceof Player player)observe(()->player(player,BigInteger.ZERO));
     }
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void openInvsee(InventoryOpenEvent event){observe(()->observeInvsee(event.getInventory(),true));}
     @EventHandler(priority=EventPriority.LOWEST)
     public void click(InventoryClickEvent event) {
         if(event.getWhoClicked() instanceof Player player)observe(()->{
-            player(player,BigInteger.ZERO);observeBlock.accept(event.getView().getTopInventory());
+            player(player,BigInteger.ZERO);observeInvsee(event.getView().getTopInventory(),true);observeBlock.accept(event.getView().getTopInventory());
         });
     }
     @EventHandler(priority=EventPriority.LOWEST)
     public void drag(InventoryDragEvent event) {
         if(event.getWhoClicked() instanceof Player player)observe(()->{
-            player(player,BigInteger.ZERO);observeBlock.accept(event.getView().getTopInventory());
+            player(player,BigInteger.ZERO);observeInvsee(event.getView().getTopInventory(),true);observeBlock.accept(event.getView().getTopInventory());
         });
     }
     @EventHandler(priority=EventPriority.LOWEST)
     public void close(InventoryCloseEvent event) {
         if(event.getPlayer() instanceof Player player)observe(()->{
-            player(player,BigInteger.ZERO);observeBlock.accept(event.getView().getTopInventory());
+            player(player,BigInteger.ZERO);observeInvsee(event.getView().getTopInventory(),true);observeBlock.accept(event.getView().getTopInventory());
         });
     }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void beforeJoin(PlayerJoinEvent event){
+        if(invsee!=null&&invsee.has(event.getPlayer().getUniqueId()))observe(()->player(event.getPlayer(),BigInteger.ZERO));
+    }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void swapHands(PlayerSwapHandItemsEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}
     @EventHandler(priority=EventPriority.MONITOR)
     public void join(PlayerJoinEvent event){
         if(deadOwner(event.getPlayer().getUniqueId())!=null)observe(()->player(event.getPlayer(),BigInteger.ZERO));
     }
     @EventHandler(priority=EventPriority.MONITOR)
     public void quit(PlayerQuitEvent event){
-        if(deadOwner(event.getPlayer().getUniqueId())!=null)observe(()->player(event.getPlayer(),BigInteger.ZERO));
+        if(deadOwner(event.getPlayer().getUniqueId())!=null||invsee!=null&&invsee.has(event.getPlayer().getUniqueId()))observe(()->player(event.getPlayer(),BigInteger.ZERO));
     }
     /** A confirmed D grant changes the exact touched player locations, not P. */
     public boolean observeConfirmedDeadGrant(UUID id,Player player)throws IOException{
@@ -207,30 +243,44 @@ public final class PaperGroundItemAccounting implements Listener {
     }
     /** Durable grant delivery has already applied its own verified ledger leg. */
     public void excludeConfirmedGrant(UUID id,long amount) {
+        if(activeLast.containsKey(id)&&!changes.contains(playerKey(id))){
+            changes.observe(playerKey(id),MemoryAccounting.Endpoint.personal(id),activeLast.get(id));
+            players.put(id,Bukkit.getPlayer(id));
+        }
         changes.excludeAlreadyRecorded(playerKey(id),BigInteger.valueOf(amount));
     }
     private void clear(){changes.clear();players.clear();deadBefore.clear();items.clear();unloaded.clear();}
     public void flush(){
-        if(!ready.getAsBoolean()){clear();return;}
+        if(!ready.getAsBoolean()){clear();activeLast.clear();if(invsee!=null)invsee.clear();return;}
         try{
+            // Capture previously accounted open views even for direct plugin
+            // changes, then switch closed views back to their actual saved NBT.
+            if(invsee!=null){
+                for(UUID id:invsee.owners())player(id,Bukkit.getPlayer(id),BigInteger.ZERO);
+                invsee.prune();
+            }
             var deadMovements=new ArrayList<MemoryAccounting.Movement>();
             for(var e:players.entrySet()){
                 var player=e.getValue();var id=e.getKey();
                 if(deadBefore.containsKey(id)){
                     var owner=deadOwner(id);if(owner==null)throw new IOException("Dead player class changed before flush");
                     Map<MemoryAccounting.Endpoint,BigInteger> after=new HashMap<>();
-                    playerLocations(player,true).forEach((location,value)->after.put(MemoryAccounting.Endpoint.dead(id,owner.reason(),location),value));
+                    var locations=playerLocations(id,true);
+                    locations.forEach((location,value)->after.put(MemoryAccounting.Endpoint.dead(id,owner.reason(),location),value));
+                    if(invsee!=null&&invsee.has(id))activeLast.put(id,locations.values().stream().reduce(BigInteger.ZERO,BigInteger::add));else activeLast.remove(id);
                     deadMovements.addAll(InventoryAccountingDelta.between(deadBefore.get(id),after));
                     continue;
                 }
-                BigInteger amount=playerValue(player);
-                if(amount.signum()>0&&PaperPlayerGrantDelivery.playerdata(e.getKey())==null){
-                    if(!player.isOnline())throw new IOException("Playerdata missing");
-                    player.saveData();
+                BigInteger amount=playerValue(id,player==null);
+                if(amount.signum()>0&&PaperPlayerGrantDelivery.playerdata(id)==null){
+                    Player live=Bukkit.getPlayer(id);
+                    if(live==null||!live.isOnline())throw new IOException("Playerdata missing");
+                    live.saveData();
                     if(PaperPlayerGrantDelivery.playerdata(e.getKey())==null)
                         throw new IOException("Playerdata unavailable after save");
                 }
-                changes.finish(playerKey(e.getKey()),MemoryAccounting.Endpoint.personal(e.getKey()),amount);
+                changes.finish(playerKey(id),MemoryAccounting.Endpoint.personal(id),amount);
+                if(invsee!=null&&invsee.has(id))activeLast.put(id,amount);else activeLast.remove(id);
             }
             for(var e:items.entrySet()){
                 var item=e.getValue();

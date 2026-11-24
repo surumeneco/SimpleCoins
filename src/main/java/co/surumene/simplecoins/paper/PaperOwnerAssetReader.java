@@ -26,6 +26,8 @@ final class PaperOwnerAssetReader {
                 Map<OwnerStorageIndex.Holder,OwnerSavedStorage.Selected> selected,Map<String,Object> playerdata) {}
     private final Plugin plugin;
     private final PaperEntityAccounting entities;
+    private PaperInvseeViews invsee;
+    void setInvseeViews(PaperInvseeViews views){invsee=views;}
     PaperOwnerAssetReader(Plugin plugin,PaperEntityAccounting entities){this.plugin=plugin;this.entities=entities;}
 
     private static int[] blockCoordinates(OwnerStorageIndex.Holder holder){
@@ -125,7 +127,8 @@ final class PaperOwnerAssetReader {
         if(plan.online()!=(player!=null)||!Objects.equals(plan.playerdata(),PaperPlayerGrantDelivery.playerdata(owner)))
             throw new IOException("Player source selection changed");
         var values=new HashMap<String,BigInteger>();var wallets=new HashSet<UUID>();
-        if(player!=null)putAll(values,livePlayerLocations(player,wallets));
+        if(InvseeSourceSelection.select(player!=null,invsee!=null&&invsee.has(owner))==InvseeSourceSelection.Source.LIVE)putAll(values,livePlayerLocations(player,wallets));
+        else if(invsee!=null)putAll(values,invsee.saved(owner,disk.playerdata(),wallets));
         else if(plan.playerdata()!=null)putAll(values,savedPlayerLocations(owner,disk.playerdata(),wallets));
         for(var e:plan.live().entrySet()){
             var loc=e.getKey();World w=requireWorld(e.getValue());
