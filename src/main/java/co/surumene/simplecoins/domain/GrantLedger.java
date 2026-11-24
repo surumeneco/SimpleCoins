@@ -118,6 +118,46 @@ public final class GrantLedger {
                 .filter(g -> g.player().equals(player)).toList());
     }
 
+    /** One authenticated, immutable ledger revision for a read-only multi-player audit. */
+    public synchronized VerifiedUniverseSnapshot verifiedUniverseSnapshot() {
+        checkHealthy();
+        return new VerifiedUniverseSnapshot(this, mutationRevision, List.copyOf(grants.values()));
+    }
+
+    /** Recheck ALL durable records at the end; a stale or foreign view is not evidence. */
+    public synchronized void requireUnchangedVerifiedUniverse(VerifiedUniverseSnapshot view) {
+        if (view == null || view.owner != this || view.revision != mutationRevision)
+            throw new IllegalStateException("Issuance history changed during saved audit");
+        checkHealthy();
+    }
+
+    public static final class VerifiedUniverseSnapshot {
+        private final GrantLedger owner;
+        private final long revision;
+        private final List<Grant> history;
+        private final Map<UUID, VerifiedPlayerSnapshot> players;
+
+        private VerifiedUniverseSnapshot(GrantLedger owner, long revision, List<Grant> history) {
+            this.owner = owner;
+            this.revision = revision;
+            this.history = List.copyOf(history);
+            Map<UUID, List<Grant>> grouped = new HashMap<>();
+            for (Grant grant : history)
+                grouped.computeIfAbsent(grant.player(), ignored -> new ArrayList<>()).add(grant);
+            Map<UUID, VerifiedPlayerSnapshot> views = new HashMap<>();
+            grouped.forEach((player, records) -> views.put(player,
+                    new VerifiedPlayerSnapshot(owner, revision, player, records)));
+            this.players = Map.copyOf(views);
+        }
+
+        public List<Grant> history() { return history; }
+        public VerifiedPlayerSnapshot forPlayer(UUID player) {
+            Objects.requireNonNull(player, "player UUID");
+            var view = players.get(player);
+            return view != null ? view : new VerifiedPlayerSnapshot(owner, revision, player, List.of());
+        }
+    }
+
     public static final class VerifiedPlayerSnapshot {
         private final GrantLedger owner;
         private final long revision;
