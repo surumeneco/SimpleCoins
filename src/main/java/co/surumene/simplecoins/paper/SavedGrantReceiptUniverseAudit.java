@@ -57,9 +57,9 @@ public final class SavedGrantReceiptUniverseAudit {
         // An already-read player must not disappear or roll back unnoticed.
         var witness = SavedPlayerdataContentWitness.capture(manifest,
                 maximumCompressedBytes);
-        final java.util.List<GrantLedger.Grant> history;
+        final GrantLedger.VerifiedUniverseSnapshot history;
         try {
-            history = ledger.historySnapshot();
+            history = ledger.verifiedUniverseSnapshot();
         } catch (IllegalStateException corrupt) {
             throw new IOException("Cannot audit unverified issuance history", corrupt);
         }
@@ -73,14 +73,14 @@ public final class SavedGrantReceiptUniverseAudit {
             // full-world scanner, including strict canonical player file names.
             Map<String, Object> nbt = PlayerDataReader.read(
                     file, maximumCompressedBytes, maximumInflatedBytes);
-            GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(nbt, ledger, player);
+            GrantReceiptState receipt = SavedGrantReceiptNbt.readAndVerify(nbt, history.forPlayer(player));
             if (receipts.putIfAbsent(player, receipt) != null)
                 throw new IOException("Duplicate saved player receipt identity: " + player);
             afterRead.observed(player);
         }
 
         int acknowledged = 0, pending = 0, awaiting = 0;
-        for (GrantLedger.Grant grant : history) {
+        for (GrantLedger.Grant grant : history.history()) {
             GrantReceiptState receipt = receipts.get(grant.player());
             if (grant.delivered()) {
                 if (receipt == null || receipt.completedSequence() < grant.sequence())
@@ -100,8 +100,7 @@ public final class SavedGrantReceiptUniverseAudit {
         // source-set recheck is NOT a simultaneous content-generation witness.
         witness.requireUnchanged();
         try {
-            if (!history.equals(ledger.historySnapshot()))
-                throw new IOException("Issuance history changed during saved audit");
+            ledger.requireUnchangedVerifiedUniverse(history);
         } catch (IllegalStateException corrupt) {
             throw new IOException("Issuance journal changed during saved audit", corrupt);
         }

@@ -161,4 +161,14 @@ class SavedGrantReceiptUniverseAuditTest {
         saveBytes(player, nbt.toByteArray());
         assertThrows(IOException.class, () -> audit(discover(), ledger));
     }
+    @Test void issuanceMutationDuringAuditRejectsOtherwiseValidReceipts() throws Exception {
+        var ledger = new GrantLedger(temp.resolve("grants"));
+        UUID player = UUID.randomUUID(), other = UUID.randomUUID();
+        save(player, GrantReceiptState.empty());
+        save(other, GrantReceiptState.empty());
+        assertThrows(IOException.class, () -> SavedGrantReceiptUniverseAudit.scan(
+                discover(), ledger, 65536, 65536,
+                observed -> { if (observed.equals(player)) ledger.reserve(other, 25, "console"); }));
+        assertEquals(1, ledger.pending(other).size());
+    }
 }
