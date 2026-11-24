@@ -191,6 +191,25 @@ final class SavedGrantProtectedAckStageTest {
         }
     }
 
+    @Test void expiredWorkerCannotAckFreshPhysicalSave() throws Exception {
+        UUID player = UUID.randomUUID();
+        Path journal = temp.resolve("grants-expired-worker");
+        var ledger = new GrantLedger(journal);
+        var grant = ledger.reserveCoins(player, CoinDenomination.FIVE_THOUSAND, 1, "console");
+        var plan = fullPlan(ledger, player, grant);
+        write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+        var savedBefore = PlayerDataReader.read(playerFile(player), 65536, 65536);
+        write(player, plan.nextReceipt(), true, "minecraft:stone");
+        var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+        assertThrows(IllegalStateException.class, () -> SavedGrantProtectedAckStage.finish(
+                fence, seal, discovery(), ledger, player, grant, plan, savedBefore,
+                65536, 65536, () -> false));
+        assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        assertEquals(java.util.List.of(grant), new GrantLedger(journal).pending(player));
+        assertEquals(plan.nextReceipt(), SavedGrantReceiptNbt.readAndVerify(
+                PlayerDataReader.read(playerFile(player), 65536, 65536), ledger, player));
+    }
+
     @Test void finalPartialBatchFreshSaveAcksWithoutReissuingEarlierCoins() throws Throwable {
         UUID player = UUID.randomUUID();
         Path journal = temp.resolve("grants-final-partial-success");
