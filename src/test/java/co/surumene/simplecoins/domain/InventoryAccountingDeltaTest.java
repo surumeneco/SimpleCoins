@@ -36,4 +36,46 @@ class InventoryAccountingDeltaTest {
         assertThrows(IllegalArgumentException.class, () -> InventoryAccountingDelta.between(
                 Map.of(MemoryAccounting.Endpoint.free(), BigInteger.valueOf(-1)), Map.of()));
     }
+    @Test void partialPickupUsesConfirmedPlayerAndGroundBalances() {
+        var id = UUID.randomUUID();
+        var person = MemoryAccounting.Endpoint.personal(id);
+        var free = MemoryAccounting.Endpoint.free();
+        var ledger = new MemoryAccounting(Map.of(id, BigInteger.valueOf(62)), BigInteger.TEN, Map.of());
+        var batch = new LocalValueChanges<String>();
+        batch.observe("player", person, BigInteger.valueOf(62));
+        batch.observe("item", free, BigInteger.TEN);
+        batch.observe("item", free, BigInteger.valueOf(2)); // temporary event amount must not replace original
+        batch.finish("player", person, BigInteger.valueOf(64));
+        batch.finish("item", free, BigInteger.valueOf(8));
+        assertEquals(MemoryAccounting.Outcome.APPLIED, ledger.record(1, batch.movements()));
+        assertEquals(BigInteger.valueOf(64), ledger.snapshot().personal().get(id));
+        assertEquals(BigInteger.valueOf(8), ledger.snapshot().free());
+    }
+    @Test void deathDropAndRetainedInventoryAreCountedOnce() {
+        var id = UUID.randomUUID();
+        var person = MemoryAccounting.Endpoint.personal(id);
+        var free = MemoryAccounting.Endpoint.free();
+        var batch = new LocalValueChanges<String>();
+        batch.observe("player", person, BigInteger.valueOf(100));
+        batch.observe("drop", free, BigInteger.ZERO);
+        batch.finish("player", person, BigInteger.valueOf(30));
+        batch.finish("drop", free, BigInteger.valueOf(70));
+        var ledger = new MemoryAccounting(Map.of(id, BigInteger.valueOf(100)), BigInteger.ZERO, Map.of());
+        assertEquals(MemoryAccounting.Outcome.APPLIED, ledger.record(1, batch.movements()));
+        assertEquals(BigInteger.valueOf(30), ledger.snapshot().personal().get(id));
+        assertEquals(BigInteger.valueOf(70), ledger.snapshot().free());
+    }
+    @Test void independentlyCommittedGrantIsNotCountedTwice() {
+        var person = MemoryAccounting.Endpoint.personal(UUID.randomUUID());
+        var batch = new LocalValueChanges<String>();
+        batch.observe("player", person, BigInteger.TEN);
+        batch.excludeAlreadyRecorded("player", BigInteger.valueOf(50));
+        batch.finish("player", person, BigInteger.valueOf(60));
+        assertTrue(batch.movements().isEmpty());
+    }
+    @Test void incompleteObservationCannotBecomeAZeroBalance() {
+        var batch = new LocalValueChanges<String>();
+        batch.observe("unread", MemoryAccounting.Endpoint.free(), BigInteger.ONE);
+        assertThrows(IllegalStateException.class, batch::movements);
+    }
 }
