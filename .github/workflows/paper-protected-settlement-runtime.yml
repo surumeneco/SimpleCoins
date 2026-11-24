@@ -104,6 +104,42 @@ jobs:
           grep -F 'PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total=5064' paper-crash-reload.log || { tail -150 paper-crash-reload.log; exit 1; }
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0' paper-crash-reload.log
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-crash-reload.log; then tail -150 paper-crash-reload.log; exit 1; fi
+      - name: Build pinned Java 26.2 protocol fixture client
+        if: ${{ !cancelled() && steps.install-fixture.outcome == 'success' }}
+        id: build-client
+        run: gradle --no-daemon -p tests/paper-protected-settlement-runtime/client installDist
+      - name: Actual loopback JE join, IP capture and retained InvSee grant save
+        if: ${{ !cancelled() && steps.build-client.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-network/plugins
+          cp smoke/paper.jar smoke-network/paper.jar
+          cp smoke/plugins/*.jar smoke-network/plugins/
+          cp smoke/eula.txt smoke/server.properties smoke-network/
+          printf 'enforce-secure-profile=false\n' >> smoke-network/server.properties
+          python3 - <<'PYTHON'
+          import hashlib,json,uuid,pathlib
+          raw=bytearray(hashlib.md5(b"OfflinePlayer:ProbeSettlement").digest());raw[6]=(raw[6]&15)|48;raw[8]=(raw[8]&63)|128
+          pathlib.Path("smoke-network/whitelist.json").write_text(json.dumps([{"uuid":str(uuid.UUID(bytes=bytes(raw))),"name":"ProbeSettlement"}]))
+          PYTHON
+          client="$PWD/tests/paper-protected-settlement-runtime/client/build/install/simplecoins-network-fixture/bin/simplecoins-network-fixture"
+          cd smoke-network
+          timeout 160 java -Da02.liveClientProbe=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-network.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            grep -Fq 'PAPER_NETWORK_GRANT_FIXTURE_READY' paper-network.log && break
+            kill -0 "$server" 2>/dev/null || { tail -150 paper-network.log; exit 1; }
+            sleep 1
+          done
+          grep -F 'PAPER_NETWORK_GRANT_FIXTURE_READY' paper-network.log || { tail -150 paper-network.log; exit 1; }
+          timeout 75 "$client" > client.log 2>&1 || { cat client.log; tail -150 paper-network.log; exit 1; }
+          wait "$server" || { tail -150 paper-network.log; exit 1; }
+          grep -F 'NETWORK_CLIENT_PLAY_LOGIN' client.log
+          grep -F 'PAPER_NETWORK_GRANT_JOIN_AND_IP_PASSED total=5064 pending=1' paper-network.log
+          grep -F 'PAPER_NETWORK_RETAINED_INVSEE_SAVE_PASSED total=5064' paper-network.log
+          if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-network.log; then tail -150 paper-network.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,3 +147,5 @@ jobs:
           path: |
             smoke/paper*.log
             smoke-crash/paper*.log
+            smoke-network/paper*.log
+            smoke-network/client.log
