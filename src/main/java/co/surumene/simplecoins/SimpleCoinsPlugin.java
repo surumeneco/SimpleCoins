@@ -55,6 +55,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private CoinExchangeRecipes exchangeRecipes;
     private WalletCrafting walletCrafting;
     private PaperSavedSourceDiscovery sourceDiscovery;
+    private co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator startupSettlement;
     private PaperSavedGrantDeliveryService savedGrantDelivery;
 
     @Override
@@ -123,6 +124,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     failure -> {
                         publication.revoke();
                         getLogger().log(Level.SEVERE, "Protected settlement failed", failure);
+                        if (startupSettlement != null) startupSettlement.close();
                         Bukkit.shutdown();
                     });
             // Validate every operator-controlled monetary setting before
@@ -320,29 +322,42 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // classloader; it never opens while journal/scan are not connected.
             getServer().getServicesManager().register(
                     AdmissionPermit.class, publication::mayAdmit, this, ServicePriority.Normal);
-            // Capture Paper world folders on its main thread, but walk their
-            // saved files off-thread. This is not a staged monetary settlement
-            // and MUST NOT publish statistics or open player admission.
-            sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
-                    sourceScope.maxSourceEntries(), () -> {
-                        publication.revoke();
-                        admission.fatalFailure();
-                        getLogger().severe("Saved-source discovery failed; stopping Paper.");
-                        Bukkit.shutdown();
-                    }, issuanceGrants);
-            sourceDiscovery.start();
-            // Discover the full, currently registered WCL reader set, not the
-            // ServicesManager.load() single winner. This is startup diagnostics,
-            // not an inventory capture or valid G0 accounting-generation proof.
             var wclRegistration = PaperWonderfulReaderRegistry.inspect(this);
             getLogger().info("SIMPLECOINS_WCL_REGISTRATION_OBSERVED"
                     + " status=" + wclRegistration.status()
                     + " reason=" + wclRegistration.reason()
                     + " providers=" + wclRegistration.owners().keySet()
-                    + " (REGISTRATION ONLY; asset collection and admission disabled)");
-            getLogger().warning("Settlement engine not connected; player admission remains disabled.");
+                    + " (REGISTRATION ONLY; no admission permit)");
+            Object diagnosticSetting=getConfig().get("settlement.diagnostic-only", false);
+            if (!(diagnosticSetting instanceof Boolean diagnosticOnly))
+                throw new IllegalArgumentException("Expected boolean settlement.diagnostic-only");
+            // Real deployments with the required providers run the managed
+            // complete source stage. Diagnostic fixtures never open admission.
+            if (!diagnosticOnly && wclRegistration.registrationsPresent()
+                    && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
+                startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
+                        this,admission,publication,protectedSettlement,sourceScope.scope(),
+                        () -> false); // ordinary accounting coverage is not complete yet
+            }
+            sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
+                    sourceScope.maxSourceEntries(), () -> {
+                        publication.revoke();
+                        admission.fatalFailure();
+                        if (startupSettlement != null) startupSettlement.close();
+                        getLogger().severe("Saved-source discovery failed; stopping Paper.");
+                        Bukkit.shutdown();
+                    }, issuanceGrants,
+                    () -> startupSettlement == null ? 0L : startupSettlement.beginWindow(),
+                    manifest -> {
+                        if (startupSettlement != null) startupSettlement.onDiscovered(manifest);
+                    });
+            sourceDiscovery.start();
+            if (startupSettlement == null)
+                getLogger().warning("Settlement engine not connected; player admission remains disabled."
+                        + " Required providers unavailable or diagnostic-only mode.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (startupSettlement != null) startupSettlement.close();
             if (protectedSettlement != null) {
                 protectedSettlement.close();
                 protectedSettlement = null;
@@ -384,6 +399,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (startupSettlement != null) {
+            startupSettlement.close();
+            startupSettlement=null;
+        }
         if (protectedSettlement != null) {
             protectedSettlement.close();
             protectedSettlement = null;
