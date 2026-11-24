@@ -23,6 +23,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-final-save-pre-ack-crash.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-before-save-sigkill-recovery.md'
       - 'Lifecycle/Works/simplecoins.a01.real-paper-shared-playerdata-omission.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantLedger.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantReceiptState.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantInventorySlotPlan.java'
 
 jobs:
   real-paper-playerdata:

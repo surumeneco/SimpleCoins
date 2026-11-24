@@ -36,11 +36,15 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
      * bypassed by selecting a later active sequence.
      */
     public void verify(GrantLedger ledger, UUID player) {
-        Objects.requireNonNull(ledger, "issuance journal");
-        Objects.requireNonNull(player, "player UUID");
-        ledger.validateReceipt(player, completedSequence);
+        verify(Objects.requireNonNull(ledger, "issuance journal").verifiedPlayerSnapshot(player));
+    }
+
+    /** Read-only planning predicate; does not establish current durable evidence. */
+    public void verify(GrantLedger.VerifiedPlayerSnapshot view) {
+        Objects.requireNonNull(view, "verified planning view");
+        view.validateReceipt(completedSequence);
         if (!active()) return;
-        List<GrantLedger.Grant> pending = ledger.pending(player);
+        List<GrantLedger.Grant> pending = view.pending();
         GrantLedger.Grant matching = null;
         for (var grant : pending) {
             if (grant.sequence() < activeSequence)
@@ -59,11 +63,15 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
 
     /** Start one pending grant after the preceding receipt was verified. */
     public GrantReceiptState begin(GrantLedger ledger, UUID player, GrantLedger.Grant handle) {
-        verify(ledger, player);
-        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
+        return begin(Objects.requireNonNull(ledger, "issuance journal").verifiedPlayerSnapshot(player), handle);
+    }
+
+    public GrantReceiptState begin(GrantLedger.VerifiedPlayerSnapshot view, GrantLedger.Grant handle) {
+        verify(view);
+        GrantLedger.Grant grant = requireAuthenticPending(view, handle);
         if (active() || grant.sequence() <= completedSequence)
             throw new IllegalStateException("Cannot start stale or concurrent issuance receipt");
-        for (var pending : ledger.pending(player))
+        for (var pending : view.pending())
             if (pending.sequence() < grant.sequence())
                 throw new IllegalStateException("Cannot start after an earlier pending grant");
         return new GrantReceiptState(completedSequence, grant.sequence(), grant.id(), 0);
@@ -76,8 +84,13 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
      */
     public GrantReceiptState advance(GrantLedger ledger, UUID player,
                                      GrantLedger.Grant handle, GrantDeliveryBatchPlanner.Batch batch) {
-        verify(ledger, player);
-        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
+        return advance(Objects.requireNonNull(ledger, "issuance journal").verifiedPlayerSnapshot(player), handle, batch);
+    }
+
+    public GrantReceiptState advance(GrantLedger.VerifiedPlayerSnapshot view,
+                                     GrantLedger.Grant handle, GrantDeliveryBatchPlanner.Batch batch) {
+        verify(view);
+        GrantLedger.Grant grant = requireAuthenticPending(view, handle);
         requireSamePending(grant);
         Objects.requireNonNull(batch, "delivery batch");
         if (batch.stacks().isEmpty())
@@ -94,8 +107,12 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
      * together before calling GrantLedger.acknowledge.
      */
     public GrantReceiptState complete(GrantLedger ledger, UUID player, GrantLedger.Grant handle) {
-        verify(ledger, player);
-        GrantLedger.Grant grant = requireAuthenticPending(ledger, player, handle);
+        return complete(Objects.requireNonNull(ledger, "issuance journal").verifiedPlayerSnapshot(player), handle);
+    }
+
+    public GrantReceiptState complete(GrantLedger.VerifiedPlayerSnapshot view, GrantLedger.Grant handle) {
+        verify(view);
+        GrantLedger.Grant grant = requireAuthenticPending(view, handle);
         requireSamePending(grant);
         if (partialValue != grant.amount())
             throw new IllegalStateException("Cannot complete a partially delivered grant");
@@ -106,12 +123,11 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
     }
 
     /** Never trust a caller-created grant solely because its UUID and sequence match. */
-    private static GrantLedger.Grant requireAuthenticPending(GrantLedger ledger,
-                                                             UUID player, GrantLedger.Grant handle) {
-        Objects.requireNonNull(ledger, "issuance ledger");
-        Objects.requireNonNull(player, "player UUID");
+    private static GrantLedger.Grant requireAuthenticPending(GrantLedger.VerifiedPlayerSnapshot view,
+                                                             GrantLedger.Grant handle) {
+        Objects.requireNonNull(view, "verified planning view");
         Objects.requireNonNull(handle, "grant handle");
-        for (var pending : ledger.pending(player)) {
+        for (var pending : view.pending()) {
             if (pending.sequence() == handle.sequence()) {
                 if (!pending.equals(handle))
                     throw new IllegalStateException("Grant handle differs from durable reservation");
