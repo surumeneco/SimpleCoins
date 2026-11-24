@@ -86,6 +86,21 @@ public final class NormalMutationJournal implements AutoCloseable {
     private final TreeMap<Long, Mutation> entries = new TreeMap<>();
     private final Map<UUID, Long> operationIds = new HashMap<>();
     private final boolean unreconciledOnStartup;
+    // Changes to either the record set OR an existing record's phase
+    // invalidate previously verified cuts, even when the head is unchanged.
+    private Object revision = new Object();
+
+    static final class Cursor {
+        private final NormalMutationJournal owner;
+        private final Object revision;
+        private final long sequence;
+        private Cursor(NormalMutationJournal owner, Object revision, long sequence) {
+            this.owner = owner;
+            this.revision = revision;
+            this.sequence = sequence;
+        }
+        long sequence() { return sequence; }
+    }
     private boolean closed;
     private boolean failed;
     private long nextAuditSequence = 1;
@@ -216,6 +231,7 @@ public final class NormalMutationJournal implements AutoCloseable {
         }
         entries.put(next, candidate);
         operationIds.put(operationId, next);
+        revision = new Object();
         return new Preparation(candidate, true);
     }
 
@@ -237,7 +253,44 @@ public final class NormalMutationJournal implements AutoCloseable {
         try { DurableFile.write(recordPath(sequence), encode(after)); }
         catch (IOException failure) { failed = true; throw failure; }
         entries.put(sequence, after);
+        revision = new Object();
         return after;
+    }
+
+    /** Expensive startup history audit; does not establish physical reconciliation. */
+    synchronized Cursor verifiedCheckpoint() {
+        verifyAll();
+        return checkpoint();
+    }
+
+    /** Bounded head/lock check for the session's current journal position. */
+    synchronized Cursor checkpoint() {
+        checkHealthy();
+        return new Cursor(this, revision, entries.isEmpty() ? 0 : entries.lastKey());
+    }
+
+    synchronized void requireCurrentCursor(Cursor expected) {
+        checkHealthy();
+        requireInMemoryCursor(expected);
+    }
+
+    /** Caller already holds the journal monitor and checked disk liveness. */
+    synchronized void requireInMemoryCursor(Cursor expected) {
+        if (closed || failed || !writerLock.isValid() || expected == null
+                || expected.owner != this || expected.revision != revision
+                || expected.sequence != (entries.isEmpty() ? 0 : entries.lastKey()))
+            throw new IllegalStateException("Normal accounting journal cut changed");
+    }
+
+    /** Verified duplicate identity; never infer that a historical effect happened. */
+    synchronized Mutation priorOperation(UUID operationId) throws IOException {
+        checkHealthy();
+        Long sequence = operationIds.get(Objects.requireNonNull(operationId));
+        if (sequence == null) return null;
+        Mutation old = entries.get(sequence);
+        try { requirePersistedMatch(old); }
+        catch (IOException failure) { failed = true; throw failure; }
+        return old;
     }
 
     /** Both states are unresolved until an independent, complete physical audit. */
