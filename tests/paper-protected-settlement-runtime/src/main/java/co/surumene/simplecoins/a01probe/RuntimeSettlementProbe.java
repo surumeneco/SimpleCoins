@@ -4,6 +4,7 @@ import co.surumene.simplecoins.domain.*;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperProtectedSettlementService;
 import co.surumene.simplecoins.paper.PaperPlayerGrantDelivery;
+import co.surumene.simplecoins.paper.SavedGrantReceiptNbt;
 import co.surumene.simplecoins.paper.PaperAdminCommand;
 import java.util.List;
 import org.bukkit.Material;
@@ -94,8 +95,10 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 if(runtime.mayAdmit() || fence.state()!=WriterEpochFence.State.FAULTED) throw new AssertionError("Close did not revoke");
                 task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
                 runOwnerProbe(root,player,()->{
-                    try{runGrantProbe(player,grants,false);runTraderProbe(product);}
-                    catch(Throwable failure){fail(failure);}
+                    try{runInvseeRoundTrip(player,grants,5000,Material.STONE,()->{
+                        try{runGrantProbe(player,grants,false);runInvseeRoundTrip(player,grants,5064,Material.DIRT,()->runTraderProbe(product));}
+                        catch(Throwable failure){fail(failure);}
+                    });}catch(Throwable failure){fail(failure);}
                 });
             } catch(Throwable failure) { task.cancel(); fail(failure); }
         },1L,1L);
@@ -197,6 +200,41 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 });
             }catch(Throwable failure){Bukkit.getScheduler().runTask(this,()->fail(failure));}
         });
+    }
+
+    /** Normal offline InvSee save before delivery and again after a partial ACK.
+     * Use the distributed plugin, a real UUID.dat and ordinary main-thread scheduler;
+     * no native Agent, artificial stale-proof callback or global writer seal. */
+    private void runInvseeRoundTrip(Player player,GrantLedger grants,long expected,Material change,Runnable next)throws Exception {
+        var installed=Bukkit.getPluginManager().getPlugin("InvSeePlusPlus");
+        if(!(installed instanceof com.janboerman.invsee.spigot.api.InvseePlusPlus invsee))
+            throw new AssertionError("Actual distributed InvSee++ unavailable");
+        var file=PaperPlayerGrantDelivery.playerdata(ID);
+        var before=PlayerDataReader.read(file,16*1024*1024,64*1024*1024);
+        var receipt=SavedGrantReceiptNbt.readAndVerify(before,grants,ID);
+        var api=invsee.getApi();
+        api.mainSpectatorInventory(ID,"ProbeSettlement").whenComplete((response,error)->
+            Bukkit.getScheduler().runTask(this,()->{
+                try{
+                    if(error!=null)throw new IllegalStateException("InvSee capture failed",error);
+                    if(response==null||!response.isSuccess())throw new AssertionError("InvSee capture unavailable");
+                    var inventory=response.getInventory();
+                    var contents=inventory.getStorageContents();
+                    if(contents.length!=36)throw new AssertionError("Unexpected storage layout");
+                    contents[35]=new ItemStack(change,1);inventory.setStorageContents(contents);
+                    var saved=api.saveInventory(inventory);
+                    if(!saved.isDone()||!saved.join().isSaved())throw new AssertionError("Ordinary Paper InvSee save did not complete inline");
+                    var after=PlayerDataReader.read(file,16*1024*1024,64*1024*1024);
+                    var value=SavedPlayerAssets.extract(after).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
+                    if(!value.equals(BigInteger.valueOf(expected))||!receipt.equals(SavedGrantReceiptNbt.readAndVerify(after,grants,ID)))
+                        throw new AssertionError("InvSee changed monetary value or delivery cursor: "+value);
+                    player.loadData();
+                    if(player.getInventory().getItem(35)==null||player.getInventory().getItem(35).getType()!=change)
+                        throw new AssertionError("InvSee noncurrency save did not survive native load");
+                    getLogger().info("PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total="+expected);
+                    next.run();
+                }catch(Throwable failure){fail(failure);}
+            }));
     }
 
     /** Actual physical inventory, real saved file and real product ledger.

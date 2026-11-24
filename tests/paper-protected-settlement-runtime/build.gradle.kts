@@ -12,6 +12,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.134-stable")
     // Probe only; production JAR is built first by the isolated CI.
     compileOnly(files("../../build/libs/SimpleCoins-1.0.0.jar"))
+    compileOnly(files("../../pinned-server/plugins/InvSee++.jar"))
 }
 tasks.jar {
     archiveFileName.set("SimpleCoinsProtectedSettlementProbe.jar")
