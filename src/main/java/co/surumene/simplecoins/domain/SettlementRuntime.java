@@ -1,6 +1,12 @@
 package co.surumene.simplecoins.domain;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,6 +37,24 @@ public final class SettlementRuntime {
             this.attempt=attempt; this.handoff=handoff;
         }
     }
+    /** New path: a source stage plus an ordinary in-memory accounting handoff. */
+    public static final class MemoryAttempt {
+        private final long generation;
+        private final BooleanSupplier tracking, noOnline;
+        private final AtomicBoolean preparing = new AtomicBoolean();
+        private MemoryAttempt(long generation, BooleanSupplier tracking, BooleanSupplier noOnline) {
+            this.generation = generation; this.tracking = tracking; this.noOnline = noOnline;
+        }
+    }
+    public static final class MemoryPrepared {
+        private final MemoryAttempt attempt;
+        private final MemoryAccounting accounting;
+        private MemoryPrepared(MemoryAttempt attempt, MemoryAccounting accounting) {
+            this.attempt = attempt; this.accounting = accounting;
+        }
+    }
+    private volatile MemoryAttempt memoryAttempt;
+    private volatile MemoryAccounting memory;
     private final AdmissionBarrier barrier;
     private final WriterEpochFence fence;
     private volatile Attempt active;
@@ -42,7 +66,7 @@ public final class SettlementRuntime {
     public synchronized Attempt begin(WriterEpochFence.Seal seal, NormalMutationJournal journal,
             BooleanSupplier tracking, BooleanSupplier noOnline) {
         Objects.requireNonNull(journal); Objects.requireNonNull(tracking); Objects.requireNonNull(noOnline);
-        if (active!=null || barrier.state()!=AdmissionBarrier.State.BLOCKED)
+        if (active!=null || memoryAttempt!=null || barrier.state()!=AdmissionBarrier.State.BLOCKED)
             throw new IllegalStateException("Settlement runtime already started or revoked");
         fence.requireDrained(seal);
         if (!noOnline.getAsBoolean()) throw new IllegalStateException("Players are online");
@@ -75,12 +99,130 @@ public final class SettlementRuntime {
         if (attempt==null || active!=attempt || barrier.state()!=AdmissionBarrier.State.SCANNING)
             throw new IllegalStateException("Unknown or no longer scanning settlement attempt");
     }
+    /** Start the revised A01 path without arming the native writer fence.
+     * The caller owns the managed static/read-reconciliation strategy. */
+    public synchronized MemoryAttempt beginMemory(BooleanSupplier tracking, BooleanSupplier noOnline) {
+        Objects.requireNonNull(tracking); Objects.requireNonNull(noOnline);
+        if (active != null || memoryAttempt != null || barrier.state() != AdmissionBarrier.State.BLOCKED)
+            throw new IllegalStateException("Settlement runtime already started or revoked");
+        if (!noOnline.getAsBoolean()) throw new IllegalStateException("Players are online");
+        memoryAttempt = new MemoryAttempt(barrier.begin(), tracking, noOnline);
+        return memoryAttempt;
+    }
+
+    /** Off-main: require the actual source runner, then initialize a complete unpublished cache.
+     * A content witness alone does not resolve known LIVE/SAVED conflicts. */
+    public MemoryPrepared prepareMemory(MemoryAttempt attempt, SourceStage source) throws IOException {
+        requireMemoryScanning(attempt);
+        if (!attempt.preparing.compareAndSet(false, true))
+            throw new IllegalStateException("Settlement source preparation already started");
+        try {
+            var captured = Objects.requireNonNull(source).capture();
+            var staged = captured.staged();
+            var manifest = captured.manifest();
+            var witness = staged.savedContentWitness();
+            if (manifest.origin() == null || witness == null || !staged.issuedByVerifiedTraversal())
+                throw new IOException("Missing verified traversal origin");
+            witness.requireOriginalManifest(manifest);
+            if (!staged.requiredSourceIds().containsAll(manifest.requiredSourceIds()))
+                throw new IOException("Mandatory saved source omitted");
+            witness.requireUnchanged();
+            var baseline = SettlementSnapshotPublisher.verifiedCopy(staged.pending().commit());
+            var dead = new HashMap<MemoryAccounting.Endpoint, BigInteger>();
+            for (var location : baseline.deadLocations())
+                dead.merge(MemoryAccounting.Endpoint.dead(location.owner(), location.reason(), location.location()),
+                        location.value(), BigInteger::add);
+            var accounting = new MemoryAccounting(baseline.personalBalances(), baseline.free(), dead);
+            requireMemoryScanning(attempt);
+            return new MemoryPrepared(attempt, accounting);
+        } catch (IOException | RuntimeException | Error failure) {
+            revoke();
+            throw failure;
+        }
+    }
+
+    /** Main-thread final phase: the owner must supply fresh, actual A01 observations. */
+    public SettlementWriterEpochDecision.Verdict completeMemory(MemoryPrepared prepared,
+            SettlementWriterEpochDecision.Evidence evidence) {
+        Objects.requireNonNull(prepared);
+        synchronized (barrier) {
+            requireMemoryScanning(prepared.attempt);
+            try {
+                var verdict = SettlementWriterEpochDecision.evaluate(evidence);
+                if (verdict == SettlementWriterEpochDecision.Verdict.REVOKE_PUBLISHED) {
+                    revoke();
+                    return verdict;
+                }
+                if (verdict == SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED) return verdict;
+                if (!prepared.attempt.noOnline.getAsBoolean() || !prepared.attempt.tracking.getAsBoolean())
+                    throw new IllegalStateException("Memory settlement handoff prerequisites lost");
+                memory = prepared.accounting;
+                barrier.complete(prepared.attempt.generation, true, true);
+                return verdict;
+            } catch (RuntimeException | Error failure) {
+                revoke();
+                throw failure;
+            }
+        }
+    }
+    private void requireMemoryScanning(MemoryAttempt attempt) {
+        if (attempt == null || memoryAttempt != attempt || barrier.state() != AdmissionBarrier.State.SCANNING)
+            throw new IllegalStateException("Unknown or no longer scanning memory settlement attempt");
+    }
+    private boolean memoryReady() {
+        if (!barrier.mayAdmit() || memory == null) return false;
+        try {
+            if (memoryAttempt.tracking.getAsBoolean()) return true;
+        } catch (RuntimeException | Error failure) {
+            revoke();
+            return false;
+        }
+        revoke();
+        return false;
+    }
+
+    /** Apply only a confirmed physical operation, with one sequence for all its effects.
+     * A rejected observed delta means the derived statistics can no longer be trusted. */
+    public MemoryAccounting.Outcome recordMemory(long sequence, List<MemoryAccounting.Movement> movements,
+            Set<UUID> unregister) {
+        synchronized (barrier) {
+            if (memoryAttempt == null || !memoryReady())
+                throw new IllegalStateException("Normal memory accounting is unavailable");
+            var outcome = memory.record(sequence, movements, unregister);
+            if (outcome == MemoryAccounting.Outcome.REJECTED) revoke();
+            return outcome;
+        }
+    }
+
     public Optional<SettlementAccumulator.Result> current() {
+        if (memoryAttempt != null) {
+            synchronized (barrier) {
+                if (!memoryReady()) return Optional.empty();
+                var snapshot = memory.snapshot();
+                var locations = snapshot.dead().entrySet().stream().map(entry ->
+                        new SettlementAccumulator.DeadLocation(entry.getKey().owner().player(),
+                                entry.getKey().owner().reason(), entry.getValue(), entry.getKey().location())).toList();
+                var dead = locations.stream().map(SettlementAccumulator.DeadLocation::value)
+                        .reduce(BigInteger.ZERO, BigInteger::add);
+                return Optional.of(new SettlementAccumulator.Result(
+                        AssetStatistics.calculate(snapshot.personal(), snapshot.free(), dead),
+                        snapshot.personal(), snapshot.free(), dead, locations));
+            }
+        }
         var attempt=active;
         if (attempt==null || !barrier.mayAdmit()) return Optional.empty();
         return attempt.publisher.current();
     }
-    public boolean mayAdmit() { return current().isPresent(); }
-    /** Must not wait on a worker-held publisher monitor. Terminal gate first. */
-    public void revoke() { barrier.fatalFailure(); fence.invalidate(); }
+    public boolean mayAdmit() {
+        if (memoryAttempt != null) {
+            synchronized (barrier) { return memoryReady(); }
+        }
+        return current().isPresent();
+    }
+    /** Terminal gate first; the new path has no armed fence to manage. */
+    public void revoke() {
+        barrier.fatalFailure();
+        memory = null;
+        if (memoryAttempt == null) fence.invalidate();
+    }
 }

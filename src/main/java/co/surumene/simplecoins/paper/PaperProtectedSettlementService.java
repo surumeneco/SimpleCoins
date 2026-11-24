@@ -30,7 +30,8 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
     });
     private boolean started,closed;
     private long deadline;
-    private Future<SettlementRuntime.Prepared> future;
+    private Future<?> future;
+    private boolean memoryMode;
     private BukkitTask task;
     private Supplier<SettlementWriterEpochDecision.Evidence> evidence;
     public PaperProtectedSettlementService(JavaPlugin owner, SettlementRuntime runtime,
@@ -53,6 +54,23 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
             task=Bukkit.getScheduler().runTaskTimer(owner,this::poll,1L,1L);
         } catch(RuntimeException | Error failure) { fail(failure); throw failure; }
     }
+    /** Same worker/main handoff for the revised startup mode. No native Agent is required.
+     * The actual source owner must resolve ordinary world/plugin mutations before finalEvidence. */
+    public void startMemory(SettlementRuntime.SourceStage source, BooleanSupplier normalTracking,
+            Supplier<SettlementWriterEpochDecision.Evidence> finalEvidence, long timeoutMillis) {
+        primary();
+        if (closed || started) throw new IllegalStateException("Settlement service closed or used");
+        Objects.requireNonNull(source); Objects.requireNonNull(normalTracking); Objects.requireNonNull(finalEvidence);
+        if (timeoutMillis < 1 || timeoutMillis > 300_000)
+            throw new IllegalArgumentException("Bounded settlement timeout required");
+        var attempt = runtime.beginMemory(normalTracking, () -> Bukkit.getOnlinePlayers().isEmpty());
+        started = true; memoryMode = true; evidence = finalEvidence;
+        deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        try {
+            future = executor.submit(() -> runtime.prepareMemory(attempt, source));
+            task = Bukkit.getScheduler().runTaskTimer(owner, this::poll, 1L, 1L);
+        } catch (RuntimeException | Error failure) { fail(failure); throw failure; }
+    }
     private void poll() {
         primary();
         if (closed || future==null) return;
@@ -63,7 +81,10 @@ public final class PaperProtectedSettlementService implements AutoCloseable {
             var prepared=future.get(); // only after isDone, never waits on disk work
             var observed=Objects.requireNonNull(evidence.get());
             if (System.nanoTime()-deadline>=0) throw new IllegalStateException("Final evidence exceeded settlement deadline");
-            if (runtime.complete(prepared,observed)!=SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH)
+            var verdict = memoryMode
+                    ? runtime.completeMemory((SettlementRuntime.MemoryPrepared) prepared, observed)
+                    : runtime.complete((SettlementRuntime.Prepared) prepared, observed);
+            if (verdict != SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH)
                 throw new IllegalStateException("Incomplete protected settlement evidence");
             stopPolling(); executor.shutdown();
         } catch(Exception | Error failure) { fail(failure); }

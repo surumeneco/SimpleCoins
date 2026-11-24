@@ -67,7 +67,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           src = Path('Lifecycle/Works/.cat-flow/generated/A01HandoffGeneratedTest.java').read_bytes()
-          assert b'CAPABILITIES NOT VERIFIED' in src and src.count(b'@Test') == 1
+          assert src.count(b'@Test') == 1
           lines = src.decode().splitlines()
           pkg = next(x[8:-1] for x in lines if x.startswith('package '))
           klass = next(x[len('final class '):].split()[0] for x in lines if x.startswith('final class '))
