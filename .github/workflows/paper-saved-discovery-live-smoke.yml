@@ -13,6 +13,8 @@ on:
       - '.github/workflows/paper-saved-discovery-live-smoke.yml'
       - 'Lifecycle/Works/simplecoins.a01.paper26-shared-playerdata-discovery.md'
       - 'Lifecycle/Works/simplecoins.a01.startup-world-universe-identity.md'
+      - 'Lifecycle/Works/simplecoins.a01.startup-source-rediscovery.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/SavedManifestDiscoveryClosureTest.java'
       - 'Lifecycle/Works/simplecoins.a01.world-registry-transition-veto.md'
       - 'src/main/java/co/surumene/simplecoins/domain/WorldRegistryTransitionWitness.java'
       - 'src/test/java/co/surumene/simplecoins/domain/WorldRegistryTransitionWitnessTest.java'
@@ -36,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
-          ref: 896cae8313a533a3c74073a8c3150daad314ff90
+          ref: d42557a7b8318925f172b401d4e2bf55c4d230c7
           path: cat-tdd-fixed
           persist-credentials: false
       - name: Validate bounded A01 CAT Work structure (not a normative Gate)
@@ -47,6 +49,11 @@ jobs:
             --work Lifecycle/Works/simplecoins.a01.startup-world-universe-identity.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate \
             --work Lifecycle/Works/simplecoins.a01.world-registry-transition-veto.md
+          work=Lifecycle/Works/simplecoins.a01.startup-source-rediscovery.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
       - name: Build and verify both plugin JARs
         run: |
           gradle --no-daemon clean test :admission-guard:test jar :admission-guard:jar
