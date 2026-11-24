@@ -63,6 +63,37 @@ class AnvilRegionReaderTest {
         assertEquals(42, chunks.getFirst().nbt().get("marker"));
     }
 
+    @Test void acceptsUnpaddedFinalSectorButNotTruncatedChunk() throws Exception {
+        Path file = region(2, 42, false);
+        byte[] padded = Files.readAllBytes(file);
+        int recordEnd = 8192 + 4 + ByteBuffer.wrap(padded).getInt(8192);
+        Files.write(file, java.util.Arrays.copyOf(padded, recordEnd));
+        List<AnvilRegionReader.Chunk> chunks = new ArrayList<>();
+        AnvilRegionReader.scan(file, 2048, 2048, chunks::add);
+        assertEquals(1, chunks.size());
+        assertEquals(42, chunks.getFirst().nbt().get("marker"));
+        assertTrue(AnvilRegionReader.externalSidecars(file).isEmpty());
+
+        Files.write(file, java.util.Arrays.copyOf(padded, recordEnd - 1));
+        assertThrows(IOException.class, () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
+        assertThrows(IOException.class, () -> AnvilRegionReader.externalSidecars(file));
+    }
+
+    @Test void acceptsUnpaddedExternalStubButNotTruncatedStub() throws Exception {
+        Path file = region(2, 99, true);
+        byte[] padded = Files.readAllBytes(file);
+        Files.write(file, java.util.Arrays.copyOf(padded, 8197));
+        assertEquals(java.util.Set.of(directory.resolve("c.0.0.mcc").toAbsolutePath()),
+                AnvilRegionReader.externalSidecars(file));
+        List<AnvilRegionReader.Chunk> chunks = new ArrayList<>();
+        AnvilRegionReader.scan(file, 2048, 2048, chunks::add);
+        assertEquals(99, chunks.getFirst().nbt().get("marker"));
+
+        Files.write(file, java.util.Arrays.copyOf(padded, 8196));
+        assertThrows(IOException.class, () -> AnvilRegionReader.scan(file, 2048, 2048, c -> {}));
+        assertThrows(IOException.class, () -> AnvilRegionReader.externalSidecars(file));
+    }
+
     @Test void supportsGzipUncompressedAndExternalSidecar() throws Exception {
         for (int compression : new int[]{1, 3}) {
             Path file = region(compression, compression, false);

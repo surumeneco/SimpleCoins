@@ -72,15 +72,18 @@ public final class AnvilRegionReader {
             throw new IOException("Region file missing or symbolic: " + regionFile);
         try (FileChannel channel = FileChannel.open(regionFile, StandardOpenOption.READ)) {
             long size = channel.size();
-            if (size < HEADER || size % SECTOR != 0)
-                throw new IOException("Incomplete or unaligned region file: " + regionFile);
+            if (size < HEADER)
+                throw new IOException("Incomplete region header: " + regionFile);
+            // An open RegionFile may have written its final payload without padding
+            // the last sector. Validate allocated sectors and actual record bytes separately.
+            long presentSectors = (size - 1) / SECTOR + 1;
             ByteBuffer header = read(channel, 0L, SECTOR);
             List<Entry> entries = new ArrayList<>();
             for (int i = 0; i < SLOTS; i++) {
                 int address = header.getInt(i * 4);
                 int offset = address >>> 8, count = address & 0xff;
                 if (offset == 0 && count == 0) continue;
-                if (offset < 2 || count < 1 || ((long) offset + count) * SECTOR > size)
+                if (offset < 2 || count < 1 || (long) offset + count > presentSectors)
                     throw new IOException("Invalid Anvil sector allocation for chunk slot " + i);
                 for (Entry previous : entries) {
                     if (offset < (long) previous.offset + previous.count &&
@@ -98,7 +101,7 @@ public final class AnvilRegionReader {
                 int flag = Byte.toUnsignedInt(prefix.get());
                 boolean external = (flag & 0x80) != 0;
                 int compression = flag & 0x7f;
-                if (length < 1 || length > entry.count * SECTOR - 4)
+                if (length < 1 || length > entry.count * SECTOR - 4 || position + 4L + length > size)
                     throw new IOException("Invalid compressed chunk length at slot " + entry.slot);
                 if (external && length != 1)
                     throw new IOException("External chunk has an invalid stub at slot " + entry.slot);
@@ -204,8 +207,9 @@ public final class AnvilRegionReader {
 
         try (FileChannel channel = FileChannel.open(regionFile, StandardOpenOption.READ)) {
             long length = channel.size();
-            if (length < HEADER || length % SECTOR != 0)
+            if (length < HEADER)
                 throw new IOException("Incomplete external Anvil region: " + regionFile);
+            long presentSectors = (length - 1) / SECTOR + 1;
             ByteBuffer table = read(channel, 0L, SECTOR);
             Set<Path> referenced = new HashSet<>();
             for (int slot = 0; slot < SLOTS; slot++) {
@@ -213,10 +217,14 @@ public final class AnvilRegionReader {
                 int offset = address >>> 8, sectors = address & 0xff;
                 if (offset == 0 && sectors == 0) continue;
                 if (offset < 2 || sectors < 1 ||
-                        ((long) offset + sectors) * SECTOR > length)
+                        (long) offset + sectors > presentSectors)
                     throw new IOException("Invalid external Anvil chunk allocation at " + slot);
-                ByteBuffer prefix = read(channel, ((long) offset) * SECTOR, 5);
+                long position = (long) offset * SECTOR;
+                ByteBuffer prefix = read(channel, position, 5);
                 int compressedLength = prefix.getInt();
+                if (compressedLength < 1 || compressedLength > sectors * SECTOR - 4 ||
+                        position + 4L + compressedLength > length)
+                    throw new IOException("Invalid Anvil chunk length at " + slot);
                 int flag = Byte.toUnsignedInt(prefix.get());
                 boolean external = (flag & 0x80) != 0;
                 if (!external) continue;
