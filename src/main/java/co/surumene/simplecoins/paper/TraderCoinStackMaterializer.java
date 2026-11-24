@@ -11,8 +11,8 @@ import java.util.Objects;
 /**
  * Prepares genuine PAPER currency ItemStacks without publishing them.
  *
- * The caller is responsible for an atomic issuance receipt and for adding the
- * returned stacks to the Paper event only when that transaction is authorized.
+ * The caller adds these stacks only to an authorized death event;
+ * physical spawn accounting records the resulting currency.
  * This class does not register a death listener or issue currency by itself.
  */
 public final class TraderCoinStackMaterializer {

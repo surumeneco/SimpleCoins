@@ -1,0 +1,7 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.paper.trader-live-issuance",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedTraderLiveTest",
+  "driver_class": "co.surumene.simplecoins.domain.TraderLiveDriver"
+}
