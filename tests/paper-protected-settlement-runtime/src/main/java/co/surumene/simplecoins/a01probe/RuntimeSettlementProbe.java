@@ -58,6 +58,10 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
         if(command==null||!(command.getExecutor() instanceof PaperAdminCommand))
             throw new AssertionError("Product give command is not registered");
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(),"sc give "+ID+" 5200");
+        if(Boolean.getBoolean("a02.liveGrantCrash")) {
+            runGrantCrashProbe(player,grants);
+            throw new AssertionError("Crash injection returned");
+        }
         if(Boolean.getBoolean("a02.liveGrantReload")) {
             if(grants.pending(ID).size()!=1)throw new AssertionError("Unexpected grant on reload");
             player.loadData();
@@ -237,6 +241,24 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
             }));
     }
 
+    /** Kill an isolated real Paper JVM after native saved readback, but before
+     * the product delivery ACK. The next boot must use the saved receipt,
+     * not issue the 64C batch again. */
+    private void runGrantCrashProbe(Player player,GrantLedger grants)throws Exception {
+        if(!grants.historySnapshot().isEmpty())throw new AssertionError("Crash fixture is not fresh");
+        var coins=new CoinItemCodec(CoinItemCodec.defaultNames());
+        player.getInventory().setItem(0,coins.create(CoinDenomination.FIVE_THOUSAND,1));
+        for(int i=2;i<36;i++)player.getInventory().setItem(i,new ItemStack(Material.STONE,64));
+        player.saveData();grants.reserveCoins(ID,CoinDenomination.ONE,65,"crash fixture");
+        var delivery=new PaperPlayerGrantDelivery(grants,coins,(id,value)->{
+            if(!id.equals(ID)||value!=64||grants.pending(ID).getFirst().confirmedPartial()!=0)
+                throw new AssertionError("Unexpected crash window");
+            System.out.println("PAPER_A02_ACTUAL_GRANT_SAVED_BEFORE_ACK_HALT total=5064 ledgerFloor=0");
+            System.out.flush();System.err.flush();Runtime.getRuntime().halt(73);
+        });
+        delivery.deliver(player);
+    }
+
     /** Actual physical inventory, real saved file and real product ledger.
      * A detached player is used instead of a networked client; no product admission bypass. */
     private void runGrantProbe(Player player,GrantLedger grants,boolean reload) throws Exception {
@@ -258,8 +280,9 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 throw new AssertionError("Full storage unexpectedly issued");
             player.getInventory().setItem(1,null);
         } else {
-            if(grants.pending(ID).getFirst().confirmedPartial()!=64)
-                throw new AssertionError("Saved partial amount lost on restart");
+            long prior=Boolean.getBoolean("a02.liveGrantCrashReload")?0:64;
+            if(grants.pending(ID).getFirst().confirmedPartial()!=prior)
+                throw new AssertionError("Unexpected durable ledger floor before recovery");
             player.getInventory().setItem(2,null);
         }
         var result=delivery.deliver(player);

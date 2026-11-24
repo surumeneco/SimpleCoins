@@ -13,7 +13,7 @@ permissions:
 jobs:
   real-paper:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -83,8 +83,28 @@ jobs:
           timeout 180 java -Da02.liveGrantReload=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-reload.log 2>&1 || { tail -150 paper-reload.log; exit 1; }
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0' paper-reload.log
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-reload.log; then tail -150 paper-reload.log; exit 1; fi
+      - name: Recover actual grant after abrupt JVM exit before ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-crash/plugins
+          cp smoke/paper.jar smoke-crash/paper.jar
+          cp smoke/plugins/*.jar smoke-crash/plugins/
+          cp smoke/eula.txt smoke/server.properties smoke-crash/
+          cd smoke-crash
+          set +e
+          timeout 180 java -Da02.liveGrantCrash=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-crash.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 73 ]; then tail -150 paper-crash.log; exit 1; fi
+          grep -F 'PAPER_A02_ACTUAL_GRANT_SAVED_BEFORE_ACK_HALT total=5064 ledgerFloor=0' paper-crash.log
+          timeout 180 java -Da02.liveGrantReload=true -Da02.liveGrantCrashReload=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-crash-reload.log 2>&1 || { tail -150 paper-crash-reload.log; exit 1; }
+          grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0' paper-crash-reload.log
+          if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-crash-reload.log; then tail -150 paper-crash-reload.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: real-paper-protected-settlement-runtime
-          path: smoke/paper*.log
+          path: |
+            smoke/paper*.log
+            smoke-crash/paper*.log
