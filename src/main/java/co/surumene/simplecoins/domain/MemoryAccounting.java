@@ -60,6 +60,16 @@ public final class MemoryAccounting {
         return record(order, movements, Set.of());
     }
 
+    /** Allocate one process-local order for a newly confirmed physical operation.
+     * Explicit registration is used only for proven eligible zero-value assets. */
+    public synchronized Outcome recordNext(List<Movement> movements, Set<UUID> registered) {
+        var additions = Set.copyOf(registered);
+        var outcome = record(Math.addExact(sequence, 1), movements, Set.of());
+        if (outcome == Outcome.APPLIED)
+            additions.forEach(id -> personal.putIfAbsent(id, BigInteger.ZERO));
+        return outcome;
+    }
+
     /** Removing registration is reserved for a complete authoritative BAN/playerdata
      * reclassification; every remaining personal balance must move in this same operation. */
     public synchronized Outcome record(long order, List<Movement> movements, Set<UUID> unregister) {
