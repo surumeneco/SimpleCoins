@@ -18,6 +18,7 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
     private final PaperProtectedSettlementService settlement;
     private final WorldScope scope;
     private final BooleanSupplier normalTracking;
+    private final PaperEntityAccounting entityAccounting;
     private final Map<World, Boolean> originalAutosave = new LinkedHashMap<>();
     private boolean originalFrozen, active;
     private long startedAt;
@@ -25,13 +26,14 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
 
     public PaperStartupSettlementCoordinator(JavaPlugin plugin, AdmissionBarrier admission,
             SettlementRuntime runtime, PaperProtectedSettlementService settlement,
-            WorldScope scope, BooleanSupplier normalTracking) {
+            WorldScope scope, BooleanSupplier normalTracking, PaperEntityAccounting entityAccounting) {
         this.plugin=Objects.requireNonNull(plugin);
         this.admission=Objects.requireNonNull(admission);
         this.runtime=Objects.requireNonNull(runtime);
         this.settlement=Objects.requireNonNull(settlement);
         this.scope=Objects.requireNonNull(scope);
         this.normalTracking=Objects.requireNonNull(normalTracking);
+        this.entityAccounting=Objects.requireNonNull(entityAccounting);
     }
 
     /** After ServerLoadEvent and before starting saved discovery. */
@@ -88,6 +90,7 @@ public final class PaperStartupSettlementCoordinator implements AutoCloseable {
                 source.requireCurrentPrimary(currentBans());
                 // Only reached after actual complete worker preparation.
                 boolean tracking=normalTracking.getAsBoolean();
+                if (tracking) source.seedNormalWcl(entityAccounting);
                 if (!tracking) plugin.getLogger().warning("SIMPLECOINS_STARTUP_NORMAL_TRACKING_INCOMPLETE");
                 return new SettlementWriterEpochDecision.Evidence(true,true,true,tracking,true,false);
             } catch (IOException failure) {
