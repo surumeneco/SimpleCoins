@@ -2,7 +2,8 @@ package co.surumene.simplecoins;
 
 import co.surumene.simplecoins.domain.AdmissionBarrier;
 import co.surumene.simplecoins.guard.api.AdmissionPermit;
-import co.surumene.simplecoins.domain.SettlementSnapshotPublisher;
+import co.surumene.simplecoins.domain.SettlementRuntime;
+import co.surumene.simplecoins.paper.PaperProtectedSettlementService;
 import co.surumene.simplecoins.domain.NormalMutationJournal;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.WriterEpochFence;
@@ -42,7 +43,8 @@ import java.util.logging.Level;
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
     private WriterEpochFence nativeWriterFence;
-    private SettlementSnapshotPublisher publication;
+    private SettlementRuntime publication;
+    private PaperProtectedSettlementService protectedSettlement;
     private NormalMutationJournal normalJournal;
     private GrantLedger issuanceGrants;
     private PaperNormalJournalWatchdog normalJournalWatchdog;
@@ -55,11 +57,11 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         admission = new AdmissionBarrier();
-        publication = new SettlementSnapshotPublisher(admission);
         // Passive bootstrap-hook handshake only. This agent family covers two
         // native save entrypoints, NOT the complete G0/G3 writer universe.
         // NEVER arm this fence or enable tracked writer mode at bootstrap.
         nativeWriterFence = new WriterEpochFence();
+        publication = new SettlementRuntime(admission, nativeWriterFence);
 
         // Register as early as possible in the Paper plugin lifecycle.
         // AdmissionBarrier starts BLOCKED; do not call begin() or complete()
@@ -119,6 +121,12 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         Bukkit.shutdown();
                     });
             normalJournalWatchdog.start();
+            protectedSettlement = new PaperProtectedSettlementService(this, publication, normalJournal,
+                    failure -> {
+                        publication.revoke();
+                        getLogger().log(Level.SEVERE, "Protected settlement failed", failure);
+                        Bukkit.shutdown();
+                    });
             // Validate every operator-controlled monetary setting before
             // installing handlers. Prior money remains identified by fixed PDC,
             // not display name, currency suffix or newly lowered wallet caps.
@@ -229,7 +237,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                                 "Irrecoverable wallet inventory mutation; revoking admission", failure);
                     }), this);
             getServer().getPluginManager().registerEvents(
-                    new SettlementAdmissionListener(admission, publication), this);
+                    SettlementAdmissionListener.forRuntime(admission, publication), this);
             // Read-only service is served through the independent guard's
             // classloader; it never opens while journal/scan are not connected.
             getServer().getServicesManager().register(
@@ -259,6 +267,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             admission.fatalFailure();
             if (writerRosterMonitor != null) writerRosterMonitor.close();
             if (nativeWriterFence != null) nativeWriterFence.invalidate();
+            if (protectedSettlement != null) {
+                protectedSettlement.close();
+                protectedSettlement = null;
+            }
             if (savedGrantDelivery != null) {
                 savedGrantDelivery.close();
                 savedGrantDelivery = null;
@@ -298,6 +310,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     public void onDisable() {
         if (writerRosterMonitor != null) writerRosterMonitor.close();
         if (nativeWriterFence != null) nativeWriterFence.invalidate();
+        if (protectedSettlement != null) {
+            protectedSettlement.close();
+            protectedSettlement = null;
+        }
         if (savedGrantDelivery != null) {
             savedGrantDelivery.close();
             savedGrantDelivery = null;
