@@ -74,6 +74,22 @@ class SavedGrantReceiptUniverseAuditTest {
         assertThrows(IOException.class, () -> audit(discover(), ledger));
     }
 
+    @Test void confirmedPartialWhosePlayerdataDisappearedMustFailClosed() throws Exception {
+        var ledger = new GrantLedger(temp.resolve("grants"));
+        UUID player = UUID.randomUUID();
+        var grant = ledger.reserveCoins(player,
+                co.surumene.simplecoins.domain.CoinDenomination.fromValue(1), 130, "console");
+        Path file = save(player, GrantReceiptState.empty());
+        ledger.writeBatchIntent(ledger.verifiedPlayerSnapshot(player), grant, file,
+                Files.readAllBytes(file), 65536);
+        var partial = new GrantReceiptState(0, grant.sequence(), grant.id(), 64);
+        save(player, partial);
+        ledger.confirmPartial(grant, GrantReceiptState.empty(), partial);
+        assertEquals(1, audit(discover(), ledger).pendingGrants());
+        Files.delete(file);
+        assertThrows(IOException.class, () -> audit(discover(), ledger));
+    }
+
     @Test void rolledBackPlayerdataCannotValidateAcknowledgedGrant() throws Exception {
         var ledger = new GrantLedger(temp.resolve("grants"));
         UUID player = UUID.randomUUID();
