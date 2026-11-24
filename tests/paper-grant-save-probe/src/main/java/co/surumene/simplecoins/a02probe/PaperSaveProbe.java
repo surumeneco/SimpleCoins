@@ -85,6 +85,11 @@ public final class PaperSaveProbe extends JavaPlugin {
                 }
                 else if ("product-queued-reload".equals(phase) || "product-amount-reload".equals(phase))
                     productQueuedReloadPhase(player, "product-amount-reload".equals(phase));
+                else if ("product-custody-first".equals(phase) || "product-custody-resume".equals(phase)) {
+                    productPartialCustodyPhase(player, "product-custody-resume".equals(phase));
+                    return;
+                }
+                else if ("product-custody-reload".equals(phase)) productPartialCustodyReload(player);
                 else if ("partial-save".equals(phase)) partialSavePhase(player);
                 else if ("partial-resume".equals(phase)) partialResumePhase(player);
                 else if ("final-ack-recovery".equals(phase)) finalAckRecoveryPhase(player);
@@ -612,6 +617,94 @@ public final class PaperSaveProbe extends JavaPlugin {
                 Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
             }
         });
+    }
+
+    /** Real scheduled partial batch, cold reboot, then final batch after earlier coins moved. */
+    private void productPartialCustodyPhase(Player player, boolean resume) throws Exception {
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        CoinItemCodec codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        var storage = player.getInventory().getStorageContents();
+        GrantLedger.Grant grant;
+        if (!resume) {
+            if (ledger.historySnapshot().size() != 1 || !ledger.pending(ID).isEmpty())
+                throw new IllegalStateException("Wrong initial custody fixture");
+            boolean leftVacant = false;
+            for (int i = 0; i < storage.length; i++) {
+                if (storage[i] == null || storage[i].getType().isAir()) {
+                    if (!leftVacant) leftVacant = true;
+                    else storage[i] = new ItemStack(Material.STONE, 1);
+                }
+            }
+            if (!leftVacant) throw new IllegalStateException("No initial vacant slot");
+            grant = ledger.reserveCoins(ID, CoinDenomination.ONE, 65, "a02-durable-partial-custody");
+        } else {
+            grant = ledger.pending(ID).getFirst();
+            if (grant.confirmedPartial() != 64 || grant.amount() != 65)
+                throw new IllegalStateException("Partial progress absent after cold restart");
+            boolean moved = false;
+            for (int i = 0; i < storage.length; i++) {
+                ItemStack item = storage[i];
+                if (codec.identify(item).orElse(null) == CoinDenomination.ONE && item.getAmount() == 64) {
+                    if (moved || player.getEnderChest().firstEmpty() < 0)
+                        throw new IllegalStateException("Ambiguous earlier physical stack");
+                    player.getEnderChest().setItem(player.getEnderChest().firstEmpty(), item.clone());
+                    storage[i] = null;
+                    moved = true;
+                }
+            }
+            if (!moved) throw new IllegalStateException("Earlier delivered stack not recovered");
+        }
+        // Fixture-only movement; NOT a proof of normal journal custody.
+        player.getInventory().setStorageContents(storage);
+        player.saveData();
+        var epoch = new WriterEpochFence(); epoch.arm(); // isolated only
+        var gate = new AdmissionBarrier();
+        var data = dataFile(); var journal = grantDirectory();
+        scheduledDelivery = new PaperSavedGrantDeliveryService(this, gate, epoch, ledger, codec, failure -> {
+            getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure); Bukkit.shutdown();
+        });
+        scheduledDelivery.start(player, grant, actualPlayerOrigin(), 90000L,
+                16 * 1024 * 1024, 64 * 1024 * 1024, result -> {
+                    var proof = result.proof().orElseThrow();
+                    if (!Bukkit.isPrimaryThread() || epoch.state() != WriterEpochFence.State.OPEN
+                            || gate.mayAdmit() || proof.receipt().active() == resume)
+                        throw new IllegalStateException("Unsafe partial/full handback");
+                    scheduledDelivery.close();
+                    Thread.ofPlatform().name("a02-partial-custody-assertions").start(() -> {
+                        try {
+                            var reopened = new GrantLedger(journal);
+                            var root = readDisk(data);
+                            var receipt = SavedGrantReceiptNbt.readAndVerify(root, reopened, ID);
+                            var value = SavedPlayerAssets.extract(root).values().stream()
+                                    .reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add);
+                            if (!proof.receipt().equals(receipt) || Files.exists(journal.resolve("2.intent"))
+                                    || !java.math.BigInteger.valueOf(resume ? 5065 : 5064).equals(value)
+                                    || !java.math.BigInteger.valueOf(resume ? 1 : 64).equals(proof.matchedMonetaryValue())
+                                    || (resume ? !reopened.pending(ID).isEmpty()
+                                        : reopened.pending(ID).size() != 1 || reopened.pending(ID).getFirst().confirmedPartial() != 64))
+                                throw new IllegalStateException("Wrong durable cumulative custody or physical value");
+                            getLogger().info(resume ? "PAPER_A02_CUSTODY_FINAL_PASSED total=5065 pending=0"
+                                    : "PAPER_A02_CUSTODY_PARTIAL_PASSED total=5064 confirmed=64 pending=1");
+                            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        } catch (Throwable failure) {
+                            getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        }
+                    });
+                });
+    }
+
+    private void productPartialCustodyReload(Player player) throws Exception {
+        player.loadData();
+        var ledger = activeProductLedger();
+        var disk = readDisk(dataFile());
+        var receipt = SavedGrantReceiptNbt.readAndVerify(disk, ledger, ID);
+        if (receipt.active() || receipt.completedSequence() != 2 || !ledger.pending(ID).isEmpty()
+                || !java.math.BigInteger.valueOf(5065).equals(SavedPlayerAssets.extract(disk)
+                    .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
+            throw new IllegalStateException("Cold custody final ACK did not retain exact currency");
+        getLogger().info("PAPER_A02_CUSTODY_RELOAD_PASSED total=5065 pending=0");
     }
 
     /** Independent cold boot consumes the actual durable intent, not a test-supplied plan. */

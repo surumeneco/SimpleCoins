@@ -9,10 +9,15 @@ import java.util.*;
 public final class GrantLedger {
     public record Grant(long sequence, UUID id, UUID player, long amount, String issuer,
                         long createdMillis, boolean delivered,
-                        CoinDenomination denomination, long coinCount) {
+                        CoinDenomination denomination, long coinCount, long confirmedPartial) {
+        public Grant(long sequence, UUID id, UUID player, long amount, String issuer,
+                     long createdMillis, boolean delivered, CoinDenomination denomination, long coinCount) {
+            this(sequence, id, player, amount, issuer, createdMillis, delivered, denomination, coinCount, 0);
+        }
         public Grant {
             Objects.requireNonNull(id); Objects.requireNonNull(player); Objects.requireNonNull(issuer);
-            if (sequence <= 0 || amount <= 0 || issuer.isBlank() || issuer.length() > 1024)
+            if (sequence <= 0 || amount <= 0 || issuer.isBlank() || issuer.length() > 1024
+                    || confirmedPartial < 0 || confirmedPartial >= amount || (delivered && confirmedPartial != 0))
                 throw new IllegalArgumentException("Invalid grant");
             if (denomination == null) {
                 if (coinCount != 0) throw new IllegalArgumentException("Unspecified denomination has a count");
@@ -22,6 +27,8 @@ public final class GrantLedger {
         }
         Grant completed() { return new Grant(sequence, id, player, amount, issuer, createdMillis,
                 true, denomination, coinCount); }
+        Grant progressed(long value) { return new Grant(sequence, id, player, amount, issuer, createdMillis,
+                false, denomination, coinCount, value); }
     }
     private final Path directory;
     private final TreeMap<Long, Grant> grants = new TreeMap<>();
@@ -199,6 +206,33 @@ public final class GrantLedger {
         persist(complete);
         grants.put(complete.sequence(), complete);
     }
+    /** Persist only a physically verified, strictly advancing partial batch.
+     * Caller owns the real saved-file proof and uninterrupted writer seal.
+     */
+    public synchronized void confirmPartial(Grant grant, GrantReceiptState prior,
+            GrantReceiptState next) throws IOException {
+        Objects.requireNonNull(prior); Objects.requireNonNull(next);
+        var view = verifiedPlayerSnapshot(grant.player());
+        requirePendingIntentView(view, grant);
+        prior.verify(view); next.verify(view);
+        long floor = grant.confirmedPartial();
+        if (prior.partialValue() != floor || (floor > 0 && !prior.active())
+                || (prior.active() && (prior.activeSequence() != grant.sequence() || !grant.id().equals(prior.activeId())))
+                || !next.active() || next.activeSequence() != grant.sequence() || !grant.id().equals(next.activeId())
+                || prior.completedSequence() != next.completedSequence() || next.partialValue() <= floor
+                || next.partialValue() >= grant.amount())
+            throw new IllegalStateException("Invalid verified partial progress transition");
+        // The cursor alone is not a physical proof. Require the prepared batch
+        // boundary and the caller's independently verified actual save.
+        var intent = decodeIntent(intentPath(grant), grant, null, MAX_INTENT_COMPRESSED);
+        if (intent.priorValue() != floor)
+            throw new IOException("Prepared intent differs from confirmed partial floor");
+        Grant progressed = grant.progressed(next.partialValue());
+        advanceMutationRevision();
+        persist(progressed);
+        grants.put(progressed.sequence(), progressed);
+    }
+
     /**
      * Nonblocking in-process freshness check for a sealed main-thread handoff.
      * Not a disk proof: the caller MUST exclude all durable writers for the
@@ -210,42 +244,74 @@ public final class GrantLedger {
     }
 
     private static final int FIRST_BATCH_MAGIC = 0x53434931; // SCI1
+    private static final int BATCH_MAGIC = 0x53434932; // SCI2
     private static final int MAX_INTENT_COMPRESSED = 16 * 1024 * 1024;
     private static final int INTENT_OVERHEAD = 16 * 1024;
 
-    /**
-     * Immutable prior playerdata for one authentic first physical batch. These
-     * operations belong on the protected worker, never the primary thread.
-     * The record is NOT an ACK, receipt or proof of a later save.
-     */
+    /** Immutable prior image bound to the previously confirmed cumulative value. */
+    public record BatchIntent(long priorValue, byte[] compressedBefore) {
+        public BatchIntent {
+            if (priorValue < 0) throw new IllegalArgumentException("Negative prior progress");
+            compressedBefore = Objects.requireNonNull(compressedBefore).clone();
+        }
+        @Override public byte[] compressedBefore() { return compressedBefore.clone(); }
+    }
+
     public synchronized Optional<byte[]> readFirstBatchIntent(VerifiedPlayerSnapshot view,
+            Grant grant, Path source, int maximumBytes) throws IOException {
+        if (grant.confirmedPartial() != 0) throw new IllegalStateException("Not first batch");
+        return readBatchIntent(view, grant, source, maximumBytes).map(BatchIntent::compressedBefore);
+    }
+
+    public synchronized Optional<BatchIntent> readBatchIntent(VerifiedPlayerSnapshot view,
             Grant grant, Path source, int maximumBytes) throws IOException {
         requirePendingIntentView(view, grant);
         String identity = intentSource(grant, source);
         requireIntentBudget(maximumBytes);
         Path target = intentPath(grant);
         if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-        return Optional.of(decodeIntent(target, grant, identity, maximumBytes));
+        var intent = decodeIntent(target, grant, identity, maximumBytes);
+        if (intent.priorValue() > grant.confirmedPartial())
+            throw new IOException("Batch intent ahead of durable confirmed progress");
+        return Optional.of(intent);
     }
 
     public synchronized void writeFirstBatchIntent(VerifiedPlayerSnapshot view,
+            Grant grant, Path source, byte[] compressedBefore, int maximumBytes) throws IOException {
+        if (grant.confirmedPartial() != 0) throw new IllegalStateException("Not first batch");
+        writeBatchIntent(view, grant, source, compressedBefore, maximumBytes);
+    }
+
+    public synchronized void writeBatchIntent(VerifiedPlayerSnapshot view,
             Grant grant, Path source, byte[] compressedBefore, int maximumBytes) throws IOException {
         requirePendingIntentView(view, grant);
         String identity = intentSource(grant, source);
         requireIntentBudget(maximumBytes);
         if (compressedBefore == null || compressedBefore.length == 0 || compressedBefore.length > maximumBytes)
-            throw new IOException("Prior playerdata exceeds first-batch intent budget");
-        byte[] reservation = encode(grant);
+            throw new IOException("Prior playerdata exceeds batch intent budget");
+        byte[] reservation = encode(grant.progressed(0));
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(buffer)) {
-            out.writeInt(FIRST_BATCH_MAGIC);
+            out.writeInt(BATCH_MAGIC);
             out.writeInt(reservation.length); out.write(reservation);
-            out.writeUTF(identity);
+            out.writeUTF(identity); out.writeLong(grant.confirmedPartial());
             out.writeInt(compressedBefore.length); out.write(compressedBefore);
         }
-        // Exclusive create; a retry cannot overwrite the sole prior-state evidence.
         DurableFile.writeNew(intentPath(grant), buffer.toByteArray());
         requireCurrentPlanningView(view);
+    }
+
+    /** The durable partial floor, not a saved cursor alone, authorizes removal. */
+    public synchronized void removeConfirmedBatchIntent(Grant grant, Path source, long priorValue) throws IOException {
+        checkHealthy();
+        Grant current = requireAuthenticReservation(grant);
+        if (current.delivered() || priorValue < 0 || current.confirmedPartial() <= priorValue)
+            throw new IllegalStateException("Cannot remove an unconfirmed batch intent");
+        Path target = intentPath(grant);
+        if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return;
+        var intent = decodeIntent(target, grant, intentSource(grant, source), MAX_INTENT_COMPRESSED);
+        if (intent.priorValue() != priorValue) throw new IOException("Different prepared batch intent");
+        removeIntent(target);
     }
 
     /** Cleanup is legal only after genuine durable ACK; a leftover is harmless. */
@@ -257,6 +323,10 @@ public final class GrantLedger {
         Path target = intentPath(grant);
         if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return;
         decodeIntent(target, grant, null, MAX_INTENT_COMPRESSED);
+        removeIntent(target);
+    }
+
+    private static void removeIntent(Path target) throws IOException {
         Files.delete(target);
         try (var parent = java.nio.channels.FileChannel.open(target.getParent(), StandardOpenOption.READ)) {
             parent.force(true);
@@ -286,23 +356,27 @@ public final class GrantLedger {
             throw new IllegalArgumentException("Invalid first-batch intent byte budget");
     }
 
-    private static byte[] decodeIntent(Path target, Grant grant, String expectedSource,
+    private static BatchIntent decodeIntent(Path target, Grant grant, String expectedSource,
             int maximumBytes) throws IOException {
         byte[] payload = DurableFile.read(target, Math.addExact(maximumBytes, INTENT_OVERHEAD));
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload))) {
-            if (in.readInt() != FIRST_BATCH_MAGIC) throw new IOException("Unknown first-batch intent schema");
+            int schema = in.readInt();
+            if (schema != FIRST_BATCH_MAGIC && schema != BATCH_MAGIC) throw new IOException("Unknown batch intent schema");
             int reservationSize = in.readInt();
             if (reservationSize < 1 || reservationSize > 8192
-                    || !Arrays.equals(in.readNBytes(reservationSize), encode(grant)))
+                    || !Arrays.equals(in.readNBytes(reservationSize), encode(grant.progressed(0))))
                 throw new IOException("First-batch intent reservation identity mismatch");
             String source = in.readUTF();
             if (!source.equals(intentSource(grant, Path.of(source)))
                     || (expectedSource != null && !source.equals(expectedSource)))
                 throw new IOException("First-batch intent source identity mismatch");
+            long prior = schema == BATCH_MAGIC ? in.readLong() : 0;
+            if (prior < 0 || prior >= grant.amount()) throw new IOException("Invalid batch intent progress");
+            GrantDeliveryBatchPlanner.next(grant.progressed(0), prior, 0);
             int size = in.readInt();
             if (size < 1 || size > maximumBytes || size != in.available())
                 throw new IOException("Invalid first-batch prior-state size");
-            return in.readNBytes(size);
+            return new BatchIntent(prior, in.readNBytes(size));
         } catch (IllegalArgumentException invalid) {
             throw new IOException("Malformed first-batch intent", invalid);
         }
@@ -367,19 +441,20 @@ public final class GrantLedger {
     private static byte[] encode(Grant grant) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(bytes)) {
-            out.writeInt(0x53434732); out.writeLong(grant.sequence());
+            out.writeInt(grant.confirmedPartial() == 0 ? 0x53434732 : 0x53434733); out.writeLong(grant.sequence());
             out.writeUTF(grant.id().toString()); out.writeUTF(grant.player().toString());
             out.writeLong(grant.amount()); out.writeUTF(grant.issuer());
             out.writeLong(grant.createdMillis()); out.writeBoolean(grant.delivered());
             out.writeInt(grant.denomination() == null ? 0 : grant.denomination().value());
             out.writeLong(grant.coinCount());
+            if (grant.confirmedPartial() != 0) out.writeLong(grant.confirmedPartial());
         }
         return bytes.toByteArray();
     }
     private static Grant decode(byte[] bytes) throws IOException {
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
             int schema = in.readInt();
-            if (schema != 0x53434731 && schema != 0x53434732)
+            if (schema != 0x53434731 && schema != 0x53434732 && schema != 0x53434733)
                 throw new IOException("Unknown issuance journal schema");
             long sequence = in.readLong();
             String rawId = in.readUTF(), rawPlayer = in.readUTF();
@@ -392,12 +467,14 @@ public final class GrantLedger {
             String issuer = in.readUTF();
             long createdMillis = in.readLong();
             boolean delivered = in.readBoolean();
-            int denominationValue = schema == 0x53434732 ? in.readInt() : 0;
-            long coinCount = schema == 0x53434732 ? in.readLong() : 0;
+            int denominationValue = schema != 0x53434731 ? in.readInt() : 0;
+            long coinCount = schema != 0x53434731 ? in.readLong() : 0;
+            long progress = schema == 0x53434733 ? in.readLong() : 0;
             CoinDenomination denomination = denominationValue == 0 ? null :
                     CoinDenomination.fromValue(denominationValue);
             Grant result = new Grant(sequence, id, player, amount, issuer,
-                    createdMillis, delivered, denomination, coinCount);
+                    createdMillis, delivered, denomination, coinCount, progress);
+            if (progress > 0) GrantDeliveryBatchPlanner.next(result, progress, 0);
             if (in.available() != 0) throw new IOException("Trailing journal data");
             return result;
         } catch (IllegalArgumentException ex) { throw new IOException("Invalid journal", ex); }
