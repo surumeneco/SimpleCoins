@@ -36,6 +36,19 @@ public final class RuntimeWriterRosterProbe extends JavaPlugin {
             try {
                 inspect();
                 getLogger().info("A01_RUNTIME_ROSTER_POINT_IN_TIME_OBSERVED");
+                if (Boolean.getBoolean("a01.runtimeRoster.testTransition")) {
+                    Plugin product = Bukkit.getPluginManager().getPlugin("SimpleCoins");
+                    var field = product.getClass().getDeclaredField("nativeWriterFence");
+                    field.setAccessible(true);
+                    Object fence = field.get(product);
+                    var state = fence.getClass().getMethod("state");
+                    if (!"DISARMED".equals(state.invoke(fence).toString()))
+                        throw new IllegalStateException("Expected passive product fence before lifecycle change");
+                    Bukkit.getPluginManager().disablePlugin(this);
+                    if (!"FAULTED".equals(state.invoke(fence).toString()))
+                        throw new IllegalStateException("Product fence was not invalidated by actual plugin disable");
+                    getLogger().info("A01_RUNTIME_ROSTER_REAL_DISABLE_INVALIDATED_PRODUCT");
+                }
             } catch (Throwable error) {
                 getLogger().log(Level.SEVERE, "A01_RUNTIME_ROSTER_PROBE_FAILED", error);
             } finally {
