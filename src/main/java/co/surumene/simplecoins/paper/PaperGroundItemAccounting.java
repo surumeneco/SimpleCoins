@@ -173,6 +173,10 @@ public final class PaperGroundItemAccounting implements Listener {
     public void interact(PlayerInteractEntityEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}
     @EventHandler(priority=EventPriority.LOWEST)
     public void interactAt(PlayerInteractAtEntityEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}
+    @EventHandler(priority=EventPriority.LOWEST,ignoreCancelled=true)
+    public void open(InventoryOpenEvent event){
+        if(event.getPlayer() instanceof Player player)observe(()->player(player,BigInteger.ZERO));
+    }
     @EventHandler(priority=EventPriority.LOWEST)
     public void click(InventoryClickEvent event) {
         if(event.getWhoClicked() instanceof Player player)observe(()->{

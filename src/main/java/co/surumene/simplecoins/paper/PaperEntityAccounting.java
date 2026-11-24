@@ -158,7 +158,7 @@ public final class PaperEntityAccounting implements Listener {
         }
         var plugin=Bukkit.getPluginManager().getPlugin(pluginName);
         if(plugin==null||!plugin.isEnabled()||plugin.getClass().getClassLoader()!=holder.getClass().getClassLoader()
-                ||holder.getInventory()!=inventory)
+                ||holder.getInventory()==null||holder.getInventory().getHolder()!=holder)
             throw new IOException("Unverified WCL inventory holder");
         UUID uuid=(UUID)holder.getClass().getMethod(method).invoke(holder);
         Entity entity=Bukkit.getEntity(uuid);
@@ -184,10 +184,10 @@ public final class PaperEntityAccounting implements Listener {
             if(entity==null)return;
             UUID id=entity.getUniqueId();
             Inventory existing=openCargo.get(id);
-            if(existing==inventory)return;
+            if(existing!=null&&existing.getHolder()==inventory.getHolder())return;
             if(existing!=null)throw new IOException("Two active WCL cargo inventories for "+id);
             observeEntity(entity);
-            if(ready.getAsBoolean())openCargo.put(id,inventory);
+            if(ready.getAsBoolean())openCargo.put(id,inventory.getHolder().getInventory());
         }catch(ReflectiveOperationException|IOException|RuntimeException failure){fail(failure);}
     }
 
@@ -195,7 +195,7 @@ public final class PaperEntityAccounting implements Listener {
     public void closeCargo(Inventory inventory){
         // Do not read the obsolete GUI again: WWC shulker swaps intentionally
         // skip saving the old inventory. The first image was captured at LOWEST.
-        openCargo.values().removeIf(active->active==inventory);
+        if(inventory!=null)openCargo.values().removeIf(active->active.getHolder()==inventory.getHolder());
     }
 
     @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
@@ -229,8 +229,10 @@ public final class PaperEntityAccounting implements Listener {
     public void unload(EntitiesUnloadEvent event){
         if(!ready.getAsBoolean())return;
         try{
-            for(var e:event.getEntities())if(before.containsKey(e.getUniqueId()))
-                unloaded.put(e.getUniqueId(),image(e));
+            for(var e:event.getEntities()){
+                if(before.containsKey(e.getUniqueId()))unloaded.put(e.getUniqueId(),image(e));
+                openCargo.remove(e.getUniqueId());
+            }
         }catch(IOException|RuntimeException failure){fail(failure);}
     }
     public void flush(){
@@ -242,6 +244,7 @@ public final class PaperEntityAccounting implements Listener {
                 Map<MemoryAccounting.Endpoint,BigInteger> after=entity.isValid()?image(entity):
                         unloaded.getOrDefault(entry.getKey(),Map.of());
                 changes.addAll(InventoryAccountingDelta.between(before.get(entry.getKey()),after));
+                if(!entity.isValid())openCargo.remove(entry.getKey());
             }
             if(!changes.isEmpty())sink.accept(List.copyOf(changes));
         }catch(IOException|RuntimeException failure){fatal.accept(failure);}
