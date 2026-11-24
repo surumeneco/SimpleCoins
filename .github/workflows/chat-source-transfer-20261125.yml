@@ -1,0 +1,31 @@
+name: One-time exact source transfer for CAT execution
+on:
+  push:
+    branches: ["feature/chat-source-transfer-20261125"]
+    paths: [".github/workflows/chat-source-transfer-20261125.yml"]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2da836b38cfcdaf0fae44cec9c9488c0c8e5d2e8
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Export only the pinned tracked Git objects
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "2da836b38cfcdaf0fae44cec9c9488c0c8e5d2e8"
+          mkdir -p "$RUNNER_TEMP/source"
+          git rev-list --objects --no-object-names HEAD | git pack-objects --stdout > "$RUNNER_TEMP/source/source.pack"
+          git rev-parse HEAD > "$RUNNER_TEMP/source/commit.txt"
+          git rev-parse HEAD^{tree} > "$RUNNER_TEMP/source/tree.txt"
+          sha256sum "$RUNNER_TEMP/source/source.pack"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-exact-source-2da836b
+          path: ${{ runner.temp }}/source/
+          retention-days: 1
