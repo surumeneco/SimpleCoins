@@ -2960,13 +2960,18 @@ public final class WclServicesProbe extends JavaPlugin {
         if (Boolean.getBoolean("a01.probe.offMainHybrid")) {
             var workerCapture = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
             workerCapture.includeDiscoveredLoadedWcl(this);
+            var settings = protectedMode
+                    ? co.surumene.simplecoins.paper.PaperBlockLockerSettings.capture() : null;
             Thread worker = new Thread(() -> {
                 try {
                     if (Bukkit.isPrimaryThread()) throw new IOException("Worker fixture on primary");
-                    var workerTerrain = co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations.capture(
-                            manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
-                            4096, Set.of("[Private]"), Set.of("[More Users]"),
-                            Set.of("Everyone"), raw -> raw);
+                    var workerTerrain = settings != null
+                            ? settings.captureSaved(manifest, scope, 2 * 1024 * 1024,
+                                    16 * 1024 * 1024, 4096)
+                            : co.surumene.simplecoins.domain.SavedBlockLockerTerrainObservations.capture(
+                                    manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
+                                    4096, Set.of("[Private]"), Set.of("[More Users]"),
+                                    Set.of("Everyone"), raw -> raw);
                     var staged = workerCapture.stageCombinedOffMain(this,
                             Map.of(sourceWorldName, sourceWorldId), manifest, scope, covered,
                             workerTerrain, knownNonProtection, nonChestOwners, owners,
