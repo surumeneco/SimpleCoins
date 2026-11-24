@@ -124,7 +124,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                         var file=PaperPlayerGrantDelivery.playerdata(ID);
                         var backup=file.resolveSibling(file.getFileName()+".owner-probe-backup");
                         org.bukkit.BanList bans=Bukkit.getBanList(org.bukkit.BanList.Type.PROFILE);
-                        var profile=Bukkit.createPlayerProfile(ID,"ProbeSettlement");
+                        var profile=Bukkit.createProfile(ID,"ProbeSettlement");
                         bans.addBan(profile,"Owner reconciliation fixture",(java.util.Date)null,"probe");
                         if(refresh.fresh())throw new AssertionError("Stale P exposed after actual BAN");
                         int[] stage={0},ticks={0};
