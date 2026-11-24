@@ -1,0 +1,212 @@
+package co.surumene.simplecoins.paper;
+
+import co.surumene.simplecoins.domain.*;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.*;
+import java.util.function.*;
+import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.*;
+import org.bukkit.event.*;
+import org.bukkit.event.entity.*;
+import org.bukkit.event.hanging.HangingBreakEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.vehicle.VehicleDestroyEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.inventory.*;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
+
+/** First actual image and last confirmed image of a locally touched entity.
+ * WCL logical storage, not the inventory GUI's rendering, is authoritative.
+ * This listener does not claim coverage of unnotified plugin mutations. */
+public final class PaperEntityAccounting implements Listener {
+    private static final int COMPRESSED=16*1024*1024, INFLATED=64*1024*1024;
+    private final Plugin consumer;
+    private final WorldScope scope;
+    private final BooleanSupplier ready;
+    private final Consumer<List<MemoryAccounting.Movement>> sink;
+    private final Consumer<Exception> fatal;
+    private final Map<UUID,Entity> touched=new HashMap<>();
+    private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> before=new HashMap<>();
+    private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> unloaded=new HashMap<>();
+
+    public PaperEntityAccounting(Plugin consumer,WorldScope scope,BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink,Consumer<Exception> fatal) {
+        this.consumer=Objects.requireNonNull(consumer);this.scope=Objects.requireNonNull(scope);
+        this.ready=Objects.requireNonNull(ready);this.sink=Objects.requireNonNull(sink);
+        this.fatal=Objects.requireNonNull(fatal);
+    }
+
+    private static final NamespacedKey WWC=new NamespacedKey("whatawonderfulchicken","type");
+    private static final NamespacedKey WWW=new NamespacedKey("whatawonderfulwolf","type");
+    private static Optional<String> provider(Entity entity) throws IOException {
+        // Only the actual marked chicken/wolf is a WCL monetary holder.
+        // WWC armor stand projections are handled as aliases below.
+        if(!(entity instanceof Chicken)&&!(entity instanceof Wolf))return Optional.empty();
+        var pdc=entity.getPersistentDataContainer();
+        Set<String> keys=new HashSet<>();
+        for(var key:pdc.getKeys())keys.add(key.toString());
+        return WclLiveMarker.provider(entity.getType().getKey().toString(),keys,
+                pdc.get(WWC,PersistentDataType.STRING),pdc.get(WWW,PersistentDataType.STRING));
+    }
+    private static boolean eligible(Entity entity) {
+        return !(entity instanceof Player)&&!(entity instanceof Item)
+                &&(entity instanceof LivingEntity||entity instanceof InventoryHolder
+                ||entity instanceof ItemFrame||entity instanceof ItemDisplay);
+    }
+    private static MemoryAccounting.Endpoint endpoint(AssetOwner.Result owner,String location) {
+        return switch(owner.kind()){
+            case FREE -> MemoryAccounting.Endpoint.free();
+            case PERSONAL -> MemoryAccounting.Endpoint.personal(owner.player());
+            case DEAD -> MemoryAccounting.Endpoint.dead(owner.player(),owner.reason(),location);
+        };
+    }
+    private Map<MemoryAccounting.Endpoint,BigInteger> image(Entity entity) throws IOException {
+        if(!Bukkit.isPrimaryThread())throw new IOException("Entity accounting off primary");
+        if(!scope.includes(entity.getWorld().getName()))return Map.of();
+        if(!entity.isValid())throw new IOException("Entity image not loaded: "+entity.getUniqueId());
+        String prefix="world/"+entity.getWorld().getName()+"/";
+        String path="entity/"+entity.getUniqueId()+"/";
+        Map<String,BigInteger> values=new HashMap<>();
+        Set<UUID> wallets=new HashSet<>();
+        Map<String,ItemStack> nativeStacks=new HashMap<>();
+        if(entity instanceof LivingEntity living){
+            var gear=living.getEquipment();
+            if(gear!=null){
+                String[] names={"mainhand","offhand","head","chest","legs","feet"};
+                ItemStack[] stacks={gear.getItemInMainHand(),gear.getItemInOffHand(),gear.getHelmet(),
+                        gear.getChestplate(),gear.getLeggings(),gear.getBoots()};
+                for(int i=0;i<names.length;i++){
+                    var stack=stacks[i];
+                    if(stack==null||stack.getType().isAir())continue;
+                    String key=path+"equipment/"+names[i];
+                    var value=PaperLiveItemValue.stack(stack,COMPRESSED,INFLATED,wallets);
+                    if(value.signum()>0&&PaperWwcDisplayPhysicalAlias.verifiedPhysicalKey(
+                            entity,names[i],entity.getWorld().getName())!=null)continue;
+                    nativeStacks.put(key,stack);
+                    values.put(key,value);
+                }
+            }
+        }else if(entity instanceof ItemFrame frame){
+            values.put(path+"display",PaperLiveItemValue.stack(frame.getItem(),COMPRESSED,INFLATED,wallets));
+        }else if(entity instanceof ItemDisplay display){
+            values.put(path+"display",PaperLiveItemValue.stack(display.getItemStack(),COMPRESSED,INFLATED,wallets));
+        }
+        if(entity instanceof InventoryHolder holder&&(PaperLoadedChunkAssets.isIndependentInventoryHolder(entity.getClass())
+                ||PaperLoadedChunkAssets.isVillagerInternalInventorySource(entity.getClass()))){
+            ItemStack[] contents=holder.getInventory().getContents();
+            for(int i=0;i<contents.length;i++)values.put(path+"inventory/"+i,
+                    PaperLiveItemValue.stack(contents[i],COMPRESSED,INFLATED,wallets));
+        }
+        UUID owner=entity instanceof Tameable tame&&tame.getOwner()!=null?tame.getOwner().getUniqueId():null;
+        var id=provider(entity);
+        if(id.isPresent()){
+            var candidate=PaperWonderfulLiveCandidates.collectForHybrid(consumer,entity,id.orElseThrow(),
+                    wallets,COMPRESSED,INFLATED);
+            if(candidate.ownerEvidence().kind()==WclOwnerEvidence.Kind.HOLD)
+                throw new IOException("Incomplete WCL ownership "+entity.getUniqueId());
+            owner=candidate.ownerEvidence().owner();
+            for(var entry:candidate.slotValues().entrySet()){
+                String key=candidate.physicalSlotKeys().get(entry.getKey());
+                if(nativeStacks.containsKey(key)){
+                    if(!Objects.equals(values.get(key),entry.getValue())
+                            ||!nativeStacks.get(key).equals(ItemStack.deserializeBytes(
+                                    candidate.sourceItems().get(entry.getKey()).bytes())))
+                        throw new IOException("WCL native mirror differs "+key);
+                }else{
+                    if(values.putIfAbsent(key,entry.getValue())!=null)
+                        throw new IOException("Duplicate WCL monetary slot "+key);
+                }
+            }
+        }
+        if(values.values().stream().noneMatch(v->v.signum()>0))return Map.of();
+        boolean banned=owner!=null&&PaperProfileBanSource.captureCompleteStandard(
+                Set.of("paper-profile","paper-ip"),Map.of()).currentlyBanned(owner);
+        AssetOwner.Result resolved=AssetOwner.resolve(owner,false,banned,
+                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+        var out=new HashMap<MemoryAccounting.Endpoint,BigInteger>();
+        values.forEach((key,value)->{
+            if(value.signum()>0)out.merge(endpoint(resolved,prefix+key),value,BigInteger::add);
+        });
+        return Map.copyOf(out);
+    }
+
+    public void observeEntity(Entity entity){
+        if(!ready.getAsBoolean()||!eligible(entity)||before.containsKey(entity.getUniqueId()))return;
+        try {
+            before.put(entity.getUniqueId(),image(entity));touched.put(entity.getUniqueId(),entity);
+        }catch(IOException|RuntimeException failure){fail(failure);}
+    }
+    public void observeInventory(Inventory inventory){
+        if(!ready.getAsBoolean()||inventory==null)return;
+        try{
+            var holder=inventory.getHolder();
+            if(holder instanceof Entity entity){observeEntity(entity);return;}
+            if(holder==null)return;
+            String name=holder.getClass().getName();
+            String pluginName,method;
+            if(name.equals("co.surumene.whatawonderfulchicken.gui.WonderfulChickenInventoryHolder")){
+                pluginName="WhatAWonderfulChicken";method="chickenId";
+            }else if(name.equals("co.surumene.www.ui.WonderfulWolfInventoryHolder")){
+                pluginName="WhatAWonderfulWolf";method="wolfId";
+            }else return;
+            var plugin=Bukkit.getPluginManager().getPlugin(pluginName);
+            if(plugin==null||plugin.getClass().getClassLoader()!=holder.getClass().getClassLoader())
+                throw new IOException("Unverified WCL inventory holder");
+            UUID uuid=(UUID)holder.getClass().getMethod(method).invoke(holder);
+            Entity entity=Bukkit.getEntity(uuid);
+            if(entity==null||provider(entity).isEmpty())throw new IOException("WCL inventory holder entity unavailable");
+            observeEntity(entity);
+        }catch(ReflectiveOperationException|IOException|RuntimeException failure){fail(failure);}
+    }
+    public boolean hasImage(Inventory inventory){
+        return inventory!=null&&inventory.getHolder() instanceof Entity entity
+                &&before.containsKey(entity.getUniqueId());
+    }
+
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void interact(PlayerInteractEntityEvent event){observeEntity(event.getRightClicked());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void interactAt(PlayerInteractAtEntityEvent event){observeEntity(event.getRightClicked());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void pickup(EntityPickupItemEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void death(EntityDeathEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void damage(EntityDamageEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void tame(EntityTameEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void teleport(EntityTeleportEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void destroy(VehicleDestroyEvent event){observeEntity(event.getVehicle());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void hanging(HangingBreakEvent event){observeEntity(event.getEntity());}
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void unload(EntitiesUnloadEvent event){
+        if(!ready.getAsBoolean())return;
+        try{
+            for(var e:event.getEntities())if(before.containsKey(e.getUniqueId()))
+                unloaded.put(e.getUniqueId(),image(e));
+        }catch(IOException|RuntimeException failure){fail(failure);}
+    }
+    public void flush(){
+        if(!ready.getAsBoolean()){clear();return;}
+        try{
+            List<MemoryAccounting.Movement> changes=new ArrayList<>();
+            for(var entry:touched.entrySet()){
+                Entity entity=entry.getValue();
+                Map<MemoryAccounting.Endpoint,BigInteger> after=entity.isValid()?image(entity):
+                        unloaded.getOrDefault(entry.getKey(),Map.of());
+                changes.addAll(InventoryAccountingDelta.between(before.get(entry.getKey()),after));
+            }
+            if(!changes.isEmpty())sink.accept(List.copyOf(changes));
+        }catch(IOException|RuntimeException failure){fatal.accept(failure);}
+        finally{clear();}
+    }
+    private void clear(){before.clear();touched.clear();unloaded.clear();}
+    private void fail(Exception failure){clear();fatal.accept(failure);}
+}

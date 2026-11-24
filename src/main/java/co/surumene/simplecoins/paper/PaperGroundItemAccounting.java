@@ -155,7 +155,7 @@ public final class PaperGroundItemAccounting implements Listener {
                     throw new IOException("Monetary pickup lacks original attempt observation");
                 player(player,BigInteger.ZERO);
             });
-        }
+        } else observe(()->ground(event.getItem(),false));
     }
     @EventHandler(priority=EventPriority.LOWEST)
     public void hopperPickup(InventoryPickupItemEvent event) {
