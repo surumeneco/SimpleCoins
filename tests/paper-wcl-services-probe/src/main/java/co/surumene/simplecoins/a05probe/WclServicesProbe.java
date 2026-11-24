@@ -285,9 +285,31 @@ public final class WclServicesProbe extends JavaPlugin {
                         // Entity chunk load is allowed in the same process:
                         // that triggers WWC's legacy genome migration while
                         // other expensive fixture checks are in flight.
-                        verifyFarUnloadedStoredItems(world, selected);
-                        if (!Boolean.getBoolean("a01.probe.offMainHybrid"))
+                        if (Boolean.getBoolean("a01.probe.offMainHybrid")) {
+                            // Disposable startup experiment: prevent ordinary simulation and
+                            // automatic saves during capture. Give already queued startup IO
+                            // time to finish, without blocking the primary scheduler.
+                            // Full source witnesses remain checked by the worker: this window
+                            // does not assert that arbitrary plugin writers are frozen.
+                            if (!Bukkit.getOnlinePlayers().isEmpty())
+                                throw new IOException("Startup static window requires zero players");
+                            Bukkit.getServer().getServerTickManager().setFrozen(true);
+                            for (World loaded : Bukkit.getWorlds()) loaded.setAutoSave(false);
+                            Bukkit.getScheduler().runTaskLater(this, () -> {
+                                try {
+                                    if (!Bukkit.getOnlinePlayers().isEmpty())
+                                        throw new IOException("Player entered static window");
+                                    getLogger().info("PAPER_A01_MANAGED_STATIC_WINDOW_TRIAL");
+                                    verifyFarUnloadedStoredItems(world, selected);
+                                } catch (Throwable failure) {
+                                    getLogger().log(Level.SEVERE, "PAPER_A05_SERVICES_PROBE_FAILED", failure);
+                                    Bukkit.shutdown();
+                                }
+                            }, 40L);
+                        } else {
+                            verifyFarUnloadedStoredItems(world, selected);
                             Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        }
                         return;
                     }
                     case "reload" -> {
