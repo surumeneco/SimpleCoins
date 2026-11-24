@@ -84,8 +84,32 @@ public final class SettlementRuntimeChecks {
             check(!runtime.mayAdmit() && fence.state()==WriterEpochFence.State.FAULTED);
         }
     }
+    static void runMemory(Path dir) throws Exception {
+        var fence = new WriterEpochFence();
+        var gate = new AdmissionBarrier();
+        var runtime = new SettlementRuntime(gate, fence);
+        var tracking = new AtomicBoolean(true);
+        var attempt = runtime.beginMemory(tracking::get, () -> true);
+        var prepared = runtime.prepareMemory(attempt, () -> capture(dir.resolve("memory")));
+        check(!runtime.mayAdmit() && runtime.current().isEmpty());
+        var hold = new SettlementWriterEpochDecision.Evidence(true,true,false,true,true,false);
+        check(runtime.completeMemory(prepared, hold) == SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED);
+        check(runtime.current().isEmpty());
+        var ready = new SettlementWriterEpochDecision.Evidence(true,true,true,true,true,false);
+        check(runtime.completeMemory(prepared, ready) == SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH);
+        check(runtime.mayAdmit() && fence.state() == WriterEpochFence.State.DISARMED);
+        check(runtime.current().orElseThrow().statistics().worldTotal().equals(BigInteger.valueOf(5000)));
+        var issued = new MemoryAccounting.Movement(MemoryAccounting.Endpoint.external(),
+                MemoryAccounting.Endpoint.personal(PLAYER), BigInteger.valueOf(100));
+        check(runtime.recordMemory(1, java.util.List.of(issued), Set.of()) == MemoryAccounting.Outcome.APPLIED);
+        check(runtime.recordMemory(1, java.util.List.of(issued), Set.of()) == MemoryAccounting.Outcome.DUPLICATE);
+        check(runtime.current().orElseThrow().statistics().worldTotal().equals(BigInteger.valueOf(5100)));
+        tracking.set(false);
+        check(!runtime.mayAdmit() && runtime.current().isEmpty());
+    }
     public static void main(String[] args) throws Exception {
         run(Files.createTempDirectory("settlement-runtime-checks"));
+        runMemory(Files.createTempDirectory("memory-settlement-runtime-checks"));
         System.out.println("SETTLEMENT_RUNTIME_CHECKS_PASSED");
     }
 }
