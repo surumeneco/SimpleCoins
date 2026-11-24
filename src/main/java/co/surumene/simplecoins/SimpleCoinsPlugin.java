@@ -156,7 +156,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             // so new files need a subsequent Geyser/server restart.
             org.bukkit.plugin.Plugin geyser =
                     getServer().getPluginManager().getPlugin("Geyser-Spigot");
-            boolean nexo = getServer().getPluginManager().isPluginEnabled("Nexo");
+            org.bukkit.plugin.Plugin nexoPlugin = getServer().getPluginManager().getPlugin("Nexo");
+            boolean nexo = nexoPlugin != null && nexoPlugin.isEnabled();
             try {
                 if (!nexo) {
                     var generated = JavaCurrencyPack.build(getDataFolder().toPath(), names);
@@ -204,6 +205,14 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         getLogger().warning("Geyser-Spigot not present; Bedrock pack not installed.");
                     }
                 } else {
+                    // Nexo merges the supplied namespaced Java assets and owns
+                    // distribution. Generate the same source archive (including
+                    // custom images); never register the direct JE listener here.
+                    var generated = JavaCurrencyPack.build(getDataFolder().toPath(), names);
+                    boolean changed = co.surumene.simplecoins.domain.NexoResourceInstaller.stage(
+                            nexoPlugin.getDataFolder().toPath(), generated.javaArchive());
+                    getLogger().info("SIMPLECOINS_NEXO_PACK_STAGED: changed=" + changed
+                            + "; actual Nexo merge/client delivery not yet verified");
                     if (geyser != null && geyser.isEnabled()) {
                         boolean cleaned = GeyserResourceInstaller.removeOwned(
                                 geyser.getDataFolder().toPath());
@@ -212,9 +221,33 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                                     "SIMPLECOINS_GEYSER_NEXO_CLEANUP: prior owned files removed;"
                                     + " restart Geyser; Scaffolding/BE delegation is not verified");
                     }
-                    getLogger().warning(
-                            "Nexo detected; SimpleCoins pack generation suppressed. "
-                            + "Delegated JE/BE distribution is not yet verified.");
+                    // softdepend means Nexo may already have built its pack
+                    // when this plugin enables. Request one documented rebuild
+                    // after ServerLoadEvent if the import actually changed.
+                    if (changed) {
+                        getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+                            private boolean requested;
+                            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+                            public void onServerReady(org.bukkit.event.server.ServerLoadEvent event) {
+                                if (requested) return;
+                                requested = true;
+                                Bukkit.getScheduler().runTask(SimpleCoinsPlugin.this, () -> {
+                                    if (!nexoPlugin.isEnabled()) {
+                                        getLogger().severe("Nexo disabled before currency pack reload");
+                                        return;
+                                    }
+                                    try {
+                                        boolean dispatched = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "nexo reload pack");
+                                        if (dispatched) getLogger().info("SIMPLECOINS_NEXO_PACK_RELOAD_REQUESTED");
+                                        else getLogger().severe("Nexo pack reload command unavailable");
+                                    } catch (RuntimeException failure) {
+                                        getLogger().log(Level.SEVERE, "Nexo currency pack reload request failed", failure);
+                                    }
+                                });
+                            }
+                        }, this);
+                    }
+                    getLogger().warning("Nexo owns pack delivery; Bedrock requires a verified conversion and delivery path.");
                 }
             } catch (IOException invalidPack) {
                 throw new IllegalStateException(
