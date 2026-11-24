@@ -2958,6 +2958,9 @@ public final class WclServicesProbe extends JavaPlugin {
         manifest.requireUnchangedDiscovery();
         getLogger().info("PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED");
         if (Boolean.getBoolean("a01.probe.offMainHybrid")) {
+            var actualStartup = protectedMode
+                    ? co.surumene.simplecoins.paper.PaperStartupSettlementSource.capturePrimary(
+                            this, List.of(world), manifest, scope, covered, budgets, 4096) : null;
             var workerCapture = PaperCapturedHybridSettlement.capture(List.of(world), budgets);
             workerCapture.includeDiscoveredLoadedWcl(this);
             var settings = protectedMode
@@ -2972,7 +2975,9 @@ public final class WclServicesProbe extends JavaPlugin {
                                     manifest, scope, 2 * 1024 * 1024, 16 * 1024 * 1024,
                                     4096, Set.of("[Private]"), Set.of("[More Users]"),
                                     Set.of("Everyone"), raw -> raw);
-                    var staged = workerCapture.stageCombinedOffMain(this,
+                    var staged = actualStartup != null
+                            ? actualStartup.capture().staged()
+                            : workerCapture.stageCombinedOffMain(this,
                             Map.of(sourceWorldName, sourceWorldId), manifest, scope, covered,
                             workerTerrain, knownNonProtection, nonChestOwners, owners,
                             2 * 1024 * 1024, 16 * 1024 * 1024, (source, value) -> {
