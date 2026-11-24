@@ -53,16 +53,16 @@ public final class SavedBlockLockerChestSigns {
             Map<ChunkPosition,Map<String,Object>> source,Position requested,
             Set<String> privateHeaders,Set<String> moreHeaders,Set<String> everyoneAliases,
             BlockLockerSavedProfileResolution.DisplayDecoder decoder,Set<String> configured) throws IOException {
-        var state=readState(source,requested);
-        if(!configured.contains(state.name()))throw new IOException("Storage is not configured for protection: "+state.name());
+        var storageState=readState(source,requested);
+        if(!configured.contains(storageState.name()))throw new IOException("Storage is not configured for protection: "+storageState.name());
         List<Position> physical=new ArrayList<>();
         physical.add(requested);
-        if(isChest(state.name())) {
+        if(isChest(storageState.name())) {
             BlockLockerChestLinkage.Part first = readChest(source, requested);
             if (first.half() != BlockLockerChestLinkage.Half.SINGLE) {
                 Position opposite = otherHalf(first);
                 BlockLockerChestLinkage.Part second = readChest(source, opposite);
-                if (!state.name().equals(readState(source,opposite).name())
+                if (!storageState.name().equals(readState(source,opposite).name())
                         || !BlockLockerChestLinkage.linked(first, second))
                     throw new IOException("Saved double-chest halves are not reciprocal");
                 physical.add(opposite);
