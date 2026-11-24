@@ -3,6 +3,11 @@ package co.surumene.simplecoins.a01probe;
 import co.surumene.simplecoins.domain.*;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperProtectedSettlementService;
+import co.surumene.simplecoins.paper.PaperPlayerGrantDelivery;
+import co.surumene.simplecoins.paper.PaperAdminCommand;
+import java.util.List;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.util.Map;
@@ -46,6 +51,20 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 server.getMethod("overworld").invoke(mc),profile.getConstructor(UUID.class,String.class).newInstance(ID,"ProbeSettlement"),
                 info.getMethod("createDefault").invoke(null));
         Player player=(Player) playerClass.getMethod("getBukkitEntity").invoke(nativePlayer);
+        var grantField=product.getClass().getDeclaredField("issuanceGrants"); grantField.setAccessible(true);
+        var grants=(GrantLedger)grantField.get(product);
+        var command=Bukkit.getPluginCommand("simplecoins");
+        if(command==null||!(command.getExecutor() instanceof PaperAdminCommand))
+            throw new AssertionError("Product give command is not registered");
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(),"sc give "+ID+" 5200");
+        if(Boolean.getBoolean("a02.liveGrantReload")) {
+            if(grants.pending(ID).size()!=1)throw new AssertionError("Unexpected grant on reload");
+            player.loadData();
+            runGrantProbe(player,grants,true);
+            Bukkit.shutdown();
+            return;
+        }
+        if(!grants.historySnapshot().isEmpty())throw new AssertionError("Guarded command issued before settlement");
         player.getInventory().setItem(0,new CoinItemCodec(CoinItemCodec.defaultNames()).create(CoinDenomination.FIVE_THOUSAND,1));
         player.saveData();
         var root=getDataFolder().toPath().resolve("fixture-world");
@@ -73,10 +92,60 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                     throw new AssertionError("Incorrect normal handoff");
                 service.close();
                 if(runtime.mayAdmit() || fence.state()!=WriterEpochFence.State.FAULTED) throw new AssertionError("Close did not revoke");
-                task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED"); Bukkit.shutdown();
+                task.cancel(); getLogger().info("PAPER_A01_RUNTIME_SETTLEMENT_HANDOFF_PASSED");
+                runGrantProbe(player,grants,false);
+                Bukkit.shutdown();
             } catch(Throwable failure) { task.cancel(); fail(failure); }
         },1L,1L);
     }
+    /** Actual physical inventory, real saved file and real product ledger.
+     * A detached player is used instead of a networked client; no product admission bypass. */
+    private void runGrantProbe(Player player,GrantLedger grants,boolean reload) throws Exception {
+        var accounting=new MemoryAccounting(Map.of(ID,BigInteger.valueOf(reload?5064:5000)),
+                BigInteger.ZERO,Map.of());
+        var delivery=new PaperPlayerGrantDelivery(grants,new CoinItemCodec(CoinItemCodec.defaultNames()),
+                (id,value)->{
+                    if(!id.equals(ID)||accounting.recordNext(List.of(new MemoryAccounting.Movement(
+                            MemoryAccounting.Endpoint.external(),MemoryAccounting.Endpoint.personal(id),
+                            BigInteger.valueOf(value))),Set.of())!=MemoryAccounting.Outcome.APPLIED)
+                        throw new AssertionError("Failed issuance accounting");
+                });
+        if(!reload) {
+            for(int i=1;i<36;i++)player.getInventory().setItem(i,new ItemStack(Material.STONE,64));
+            player.saveData();
+            grants.reserveCoins(ID,CoinDenomination.ONE,65,"actual Paper probe");
+            var full=delivery.deliver(player);
+            if(full.deliveredNow()!=0||full.pendingCount()!=1)
+                throw new AssertionError("Full storage unexpectedly issued");
+            player.getInventory().setItem(1,null);
+        } else {
+            if(grants.pending(ID).getFirst().confirmedPartial()!=64)
+                throw new AssertionError("Saved partial amount lost on restart");
+            player.getInventory().setItem(2,null);
+        }
+        var result=delivery.deliver(player);
+        long expected=reload?5065:5064;
+        if(result.deliveredNow()!=(reload?1:64)||result.pendingCount()!=(reload?0:1))
+            throw new AssertionError("Wrong physical batch result: "+result);
+        var file=PaperPlayerGrantDelivery.playerdata(ID);
+        var value=SavedPlayerAssets.extract(PlayerDataReader.read(file,16*1024*1024,64*1024*1024))
+                .values().stream().reduce(BigInteger.ZERO,BigInteger::add);
+        if(!value.equals(BigInteger.valueOf(expected))
+                ||!accounting.snapshot().personal().get(ID).equals(value))
+            throw new AssertionError("Saved coin total disagrees with accounting: "+value);
+        var repeat=delivery.deliver(player);
+        if(repeat.deliveredNow()!=0)throw new AssertionError("Replayed saved batch");
+        if(reload) {
+            if(!grants.pending(ID).isEmpty()||!grants.historySnapshot().getFirst().delivered())
+                throw new AssertionError("Full grant not acknowledged");
+            getLogger().info("PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0");
+        } else {
+            if(grants.pending(ID).getFirst().confirmedPartial()!=64)
+                throw new AssertionError("Partial floor not persisted");
+            getLogger().info("PAPER_A02_MINIMAL_PLAYER_GRANT_PARTIAL_PASSED total=5064 remaining=1");
+        }
+    }
+
     private static SettlementWriterEpochDecision.Evidence ready() {return new SettlementWriterEpochDecision.Evidence(true,true,true,true,true,true,true,false);}
     private void fail(Throwable failure) {getLogger().log(Level.SEVERE,"PAPER_A01_RUNTIME_SETTLEMENT_FAILED",failure); Bukkit.shutdown();}
     @Override public void onDisable() {

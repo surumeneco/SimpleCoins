@@ -246,6 +246,33 @@ public final class GrantLedger {
         persist(complete);
         grants.put(complete.sequence(), complete);
     }
+    /**
+     * Reconcile the cumulative receipt read from the target's actual playerdata.
+     * Caller must have observed the matching saved inventory/receipt generation
+     * (or a valid persisted receipt on recovery). No whole-inventory intent or
+     * server-wide writer seal is required for this normal per-player path.
+     */
+    public synchronized void confirmSavedProgress(Grant grant, GrantReceiptState receipt) throws IOException {
+        Objects.requireNonNull(receipt);
+        checkHealthy();
+        Grant current = requireAuthenticReservation(grant);
+        receipt.verify(verifiedPlayerSnapshot(current.player()));
+        if (receipt.completedSequence() == current.sequence()) {
+            acknowledge(current, receipt.completedSequence());
+            return;
+        }
+        if (current.delivered() || receipt.activeSequence() != current.sequence()
+                || !current.id().equals(receipt.activeId())
+                || receipt.partialValue() < current.confirmedPartial()
+                || receipt.partialValue() >= current.amount())
+            throw new IllegalStateException("Saved receipt does not confirm this reservation");
+        if (receipt.partialValue() == current.confirmedPartial()) return;
+        var progressed = current.progressed(receipt.partialValue());
+        advanceMutationRevision();
+        persist(progressed);
+        grants.put(progressed.sequence(), progressed);
+    }
+
     /** Persist only a physically verified, strictly advancing partial batch.
      * Caller owns the real saved-file proof and uninterrupted writer seal.
      */

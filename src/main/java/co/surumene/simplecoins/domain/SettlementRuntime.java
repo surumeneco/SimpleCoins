@@ -194,6 +194,21 @@ public final class SettlementRuntime {
         }
     }
 
+    /** Shared sequence allocation for main-thread physical operations. */
+    public boolean memoryAccountingReady() {
+        synchronized (barrier) { return memoryAttempt != null && memoryReady(); }
+    }
+    public void recordConfirmedMemory(List<MemoryAccounting.Movement> movements, Set<UUID> registered) {
+        synchronized (barrier) {
+            if (!memoryAccountingReady())
+                throw new IllegalStateException("Normal memory accounting is unavailable");
+            if (memory.recordNext(movements, registered) != MemoryAccounting.Outcome.APPLIED) {
+                revoke();
+                throw new IllegalStateException("Confirmed physical operation disagrees with accounting");
+            }
+        }
+    }
+
     public Optional<SettlementAccumulator.Result> current() {
         if (memoryAttempt != null) {
             synchronized (barrier) {
