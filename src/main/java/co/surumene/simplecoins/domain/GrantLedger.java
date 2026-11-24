@@ -101,6 +101,39 @@ public final class GrantLedger {
         return grants.values().stream().filter(g -> g.player().equals(player) && !g.delivered()).toList();
     }
     /**
+     * One coherent, immutable, player-scoped read-only planning view. Capture
+     * verifies ALL durable records, not only this player's records. Reusing it
+     * within a logical planning operation avoids repeating the full disk scan
+     * for each receipt predicate. It is deliberately not a current-world
+     * witness or an ACK/write capability; all actual ledger mutations still
+     * perform their existing independent durable checks.
+     */
+    public synchronized VerifiedPlayerSnapshot verifiedPlayerSnapshot(UUID player) {
+        Objects.requireNonNull(player, "player UUID");
+        checkHealthy();
+        return new VerifiedPlayerSnapshot(player, grants.values().stream()
+                .filter(g -> g.player().equals(player)).toList());
+    }
+
+    public static final class VerifiedPlayerSnapshot {
+        private final UUID player;
+        private final List<Grant> history;
+        private final List<Grant> pending;
+
+        private VerifiedPlayerSnapshot(UUID player, List<Grant> history) {
+            this.player = player;
+            this.history = List.copyOf(history);
+            this.pending = this.history.stream().filter(g -> !g.delivered()).toList();
+        }
+
+        public UUID player() { return player; }
+        public List<Grant> pending() { return pending; }
+        public void validateReceipt(long receipt) {
+            validatePlayerReceipt(history, receipt);
+        }
+    }
+
+    /**
      * A playerdata receipt refers to a durable reservation, not an arbitrary
      * caller-supplied Grant with a plausible owner and sequence. Its immutable
      * attributes must match our journal before it can be treated as applied.
@@ -131,11 +164,15 @@ public final class GrantLedger {
     }
     public synchronized void validateReceipt(UUID player, long receipt) {
         checkHealthy();
-        if (receipt < 0 || (receipt != 0 && (!grants.containsKey(receipt) ||
-                !grants.get(receipt).player().equals(player))))
+        validatePlayerReceipt(grants.values().stream()
+                .filter(g -> g.player().equals(player)).toList(), receipt);
+    }
+
+    /** Both fresh durable validation and immutable read-only views use the same predicates. */
+    private static void validatePlayerReceipt(List<Grant> history, long receipt) {
+        if (receipt < 0 || (receipt != 0 && history.stream().noneMatch(g -> g.sequence() == receipt)))
             throw new IllegalStateException("Receipt does not belong to this player's journal");
-        for (Grant g : grants.values()) {
-            if (!g.player().equals(player)) continue;
+        for (Grant g : history) {
             if (g.delivered() && g.sequence() > receipt)
                 throw new IllegalStateException("Playerdata receipt rolled back behind acknowledged grant");
             // An undelivered earlier grant cannot be skipped by a later receipt.

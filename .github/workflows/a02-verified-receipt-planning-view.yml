@@ -1,0 +1,45 @@
+name: A02 coherent read-only receipt planning view
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Lifecycle/Works/simplecoins.a02.verified-receipt-planning-view.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantLedger.java'
+      - 'src/main/java/co/surumene/simplecoins/domain/GrantReceiptState.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantInventorySlotPlan.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantLedgerVerifiedPlayerSnapshot*.java'
+      - '.github/workflows/a02-verified-receipt-planning-view.yml'
+permissions:
+  contents: read
+jobs:
+  receipt-planning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - uses: actions/checkout@v4
+        with:
+          repository: surumeneco/CAT-TDD
+          ref: d42557a7b8318925f172b401d4e2bf55c4d230c7
+          path: cat-runtime
+          persist-credentials: false
+      - name: Validate Confirmed A02 model and scoped Work
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C cat-runtime rev-parse HEAD)" = d42557a7b8318925f172b401d4e2bf55c4d230c7
+          c=cat-runtime/.cat-system/scripts/cat_flow.py
+          w=Lifecycle/Works/simplecoins.a02.verified-receipt-planning-view.md
+          python "$c" validate --work "$w"
+          python "$c" conformance --kind process-closure --work "$w"
+          python "$c" compile --kind model --work "$w"
+          python "$c" conformance --kind model-conformance --work "$w"
+      - name: Verify planning, durable integrity and receipt regressions
+        run: gradle --no-daemon :test --tests 'co.surumene.simplecoins.domain.Grant*Test' --tests 'co.surumene.simplecoins.paper.*Grant*Test' jar

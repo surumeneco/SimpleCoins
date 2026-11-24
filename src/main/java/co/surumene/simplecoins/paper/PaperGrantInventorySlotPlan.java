@@ -120,10 +120,13 @@ public final class PaperGrantInventorySlotPlan {
         Objects.requireNonNull(savedReceipt, "saved receipt");
         Objects.requireNonNull(storage, "storage snapshot");
 
-        savedReceipt.verify(ledger, player);
+        // Exactly one full durable journal scan for this read-only plan.
+        // The saved playerdata/ACK path must independently verify current evidence.
+        GrantLedger.VerifiedPlayerSnapshot view = ledger.verifiedPlayerSnapshot(player);
+        savedReceipt.verify(view);
         GrantReceiptState current = savedReceipt.active()
-                ? savedReceipt : savedReceipt.begin(ledger, player, grant);
-        if (!ledger.pending(player).contains(grant))
+                ? savedReceipt : savedReceipt.begin(view, grant);
+        if (!view.pending().contains(grant))
             throw new IllegalStateException("Grant is not the authentic pending reservation");
         if (current.activeSequence() != grant.sequence()
                 || !grant.id().equals(current.activeId()))
@@ -140,9 +143,9 @@ public final class PaperGrantInventorySlotPlan {
                 throw new IllegalStateException("Complete amount still has an active partial receipt");
             return Optional.empty();
         }
-        GrantReceiptState next = current.advance(ledger, player, grant, batch);
+        GrantReceiptState next = current.advance(view, grant, batch);
         if (batch.complete())
-            next = next.complete(ledger, player, grant);
+            next = next.complete(view, grant);
         List<Slot> slots = new ArrayList<>(batch.stacks().size());
         for (int i = 0; i < batch.stacks().size(); i++) {
             var coin = batch.stacks().get(i);
