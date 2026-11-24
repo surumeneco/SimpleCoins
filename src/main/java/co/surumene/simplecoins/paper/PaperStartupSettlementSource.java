@@ -23,6 +23,8 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
     private final Map<String, UUID> worldIds;
     private final PaperBlockLockerSettings settings;
     private final PaperCapturedHybridSettlement live;
+    private final PaperWonderfulLiveEntityDiscovery.Report initialWcl;
+    private final Map<String, SettlementAccumulator.Asset> initialOwners = new HashMap<>();
 
     private PaperStartupSettlementSource(Plugin plugin, Collection<World> registered,
             WorldStorageDiscovery.Manifest manifest, WorldScope scope, BanSourceCoverage bans,
@@ -54,7 +56,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
         if (!PaperWonderfulReaderRegistry.inspect(plugin).registrationsPresent())
             throw new IOException("Required WCL provider registration unavailable");
         this.live = PaperCapturedHybridSettlement.capture(worlds.values(), budget);
-        live.includeDiscoveredLoadedWcl(plugin);
+        initialWcl = live.includeDiscoveredLoadedWcl(plugin);
     }
 
     public static PaperStartupSettlementSource capturePrimary(Plugin plugin, Collection<World> registered,
@@ -79,8 +81,49 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                 },
                 (source, chunk, position) -> new BlockEntitySettlementImport.Ownership(null, false, false, false),
                 this::savedOwners, budget.maxSerializedBytes(), budget.maxInflatedBytes(),
-                this::classifyLive, 120000);
+                (source, value) -> {
+                    var asset = classifyLive(source, value);
+                    if (initialOwners.putIfAbsent(value.physicalKey(), asset) != null)
+                        throw new IOException("Repeated LIVE attribution key");
+                    return asset;
+                }, 120000);
         return new SettlementRuntime.Captured(staged, manifest, bans);
+    }
+
+    /** Verify the actual selected LIVE values and provider inputs at handoff.
+     * SAVED bytes were rechecked by the worker, not by a main-thread disk walk. */
+    public void requireCurrentPrimary(BanSourceCoverage currentBans) throws IOException {
+        if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                || !bans.sameCompleteBannedPlayers(currentBans)
+                || !settings.equals(PaperBlockLockerSettings.capture())
+                || !PaperWonderfulReaderRegistry.inspect(plugin).registrationsPresent())
+            throw new IOException("Startup attribution inputs changed");
+        Map<String,UUID> currentWorlds = new HashMap<>();
+        for (World world : Bukkit.getWorlds()) currentWorlds.put(world.getName(), world.getUID());
+        if (!worldIds.equals(currentWorlds)) throw new IOException("World registry changed");
+        var now = PaperLiveUniverseAssets.scanWithSources(worlds.values(), budget, new HashSet<>());
+        if (!sourceValues(live.observed()).equals(sourceValues(now)))
+            throw new IOException("LIVE monetary source changed during settlement");
+        var wclNow = PaperWonderfulLiveEntityDiscovery.discover(worlds, now.sources(),
+                budget.maxChunks(), budget.maxEntities());
+        if (!initialWcl.identities().equals(wclNow.identities())
+                || !initialWcl.observedEntityIds().equals(wclNow.observedEntityIds()))
+            throw new IOException("LIVE holder population changed during settlement");
+        live.requireCurrentWclPrimary(budget.maxSerializedBytes(), budget.maxInflatedBytes());
+        Map<String, SettlementAccumulator.Asset> currentOwners = new HashMap<>();
+        for (var source : now.sources()) for (var value : source.values()) {
+            if (initialOwners.containsKey(value.physicalKey()))
+                currentOwners.put(value.physicalKey(), classifyLive(source, value));
+        }
+        if (!initialOwners.equals(currentOwners))
+            throw new IOException("LIVE monetary attribution changed during settlement");
+    }
+
+    private static Map<String, Set<HybridLiveSourceStage.Value>> sourceValues(
+            PaperLiveUniverseAssets.Observed observed) {
+        var result = new HashMap<String, Set<HybridLiveSourceStage.Value>>();
+        for (var source : observed.sources()) result.put(source.id(), Set.copyOf(source.values()));
+        return Map.copyOf(result);
     }
 
     /** Native storage fallback. A selected WCL provider's same-read decision
