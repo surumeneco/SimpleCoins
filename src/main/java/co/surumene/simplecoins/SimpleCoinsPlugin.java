@@ -22,6 +22,7 @@ import co.surumene.simplecoins.paper.PaperWonderfulReaderRegistry;
 import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
+import co.surumene.simplecoins.paper.AdminAssetCommand;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.ServicePriority;
@@ -208,6 +209,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         getLogger().log(Level.SEVERE, "Protected saved grant delivery failed", failure);
                         Bukkit.shutdown();
                     });
+            java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command")
+                    .setExecutor(new AdminAssetCommand(publication, sourceScope.scope(), unit));
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
             exchangeRecipes = new CoinExchangeRecipes(this, coinCodec);
             exchangeRecipes.register();

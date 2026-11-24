@@ -14,3 +14,13 @@ softdepend:
   - WhatAWonderfulChicken
   - WhatAWonderfulWolf
   - WonderfulCoreLibrary
+commands:
+  simplecoins:
+    aliases: [sc]
+    description: SimpleCoins administrative asset queries
+    usage: /<command> <stats|balance <player>|dead [page]>
+    permission: simplecoins.admin
+permissions:
+  simplecoins.admin:
+    description: View SimpleCoins accounting and dead assets
+    default: op
