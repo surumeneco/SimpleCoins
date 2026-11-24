@@ -44,9 +44,9 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
                     try {
                         verifyRestartedOwnerEvidence(world);
                         getLogger().info("PAPER_BLOCKLOCKER_115_RELOADED_PROTECTION_PASSED");
+                        verifyHopperAccounting(world);
                     } catch (Throwable failure) {
                         getLogger().log(Level.SEVERE, "PAPER_BLOCKLOCKER_115_RELOAD_FAILED", failure);
-                    } finally {
                         Bukkit.shutdown();
                     }
                 }, 40L);
@@ -257,6 +257,80 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
         verifyRealCapturedMoney(world, y, false);
         getLogger().info("PAPER_BLOCKLOCKER_115_SAVED_OWNER_AND_EVERYONE_UUID_PASSED"
                 + " world=" + world.getUID() + " y=" + y);
+    }
+
+    /** Real transfer on a force-loaded chunk, initially cancelled then allowed.
+     * A missing playerdata owner's protected chest receives Free coins as Dead. */
+    private void verifyHopperAccounting(World world) throws IOException {
+        int x = 30, y = 120, z = 30;
+        world.getChunkAt(x >> 4, z >> 4).setForceLoaded(true);
+        Block destination = placeChest(world, x, y, z, "ProbeOwner#" + OWNER, "[Redstone]");
+        Block source = world.getBlockAt(x, y + 1, z);
+        source.setType(Material.HOPPER, false);
+        var data = (org.bukkit.block.data.type.Hopper) source.getBlockData();
+        data.setFacing(BlockFace.DOWN);
+        data.setEnabled(true);
+        source.setBlockData(data, false);
+        if (!OWNER.equals(BlockLockerLiveEvidence.observe(destination).owner()))
+            throw new IOException("Hopper fixture lost destination protection");
+        var codec = new CoinItemCodec(CoinItemCodec.defaultNames());
+        var hopper = ((org.bukkit.block.Hopper) source.getState()).getInventory();
+        var chest = ((org.bukkit.block.Chest) destination.getState()).getBlockInventory();
+        hopper.clear();
+        chest.clear();
+        hopper.setItem(0, codec.create(CoinDenomination.FIVE_THOUSAND, 2));
+        var ledger = new co.surumene.simplecoins.domain.MemoryAccounting(Map.of(), BigInteger.valueOf(10000), Map.of());
+        var failed = new java.util.concurrent.atomic.AtomicReference<Exception>();
+        var cancel = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var observed = new java.util.concurrent.atomic.AtomicInteger();
+        Bukkit.getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.HIGHEST)
+            public void cancelFirst(org.bukkit.event.inventory.InventoryMoveItemEvent event) {
+                var from = event.getSource().getLocation();
+                var to = event.getDestination().getLocation();
+                if (from != null && to != null && from.getBlock().equals(source) && to.getBlock().equals(destination)) {
+                    observed.incrementAndGet();
+                    if (cancel.get()) event.setCancelled(true);
+                }
+            }
+        }, this);
+        var tracking = new PaperHopperAccounting(new co.surumene.simplecoins.domain.WorldScope(true, Set.of(), Set.of()),
+                () -> failed.get() == null, moves -> {
+                    if (ledger.recordNext(moves, Set.of()) != co.surumene.simplecoins.domain.MemoryAccounting.Outcome.APPLIED)
+                        throw new IllegalStateException("Hopper delta rejected");
+                }, failed::set);
+        Bukkit.getPluginManager().registerEvents(tracking, this);
+        new org.bukkit.scheduler.BukkitRunnable() {
+            private int ticks;
+            @Override public void run() {
+                try {
+                    tracking.flush();
+                    if (failed.get() != null) throw failed.get();
+                    BigInteger h = PaperLiveItemValue.inventory(hopper, 54, 2*1024*1024, 16*1024*1024);
+                    BigInteger c = PaperLiveItemValue.inventory(chest, 54, 2*1024*1024, 16*1024*1024);
+                    if (cancel.get() && observed.get() > 0) {
+                        if (!h.equals(BigInteger.valueOf(10000)) || c.signum() != 0 || ledger.snapshot().sequence() != 0)
+                            throw new IOException("Cancelled hopper transfer changed physical or accounting value");
+                        cancel.set(false);
+                    }
+                    if (c.equals(BigInteger.valueOf(10000))) {
+                        var snap = ledger.snapshot();
+                        var expected = co.surumene.simplecoins.domain.MemoryAccounting.Endpoint.dead(OWNER,
+                                co.surumene.simplecoins.domain.AssetOwner.DeadReason.MISSING_PLAYERDATA,
+                                "world/" + world.getName() + "/" + x + "," + y + "," + z + ":0");
+                        if (h.signum()!=0 || snap.free().signum()!=0 || !snap.dead().equals(Map.of(expected, c)))
+                            throw new IOException("Actual hopper transfer accounting mismatch: " + snap);
+                        getLogger().info("PAPER_HOPPER_CONFIRMED_ACCOUNTING_PASSED free=0 dead=10000 cancelledUnchanged=true");
+                        cancel();
+                        Bukkit.shutdown();
+                    } else if (++ticks >= 240) throw new IOException("Hopper fixture timed out: source="+h+" destination="+c+" events="+observed.get());
+                } catch (Throwable failure) {
+                    getLogger().log(Level.SEVERE, "PAPER_BLOCKLOCKER_115_RELOAD_FAILED", failure);
+                    cancel();
+                    Bukkit.shutdown();
+                }
+            }
+        }.runTaskTimer(this, 1L, 1L);
     }
 
     private static void configureChestHalf(Block block,
