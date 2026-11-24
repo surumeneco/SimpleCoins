@@ -302,6 +302,19 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
                         if (h.signum()!=0 || snap.free().signum()!=0 || !snap.dead().equals(Map.of(expected, c)))
                             throw new IOException("Actual hopper transfer accounting mismatch: " + snap);
                         getLogger().info("PAPER_HOPPER_CONFIRMED_ACCOUNTING_PASSED free=0 dead=10000 cancelledUnchanged=true");
+                        // Read the original physical container, then alter the
+                        // actual protection sign; the value is unchanged but
+                        // attribution must move from Dead to Free.
+                        tracking.observeInventory(chest);
+                        Sign sign=(Sign)world.getBlockAt(x,y,z+1).getState();
+                        sign.getSide(Side.FRONT).setLine(2,"[Everyone]");
+                        if(!sign.update(true,false))throw new IOException("Sign update failed");
+                        tracking.flush();
+                        var shared=ledger.snapshot();
+                        if(failed.get()!=null)throw failed.get();
+                        if(!shared.dead().isEmpty()||!shared.free().equals(BigInteger.valueOf(10000)))
+                            throw new IOException("Protection change did not reclassify actual asset: "+shared);
+                        getLogger().info("PAPER_BLOCKLOCKER_LOCAL_PROTECTION_CHANGE_PASSED dead=0 free=10000");
                         cancel();
                         Bukkit.shutdown();
                     } else if (++ticks >= 240) throw new IOException("Hopper fixture timed out: source="+h+" destination="+c+" events="+observed.get());

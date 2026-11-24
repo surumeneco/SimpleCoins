@@ -265,8 +265,9 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 getLogger().log(Level.SEVERE, "Ground item accounting failed", failure);
             };
             var tickMovements = new java.util.ArrayList<MemoryAccounting.Movement>();
+            var tickRegistrations = new java.util.HashSet<UUID>();
             var hopper = new co.surumene.simplecoins.paper.PaperHopperAccounting(sourceScope.scope(),
-                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure);
+                    publication::memoryAccountingReady, tickMovements::addAll, groundFailure, tickRegistrations::addAll);
             var ground = new co.surumene.simplecoins.paper.PaperGroundItemAccounting(sourceScope.scope(),
                     publication::memoryAccountingReady, tickMovements::addAll, groundFailure,
                     hopper::observeInventory);
@@ -276,10 +277,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 try {
                     ground.flush();
                     hopper.flush();
-                    if (publication.memoryAccountingReady() && !tickMovements.isEmpty())
-                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.of());
+                    if (publication.memoryAccountingReady() && (!tickMovements.isEmpty()||!tickRegistrations.isEmpty()))
+                        publication.recordConfirmedMemory(java.util.List.copyOf(tickMovements),java.util.Set.copyOf(tickRegistrations));
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
-                finally { tickMovements.clear(); }
+                finally { tickMovements.clear(); tickRegistrations.clear(); }
             },1L,1L);
             getServer().getPluginManager().registerEvents(new co.surumene.simplecoins.paper.TraderDeathIssuanceListener(
                     traderDrops, coinCodec, publication::memoryAccountingReady,
