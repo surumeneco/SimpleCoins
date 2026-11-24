@@ -11,6 +11,8 @@ import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.hanging.HangingBreakEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
@@ -20,7 +22,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 /** First actual image and last confirmed image of a locally touched entity.
- * WCL logical storage, not the inventory GUI's rendering, is authoritative.
+ * A verified open WCL cargo GUI replaces only its writable stored cargo.
  * This listener does not claim coverage of unnotified plugin mutations. */
 public final class PaperEntityAccounting implements Listener {
     private static final int COMPRESSED=16*1024*1024, INFLATED=64*1024*1024;
@@ -30,6 +32,7 @@ public final class PaperEntityAccounting implements Listener {
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
     private final Map<UUID,Entity> touched=new HashMap<>();
+    private final Map<UUID,Inventory> openCargo=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> before=new HashMap<>();
     private final Map<UUID,Map<MemoryAccounting.Endpoint,BigInteger>> unloaded=new HashMap<>();
 
@@ -105,7 +108,7 @@ public final class PaperEntityAccounting implements Listener {
         var id=provider(entity);
         if(id.isPresent()){
             var candidate=PaperWonderfulLiveCandidates.collectForHybrid(consumer,entity,id.orElseThrow(),
-                    wallets,COMPRESSED,INFLATED);
+                    wallets,COMPRESSED,INFLATED,openCargo.get(entity.getUniqueId()));
             if(candidate.ownerEvidence().kind()==WclOwnerEvidence.Kind.HOLD)
                 throw new IOException("Incomplete WCL ownership "+entity.getUniqueId());
             owner=candidate.ownerEvidence().owner();
@@ -140,28 +143,65 @@ public final class PaperEntityAccounting implements Listener {
             before.put(entity.getUniqueId(),image(entity));touched.put(entity.getUniqueId(),entity);
         }catch(IOException|RuntimeException failure){fail(failure);}
     }
+    /** Recognize only the actual distributed provider holder class and entity. */
+    private Entity cargoEntity(Inventory inventory) throws ReflectiveOperationException,IOException {
+        if(inventory==null)return null;
+        var holder=inventory.getHolder();
+        if(holder==null)return null;
+        String pluginName,method,expected;
+        switch(holder.getClass().getName()){
+            case "co.surumene.whatawonderfulchicken.gui.WonderfulChickenInventoryHolder" ->
+                {pluginName="WhatAWonderfulChicken";method="chickenId";expected="wwc";}
+            case "co.surumene.www.ui.WonderfulWolfInventoryHolder" ->
+                {pluginName="WhatAWonderfulWolf";method="wolfId";expected="www";}
+            default -> {return null;}
+        }
+        var plugin=Bukkit.getPluginManager().getPlugin(pluginName);
+        if(plugin==null||!plugin.isEnabled()||plugin.getClass().getClassLoader()!=holder.getClass().getClassLoader()
+                ||holder.getInventory()!=inventory)
+            throw new IOException("Unverified WCL inventory holder");
+        UUID uuid=(UUID)holder.getClass().getMethod(method).invoke(holder);
+        Entity entity=Bukkit.getEntity(uuid);
+        if(entity==null||!provider(entity).filter(expected::equals).isPresent())
+            throw new IOException("WCL inventory holder entity unavailable");
+        return entity;
+    }
+
     public void observeInventory(Inventory inventory){
         if(!ready.getAsBoolean()||inventory==null)return;
         try{
-            var holder=inventory.getHolder();
-            if(holder instanceof Entity entity){observeEntity(entity);return;}
-            if(holder==null)return;
-            String name=holder.getClass().getName();
-            String pluginName,method;
-            if(name.equals("co.surumene.whatawonderfulchicken.gui.WonderfulChickenInventoryHolder")){
-                pluginName="WhatAWonderfulChicken";method="chickenId";
-            }else if(name.equals("co.surumene.www.ui.WonderfulWolfInventoryHolder")){
-                pluginName="WhatAWonderfulWolf";method="wolfId";
-            }else return;
-            var plugin=Bukkit.getPluginManager().getPlugin(pluginName);
-            if(plugin==null||plugin.getClass().getClassLoader()!=holder.getClass().getClassLoader())
-                throw new IOException("Unverified WCL inventory holder");
-            UUID uuid=(UUID)holder.getClass().getMethod(method).invoke(holder);
-            Entity entity=Bukkit.getEntity(uuid);
-            if(entity==null||provider(entity).isEmpty())throw new IOException("WCL inventory holder entity unavailable");
-            observeEntity(entity);
+            if(inventory.getHolder() instanceof Entity entity){observeEntity(entity);return;}
+            Entity entity=cargoEntity(inventory);
+            if(entity!=null)observeEntity(entity);
         }catch(ReflectiveOperationException|IOException|RuntimeException failure){fail(failure);}
     }
+
+    /** Record the stored preimage before switching to the real open GUI. */
+    public void openCargo(Inventory inventory){
+        if(!ready.getAsBoolean())return;
+        try{
+            Entity entity=cargoEntity(inventory);
+            if(entity==null)return;
+            UUID id=entity.getUniqueId();
+            Inventory existing=openCargo.get(id);
+            if(existing==inventory)return;
+            if(existing!=null)throw new IOException("Two active WCL cargo inventories for "+id);
+            observeEntity(entity);
+            if(ready.getAsBoolean())openCargo.put(id,inventory);
+        }catch(ReflectiveOperationException|IOException|RuntimeException failure){fail(failure);}
+    }
+
+    /** Called after the provider's close handler persisted or replaced cargo. */
+    public void closeCargo(Inventory inventory){
+        // Do not read the obsolete GUI again: WWC shulker swaps intentionally
+        // skip saving the old inventory. The first image was captured at LOWEST.
+        openCargo.values().removeIf(active->active==inventory);
+    }
+
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void open(InventoryOpenEvent event){openCargo(event.getInventory());}
+    @EventHandler(priority=EventPriority.MONITOR)
+    public void close(InventoryCloseEvent event){closeCargo(event.getInventory());}
     public boolean hasImage(Inventory inventory){
         return inventory!=null&&inventory.getHolder() instanceof Entity entity
                 &&before.containsKey(entity.getUniqueId());
@@ -194,7 +234,7 @@ public final class PaperEntityAccounting implements Listener {
         }catch(IOException|RuntimeException failure){fail(failure);}
     }
     public void flush(){
-        if(!ready.getAsBoolean()){clear();return;}
+        if(!ready.getAsBoolean()){clear();openCargo.clear();return;}
         try{
             List<MemoryAccounting.Movement> changes=new ArrayList<>();
             for(var entry:touched.entrySet()){
@@ -208,5 +248,5 @@ public final class PaperEntityAccounting implements Listener {
         finally{clear();}
     }
     private void clear(){before.clear();touched.clear();unloaded.clear();}
-    private void fail(Exception failure){clear();fatal.accept(failure);}
+    private void fail(Exception failure){clear();openCargo.clear();fatal.accept(failure);}
 }

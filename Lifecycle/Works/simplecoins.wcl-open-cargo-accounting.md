@@ -7,20 +7,20 @@ process: simplecoins.accounting.wcl-cargo-source
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
-decision_ref: ''
+decision_ref: 'user-chat:2026-11-24:continue-and-complete-PR681;approved-02B:通常時の仕訳・差分反映'
 refs:
   - simplecoins.accounting.wcl-cargo-source
   - simplecoins.accounting.wcl-cargo-source.pi.capture
   - simplecoins.accounting.wcl-cargo-source.tce.capture
-entry: issue
-mode: shadow
-flow: issue-work
+entry: confirmed-spec
+mode: implementation
+flow: spec-implementation
 work_kind: implementation
 parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/423
 project_entry_ref: https://drive.google.com/file/d/1lLgAP9zAf8e0_Il8Mdh4HGXNr2aJ4ShC/view
-spec_status: draft
+spec_status: confirmed
 ---
 
 # Work: simplecoins.wcl-open-cargo-accounting
@@ -55,7 +55,7 @@ Multiple IDs in one cell are separated by `;`.
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.wcl-open-cargo-accounting.md;docs/cat/draft/wcl-cargo-source-*.md;src/main/java/co/surumene/simplecoins/paper/PaperEntityAccounting.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java;src/main/java/co/surumene/simplecoins/paper/PaperGroundItemAccounting.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/paper/PaperEntityAccounting.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java;src/main/java/co/surumene/simplecoins/paper/PaperGroundItemAccounting.java | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
+| SimpleCoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.wcl-open-cargo-accounting.md;docs/cat/confirmed/wcl-cargo-source-*.md;src/main/java/co/surumene/simplecoins/paper/PaperEntityAccounting.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java;src/main/java/co/surumene/simplecoins/paper/PaperGroundItemAccounting.java;tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/paper/PaperEntityAccounting.java;src/main/java/co/surumene/simplecoins/paper/PaperWonderfulLiveCandidates.java;src/main/java/co/surumene/simplecoins/paper/PaperGroundItemAccounting.java | tests/paper-wcl-services-probe/src/main/java/co/surumene/simplecoins/a05probe/WclServicesProbe.java;.github/workflows/paper-wcl-services-probe.yml |
 
 ## Checks
 
@@ -90,10 +90,10 @@ External/semantic gates are reported evidence. `passed` or `not-applicable` requ
 - Observe the real player and entity before ordinary interaction; keep the existing tick-local combined journal. Use the actual verified holder instance at accepted open and close; transition back to provider storage after persistence without counting the same cargo again. No persistent per-holder balance cache; no full-world rescan. Reuse existing owner resolution and valuation.
 - Existing #681 probe already detects missing openCargo/closeCargo (compiler failure, not a canonical current-item Red). Extend the real Paper acceptance to changed and emptied cargo, close after actual persistence, disabled/hidden WWW slots and WWC shulker swap, while preserving the existing provider and native-mirror regressions. A synthetic holder alone does not prove the real player's GUI lifecycle.
 - Source investigation: WWC main 05508cc263a02d8288e81a4fa82d76bbae64c886 InventoryService; WWW main 92683837f6e61db2c9c3a506a1a63855f2e7eddb WonderfulWolfInventoryService/Policy. Runtime compatibility is still to be checked against the pinned distributed JARs in CI.
-- The added Draft is a narrow source-selection contract, not a claim of physical observation or full admission conformance. Its draft-mode source/model check does not authorize production code; follow the canonical confirmation and spec-implementation gates. Do not reopen A01 global writer closure or redo startup settlement for this work.
+- The confirmed source-selection contract is narrow, not a claim of physical observation or full admission conformance. The source-selection closure and model conformance do not establish runtime observation or complete implementation conformance. Do not reopen A01 global writer closure or redo startup settlement for this work.
 
 ## Compilation
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| @repo:SimpleCoins/docs/cat/draft/wcl-cargo-source-process.md | @repo:SimpleCoins/docs/cat/draft/wcl-cargo-source-pi.md | @repo:SimpleCoins/docs/cat/draft/wcl-cargo-source-tce.md | — | — | — | @work/.cat-flow/cache/wcl-cargo-source-model.json | @work/.cat-flow/cache/wcl-cargo-source-vectors.json | @work/.cat-flow/cache/wcl-cargo-source-queue.json | — | — | — | — | true |
+| @repo:SimpleCoins/docs/cat/confirmed/wcl-cargo-source-process.md | @repo:SimpleCoins/docs/cat/confirmed/wcl-cargo-source-pi.md | @repo:SimpleCoins/docs/cat/confirmed/wcl-cargo-source-tce.md | — | — | — | @work/.cat-flow/cache/wcl-cargo-source-model.json | @work/.cat-flow/cache/wcl-cargo-source-vectors.json | @work/.cat-flow/cache/wcl-cargo-source-queue.json | — | — | — | — | false |

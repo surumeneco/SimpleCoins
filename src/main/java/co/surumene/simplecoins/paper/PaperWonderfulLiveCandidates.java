@@ -10,6 +10,11 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Wolf;
+import org.bukkit.block.ShulkerBox;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -84,18 +89,25 @@ public final class PaperWonderfulLiveCandidates {
             Set<UUID> seenWalletIds, int maxSerializedBytes,
             int maxInflatedBytes) throws IOException {
         return collect(consumer, entity, providerId, seenWalletIds,
-                maxSerializedBytes, maxInflatedBytes, false);
+                maxSerializedBytes, maxInflatedBytes, false, null);
     }
 
     static Candidate collectForHybrid(Plugin consumer, Entity entity, String providerId,
             Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes) throws IOException {
         return collect(consumer, entity, providerId, seenWalletIds,
-                maxSerializedBytes, maxInflatedBytes, true);
+                maxSerializedBytes, maxInflatedBytes, true, null);
+    }
+
+    static Candidate collectForHybrid(Plugin consumer, Entity entity, String providerId,
+            Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes,
+            Inventory openCargo) throws IOException {
+        return collect(consumer, entity, providerId, seenWalletIds,
+                maxSerializedBytes, maxInflatedBytes, true, openCargo);
     }
 
     private static Candidate collect(Plugin consumer, Entity entity, String providerId,
             Set<UUID> seenWalletIds, int maxSerializedBytes, int maxInflatedBytes,
-            boolean nativeMirrors) throws IOException {
+            boolean nativeMirrors, Inventory openCargo) throws IOException {
         Objects.requireNonNull(consumer, "consumer plugin");
         Objects.requireNonNull(entity, "selected LIVE Entity");
         Objects.requireNonNull(providerId, "expected WCL provider");
@@ -119,6 +131,7 @@ public final class PaperWonderfulLiveCandidates {
                 PaperWonderfulLiveOwnerEvidence.fromVerifiedLoadedSnapshot(
                         entity, providerId, snapshot);
 
+        if(openCargo!=null)snapshot=withOpenCargo(snapshot,entity,openCargo);
         Map<String, BigInteger> values = nativeMirrors
                 ? PaperWonderfulSnapshotAssets.slotValuesForHybrid(
                         snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds)
@@ -143,4 +156,64 @@ public final class PaperWonderfulLiveCandidates {
                 entity.getWorld().getName(), providerId, snapshot.relationships(),
                 owner, values, aliases, sameRead);
     }
+
+    /** Replace only the physical cargo represented by the verified open GUI.
+     * Keep equipment, non-visible slots and the original WCL relationship evidence.
+     * This happens before valuation, so stale wallet UUIDs cannot pollute the
+     * shared identity set or be counted a second time. */
+    private static PaperWonderfulLoadedEvidence.Snapshot withOpenCargo(
+            PaperWonderfulLoadedEvidence.Snapshot source,Entity entity,Inventory gui) throws IOException {
+        var items=new java.util.LinkedHashMap<String,PaperWonderfulLoadedEvidence.StoredItem>();
+        for(var item:source.items())items.put(item.slot(),item);
+        if("wwc".equals(source.providerId())){
+            if(gui.getSize()==9)return source;
+            if(gui.getSize()!=36)throw new IOException("Unexpected WWC cargo GUI size");
+            var stored=items.get("shulker");
+            if(stored==null)throw new IOException("WWC open cargo without stored shulker");
+            ItemStack box=ItemStack.deserializeBytes(stored.bytes());
+            if(!(box.getItemMeta() instanceof BlockStateMeta meta)
+                    ||!(meta.getBlockState() instanceof ShulkerBox shulker))
+                throw new IOException("WWC cargo is not a shulker");
+            ItemStack[] contents=new ItemStack[27];
+            for(int i=0;i<27;i++)contents[i]=gui.getItem(i+9);
+            shulker.getInventory().setContents(contents);
+            meta.setBlockState(shulker);box.setItemMeta(meta);
+            items.put("shulker",new PaperWonderfulLoadedEvidence.StoredItem("shulker",box.serializeAsBytes()));
+        }else if("www".equals(source.providerId())&&entity instanceof Wolf wolf){
+            if(gui.getSize()<9||gui.getSize()>54||gui.getSize()%9!=0)
+                throw new IOException("Unexpected WWW cargo GUI size");
+            // The provider rounds the inventory up to full rows but persists
+            // only its effective capacity. Read its actual capacity rather
+            // than guessing from black-glass decorations or GUI size.
+            int count=Math.min(wolfCargoCapacity(wolf),gui.getSize()-9);
+            for(int i=0;i<count;i++){
+                String slot="cargo:"+i;
+                items.remove(slot);
+                ItemStack stack=gui.getItem(9+i);
+                if(stack!=null&&!stack.getType().isAir())
+                    items.put(slot,new PaperWonderfulLoadedEvidence.StoredItem(slot,stack.serializeAsBytes()));
+            }
+        }else throw new IOException("Unknown open WCL cargo provider");
+        return new PaperWonderfulLoadedEvidence.Snapshot(source.entityId(),source.worldId(),
+                source.providerId(),source.relationships(),java.util.List.copyOf(items.values()));
+    }
+
+    private static int wolfCargoCapacity(Wolf wolf) throws IOException {
+        try{
+            Plugin www=Bukkit.getPluginManager().getPlugin("WhatAWonderfulWolf");
+            if(www==null||!www.isEnabled())throw new IOException("WWW unavailable");
+            var field=www.getClass().getDeclaredField("inventoryService");
+            field.setAccessible(true);
+            Object service=field.get(www);
+            if(service==null)throw new IOException("WWW inventory service unavailable");
+            var method=service.getClass().getDeclaredMethod("capacity",Wolf.class);
+            method.setAccessible(true);
+            int capacity=(Integer)method.invoke(service,wolf);
+            if(capacity<0||capacity>45)throw new IOException("Invalid WWW cargo capacity");
+            return capacity;
+        }catch(ReflectiveOperationException|RuntimeException failure){
+            throw new IOException("WWW actual cargo capacity unavailable",failure);
+        }
+    }
+
 }

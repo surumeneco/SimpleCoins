@@ -2,13 +2,13 @@
 cat_version: '0.3'
 kind: tce
 id: simplecoins.accounting.wcl-cargo-source.tce.capture
-status: draft
+status: confirmed
 process: simplecoins.accounting.wcl-cargo-source
 source_refs:
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
   - https://github.com/surumeneco/SimpleCoins/pull/681
-decision_ref: ''
+decision_ref: user-chat:2026-11-24:continue-and-complete-PR681;approved-02B:通常時の仕訳・差分反映
 refs: 
   - simplecoins.accounting.wcl-cargo-source.pi.capture
 semantic_contract: markdown-v2

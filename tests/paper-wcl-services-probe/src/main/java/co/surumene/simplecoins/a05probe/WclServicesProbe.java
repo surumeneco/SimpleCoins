@@ -510,6 +510,9 @@ public final class WclServicesProbe extends JavaPlugin {
             getLogger().info("PAPER_A05_LIVE_NATIVE_WWW_MIRROR_ONCE_15000_PASSED");
             // WWW persists the GUI cargo only on close. Test the real
             // distributed holder, actual live provider, and committed store.
+            var cargoIndividual=individual.withAdminAbilityOverrides(Map.of(co.surumene.www.domain.Ability.INVENTORY,8.0));
+            www.loadedIndividuals().saveAndRegister(wolf,cargoIndividual);
+            www.abilityRuntime().refresh(wolf);
             var cargoHolder=new co.surumene.www.ui.WonderfulWolfInventoryHolder(wolf.getUniqueId());
             var cargoGui=Bukkit.createInventory(cargoHolder,18);
             cargoHolder.inventory(cargoGui);
@@ -535,13 +538,14 @@ public final class WclServicesProbe extends JavaPlugin {
             if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(cargoEndpoint,BigInteger.valueOf(2000),weaponEndpoint,BigInteger.valueOf(10000))))
                 throw new IOException("WWW open cargo did not reflect actual value: "+ledger.snapshot(),fault.get());
             local.observeInventory(cargoGui);
-            www.loadedIndividuals().saveAndRegister(wolf,individual.withStorage(individual.weapon(),
+            www.loadedIndividuals().saveAndRegister(wolf,cargoIndividual.withStorage(cargoIndividual.weapon(),
                     Map.of(7,new ItemStackSnapshot(smaller.serializeAsBytes()))));
             local.closeCargo(cargoGui);
             local.flush();
             if(fault.get()!=null||!ledger.snapshot().dead().equals(Map.of(cargoEndpoint,BigInteger.valueOf(2000),weaponEndpoint,BigInteger.valueOf(10000))))
                 throw new IOException("WWW close counted already observed cargo again: "+ledger.snapshot(),fault.get());
             www.loadedIndividuals().saveAndRegister(wolf,individual);
+            www.abilityRuntime().refresh(wolf);
             getLogger().info("PAPER_A05_WWW_OPEN_CARGO_ACCOUNTED_ONCE_PASSED");
 
             if (Boolean.getBoolean("a01.moneyOwnerWriterProbe")) {
