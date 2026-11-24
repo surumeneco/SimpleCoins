@@ -75,7 +75,7 @@ tasks.register<Jar>("paperBlockLockerLiveProbeJar") {
     dependsOn(tasks.named("testClasses"))
     archiveBaseName.set("SimpleCoinsBlockLockerLiveProbe")
     from(sourceSets.test.get().output) {
-        include("co/surumene/simplecoins/paper/BlockLockerLiveProbe.class")
+        include("co/surumene/simplecoins/paper/BlockLockerLiveProbe.class", "co/surumene/simplecoins/paper/BlockLockerLiveProbe$*.class")
     }
     from("tests/paper-blocklocker-smoke/plugin.yml") {
         rename { "plugin.yml" }
