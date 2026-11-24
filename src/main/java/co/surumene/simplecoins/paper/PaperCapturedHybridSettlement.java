@@ -422,8 +422,7 @@ public final class PaperCapturedHybridSettlement {
             SettlementScanRunner.SourceBlockOwnerLookup allBlocks =
                     (source, chunk, position) -> {
                         String type = verifiedSavedBlockType(manifest, source, chunk, position);
-                        if ("minecraft:chest".equals(type)
-                                || "minecraft:trapped_chest".equals(type))
+                        if (savedTerrain.configuredContainers().contains(type))
                             return chestOwners.resolve(source, chunk, position);
                         return otherOwners.resolve(source, chunk, position);
                     };
@@ -497,10 +496,10 @@ public final class PaperCapturedHybridSettlement {
         }
         if (type == null)
             throw new IOException("No selected SAVED BlockEntity at requested coordinate");
-        if (!type.equals(SavedTerrainBlockPalette.read(
-                chunk.nbt(), xyz[0], xyz[1], xyz[2]).name()))
+        String physical=SavedTerrainBlockPalette.read(chunk.nbt(),xyz[0],xyz[1],xyz[2]).name();
+        if (!co.surumene.simplecoins.domain.SavedBlockLockerChestSigns.matchesStorage(type,physical))
             throw new IOException("SAVED BlockEntity differs from physical terrain palette");
-        return type;
+        return physical;
     }
 
     /**

@@ -71,6 +71,11 @@ class SavedBlockLockerTerrainObservationsTest {
 
     private static byte[] chunk(int chunkX, boolean chest, boolean sign,
                                 boolean withMonetaryItem, UUID signedOwner) throws IOException {
+        return chunk(chunkX,chest,sign,withMonetaryItem,signedOwner,"minecraft:chest");
+    }
+
+    private static byte[] chunk(int chunkX, boolean chest, boolean sign,
+                                boolean withMonetaryItem, UUID signedOwner,String storageType) throws IOException {
         int x = chest ? CHEST_X : NEIGHBOR_X;
         var bytes = new ByteArrayOutputStream();
         try (var out = new DataOutputStream(bytes)) {
@@ -95,11 +100,11 @@ class SavedBlockLockerTerrainObservationsTest {
             out.writeByte(0);
             if (chest || sign) {
                 string(out, "Name",
-                        chest ? "minecraft:chest" : "minecraft:oak_wall_sign");
+                        chest ? storageType : "minecraft:oak_wall_sign");
                 out.writeByte(10);
                 out.writeUTF("Properties");
                 string(out, "facing", chest ? "north" : "east");
-                if (chest) string(out, "type", "single");
+                if (chest && storageType.equals("minecraft:chest")) string(out, "type", "single");
                 out.writeByte(0);
                 out.writeByte(0);
             }
@@ -120,7 +125,7 @@ class SavedBlockLockerTerrainObservationsTest {
             out.writeByte(10);
             out.writeInt(chest || sign ? 1 : 0);
             if (chest || sign) {
-                string(out, "id", chest ? "minecraft:chest" : "minecraft:sign");
+                string(out, "id", chest ? storageType : "minecraft:sign");
                 integer(out, "x", x);
                 integer(out, "y", Y);
                 integer(out, "z", Z);
@@ -494,5 +499,23 @@ class SavedBlockLockerTerrainObservationsTest {
         Files.write(f.region1(), region);
         assertThrows(IOException.class, () -> SavedBlockLockerSettlementOwnerLookup.fromCaptured(
                 snapshot, f.manifest(), ban, chest -> syntheticComplete(true)));
+    }
+
+    @Test void configuredBarrelOwnerUsesActualCrossRegionProtection() throws Exception {
+        var root=directory.resolve("configured-barrel");
+        region(root.resolve("region"),0,chunk(31,true,false,true,null,"minecraft:barrel"));
+        region(root.resolve("region"),1,chunk(32,false,true,false,VERIFIED_OWNER));
+        var scope=new WorldScope(true,Set.of(),Set.of());
+        var manifest=WorldStorageDiscovery.discover(Map.of("world",root),scope,1000);
+        var capture=SavedBlockLockerTerrainObservations.captureConfigured(
+                manifest,scope,1024*1024,4*1024*1024,4,
+                Set.of("[Private]"),Set.of("[More Users]"),Set.of("Everyone"),raw->raw,
+                Set.of("minecraft:chest","minecraft:barrel"));
+        var index=capture.assembleOwnerIndex(manifest, candidate->syntheticComplete(false));
+        var holder=index.lookup("world",CHEST_X+","+Y+","+Z);
+        assertEquals(VERIFIED_OWNER,holder.verifiedOwner().orElseThrow());
+        assertFalse(holder.everyoneEffective());
+        assertFalse(holder.verifiedNonProtection());
+        capture.witness().requireUnchanged();
     }
 }
