@@ -78,11 +78,10 @@ jobs:
           grep -F 'PAPER_DEAD_PLAYER_LOCATION_MOVEMENT_PASSED' paper.log
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_PARTIAL_PASSED total=5064 remaining=1' paper.log
           grep -F 'PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total=5000' paper.log
-          grep -F 'PAPER_NORMAL_INVSEE_JOIN_TRANSFER_INVOKED' paper.log || { tail -150 paper.log; exit 1; }
-          grep -F 'PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total=5064' paper.log || { tail -150 paper.log; exit 1; }
           grep -F 'PAPER_NORMAL_TRADER_SPAWN_PASSED' paper.log || { tail -150 paper.log; exit 1; }
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper.log; then tail -150 paper.log; exit 1; fi
           timeout 180 java -Da02.liveGrantReload=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-reload.log 2>&1 || { tail -150 paper-reload.log; exit 1; }
+          grep -F 'PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total=5064' paper-reload.log || { tail -150 paper-reload.log; exit 1; }
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0' paper-reload.log
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-reload.log; then tail -150 paper-reload.log; exit 1; fi
       - name: Recover actual grant after abrupt JVM exit before ACK
@@ -102,6 +101,7 @@ jobs:
           if [ "$code" -ne 73 ]; then tail -150 paper-crash.log; exit 1; fi
           grep -F 'PAPER_A02_ACTUAL_GRANT_SAVED_BEFORE_ACK_HALT total=5064 ledgerFloor=0' paper-crash.log
           timeout 180 java -Da02.liveGrantReload=true -Da02.liveGrantCrashReload=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-crash-reload.log 2>&1 || { tail -150 paper-crash-reload.log; exit 1; }
+          grep -F 'PAPER_NORMAL_INVSEE_SAVE_PRESERVES_RECEIPT total=5064' paper-crash-reload.log || { tail -150 paper-crash-reload.log; exit 1; }
           grep -F 'PAPER_A02_MINIMAL_PLAYER_GRANT_RESTART_PASSED total=5065 pending=0' paper-crash-reload.log
           if grep -Fq 'PAPER_A01_RUNTIME_SETTLEMENT_FAILED' paper-crash-reload.log; then tail -150 paper-crash-reload.log; exit 1; fi
       - uses: actions/upload-artifact@v4
