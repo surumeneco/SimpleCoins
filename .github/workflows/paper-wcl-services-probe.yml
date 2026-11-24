@@ -4,6 +4,8 @@ on:
     branches: [develop]
     paths:
       - 'tests/paper-wcl-services-probe/**'
+      - 'src/main/java/co/surumene/simplecoins/domain/SettlementReadDispatch.java'
+      - 'Lifecycle/Works/simplecoins.a01.hybrid-off-main-stage.md'
       - 'Lifecycle/Works/simplecoins.a01.paper-g1-staged-seal-publication.md'
       - 'src/main/java/co/surumene/simplecoins/domain/SettlementProtectedPublisher.java'
       - '.github/workflows/paper-wcl-services-probe.yml'
@@ -580,6 +582,7 @@ jobs:
             timeout --signal=TERM --kill-after=5s 180s \
               java -Da05.probe.phase="$phase" \
                 -Da01.probe.realSourcePublish="$([ "$phase" = reload-saved ] && echo true || echo false)" \
+                -Da01.probe.offMainHybrid=true \
                 -Xms256M -Xmx1024M -jar paper.jar nogui \
               </dev/null > "paper-a05-$phase.log" 2>&1
             status=$?
@@ -662,7 +665,8 @@ jobs:
                 grep -F 'PAPER_A05_FULL_HYBRID_FIXTURE_BAN_COVERED_STAGING_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_FULL_HYBRID_MISSING_OWNER_BAN_REJECTED_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A04_A05_FULL_HYBRID_REAL_SAVED_CHEST_WCL_55000_PASSED' "paper-a05-$phase.log"
-                grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' "paper-a05-$phase.log" ;;
+                grep -F 'PAPER_A04_A05_UNKNOWN_CHEST_PROOF_FAIL_CLOSED_PASSED' "paper-a05-$phase.log"
+                grep -F 'PAPER_A01_G1_OFF_MAIN_HYBRID_STAGE_PASSED' "paper-a05-$phase.log" ;;
               reload)
                 grep -F 'PAPER_A05_WWC_REAL_ENTITY_RELOAD_COIN_SHULKER_PASSED' "paper-a05-$phase.log"
                 grep -F 'PAPER_A05_WWW_REAL_ENTITY_RELOAD_OWNER_CURRENCY_PASSED' "paper-a05-$phase.log" ;;
