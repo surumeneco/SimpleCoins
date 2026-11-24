@@ -107,9 +107,48 @@ public final class SettlementRuntimeChecks {
         tracking.set(false);
         check(!runtime.mayAdmit() && runtime.current().isEmpty());
     }
+    static void runRegistrationRestart(Path dir) throws Exception {
+        var historyFile = dir.resolve("registered-players.txt");
+        var eligibleZero = UUID.fromString("00000000-0000-0000-0000-000000000102");
+        var bannedZero = UUID.fromString("00000000-0000-0000-0000-000000000103");
+        var neverRegistered = UUID.fromString("00000000-0000-0000-0000-000000000104");
+        var missing = UUID.fromString("00000000-0000-0000-0000-000000000105");
+        var history = new RegisteredPlayerHistory(historyFile);
+        var first = new SettlementRuntime(new AdmissionBarrier(), new WriterEpochFence(), history);
+        var attempt = first.beginMemory(() -> true, () -> true);
+        var prepared = first.prepareMemory(attempt, () -> capture(dir.resolve("initial")));
+        var ready = new SettlementWriterEpochDecision.Evidence(true,true,true,true,true,false);
+        check(first.completeMemory(prepared, ready) == SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH);
+        first.recordConfirmedMemory(java.util.List.of(), Set.of(eligibleZero, bannedZero, missing));
+        check(new RegisteredPlayerHistory(historyFile).snapshot().equals(Set.of(PLAYER, eligibleZero, bannedZero, missing)));
+        first.revoke();
+
+        Path secondRoot = dir.resolve("restart");
+        Path playerDir = secondRoot.resolve("world/playerdata");
+        Files.createDirectories(playerDir);
+        for (UUID id : Set.of(eligibleZero, bannedZero, neverRegistered)) {
+            try (var out = new DataOutputStream(new GZIPOutputStream(Files.newOutputStream(playerDir.resolve(id + ".dat"))))) {
+                out.writeByte(10); out.writeUTF("");
+                out.writeByte(9); out.writeUTF("Inventory"); out.writeByte(10); out.writeInt(0);
+                out.writeByte(9); out.writeUTF("EnderItems"); out.writeByte(10); out.writeInt(0);
+                out.writeByte(0);
+            }
+        }
+        var captured = capture(secondRoot);
+        var bans = BanSourceCoverage.captureCompleteLists(Set.of("profile"), Map.of("profile",Set.of(bannedZero)));
+        var restarted = new SettlementRuntime(new AdmissionBarrier(), new WriterEpochFence(), new RegisteredPlayerHistory(historyFile));
+        var secondAttempt = restarted.beginMemory(() -> true, () -> true);
+        var next = restarted.prepareMemory(secondAttempt, () ->
+                new SettlementRuntime.Captured(captured.staged(), captured.manifest(), bans));
+        check(restarted.completeMemory(next, ready) == SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH);
+        check(restarted.current().orElseThrow().personalBalances().equals(Map.of(PLAYER, BigInteger.valueOf(5000), eligibleZero, BigInteger.ZERO)));
+        check(restarted.current().orElseThrow().free().equals(BigInteger.ZERO));
+        check(restarted.current().orElseThrow().dead().equals(BigInteger.ZERO));
+    }
     public static void main(String[] args) throws Exception {
         run(Files.createTempDirectory("settlement-runtime-checks"));
         runMemory(Files.createTempDirectory("memory-settlement-runtime-checks"));
+        runRegistrationRestart(Files.createTempDirectory("registration-restart-checks"));
         System.out.println("SETTLEMENT_RUNTIME_CHECKS_PASSED");
     }
 }

@@ -64,7 +64,6 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         // native save entrypoints, NOT the complete G0/G3 writer universe.
         // NEVER arm this fence or enable tracked writer mode at bootstrap.
         nativeWriterFence = new WriterEpochFence();
-        publication = new SettlementRuntime(admission, nativeWriterFence);
 
         // Register as early as possible in the Paper plugin lifecycle.
         // AdmissionBarrier starts BLOCKED; do not call begin() or complete()
@@ -72,6 +71,13 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
         try {
             if (!getServer().getOnlinePlayers().isEmpty())
                 throw new IllegalStateException("Unsafe startup: players already online");
+            try {
+                publication = new SettlementRuntime(admission, nativeWriterFence,
+                        new co.surumene.simplecoins.domain.RegisteredPlayerHistory(
+                                getDataFolder().toPath().resolve("registered-players.txt")));
+            } catch (IOException historyFailure) {
+                throw new IllegalStateException("Cannot read registered-player history", historyFailure);
+            }
             boolean nativeBridgePresent =
                     new PaperNativeSaveFenceAdapter(nativeWriterFence).bindIfAgentPresent();
             getLogger().info("SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound="

@@ -108,8 +108,18 @@ public final class InventoryHopperOutputWriterProbe {
             }
         }, probe);
         // First require a real *PASSIVE* transfer; a sealed no-op is not evidence.
-        Bukkit.getScheduler().runTaskLater(probe, () -> {
+        new org.bukkit.scheduler.BukkitRunnable() {
+            private int elapsed;
+            @Override public void run() {
             try {
+                if (count(hopper, codec) != 0 || count(chest, codec) != 2 || matches.get() == 0) {
+                    if (++elapsed < 200) return;
+                    throw new IllegalStateException("Passive Hopper output timeout: hopper="
+                            + count(hopper, codec) + " chest=" + count(chest, codec)
+                            + " events=" + matches.get() + " forceLoaded=" + chunk.isForceLoaded()
+                            + " data=" + hopperBlock.getBlockData());
+                }
+                cancel();
                 check(count(hopper, codec) == 0 && count(chest, codec) == 2
                         && matches.get() > 0 && stack[0].contains("HopperBlockEntity#"),
                         "Passive actual Hopper→Chest native output not established");
@@ -197,6 +207,7 @@ public final class InventoryHopperOutputWriterProbe {
                     } catch (Throwable failure) { fail(failure); }
                 }, 60L);
             } catch (Throwable failure) { fail(failure); }
-        }, 50L);
+            }
+        }.runTaskTimer(probe, 1L, 1L);
     }
 }
