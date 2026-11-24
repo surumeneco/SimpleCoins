@@ -10,15 +10,27 @@ import java.util.*;
 /** Owns only explicitly recorded pack files. Changed or unrelated files are never overwritten. */
 public final class ManagedResources {
     private final Path root;
-    public ManagedResources(Path root) { this.root = root.toAbsolutePath().normalize(); }
+    private final Set<String> allowed;
+    public ManagedResources(Path root) {
+        this(root, Set.of("packs/simplecoins-generated.mcpack", "custom_mappings/simplecoins-generated.json",
+                "packs/simplecoins.mcpack", "custom_mappings/simplecoins.json"));
+    }
+    ManagedResources(Path root, Set<String> allowed) {
+        this.root = root.toAbsolutePath().normalize();
+        this.allowed = Set.copyOf(allowed);
+    }
 
     public void replace(Map<String, byte[]> desired) throws IOException {
+        replaceIfChanged(desired);
+    }
+
+    boolean replaceIfChanged(Map<String, byte[]> desired) throws IOException {
         requireRealAncestors(root);
         Files.createDirectories(root);
         requireRealAncestors(root);
         Path manifest = root.resolve("simplecoins-managed-resources");
         Map<String,String> previous = new TreeMap<>();
-        if (Files.exists(manifest)) {
+        if (Files.exists(manifest, LinkOption.NOFOLLOW_LINKS)) {
             for (String line : new String(DurableFile.read(manifest, 16384), StandardCharsets.UTF_8).split("\n")) {
                 if (line.isBlank()) continue;
                 String[] fields = line.split(" ", 2);
@@ -35,11 +47,15 @@ public final class ManagedResources {
             if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
                 if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || !previous.containsKey(path)
                         || !previous.get(path).equals(digest(Files.readAllBytes(file))))
-                    throw new IOException("Unowned or modified Geyser resource: " + file);
+                    throw new IOException("Unowned or modified pack resource: " + file);
             } else if (previous.containsKey(path)) {
-                throw new IOException("Managed Geyser resource is missing: " + file);
+                throw new IOException("Managed pack resource is missing: " + file);
             }
         }
+        boolean changed = !previous.keySet().equals(desired.keySet());
+        for (var entry : desired.entrySet())
+            if (!digest(entry.getValue()).equals(previous.get(entry.getKey()))) changed = true;
+        if (!changed) return false;
         for (String path : paths) {
             Path file = target(path);
             if (!desired.containsKey(path)) Files.delete(file);
@@ -56,10 +72,11 @@ public final class ManagedResources {
         for (String path : new TreeSet<>(desired.keySet())) contents.append(digest(desired.get(path))).append(' ').append(path).append('\n');
         DurableFile.write(manifest, contents.toString().getBytes(StandardCharsets.UTF_8));
         // An interrupted multi-file update is detected on next startup and fails closed.
+        return true;
     }
 
     private Path target(String name) throws IOException {
-        if (!name.matches("(?:packs/simplecoins-generated\\.mcpack|custom_mappings/simplecoins-generated\\.json|packs/simplecoins\\.mcpack|custom_mappings/simplecoins\\.json)"))
+        if (!allowed.contains(name))
             throw new IOException("Not a managed resource path: " + name);
         Path target = root.resolve(name);
         requireRealAncestors(target);
