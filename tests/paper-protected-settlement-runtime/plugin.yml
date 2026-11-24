@@ -1,0 +1,5 @@
+name: SimpleCoinsProtectedSettlementProbe
+version: '1.0.0'
+main: co.surumene.simplecoins.a01probe.RuntimeSettlementProbe
+api-version: '26.2'
+depend: [SimpleCoins]
