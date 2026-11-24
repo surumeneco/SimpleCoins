@@ -1,6 +1,11 @@
 package co.surumene.simplecoins.paper;
 
 import co.surumene.simplecoins.domain.BanEvidence;
+import co.surumene.simplecoins.domain.BanSourceCoverage;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.io.IOException;
 import java.util.UUID;
 import org.bukkit.Bukkit;
@@ -32,6 +37,42 @@ public final class PaperProfileBanSource {
             throw failure;
         } catch (RuntimeException failure) {
             throw new IOException("Failed to read Paper profile BAN for " + expectedPlayer, failure);
+        }
+    }
+
+    /**
+     * Enumerate Paper's two standard lists once on primary. An empty IP list
+     * proves no account is currently IP-banned; a nonempty list must not be
+     * converted to UUIDs without authoritative associations. Other providers
+     * require independently captured complete UUID lists and must be declared.
+     */
+    public static BanSourceCoverage captureCompleteStandard(
+            Set<String> requiredSources, Map<String, Set<UUID>> externalCompleteLists)
+            throws IOException {
+        if (!Bukkit.isPrimaryThread())
+            throw new IOException("Paper BAN access requires the primary thread");
+        if (requiredSources == null || externalCompleteLists == null
+                || !requiredSources.contains(SOURCE_ID) || !requiredSources.contains("paper-ip"))
+            throw new IOException("Both Paper standard BAN sources must be declared");
+        try {
+            if (!Bukkit.getIPBans().isEmpty())
+                throw new IOException("Nonempty IP BAN list requires authenticated UUID mapping");
+            Set<UUID> profiles = new HashSet<>();
+            for (OfflinePlayer profile : Bukkit.getBannedPlayers()) {
+                if (profile == null || profile.getUniqueId() == null)
+                    throw new IOException("Incomplete Paper profile BAN identity");
+                if (profile.isBanned()) profiles.add(profile.getUniqueId());
+            }
+            Map<String, Set<UUID>> lists = new HashMap<>(externalCompleteLists);
+            if (lists.containsKey(SOURCE_ID) || lists.containsKey("paper-ip"))
+                throw new IOException("External provider cannot replace Paper BAN observations");
+            lists.put(SOURCE_ID, profiles);
+            lists.put("paper-ip", Set.of());
+            return BanSourceCoverage.captureCompleteLists(requiredSources, lists);
+        } catch (IOException failure) {
+            throw failure;
+        } catch (RuntimeException failure) {
+            throw new IOException("Failed to enumerate complete Paper BAN lists", failure);
         }
     }
 

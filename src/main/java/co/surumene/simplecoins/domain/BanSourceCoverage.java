@@ -21,9 +21,52 @@ import java.util.UUID;
  */
 public final class BanSourceCoverage {
     private final Map<UUID, Boolean> bannedByPlayer;
+    private final Set<UUID> completeBannedUnion;
 
     private BanSourceCoverage(Map<UUID, Boolean> bannedByPlayer) {
         this.bannedByPlayer = Map.copyOf(bannedByPlayer);
+        this.completeBannedUnion = null;
+    }
+
+    private BanSourceCoverage(Set<UUID> completeBannedUnion) {
+        this.bannedByPlayer = Map.of();
+        this.completeBannedUnion = Set.copyOf(completeBannedUnion);
+    }
+
+    /**
+     * Alternative representation for providers which authoritatively enumerate
+     * their entire current banned-UUID set. Unlike partial UUID observations,
+     * complete lists can classify a UUID first encountered during the scan.
+     * The caller must establish complete lists and the actual provider roster.
+     */
+    public static BanSourceCoverage captureCompleteLists(
+            Set<String> requiredSourceIds, Map<String, Set<UUID>> completeLists)
+            throws IOException {
+        if (requiredSourceIds == null || requiredSourceIds.isEmpty() || completeLists == null)
+            throw new IOException("Missing complete BAN list declarations");
+        Set<String> required = new HashSet<>();
+        for (String raw : requiredSourceIds) {
+            if (raw == null || raw.isBlank()
+                    || !required.add(raw.trim().toLowerCase(Locale.ROOT)))
+                throw new IOException("Invalid or duplicate required BAN source");
+        }
+        Set<String> actual = new HashSet<>();
+        Set<UUID> union = new HashSet<>();
+        for (var entry : completeLists.entrySet()) {
+            String raw = entry.getKey();
+            if (raw == null || raw.isBlank() || entry.getValue() == null)
+                throw new IOException("Missing complete BAN provider list");
+            String id = raw.trim().toLowerCase(Locale.ROOT);
+            if (!required.contains(id) || !actual.add(id))
+                throw new IOException("Unexpected or duplicate complete BAN provider: " + id);
+            for (UUID subject : entry.getValue()) {
+                if (subject == null) throw new IOException("Missing banned UUID");
+                union.add(subject);
+            }
+        }
+        if (!actual.equals(required))
+            throw new IOException("Missing complete BAN provider list");
+        return new BanSourceCoverage(union);
     }
 
     public static BanSourceCoverage capture(
@@ -61,7 +104,10 @@ public final class BanSourceCoverage {
     }
 
     public boolean currentlyBanned(UUID player) throws IOException {
-        if (player == null || !bannedByPlayer.containsKey(player))
+        if (player == null)
+            throw new IOException("Missing UUID for BAN coverage");
+        if (completeBannedUnion != null) return completeBannedUnion.contains(player);
+        if (!bannedByPlayer.containsKey(player))
             throw new IOException("Missing complete BAN source coverage for " + player);
         return bannedByPlayer.get(player);
     }
