@@ -3,6 +3,8 @@ package co.surumene.simplecoins.a02probe;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import co.surumene.simplecoins.domain.CoinDenomination;
+import co.surumene.simplecoins.domain.AdmissionBarrier;
+import co.surumene.simplecoins.paper.PaperSavedGrantDeliveryService;
 import co.surumene.simplecoins.domain.GrantLedger;
 import co.surumene.simplecoins.domain.GrantReceiptState;
 import co.surumene.simplecoins.domain.PlayerDataReader;
@@ -48,7 +50,11 @@ public final class PaperSaveProbe extends JavaPlugin {
     private static final long ISSUED_VALUE = 5000;
     private final SavedGrantCommitWorker productCommitWorker = new SavedGrantCommitWorker();
 
-    @Override public void onDisable() { productCommitWorker.close(); }
+    private PaperSavedGrantDeliveryService scheduledDelivery;
+    @Override public void onDisable() {
+        if (scheduledDelivery != null) scheduledDelivery.close();
+        productCommitWorker.close();
+    }
 
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(getServer().getIp()) || !getServer().getOnlinePlayers().isEmpty()) {
@@ -707,13 +713,33 @@ public final class PaperSaveProbe extends JavaPlugin {
                 || grants.getLast().denomination() != null
                 || grants.getLast().amount() != 5200)
             throw new IllegalStateException("Wrong authentic ordered amount reservation fixture");
+        // The production lifecycle instance exists, but the real bootstrap
+        // fence is still disarmed. It cannot use this genuine pending grant.
+        var product = getServer().getPluginManager().getPlugin("SimpleCoins");
+        var serviceField = product.getClass().getDeclaredField("savedGrantDelivery");
+        serviceField.setAccessible(true);
+        if (!(serviceField.get(product) instanceof PaperSavedGrantDeliveryService owned))
+            throw new IllegalStateException("Actual product did not own the delivery service");
+        boolean denied = false;
+        try { owned.start(player, grants.getFirst(), actualPlayerOrigin(), 90000L,
+                16 * 1024 * 1024, 64 * 1024 * 1024,
+                ignored -> { throw new AssertionError("Unaudited product callback"); }); }
+        catch (IllegalStateException expected) { denied = true; }
+        if (!denied || !ledger.pending(ID).equals(grants))
+            throw new IllegalStateException("Unaudited product service accepted grant");
+        getLogger().info("PAPER_A02_PRODUCT_SCHEDULED_DISARMED_DENY_PASSED");
         WriterEpochFence epoch = new WriterEpochFence();
         epoch.arm(); // isolated fixture only; not installed-writer closure
-        startQueuedProductBatch(player, ledger,
-                new CoinItemCodec(CoinItemCodec.defaultNames()), epoch, List.copyOf(grants), 0);
+        var gate = new AdmissionBarrier();
+        scheduledDelivery = new PaperSavedGrantDeliveryService(this, gate, epoch, ledger,
+                new CoinItemCodec(CoinItemCodec.defaultNames()), failure -> {
+                    getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                    Bukkit.shutdown();
+                });
+        startQueuedProductBatch(player, ledger, epoch, List.copyOf(grants), 0);
     }
 
-    private void startQueuedProductBatch(Player player, GrantLedger ledger, CoinItemCodec coins,
+    private void startQueuedProductBatch(Player player, GrantLedger ledger,
             WriterEpochFence epoch, List<GrantLedger.Grant> grants, int index) throws Exception {
         if (!Bukkit.isPrimaryThread() || player.isOnline() || playerCountIsNonzero()
                 || epoch.state() != WriterEpochFence.State.OPEN
@@ -721,97 +747,72 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Queued next grant not in genuine sequence order");
         GrantLedger.Grant grant = grants.get(index);
         boolean amountForm = grant.denomination() == null;
-        Class<?> coordinator = Class.forName(
-                "co.surumene.simplecoins.paper.PaperGrantSavedBatchCoordinator",
-                true, PaperSaveProbe.class.getClassLoader());
-        var begin = coordinator.getDeclaredMethod("saveAndSealFirstBatchOnMain",
-                Player.class, GrantLedger.class, GrantLedger.Grant.class, CoinItemCodec.class,
-                WriterEpochFence.class, WorldStorageDiscovery.Manifest.class, int.class, int.class);
-        begin.setAccessible(true);
-        final Object ticket;
-        try {
-            Object result = begin.invoke(null, player, ledger, grant, coins, epoch,
-                    actualPlayerManifest(), 16 * 1024 * 1024, 64 * 1024 * 1024);
-            if (!(result instanceof java.util.Optional<?> option) || option.isEmpty())
-                throw new IllegalStateException("Queued product denied vacant storage");
-            ticket = option.orElseThrow();
-        } catch (InvocationTargetException failure) {
-            throw actualQueuedFailure(failure);
-        }
-        if (epoch.state() != WriterEpochFence.State.SEALED
-                || !ledger.pending(ID).equals(grants.subList(index, grants.size()))
-                || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
-                        .completedSequence() != grant.sequence())
-            throw new IllegalStateException("Main save ACKed a queued grant prematurely");
-        var scheduled = scheduleProductTicket(ticket);
+        var origin = actualPlayerOrigin();
         final Path data = dataFile(), journal = grantDirectory();
-        Thread.ofPlatform().name("a02-ordered-grant-assertions").start(() -> {
-            try {
-                if (Bukkit.isPrimaryThread())
-                    throw new IllegalStateException("Queued verification ran on primary thread");
-                final SavedGrantDeliveryReadback.Proof proof = awaitProductProof(scheduled);
-                List<GrantLedger.Grant> remaining = grants.subList(index + 1, grants.size());
-                var reopened = new GrantLedger(journal);
-                var saved = readDisk(data);
-                var expected = java.math.BigInteger.valueOf(grant.amount());
-                long total = 5000;
-                for (int i = 0; i <= index; i++) total = Math.addExact(total, grants.get(i).amount());
-                if (epoch.state() != WriterEpochFence.State.SEALED
-                        || proof.receipt().active()
-                        || proof.receipt().completedSequence() != grant.sequence()
-                        || proof.matchedStacks() != (amountForm ? 2 : 1)
-                        || !proof.matchedMonetaryValue().equals(expected)
-                        || !ledger.pending(ID).equals(remaining)
-                        || !reopened.pending(ID).equals(remaining)
-                        || reopened.historySnapshot().size() != grants.size() + 1
-                        || reopened.historySnapshot().stream()
-                            .filter(g -> g.sequence() <= grant.sequence()).anyMatch(g -> !g.delivered())
-                        || reopened.historySnapshot().stream()
-                            .filter(g -> g.sequence() > grant.sequence()).anyMatch(GrantLedger.Grant::delivered)
-                        || !proof.receipt().equals(SavedGrantReceiptNbt.readAndVerify(saved, reopened, ID))
-                        || !java.math.BigInteger.valueOf(total).equals(SavedPlayerAssets.extract(saved)
-                            .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
-                    throw new IllegalStateException("Queued physical delta/independent journal did not match exact reservation");
-                final long physicalTotal = total;
-                getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANT_ACK_PASSED"
-                        + " seq=" + grant.sequence() + " newValue=" + grant.amount()
-                        + " physical=" + physicalTotal + " pending=" + remaining.size());
-                Bukkit.getScheduler().runTask(this, () -> {
-                    try {
-                        int exactCount = grants.size() == 2 ? 1 : 0;
-                        verifyQueuedStorage(player, exactCount, amountForm, ledger);
-                        if (remaining.isEmpty()) {
-                            getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANTS_COMPLETE_PASSED"
-                                    + " total=" + physicalTotal + " grants=" + (grants.size() + 1)
-                                    + " pending=0");
-                            Bukkit.shutdown();
-                            return;
+        var complete = (java.util.function.Consumer<PaperSavedGrantDeliveryService.Completion>) result -> {
+            if (!Bukkit.isPrimaryThread() || epoch.state() != WriterEpochFence.State.OPEN
+                    || result.proof().isEmpty())
+                throw new IllegalStateException("Actual scheduler failed to return complete protected grant");
+            var proof = result.proof().orElseThrow();
+            Thread.ofPlatform().name("a02-ordered-grant-assertions").start(() -> {
+                try {
+                    if (Bukkit.isPrimaryThread()) throw new IllegalStateException("Wrong verification thread");
+                    List<GrantLedger.Grant> remaining = grants.subList(index + 1, grants.size());
+                    var reopened = new GrantLedger(journal);
+                    var saved = readDisk(data);
+                    long total = 5000;
+                    for (int i = 0; i <= index; i++) total = Math.addExact(total, grants.get(i).amount());
+                    if (proof.receipt().active() || proof.receipt().completedSequence() != grant.sequence()
+                            || proof.matchedStacks() != (amountForm ? 2 : 1)
+                            || !proof.matchedMonetaryValue().equals(java.math.BigInteger.valueOf(grant.amount()))
+                            || !ledger.pending(ID).equals(remaining) || !reopened.pending(ID).equals(remaining)
+                            || reopened.historySnapshot().size() != grants.size() + 1
+                            || reopened.historySnapshot().stream().filter(g -> g.sequence() <= grant.sequence()).anyMatch(g -> !g.delivered())
+                            || reopened.historySnapshot().stream().filter(g -> g.sequence() > grant.sequence()).anyMatch(GrantLedger.Grant::delivered)
+                            || !proof.receipt().equals(SavedGrantReceiptNbt.readAndVerify(saved, reopened, ID))
+                            || !java.math.BigInteger.valueOf(total).equals(SavedPlayerAssets.extract(saved)
+                                    .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
+                        throw new IllegalStateException("Queued durable delivery differs from exact reservation");
+                    final long physicalTotal = total;
+                    getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANT_ACK_PASSED seq=" + grant.sequence()
+                            + " newValue=" + grant.amount() + " physical=" + total + " pending=" + remaining.size());
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        try {
+                            verifyQueuedStorage(player, grants.size() == 2 ? 1 : 0, amountForm, ledger);
+                            if (remaining.isEmpty()) {
+                                scheduledDelivery.close();
+                                boolean closedRejected = false;
+                                try { scheduledDelivery.start(player, grant, origin, 90000L,
+                                        16 * 1024 * 1024, 64 * 1024 * 1024, ignored -> {}); }
+                                catch (IllegalStateException expected) { closedRejected = true; }
+                                if (!closedRejected) throw new IllegalStateException("Closed service accepted another grant");
+                                getLogger().info("PAPER_A02_PRODUCT_SCHEDULED_LIFECYCLE_PASSED");
+                                getLogger().info("PAPER_A02_PRODUCT_ORDERED_GRANTS_COMPLETE_PASSED total="
+                                        + physicalTotal + " grants=" + (grants.size() + 1) + " pending=0");
+                                Bukkit.shutdown();
+                            } else {
+                                getLogger().info("PAPER_A02_PRODUCT_ORDERED_SAME_FENCE_RESUMED_PASSED");
+                                startQueuedProductBatch(player, ledger, epoch, grants, index + 1);
+                            }
+                        } catch (Throwable failure) {
+                            getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure); Bukkit.shutdown();
                         }
-                        // Production ticket—not a newly invented fixture fence—
-                        // must return the SAME drained generation for the next grant.
-                        var resume = ticket.getClass().getDeclaredMethod(
-                                "resumeAfterVerifiedCompleteOnMain");
-                        resume.setAccessible(true);
-                        try { resume.invoke(ticket); }
-                        catch (InvocationTargetException failure) {
-                            throw actualQueuedFailure(failure);
-                        }
-                        if (epoch.state() != WriterEpochFence.State.OPEN)
-                            throw new IllegalStateException("Verified complete grant did not return writer epoch");
-                        getLogger().info("PAPER_A02_PRODUCT_ORDERED_SAME_FENCE_RESUMED_PASSED");
-                        startQueuedProductBatch(player, ledger, coins, epoch, grants, index + 1);
-                    } catch (Throwable failure) {
-                        getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
-                        Bukkit.shutdown();
-                    }
-                });
-            } catch (Throwable failure) {
-                Bukkit.getScheduler().runTask(this, () -> {
-                    getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
-                    Bukkit.shutdown();
-                });
-            }
-        });
+                    });
+                } catch (Throwable failure) {
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure); Bukkit.shutdown();
+                    });
+                }
+            });
+        };
+        scheduledDelivery.start(player, grant, origin, 90000L, 16 * 1024 * 1024, 64 * 1024 * 1024, complete);
+        if (epoch.state() != WriterEpochFence.State.SEALED)
+            throw new IllegalStateException("Scheduled preflight did not hold the epoch");
+        boolean busyRejected = false;
+        try { scheduledDelivery.start(player, grant, origin, 90000L, 16 * 1024 * 1024,
+                64 * 1024 * 1024, ignored -> { throw new AssertionError("duplicate callback"); }); }
+        catch (IllegalStateException expected) { busyRejected = true; }
+        if (!busyRejected) throw new IllegalStateException("Concurrent delivery accepted");
     }
 
     private static Exception actualQueuedFailure(InvocationTargetException invocation) {

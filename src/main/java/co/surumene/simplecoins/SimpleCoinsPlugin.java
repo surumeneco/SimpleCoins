@@ -16,6 +16,7 @@ import co.surumene.simplecoins.paper.WalletMenu;
 import co.surumene.simplecoins.paper.WanderingTraderDropConfigReader;
 import co.surumene.simplecoins.paper.WorldScopeConfigReader;
 import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
+import co.surumene.simplecoins.paper.PaperSavedGrantDeliveryService;
 import co.surumene.simplecoins.paper.PaperWonderfulReaderRegistry;
 import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
@@ -47,6 +48,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private CoinExchangeRecipes exchangeRecipes;
     private WalletCrafting walletCrafting;
     private PaperSavedSourceDiscovery sourceDiscovery;
+    private PaperSavedGrantDeliveryService savedGrantDelivery;
 
     @Override
     public void onEnable() {
@@ -189,6 +191,15 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         "Cannot stage verified JE/BE currency resources", invalidPack);
             }
             CoinItemCodec coinCodec = new CoinItemCodec(names);
+            // Own the real saved-grant lifecycle, but never start it before
+            // the complete installed writer coverage and startup gate exist.
+            savedGrantDelivery = new PaperSavedGrantDeliveryService(this, admission,
+                    nativeWriterFence, issuanceGrants, coinCodec, failure -> {
+                        publication.revoke();
+                        admission.fatalFailure();
+                        getLogger().log(Level.SEVERE, "Protected saved grant delivery failed", failure);
+                        Bukkit.shutdown();
+                    });
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
             exchangeRecipes = new CoinExchangeRecipes(this, coinCodec);
             exchangeRecipes.register();
@@ -233,6 +244,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (savedGrantDelivery != null) {
+                savedGrantDelivery.close();
+                savedGrantDelivery = null;
+            }
             if (normalJournalWatchdog != null) {
                 try { normalJournalWatchdog.close(); }
                 catch (RuntimeException closeFailure) { failure.addSuppressed(closeFailure); }
@@ -266,6 +281,10 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (savedGrantDelivery != null) {
+            savedGrantDelivery.close();
+            savedGrantDelivery = null;
+        }
         if (normalJournalWatchdog != null) {
             normalJournalWatchdog.close();
             normalJournalWatchdog = null;
