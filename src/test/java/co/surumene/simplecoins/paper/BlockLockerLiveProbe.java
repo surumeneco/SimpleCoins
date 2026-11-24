@@ -31,6 +31,13 @@ public final class BlockLockerLiveProbe extends JavaPlugin {
     @Override public void onEnable() {
         try {
             if (!Bukkit.isPrimaryThread()) throw new IOException("Not on main thread");
+            var settings = PaperBlockLockerSettings.capture();
+            if (!settings.containers().containsAll(Set.of("minecraft:chest", "minecraft:barrel", "minecraft:hopper", "minecraft:white_shulker_box"))
+                    || !settings.privateHeaders().contains("[Private]")
+                    || !settings.moreHeaders().contains("[More Users]")
+                    || !settings.everyoneAliases().contains("Everyone"))
+                throw new IOException("Installed BlockLocker configuration was not captured");
+            getLogger().info("PAPER_A04_RUNTIME_BLOCKLOCKER_SETTINGS_PASSED");
             World world = Bukkit.getWorlds().getFirst();
             if ("reload".equals(System.getProperty("a04.probe.phase", "create"))) {
                 Bukkit.getScheduler().runTaskLater(this, () -> {
