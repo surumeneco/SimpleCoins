@@ -1,0 +1,5 @@
+# Correct physical cargo authority while a Wonderful storage GUI is open
+
+Issue #423 / #5. Existing approved 02A/02B (§通常時の仕訳・差分反映) and Confirmed memory-accounting and A05 WCL consumer Process/PI/TCE are authoritative. This is correction of physical observation, not a new accounting policy or provider release.
+
+The shipped WWC 2.1.1 schedules cargo sync after clicks; WWW 1.1.2 persists cargo only at close. While the genuine GUI is open the cargo slots are the physical authority. Count those slots instead of the stale stored cargo, preserving hidden slots and equipment. On close resume the same provider storage; do not count the transfer twice. No persistent per-holder balance cache; only references to active GUI and its verified visible slot selection. On player-entity interaction observe the player's original state as well. Acceptance: actual distributed holder classes, actual real Paper ItemStacks and real provider read/store, open GUI monetary changes followed by close without a duplicate delta. This does not prove direct unnotified writes or full admission readiness.
