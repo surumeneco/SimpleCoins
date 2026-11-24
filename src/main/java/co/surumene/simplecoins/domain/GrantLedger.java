@@ -29,7 +29,8 @@ public final class GrantLedger {
     private volatile long mutationRevision;
 
     public GrantLedger(Path directory) throws IOException {
-        this.directory = directory;
+        this.directory = directory.toAbsolutePath().normalize();
+        directory = this.directory;
         Files.createDirectories(directory);
         try (var listing = Files.list(directory)) {
             for (Path file : listing.filter(p -> p.getFileName().toString().endsWith(".grant")).toList()) {
@@ -206,6 +207,105 @@ public final class GrantLedger {
     public void requireCurrentPlanningView(VerifiedPlayerSnapshot view) {
         if (view == null || view.owner != this || failed || view.revision != mutationRevision)
             throw new IllegalStateException("Issuance planning view is stale or foreign");
+    }
+
+    private static final int FIRST_BATCH_MAGIC = 0x53434931; // SCI1
+    private static final int MAX_INTENT_COMPRESSED = 16 * 1024 * 1024;
+    private static final int INTENT_OVERHEAD = 16 * 1024;
+
+    /**
+     * Immutable prior playerdata for one authentic first physical batch. These
+     * operations belong on the protected worker, never the primary thread.
+     * The record is NOT an ACK, receipt or proof of a later save.
+     */
+    public synchronized Optional<byte[]> readFirstBatchIntent(VerifiedPlayerSnapshot view,
+            Grant grant, Path source, int maximumBytes) throws IOException {
+        requirePendingIntentView(view, grant);
+        String identity = intentSource(grant, source);
+        requireIntentBudget(maximumBytes);
+        Path target = intentPath(grant);
+        if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+        return Optional.of(decodeIntent(target, grant, identity, maximumBytes));
+    }
+
+    public synchronized void writeFirstBatchIntent(VerifiedPlayerSnapshot view,
+            Grant grant, Path source, byte[] compressedBefore, int maximumBytes) throws IOException {
+        requirePendingIntentView(view, grant);
+        String identity = intentSource(grant, source);
+        requireIntentBudget(maximumBytes);
+        if (compressedBefore == null || compressedBefore.length == 0 || compressedBefore.length > maximumBytes)
+            throw new IOException("Prior playerdata exceeds first-batch intent budget");
+        byte[] reservation = encode(grant);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(buffer)) {
+            out.writeInt(FIRST_BATCH_MAGIC);
+            out.writeInt(reservation.length); out.write(reservation);
+            out.writeUTF(identity);
+            out.writeInt(compressedBefore.length); out.write(compressedBefore);
+        }
+        // Exclusive create; a retry cannot overwrite the sole prior-state evidence.
+        DurableFile.writeNew(intentPath(grant), buffer.toByteArray());
+        requireCurrentPlanningView(view);
+    }
+
+    /** Cleanup is legal only after genuine durable ACK; a leftover is harmless. */
+    public synchronized void removeAcknowledgedFirstBatchIntent(Grant grant) throws IOException {
+        checkHealthy();
+        Grant current = requireAuthenticReservation(grant);
+        if (!current.delivered() || grant.delivered())
+            throw new IllegalStateException("Cannot remove pending or foreign grant intent");
+        Path target = intentPath(grant);
+        if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) return;
+        decodeIntent(target, grant, null, MAX_INTENT_COMPRESSED);
+        Files.delete(target);
+        try (var parent = java.nio.channels.FileChannel.open(target.getParent(), StandardOpenOption.READ)) {
+            parent.force(true);
+        }
+    }
+
+    private void requirePendingIntentView(VerifiedPlayerSnapshot view, Grant grant) {
+        requireCurrentPlanningView(view);
+        if (!view.pending().contains(grant) || !requireAuthenticReservation(grant).equals(grant))
+            throw new IllegalStateException("Intent does not identify an authentic pending grant");
+    }
+
+    private Path intentPath(Grant grant) {
+        return directory.resolve(grant.sequence() + ".intent");
+    }
+
+    private static String intentSource(Grant grant, Path source) {
+        Path canonical = Objects.requireNonNull(source, "saved playerdata path").toAbsolutePath().normalize();
+        String identity = canonical.toString();
+        if (!canonical.getFileName().toString().equals(grant.player() + ".dat") || identity.length() > 4096)
+            throw new IllegalArgumentException("Invalid canonical intent source identity");
+        return identity;
+    }
+
+    private static void requireIntentBudget(int maximumBytes) {
+        if (maximumBytes < 1 || maximumBytes > MAX_INTENT_COMPRESSED)
+            throw new IllegalArgumentException("Invalid first-batch intent byte budget");
+    }
+
+    private static byte[] decodeIntent(Path target, Grant grant, String expectedSource,
+            int maximumBytes) throws IOException {
+        byte[] payload = DurableFile.read(target, Math.addExact(maximumBytes, INTENT_OVERHEAD));
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload))) {
+            if (in.readInt() != FIRST_BATCH_MAGIC) throw new IOException("Unknown first-batch intent schema");
+            int reservationSize = in.readInt();
+            if (reservationSize < 1 || reservationSize > 8192
+                    || !Arrays.equals(in.readNBytes(reservationSize), encode(grant)))
+                throw new IOException("First-batch intent reservation identity mismatch");
+            String source = in.readUTF();
+            if (!source.equals(intentSource(grant, Path.of(source)))
+                    || (expectedSource != null && !source.equals(expectedSource)))
+                throw new IOException("First-batch intent source identity mismatch");
+            int size = in.readInt();
+            if (size < 1 || size > maximumBytes || size != in.available())
+                throw new IOException("Invalid first-batch prior-state size");
+            return in.readNBytes(size);
+        } catch (IllegalArgumentException invalid) {
+            throw new IOException("Malformed first-batch intent", invalid);
+        }
     }
 
     private void advanceMutationRevision() {

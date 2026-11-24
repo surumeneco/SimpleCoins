@@ -16,6 +16,10 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.bounded-saved-commit-worker.md'
       - 'Lifecycle/Works/simplecoins.a02.protected-off-main-preflight.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-scheduled-delivery-lifecycle.md'
+      - 'Lifecycle/Works/simplecoins.a02.first-batch-durable-intent-recovery.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/PlayerDataReader.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadback.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantFirstBatchIntent*.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperSavedGrantDeliveryService.java'
       - 'src/main/java/co/surumene/simplecoins/domain/WriterEpochFence.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantReceiptNbt.java'
@@ -98,6 +102,17 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.first-batch-durable-intent-recovery.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind vectors --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind queue --work "$work"
+          cache=Lifecycle/Works/.cat-flow/cache/a02-durable-intent
+          out=Lifecycle/Works/.cat-flow/generated/A02DurableIntentDecisionGeneratedTest.java
+          python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
+          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
           work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
@@ -289,6 +304,50 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
+      - name: Recover immutable first-batch intent on independent Paper boots after forced crash
+        shell: bash
+        run: |
+          set -euo pipefail
+          for boundary in before-save after-save; do
+            root="smoke-intent-$boundary"
+            cp -a smoke "$root"
+            (
+              cd "$root"
+              java -Da02.probe.phase=product-async-commit "-Da02.probe.intentCrash=$boundary" \
+                -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-intent-crash.log 2>&1 &
+              pid=$!
+              trap 'kill -KILL "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+              ready=0
+              marker="PAPER_A02_INTENT_$(printf '%s' "$boundary" | tr '[:lower:]-' '[:upper:]_')_CRASH_READY"
+              for _ in $(seq 1 180); do
+                if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-intent-crash.log || ! kill -0 "$pid" 2>/dev/null; then
+                  tail -180 paper-intent-crash.log; exit 1
+                fi
+                if grep -Fq "$marker" paper-intent-crash.log; then ready=1; break; fi
+                sleep 1
+              done
+              test "$ready" = 1
+              test -f plugins/SimpleCoins/grants/2.intent
+              if grep -Fq 'Saving worlds' paper-intent-crash.log; then exit 1; fi
+              kill -KILL "$pid"
+              set +e; wait "$pid"; code=$?; set -e
+              trap - EXIT
+              test "$code" = 137
+              saved=false
+              if [ "$boundary" = after-save ]; then saved=true; fi
+              timeout --signal=TERM --kill-after=10s 200s \
+                java -Da02.probe.phase=product-intent-recover "-Da02.probe.intentAlreadySaved=$saved" \
+                -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-intent-recover.log 2>&1 || { tail -180 paper-intent-recover.log; exit 1; }
+              grep -F "PAPER_A02_DURABLE_INTENT_RECOVERY_PASSED alreadySaved=$saved total=10000 pending=0" paper-intent-recover.log
+              if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-intent-recover.log; then exit 1; fi
+              test ! -e plugins/SimpleCoins/grants/2.intent
+              timeout --signal=TERM --kill-after=10s 200s \
+                java -Da02.probe.phase=product-coordinator-acked-reload -Xms256M -Xmx1024M \
+                -jar paper.jar nogui </dev/null > paper-intent-reload.log 2>&1 || { tail -180 paper-intent-reload.log; exit 1; }
+              grep -F 'PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED total=10000 grants=2 pending=0' paper-intent-reload.log
+              if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-intent-reload.log; then exit 1; fi
+            )
+          done
       - name: Actual Paper amount and ordered reservations through product worker ACK
         shell: bash
         run: |
@@ -718,5 +777,6 @@ jobs:
             smoke-product-async/*.log
             smoke-product-queued/*.log
             smoke-product-amount/*.log
+            smoke-intent-*/*.log
           if-no-files-found: ignore
           retention-days: 7

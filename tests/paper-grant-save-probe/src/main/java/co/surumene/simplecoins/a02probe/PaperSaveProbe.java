@@ -69,6 +69,10 @@ public final class PaperSaveProbe extends JavaPlugin {
                 else if ("acked-reload".equals(phase)) ackedReloadPhase(player);
                 else if ("verified-delivery".equals(phase)) verifiedDeliveryPhase(player);
                 else if ("product-coordinator-full".equals(phase)) productCoordinatorFullPhase(player);
+                else if ("product-intent-recover".equals(phase)) {
+                    productIntentRecoverPhase(player);
+                    return;
+                }
                 else if ("product-async-commit".equals(phase)) {
                     productAsyncCommitPhase(player);
                     return; // completion and shutdown are scheduled from the real worker
@@ -573,10 +577,30 @@ public final class PaperSaveProbe extends JavaPlugin {
                         if (player.getInventory().getItem(1) != null
                                 || !priorReceipt.equals(PaperGrantReceiptPdc.read(player.getPersistentDataContainer())))
                             throw new IllegalStateException("Off-main preflight mutated physical money");
+                        String crash = System.getProperty("a02.probe.intentCrash", "");
+                        if ("before-save".equals(crash)) {
+                            if (ledger.readFirstBatchIntent(ledger.verifiedPlayerSnapshot(ID), second,
+                                    dataFile(), 16 * 1024 * 1024).isEmpty())
+                                throw new IllegalStateException("Missing durable intent before physical save");
+                            getLogger().info("PAPER_A02_INTENT_BEFORE_SAVE_CRASH_READY");
+                            return;
+                        }
                         Object prepared = save.invoke(preflight, player, codec);
                         if (!(prepared instanceof java.util.Optional<?> pending) || pending.isEmpty())
                             throw new IllegalStateException("Async product failed to save a vacant first batch");
                         getLogger().info("PAPER_A02_PRODUCT_PROTECTED_OFF_MAIN_PREFLIGHT_PASSED");
+                        if ("after-save".equals(crash)) {
+                            var disk = readDisk(dataFile());
+                            if (!ledger.pending(ID).equals(List.of(second))
+                                    || ledger.readFirstBatchIntent(ledger.verifiedPlayerSnapshot(ID), second,
+                                            dataFile(), 16 * 1024 * 1024).isEmpty()
+                                    || SavedGrantReceiptNbt.readAndVerify(disk, ledger, ID).completedSequence() != 2
+                                    || !java.math.BigInteger.valueOf(10000).equals(SavedPlayerAssets.extract(disk)
+                                            .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
+                                throw new IllegalStateException("Durable intent/save did not reach pending crash boundary");
+                            getLogger().info("PAPER_A02_INTENT_AFTER_SAVE_CRASH_READY");
+                            return;
+                        }
                         finishAsyncProductSave(player, ledger, epoch, pending.orElseThrow());
                     } catch (Throwable failure) {
                         getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -588,6 +612,57 @@ public final class PaperSaveProbe extends JavaPlugin {
                 Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
             }
         });
+    }
+
+    /** Independent cold boot consumes the actual durable intent, not a test-supplied plan. */
+    private void productIntentRecoverPhase(Player player) throws Exception {
+        player.loadData();
+        GrantLedger ledger = activeProductLedger();
+        var pending = ledger.pending(ID);
+        if (pending.size() != 1 || pending.getFirst().sequence() != 2)
+            throw new IllegalStateException("Missing pending grant after intent crash");
+        var grant = pending.getFirst();
+        Path data = dataFile(), intent = grantDirectory().resolve("2.intent");
+        if (!Files.isRegularFile(intent)
+                || ledger.readFirstBatchIntent(ledger.verifiedPlayerSnapshot(ID), grant, data,
+                        16 * 1024 * 1024).isEmpty())
+            throw new IllegalStateException("First-batch intent was not durable across SIGKILL");
+        var before = readDisk(data);
+        boolean alreadySaved = SavedGrantReceiptNbt.readAndVerify(before, ledger, ID).completedSequence() == 2;
+        if (alreadySaved != Boolean.getBoolean("a02.probe.intentAlreadySaved"))
+            throw new IllegalStateException("Unexpected saved state at intent recovery");
+        byte[] oldBytes = Files.readAllBytes(data);
+        Object oldChangeTime = Files.getAttribute(data, "unix:ctime");
+        var epoch = new WriterEpochFence();
+        epoch.arm(); // only isolated fixture
+        scheduledDelivery = new PaperSavedGrantDeliveryService(this, new AdmissionBarrier(), epoch,
+                ledger, new CoinItemCodec(CoinItemCodec.defaultNames()), failure -> {
+                    getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure); Bukkit.shutdown();
+                });
+        scheduledDelivery.start(player, grant, actualPlayerOrigin(), 90000L,
+                16 * 1024 * 1024, 64 * 1024 * 1024, result -> {
+                    if (!Bukkit.isPrimaryThread() || epoch.state() != WriterEpochFence.State.OPEN
+                            || result.proof().orElseThrow().receipt().completedSequence() != 2)
+                        throw new IllegalStateException("Intent recovery did not return a verified complete batch");
+                    Thread.ofPlatform().name("a02-intent-recovery-assertions").start(() -> {
+                        try {
+                            var fresh = readDisk(data);
+                            if (!ledger.pending(ID).isEmpty() || Files.exists(intent)
+                                    || !java.math.BigInteger.valueOf(10000).equals(SavedPlayerAssets.extract(fresh)
+                                            .values().stream().reduce(java.math.BigInteger.ZERO, java.math.BigInteger::add)))
+                                throw new IllegalStateException("Recovery lost, duplicated or failed to acknowledge grant");
+                            if (alreadySaved && (!Arrays.equals(oldBytes, Files.readAllBytes(data))
+                                    || !oldChangeTime.equals(Files.getAttribute(data, "unix:ctime"))))
+                                throw new IllegalStateException("Recovered completed saved batch was physically rewritten");
+                            getLogger().info("PAPER_A02_DURABLE_INTENT_RECOVERY_PASSED alreadySaved="
+                                    + alreadySaved + " total=10000 pending=0");
+                            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        } catch (Throwable failure) {
+                            getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
+                            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+                        }
+                    });
+                });
     }
 
     private void finishAsyncProductSave(Player player, GrantLedger ledger, WriterEpochFence epoch,
