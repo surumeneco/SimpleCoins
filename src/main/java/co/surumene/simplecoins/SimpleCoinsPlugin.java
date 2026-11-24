@@ -20,6 +20,7 @@ import co.surumene.simplecoins.paper.PaperSavedSourceDiscovery;
 import co.surumene.simplecoins.paper.PaperSavedGrantDeliveryService;
 import co.surumene.simplecoins.paper.PaperWonderfulReaderRegistry;
 import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
+import co.surumene.simplecoins.paper.PaperWriterRosterMonitor;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import org.bukkit.Bukkit;
@@ -51,6 +52,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
     private WalletCrafting walletCrafting;
     private PaperSavedSourceDiscovery sourceDiscovery;
     private PaperSavedGrantDeliveryService savedGrantDelivery;
+    private PaperWriterRosterMonitor writerRosterMonitor;
 
     @Override
     public void onEnable() {
@@ -71,6 +73,17 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     new PaperNativeSaveFenceAdapter(nativeWriterFence).bindIfAgentPresent();
             getLogger().info("SIMPLECOINS_NATIVE_WRITER_BRIDGE_PASSIVE bound="
                     + nativeBridgePresent + " (not armed; G0/G3/Admission denied)");
+            writerRosterMonitor = new PaperWriterRosterMonitor(this, reason -> {
+                WriterEpochFence.State prior = nativeWriterFence.state();
+                nativeWriterFence.invalidate();
+                publication.revoke();
+                // No admission has been opened in the passive bootstrap. If an
+                // actual writer generation was armed, stop rather than continue
+                // with an invalidated generation and a different plugin universe.
+                if (prior == WriterEpochFence.State.OPEN || prior == WriterEpochFence.State.SEALED)
+                    Bukkit.shutdown();
+            });
+            writerRosterMonitor.start();
             // Open and check persistent monetary evidence before registering
             // any runtime listener/service. This is NOT world reconciliation.
             try {
@@ -252,6 +265,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             getLogger().warning("Settlement engine not connected; player admission remains disabled.");
         } catch (RuntimeException | Error failure) {
             admission.fatalFailure();
+            if (writerRosterMonitor != null) writerRosterMonitor.close();
+            if (nativeWriterFence != null) nativeWriterFence.invalidate();
             if (protectedSettlement != null) {
                 protectedSettlement.close();
                 protectedSettlement = null;
@@ -293,6 +308,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (writerRosterMonitor != null) writerRosterMonitor.close();
+        if (nativeWriterFence != null) nativeWriterFence.invalidate();
         if (protectedSettlement != null) {
             protectedSettlement.close();
             protectedSettlement = null;

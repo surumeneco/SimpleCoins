@@ -108,11 +108,23 @@ public final class InventoryHopperOutputWriterProbe {
             }
         }, probe);
         // First require a real *PASSIVE* transfer; a sealed no-op is not evidence.
-        Bukkit.getScheduler().runTaskLater(probe, () -> {
+        // A force-loaded chunk does not necessarily become block-ticking on the
+        // very first scheduler tick. Poll for the real transfer, not elapsed time.
+        // The exact same physical/native-event oracle must succeed within 200 ticks.
+        AtomicInteger passivePolls = new AtomicInteger();
+        Bukkit.getScheduler().runTaskTimer(probe, task -> {
             try {
-                check(count(hopper, codec) == 0 && count(chest, codec) == 2
-                        && matches.get() > 0 && stack[0].contains("HopperBlockEntity#"),
-                        "Passive actual Hopper→Chest native output not established");
+                int passiveFrom = count(hopper, codec), passiveTo = count(chest, codec);
+                check(passiveFrom + passiveTo == 2, "Passive actual Hopper money lost or duplicated");
+                boolean observed = passiveFrom == 0 && passiveTo == 2 && matches.get() > 0
+                        && stack[0].contains("HopperBlockEntity#");
+                if (!observed) {
+                    check(passivePolls.incrementAndGet() < 40,
+                            "Passive actual Hopper→Chest native output not established"
+                                    + " hopper=" + passiveFrom + " chest=" + passiveTo + " events=" + matches.get());
+                    return;
+                }
+                task.cancel();
                 System.out.println("PAPER_A01_REAL_HOPPER_OUTPUT_PASSIVE_BASELINE"
                         + " hopper=2->0 chest=0->2 events=" + matches.get());
                 chest.setItem(0, null);
@@ -197,6 +209,6 @@ public final class InventoryHopperOutputWriterProbe {
                     } catch (Throwable failure) { fail(failure); }
                 }, 60L);
             } catch (Throwable failure) { fail(failure); }
-        }, 50L);
+        }, 5L, 5L);
     }
 }
