@@ -102,7 +102,7 @@ public final class SettlementSnapshotPublisher {
         staged.set(null);
     }
 
-    private static SettlementAccumulator.Result verifiedCopy(SettlementAccumulator.Result result) {
+    static SettlementAccumulator.Result verifiedCopy(SettlementAccumulator.Result result) {
         Objects.requireNonNull(result, "settlement result");
         Map<UUID, BigInteger> balances = Map.copyOf(result.personalBalances());
         List<SettlementAccumulator.DeadLocation> locations = List.copyOf(result.deadLocations());

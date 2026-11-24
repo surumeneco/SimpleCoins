@@ -367,6 +367,194 @@ final class SettlementProtectedPublisherTest {
                 publisher.current().orElseThrow().statistics().worldTotal());
     }
 
+    // Actual compressed saved-stage and durable journal. The tracking/physical
+    // callbacks below are isolated oracles, NOT Paper all-writer certificates.
+    private SettlementProtectedPublisher normalPublisher(
+            WriterEpochFence fence, WriterEpochFence.Seal seal,
+            AdmissionBarrier gate, AtomicBoolean tracking) {
+        return new SettlementProtectedPublisher(fence, seal, gate, tracking::get, () -> true);
+    }
+
+    @Test void realSavedStageHandsOffToNormalJournalWithoutReplayingHistoricalMoney() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        var path = temp.resolve("normal");
+        UUID historical = UUID.randomUUID();
+        var player = NormalMutationJournal.Account.player(PLAYER);
+        var external = NormalMutationJournal.Account.external();
+        var free = NormalMutationJournal.Account.free();
+        try (var old = new NormalMutationJournal(path)) {
+            old.prepare(historical, external, player, 5000);
+            old.markEventApplied(historical);
+        }
+        try (var journal = new NormalMutationJournal(path)) {
+            assertTrue(journal.hasUnreconciledFromStartup());
+            var gate = new AdmissionBarrier(); long generation = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var tracking = new AtomicBoolean(true);
+            var publisher = normalPublisher(fence, seal, gate, tracking);
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            assertTrue(publisher.current().isEmpty());
+            assertEquals(WriterEpochFence.State.SEALED, fence.state());
+            var notReady = new SettlementWriterEpochDecision.Evidence(true, true, true,
+                    true, true, false, true, false);
+            assertEquals(SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED,
+                    publisher.completeNormalHandoff(generation, prepared, notReady));
+            assertFalse(publisher.mayAdmit());
+            assertEquals(SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH,
+                    publisher.completeNormalHandoff(generation, prepared, allEvidence()));
+            assertEquals(WriterEpochFence.State.OPEN, fence.state());
+            assertTrue(publisher.mayAdmit());
+            assertEquals(BigInteger.valueOf(5000),
+                    publisher.current().orElseThrow().statistics().worldTotal());
+            assertThrows(IllegalStateException.class, () -> fence.requireDrained(seal));
+
+            var normal = publisher.normalSession();
+            var previous = new NormalSettlementSession.Movement(historical, external, player,
+                    5000, null, null);
+            assertEquals(NormalSettlementSession.Outcome.HISTORICAL,
+                    normal.apply(previous, () -> fail("Historical physical operation replayed")));
+            var physical = new java.util.concurrent.atomic.AtomicInteger(5000);
+            var transfer = new NormalSettlementSession.Movement(UUID.randomUUID(),
+                    player, free, 1000, null, null);
+            assertEquals(NormalSettlementSession.Outcome.APPLIED,
+                    normal.apply(transfer, () -> {
+                        // Normal instrumented root can actually enter again.
+                        var root = fence.enterRoot();
+                        assertEquals(4000, physical.addAndGet(-1000));
+                        root.normalReturn();
+                        assertEquals(NormalMutationJournal.Phase.PREPARED,
+                                journal.unresolved().getLast().phase());
+                    }));
+            var result = publisher.current().orElseThrow();
+            assertEquals(BigInteger.valueOf(4000), result.personalBalances().get(PLAYER));
+            assertEquals(BigInteger.valueOf(1000), result.free());
+            assertEquals(BigInteger.valueOf(5000), result.statistics().worldTotal());
+            assertEquals(NormalSettlementSession.Outcome.DUPLICATE,
+                    normal.apply(transfer, () -> fail("Duplicate physical operation replayed")));
+            assertEquals(4000, physical.get());
+            assertEquals(2, journal.unresolved().size());
+            assertEquals(NormalMutationJournal.Phase.EVENT_APPLIED,
+                    journal.unresolved().getLast().phase());
+            tracking.set(false);
+            assertTrue(publisher.current().isEmpty());
+            assertEquals(AdmissionBarrier.State.FAILED, gate.state());
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        }
+        try (var reopened = new NormalMutationJournal(path)) {
+            assertEquals(2, reopened.unresolved().size());
+            assertTrue(reopened.hasUnreconciledFromStartup(),
+                    "Every new process still needs physical settlement");
+        }
+    }
+
+    @Test void sameHeadJournalPhaseDriftInvalidatesPreparedHandoff() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        try (var journal = new NormalMutationJournal(temp.resolve("normal"))) {
+            UUID prior = UUID.randomUUID();
+            journal.prepare(prior, NormalMutationJournal.Account.external(),
+                    NormalMutationJournal.Account.free(), 5000);
+            var gate = new AdmissionBarrier(); long gen = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var publisher = normalPublisher(fence, seal, gate, new AtomicBoolean(true));
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            journal.markEventApplied(prior); // same tail sequence, different durable record
+            assertThrows(IllegalStateException.class, () ->
+                    publisher.completeNormalHandoff(gen, prepared, allEvidence()));
+            assertFalse(publisher.mayAdmit());
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        }
+    }
+
+    @Test void outsideJournalMutationInvalidatesNormalSession() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        try (var journal = new NormalMutationJournal(temp.resolve("normal"))) {
+            var gate = new AdmissionBarrier(); long gen = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var publisher = normalPublisher(fence, seal, gate, new AtomicBoolean(true));
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            publisher.completeNormalHandoff(gen, prepared, allEvidence());
+            journal.prepare(UUID.randomUUID(), NormalMutationJournal.Account.external(),
+                    NormalMutationJournal.Account.free(), 5000);
+            assertFalse(publisher.mayAdmit());
+            assertEquals(AdmissionBarrier.State.FAILED, gate.state());
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        }
+    }
+
+    @Test void failedPhysicalVerificationKeepsPreparedJournalAndRevokes() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        try (var journal = new NormalMutationJournal(temp.resolve("normal"))) {
+            var gate = new AdmissionBarrier(); long gen = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var publisher = normalPublisher(fence, seal, gate, new AtomicBoolean(true));
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            publisher.completeNormalHandoff(gen, prepared, allEvidence());
+            var movement = new NormalSettlementSession.Movement(UUID.randomUUID(),
+                    NormalMutationJournal.Account.player(PLAYER),
+                    NormalMutationJournal.Account.free(), 1000, null, null);
+            assertThrows(IOException.class, () -> publisher.normalSession().apply(movement, () -> {
+                throw new IOException("Unverified physical change");
+            }));
+            assertEquals(NormalMutationJournal.Phase.PREPARED,
+                    journal.unresolved().getFirst().phase());
+            assertTrue(publisher.current().isEmpty());
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        }
+    }
+
+    @Test void deadLocationMovementChangesDWithoutIncludingItInT() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        try (var journal = new NormalMutationJournal(temp.resolve("normal"))) {
+            var gate = new AdmissionBarrier(); long gen = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var publisher = normalPublisher(fence, seal, gate, new AtomicBoolean(true));
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            publisher.completeNormalHandoff(gen, prepared, allEvidence());
+            var owner = UUID.randomUUID();
+            var dead = NormalMutationJournal.Account.dead(owner);
+            var player = NormalMutationJournal.Account.player(PLAYER);
+            var free = NormalMutationJournal.Account.free();
+            var location = new NormalSettlementSession.DeadEndpoint(
+                    AssetOwner.DeadReason.MISSING_PLAYERDATA, "world/chest/1");
+            publisher.normalSession().apply(new NormalSettlementSession.Movement(UUID.randomUUID(),
+                    player, dead, 2000, null, location), () -> {});
+            var result = publisher.current().orElseThrow();
+            assertEquals(BigInteger.valueOf(2000), result.dead());
+            assertEquals(BigInteger.valueOf(3000), result.statistics().worldTotal());
+            assertEquals(java.util.List.of(new SettlementAccumulator.DeadLocation(owner,
+                    location.reason(), BigInteger.valueOf(2000), location.location())),
+                    result.deadLocations());
+            publisher.normalSession().apply(new NormalSettlementSession.Movement(UUID.randomUUID(),
+                    dead, free, 500, location, null), () -> {});
+            result = publisher.current().orElseThrow();
+            assertEquals(BigInteger.valueOf(1500), result.dead());
+            assertEquals(BigInteger.valueOf(3500), result.statistics().worldTotal());
+            assertEquals(BigInteger.valueOf(1500), result.deadLocations().getFirst().value());
+        }
+    }
+
+    @Test void lostTrackingBeforeHandoffCannotPublish() throws Exception {
+        savedCoin(PLAYER, true);
+        var disk = realStage();
+        try (var journal = new NormalMutationJournal(temp.resolve("normal"))) {
+            var gate = new AdmissionBarrier(); long gen = gate.begin();
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var tracking = new AtomicBoolean(true);
+            var publisher = normalPublisher(fence, seal, gate, tracking);
+            var prepared = publisher.prepareNormalHandoff(disk.staged(), disk.manifest(), journal);
+            tracking.set(false);
+            assertThrows(IllegalStateException.class, () ->
+                    publisher.completeNormalHandoff(gen, prepared, allEvidence()));
+            assertFalse(publisher.mayAdmit());
+            assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+        }
+    }
+
     /**
      * An authentic saved byte witness is not an authorization to substitute
      * an unrelated accumulator. The original A01 stage API was a public

@@ -14,10 +14,11 @@ import java.util.function.BooleanSupplier;
  * certificate is wired to bootstrap. Therefore this class cannot be invoked
  * from SimpleCoinsPlugin or registered as an AdmissionPermit provider yet.
  *
- * Its sole local guarantee is that an already proven, completely drained
- * writer epoch stays SEALED through the final atomic accumulator snapshot
- * replacement and barrier READY transition. Other A01 evidence is supplied
- * by a separately accountable authoritative observer, not inferred here.
+ * The legacy isolated path retains its sealed-only publication contract.
+ * The normal handoff binds a complete immutable baseline and actual journal
+ * cut before switching the epoch and exposing READY, with roots excluded
+ * throughout. Other A01 evidence comes from the accountable external
+ * observer; neither route is a complete writer/normal tracking certificate.
  */
 final class SettlementProtectedPublisher {
     private final WriterEpochFence fence;
@@ -26,6 +27,24 @@ final class SettlementProtectedPublisher {
     private final BooleanSupplier journalActive;
     private final BooleanSupplier noOnlinePlayers;
     private final SettlementSnapshotPublisher publication;
+    private PreparedHandoff outstanding;
+    private volatile NormalSettlementSession normal;
+
+    /**
+     * One source-verified, immutable unpublished baseline plus its genuine
+     * durable journal cut. Only this publisher can prepare and consume it.
+     */
+    static final class PreparedHandoff {
+        private final NormalMutationJournal journal;
+        private final NormalMutationJournal.Cursor cut;
+        private final SettlementAccumulator.Result baseline;
+        private PreparedHandoff(NormalMutationJournal journal,
+                NormalMutationJournal.Cursor cut, SettlementAccumulator.Result baseline) {
+            this.journal = journal;
+            this.cut = cut;
+            this.baseline = baseline;
+        }
+    }
 
     SettlementProtectedPublisher(WriterEpochFence fence, WriterEpochFence.Seal seal,
                                  AdmissionBarrier barrier, BooleanSupplier journalActive,
@@ -134,6 +153,100 @@ final class SettlementProtectedPublisher {
         }
     }
 
+    /**
+     * Worker phase: full saved-content and journal audit within the same
+     * drained lease, with no player admission and no Bukkit API access.
+     * The complete baseline absorbs historical movements by physical
+     * reconciliation; the journal itself is retained, never replayed.
+     */
+    synchronized PreparedHandoff prepareNormalHandoff(SettlementScanRunner.Staged staged,
+            WorldStorageDiscovery.Manifest manifest, NormalMutationJournal journal) throws IOException {
+        try {
+            if (barrier.state() != AdmissionBarrier.State.SCANNING || outstanding != null
+                    || normal != null)
+                throw new IllegalStateException("Normal handoff is one-shot while scanning");
+            Objects.requireNonNull(staged, "source-verified candidate");
+            Objects.requireNonNull(manifest, "original saved manifest");
+            Objects.requireNonNull(journal, "normal journal");
+            var witness = staged.savedContentWitness();
+            if (manifest.origin() == null || witness == null
+                    || !staged.issuedByVerifiedTraversal())
+                throw new IOException("Missing authentic source-runner origin for normal handoff");
+            var prepared = fence.withDrainedLease(seal, () -> {
+                witness.requireOriginalManifest(manifest);
+                if (!staged.requiredSourceIds().containsAll(manifest.requiredSourceIds()))
+                    throw new IOException("Mandatory saved source omitted from normal handoff");
+                witness.requireUnchanged();
+                var cut = journal.verifiedCheckpoint();
+                var baseline = SettlementSnapshotPublisher.verifiedCopy(staged.pending().commit());
+                journal.requireCurrentCursor(cut);
+                return new PreparedHandoff(journal, cut, baseline);
+            });
+            outstanding = prepared;
+            return prepared;
+        } catch (IOException | RuntimeException | Error failure) {
+            revoke();
+            throw failure;
+        }
+    }
+
+    /**
+     * Main-thread final phase (the Paper coordinator must enforce affinity).
+     * The same seal still protects the entire generation. Bind the actual
+     * audited journal/session and new writer epoch before readers may
+     * observe READY. The caller must prove all A01 observations, including
+     * real complete normal writer tracking; an injected true is not proof.
+     */
+    synchronized SettlementWriterEpochDecision.Verdict completeNormalHandoff(long generation,
+            PreparedHandoff prepared, SettlementWriterEpochDecision.Evidence evidence) {
+        try {
+            var verdict = SettlementWriterEpochDecision.evaluate(evidence);
+            if (verdict == SettlementWriterEpochDecision.Verdict.REVOKE_PUBLISHED) {
+                revoke();
+                return verdict;
+            }
+            if (prepared == null || prepared != outstanding || normal != null)
+                throw new IllegalStateException("Unknown or consumed normal handoff");
+            if (verdict == SettlementWriterEpochDecision.Verdict.HOLD_UNPUBLISHED)
+                return verdict;
+            if (verdict != SettlementWriterEpochDecision.Verdict.TRY_ATOMIC_PUBLISH)
+                throw new IllegalStateException("Unexpected normal handoff verdict");
+
+            // The barrier excludes readers until the fence really is OPEN.
+            // Holding the actual journal monitor also excludes a phase or
+            // tail change between the final cursor check and the transition.
+            synchronized (barrier) {
+                synchronized (prepared.journal) {
+                    prepared.journal.requireCurrentCursor(prepared.cut);
+                    fence.handoffDrainedSeal(seal, epoch -> {
+                        if (barrier.state() != AdmissionBarrier.State.SCANNING
+                                || !noOnlinePlayers.getAsBoolean()
+                                || !journalActive.getAsBoolean())
+                            throw new IllegalStateException("Normal journal handoff prerequisites lost");
+                        prepared.journal.requireInMemoryCursor(prepared.cut);
+                        normal = new NormalSettlementSession(barrier, fence, epoch,
+                                prepared.journal, prepared.cut, prepared.baseline, journalActive);
+                        if (!journalActive.getAsBoolean() || !noOnlinePlayers.getAsBoolean())
+                            throw new IllegalStateException("Normal handoff prerequisites changed");
+                        prepared.journal.requireInMemoryCursor(prepared.cut);
+                    }, () -> barrier.complete(generation, true, true));
+                    outstanding = null;
+                }
+            }
+            return verdict;
+        } catch (RuntimeException | Error failure) {
+            revoke();
+            throw failure;
+        }
+    }
+
+    NormalSettlementSession normalSession() {
+        var session = normal;
+        if (session == null || session.current().isEmpty())
+            throw new IllegalStateException("No valid normal accounting session");
+        return session;
+    }
+
     private boolean monitoringAlive() {
         if (!journalActive.getAsBoolean()) return false;
         try {
@@ -148,15 +261,24 @@ final class SettlementProtectedPublisher {
 
     /** A result is externally visible only while both monitors stay valid. */
     Optional<SettlementAccumulator.Result> current() {
-        return publication.current();
+        synchronized (barrier) {
+            var session = normal;
+            return session == null ? publication.current() : session.current();
+        }
     }
 
     boolean mayAdmit() {
-        return publication.mayAdmit();
+        return current().isPresent();
     }
 
     void revoke() {
-        publication.revoke();
+        synchronized (barrier) {
+            publication.revoke();
+            normal = null;
+        }
+        // Do not hold the barrier while waiting for the legacy SEALED
+        // publication callback's fence lock. Revocation has already made
+        // the gate terminal, so it cannot publish after this point.
         fence.invalidate();
     }
 }
