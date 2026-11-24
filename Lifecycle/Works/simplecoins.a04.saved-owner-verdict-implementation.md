@@ -8,7 +8,7 @@ source_refs:
   - https://drive.google.com/file/d/1NDERmCBmKqFmBNYZQBKifQ6kXChdbB4g/view
   - https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
   - https://github.com/surumeneco/SimpleCoins/issues/423
-decision_ref: user-chat:2026-11-20:A04-saved-BlockLocker-CAT-approved
+decision_ref: https://drive.google.com/file/d/1eczGiqZgCNevfGhIJCkS2B1acvRRP0P8/view
 refs: []
 entry: confirmed-spec
 mode: implementation
@@ -52,6 +52,7 @@ spec_status: confirmed
 | --- | --- | --- | --- | --- | --- | --- | --- | ---: |
 | a04-green-f0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.f0 | case.f0 | — | — | 300 |
 | a04-green-f1 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.f1 | case.f1 | — | — | 300 |
+| a04-green-f2 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.f2 | case.f2 | — | — | 300 |
 | a04-green-o0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.o0 | case.o0 | — | — | 300 |
 | a04-green-h0 | green | junit | @repo:SimpleCoins | python3 tools/run_cat_a04_junit.py {report} case.h0 | case.h0 | — | — | 300 |
 
@@ -76,7 +77,7 @@ spec_status: confirmed
 | @repo:SimpleCoins/docs/cat/confirmed/a04-saved-blocklocker-owner-process.md | @repo:SimpleCoins/docs/cat/confirmed/a04-saved-blocklocker-owner-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a04-saved-blocklocker-owner-tce.md | — | — | — | @work/.cat-flow/cache/a04-saved-owner-model.json | @work/.cat-flow/cache/a04-saved-owner-vectors.json | @work/.cat-flow/cache/a04-saved-owner-queue.json | @repo:SimpleCoins/tests/cat/a04-saved-owner-junit-binding.json | @work/.cat-flow/generated/A04SavedOwnerGeneratedTest.java | @work/.cat-flow/cache/a04-saved-owner-obligations.json | — | false |
 
 ## Acceptance
-- The Confirmed 10 boolean evidence fields have exact truth-table f0, f1, o0, h0 semantics; the output is local un**published** FREE, OWNER, HOLD candidate only.
+- The Confirmed 10 boolean evidence fields have exact truth-table f0, f1, f2, o0, h0 semantics; the output is local un**published** FREE, OWNER, HOLD candidate only.
 - Upstream collector must independently verify every claimed positive input against BlockLocker v1.15 saved geometry, PDC/display and locale, source identity and physical deduplication. This local verdict cannot attest those capabilities by itself.
-- 0/unknown or inconsistent evidence never becomes positive FREE or OWNER. BAN/playerdata and G0 writer quiescence/global publishing and G3 are separate future stages; admission stays blocked.
+- A fully read legacy PRIVATE profile whose UUID is unidentifiable is FREE; unreadable, missing or inconsistent evidence remains HOLD. BAN/playerdata and G0 writer quiescence/global publishing and G3 are separate future stages; admission stays blocked.
 - Source-derived current-item JUnit Red/Green, Queue state and official CAT conformance as required. No unowned production changes.

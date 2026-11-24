@@ -81,7 +81,7 @@ Remove this section when deterministic compilation is not used. Multiple TCE pat
 
 | Process | PI | TCE | Domain rule | Common rules | Domain specs | Model | Vectors | Queue | Binding | Tests | Obligations | Conformance binding | Allow draft |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-process.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-tce.md | — | — | — | @work/.cat-flow/cache/startup-model.json | @work/.cat-flow/cache/startup-vectors.json | @work/.cat-flow/cache/startup-queue.json | @repo:SimpleCoins/tests/cat/a01-writer-epoch-publication-junit-binding.json | @work/.cat-flow/generated/GeneratedA01StartupTest.java | @work/.cat-flow/cache/startup-obligations.json | — | false |
+| @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-process.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-pi.md | @repo:SimpleCoins/docs/cat/confirmed/a01-writer-epoch-publication-tce.md | — | — | — | @work/.cat-flow/cache/startup-model.json | @work/.cat-flow/cache/startup-vectors.json | @work/.cat-flow/cache/startup-queue.json | @repo:SimpleCoins/tests/cat/a01-writer-epoch-junit-binding.json | @work/.cat-flow/generated/GeneratedA01StartupTest.java | @work/.cat-flow/cache/startup-obligations.json | — | false |
 
 ## Scope and acceptance
 

@@ -63,9 +63,12 @@ class SavedBlockLockerOwnerCandidateTest {
 
     @Test void contradictoryProtectionOrUnresolvedOwnerCanNeverClaimOwner() throws Exception {
         var proof=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,false);
-        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.FREE_UNPUBLISHED,
             SavedBlockLockerOwnerCandidate.fromObservedSigns(
                 observed(BlockLockerHeaderMatcher.Type.PRIVATE,null,false),proof).verdict());
+        assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,
+            SavedBlockLockerOwnerCandidate.fromObservedSigns(
+                observed(BlockLockerHeaderMatcher.Type.MORE_USERS,null,false),proof).verdict());
 
         var contradictory=new SavedBlockLockerOwnerCandidate.ExternalProof(true,true,true,true,true);
         assertEquals(BlockLockerSavedOwnerVerdict.Verdict.HOLD,

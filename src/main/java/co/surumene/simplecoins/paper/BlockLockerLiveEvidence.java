@@ -57,9 +57,11 @@ public final class BlockLockerLiveEvidence {
         } catch (RuntimeException failure) {
             throw new IOException("BlockLocker owner UUID could not be read", failure);
         }
-        if (uuid == null || uuid.isEmpty())
-            throw new IOException("Protected BlockLocker owner has no verified UUID");
-        return new Ownership(uuid.orElseThrow(), false);
+        if (uuid == null)
+            throw new IOException("BlockLocker owner UUID evidence unavailable");
+        // A successful read of a legacy profile without a UUID is Free;
+        // missing protection evidence or a failed read still throws.
+        return new Ownership(uuid.orElse(null), false);
     }
 
     /**
@@ -153,10 +155,12 @@ public final class BlockLockerLiveEvidence {
                 if (!playerProfileType.isInstance(candidate)) return Optional.empty();
                 try {
                     Object id = uuidMethod.invoke(candidate);
-                    if (!(id instanceof Optional<?> optional) || optional.isEmpty())
-                        return Optional.empty();
+                    if (!(id instanceof Optional<?> optional))
+                        throw new IllegalStateException("Invalid BlockLocker owner UUID response");
+                    if (optional.isEmpty()) return Optional.empty();
                     Object value = optional.orElseThrow();
-                    if (!(value instanceof UUID uuid)) return Optional.empty();
+                    if (!(value instanceof UUID uuid))
+                        throw new IllegalStateException("Invalid BlockLocker owner UUID value");
                     return Optional.of(uuid);
                 } catch (IllegalAccessException | InvocationTargetException reflection) {
                     throw new IllegalStateException("BlockLocker player UUID lookup failed", reflection);

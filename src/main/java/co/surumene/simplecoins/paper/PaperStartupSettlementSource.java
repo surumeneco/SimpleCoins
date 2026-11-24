@@ -80,7 +80,7 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
                 (source, chunk, position) -> new BlockEntitySettlementImport.Ownership(null, false, false, false),
                 this::savedOwners, budget.maxSerializedBytes(), budget.maxInflatedBytes(),
                 this::classifyLive, 120000);
-        return new SettlementRuntime.Captured(staged, manifest);
+        return new SettlementRuntime.Captured(staged, manifest, bans);
     }
 
     /** Native storage fallback. A selected WCL provider's same-read decision

@@ -52,7 +52,11 @@ public final class SavedBlockLockerSignSummary {
                     unknownMain = true;
             }
         }
-        boolean conflicting = principalCandidates.size() > 1;
+        // No verified PRIVATE profile, or mixed known/unknown principals,
+        // is incomplete/conflicting protection evidence, not legacy UUID absence.
+        boolean conflicting = principalCandidates.size() > 1
+                || (unknownMain && !principalCandidates.isEmpty())
+                || (!unknownMain && principalCandidates.isEmpty() && !everyone);
         Optional<UUID> owner = !conflicting && !unknownMain && principalCandidates.size() == 1
                 ? Optional.of(principalCandidates.iterator().next())
                 : Optional.empty();
