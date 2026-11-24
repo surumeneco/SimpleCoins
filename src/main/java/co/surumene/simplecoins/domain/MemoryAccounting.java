@@ -107,6 +107,34 @@ public final class MemoryAccounting {
         return Outcome.APPLIED;
     }
 
+    /** Replace only one owner's derived balances from a complete, fresh physical observation.
+     * The caller must establish completeness and exclude assets no longer owned or present.
+     * This operation does not acquire physical observations or decide when they are fresh. */
+    public synchronized Outcome reconcileOwner(UUID owner, boolean complete, boolean banned,
+            boolean hasPlayerdata, boolean registrationBasis, Map<String, BigInteger> observed) {
+        if (!complete || owner == null || observed == null) return Outcome.REJECTED;
+        Map<Endpoint, BigInteger> replacement = new HashMap<>();
+        BigInteger total = BigInteger.ZERO;
+        var classification = AssetOwner.resolve(owner, false, banned, hasPlayerdata);
+        try {
+            for (var entry : Map.copyOf(observed).entrySet()) {
+                if (entry.getKey().isBlank() || entry.getValue().signum() < 0) return Outcome.REJECTED;
+                if (entry.getValue().signum() == 0) continue;
+                total = total.add(entry.getValue());
+                if (classification.kind() == AssetOwner.Kind.DEAD)
+                    replacement.put(Endpoint.dead(owner, classification.reason(), entry.getKey()), entry.getValue());
+            }
+        } catch (NullPointerException invalidObservation) { return Outcome.REJECTED; }
+        long next = Math.addExact(sequence, 1);
+        boolean register = classification.kind() == AssetOwner.Kind.PERSONAL
+                && (registrationBasis || total.signum() > 0);
+        dead.keySet().removeIf(endpoint -> owner.equals(endpoint.owner().player()));
+        dead.putAll(replacement);
+        if (register) personal.put(owner, total); else personal.remove(owner);
+        sequence = next;
+        return Outcome.APPLIED;
+    }
+
     public synchronized boolean isRegistered(UUID player) {
         return personal.containsKey(player);
     }
