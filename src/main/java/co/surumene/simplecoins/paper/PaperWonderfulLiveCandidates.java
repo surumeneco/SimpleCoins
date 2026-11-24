@@ -28,6 +28,12 @@ import org.bukkit.plugin.Plugin;
 public final class PaperWonderfulLiveCandidates {
     private PaperWonderfulLiveCandidates() {}
 
+    enum CargoSource { GUI, WCL, HOLD }
+    static CargoSource cargoSource(Boolean guiOpen,boolean authorityConfirmed){
+        if(guiOpen==null||!authorityConfirmed)return CargoSource.HOLD;
+        return guiOpen?CargoSource.GUI:CargoSource.WCL;
+    }
+
     public record Candidate(UUID entityId, UUID worldId, String worldName,
                             String providerId, Map<String, UUID> relationships,
                             WclOwnerEvidence.Decision ownerEvidence,
@@ -119,8 +125,9 @@ public final class PaperWonderfulLiveCandidates {
 
         PaperWonderfulLoadedEvidence.Result observed =
                 PaperWonderfulLoadedEvidence.readLoaded(consumer, entity, providerId);
-        if (observed.status() != PaperWonderfulLoadedEvidence.Status.SUCCESS
-                || observed.snapshot().isEmpty())
+        CargoSource selected=cargoSource(openCargo!=null,
+                observed.status()==PaperWonderfulLoadedEvidence.Status.SUCCESS&&observed.snapshot().isPresent());
+        if (selected==CargoSource.HOLD)
             throw new IOException("WCL LIVE source not usable: "
                     + providerId + "/" + entity.getUniqueId()
                     + " status=" + observed.status() + " reason=" + observed.reason());
@@ -131,7 +138,7 @@ public final class PaperWonderfulLiveCandidates {
                 PaperWonderfulLiveOwnerEvidence.fromVerifiedLoadedSnapshot(
                         entity, providerId, snapshot);
 
-        if(openCargo!=null)snapshot=withOpenCargo(snapshot,entity,openCargo);
+        if(selected==CargoSource.GUI)snapshot=withOpenCargo(snapshot,entity,openCargo);
         Map<String, BigInteger> values = nativeMirrors
                 ? PaperWonderfulSnapshotAssets.slotValuesForHybrid(
                         snapshot, maxSerializedBytes, maxInflatedBytes, seenWalletIds)

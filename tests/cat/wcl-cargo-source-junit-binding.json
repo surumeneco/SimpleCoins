@@ -1,0 +1,7 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.accounting.wcl-cargo-source",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedWclCargoSourceTest",
+  "driver_class": "co.surumene.simplecoins.paper.WclCargoSourceDriver"
+}
