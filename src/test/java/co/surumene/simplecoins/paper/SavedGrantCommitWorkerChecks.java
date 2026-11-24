@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class SavedGrantCommitWorkerChecks {
     private SavedGrantCommitWorkerChecks() {}
     public static void main(String[] args) throws Exception {
-        successAndExclusion(); expiryAndShutdown(); failures();
+        successAndExclusion(); expiryAndShutdown(); unclaimedSuccessExpires(); failures();
         System.out.println("SAVED_GRANT_COMMIT_WORKER_CHECKS_PASSED");
     }
     private static void check(boolean value) { if (!value) throw new AssertionError(); }
@@ -71,6 +71,18 @@ public final class SavedGrantCommitWorkerChecks {
         terminal(completed); check(completed.status() == SavedGrantCommitWorker.Status.SUCCEEDED);
         worker.close(); check(completed.status() == SavedGrantCommitWorker.Status.ABANDONED);
         rejected(completed::claimSuccess);
+    }
+    private static void unclaimedSuccessExpires() throws Exception {
+        try (var worker = new SavedGrantCommitWorker()) {
+            var ticket = worker.submit(300, live -> "complete", () -> {});
+            terminal(ticket); check(ticket.status() == SavedGrantCommitWorker.Status.SUCCEEDED);
+            long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (ticket.status() == SavedGrantCommitWorker.Status.SUCCEEDED
+                    && System.nanoTime() < until) Thread.sleep(5);
+            check(ticket.status() == SavedGrantCommitWorker.Status.ABANDONED);
+            rejected(ticket::result); rejected(ticket::claimSuccess);
+            rejected(() -> worker.submit(1000, live -> "wrong", () -> {}));
+        }
     }
     private static void failures() throws Exception {
         try (var worker = new SavedGrantCommitWorker()) {
