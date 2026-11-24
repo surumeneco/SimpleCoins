@@ -112,9 +112,8 @@ public final class PaperStartupSettlementSource implements SettlementRuntime.Sou
         if (value.physicalKey().startsWith(prefix)) {
             String tail = value.physicalKey().substring(prefix.length());
             int separator = tail.indexOf('/');
-            if (separator <= 0) throw new IOException("Invalid LIVE entity source key");
             UUID id;
-            try { id = UUID.fromString(tail.substring(0, separator)); }
+            try { id = UUID.fromString(separator < 0 ? tail : tail.substring(0, separator)); }
             catch (IllegalArgumentException invalid) { throw new IOException("Invalid LIVE entity UUID", invalid); }
             Entity entity = Bukkit.getEntity(id);
             if (entity == null || !entity.isValid() || entity.getWorld() != world
