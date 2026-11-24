@@ -34,6 +34,16 @@ public final class WriterEpochFence {
         }
     }
 
+    /** Opaque identity of the normal OPEN generation created by an atomic handoff. */
+    static final class OpenEpoch {
+        private final WriterEpochFence owner;
+        private final long epoch;
+        private OpenEpoch(WriterEpochFence owner, long epoch) {
+            this.owner = owner;
+            this.epoch = epoch;
+        }
+    }
+
     /** Instrumentation must call exactly one terminal method per admitted invocation. */
     public final class Entry {
         private final Thread thread = Thread.currentThread();
@@ -227,6 +237,47 @@ public final class WriterEpochFence {
             } finally {
                 atomicPublicationActive = false;
             }
+        }
+    }
+
+    /**
+     * Commit the prepared normal journal session before reopening roots, in
+     * one writer-admission critical section. The caller also holds the
+     * publication barrier so readers cannot see READY before OPEN.
+     *
+     * The callback is short, synchronous, and must not run disk IO or wait
+     * for another writer. The future token cannot authorize roots by itself.
+     * Only the caller's independently established G0 evidence can justify
+     * this handoff; an OPEN generation is not a complete tracking certificate.
+     */
+    void handoffDrainedSeal(Seal seal, java.util.function.Consumer<OpenEpoch> commit) {
+        Objects.requireNonNull(commit, "normal journal handoff");
+        synchronized (lock) {
+            requireDrained(seal);
+            if (atomicPublicationActive || durableLeaseOwner != null)
+                throw new IllegalStateException("Cannot hand off an exclusively held writer epoch");
+            atomicPublicationActive = true;
+            try {
+                long next = Math.addExact(generation, 1);
+                commit.accept(new OpenEpoch(this, next));
+                requireDrained(seal);
+                generation = next;
+                state = State.OPEN;
+            } catch (RuntimeException | Error failure) {
+                fault();
+                throw failure;
+            } finally {
+                atomicPublicationActive = false;
+            }
+        }
+    }
+
+    /** Reject unrelated reopening, sealing or fault of the normal generation. */
+    void requireOpenEpoch(OpenEpoch epoch) {
+        synchronized (lock) {
+            if (epoch == null || epoch.owner != this || epoch.epoch != generation
+                    || state != State.OPEN)
+                throw new IllegalStateException("Normal writer epoch is no longer current");
         }
     }
 
