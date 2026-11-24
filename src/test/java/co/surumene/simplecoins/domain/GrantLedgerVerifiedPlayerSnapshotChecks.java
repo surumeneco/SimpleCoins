@@ -11,7 +11,7 @@ public final class GrantLedgerVerifiedPlayerSnapshotChecks {
     private GrantLedgerVerifiedPlayerSnapshotChecks() {}
     public static void main(String[] args) throws Exception {
         Path temp = Files.createTempDirectory("sc-verified-receipt-view-");
-        try { coherentPlanning(temp); integrityStillRequired(temp); }
+        try { coherentPlanning(temp); integrityStillRequired(temp); coherentUniverse(temp); }
         finally {
             try (var paths = Files.walk(temp)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
@@ -75,5 +75,34 @@ public final class GrantLedgerVerifiedPlayerSnapshotChecks {
         try { ledger.acknowledge(actual, actual.sequence()); throw new AssertionError("corrupt ledger ACK"); }
         catch (IllegalStateException expected) { }
         check(!Files.exists(root.resolve(unrelated.sequence() + ".grant")));
+    }
+    private static void coherentUniverse(Path temp) throws Exception {
+        Path root = temp.resolve("universe");
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID(), unknown = UUID.randomUUID();
+        var ledger = new GrantLedger(root);
+        var first = ledger.reserve(a, 5000, "console");
+        var second = ledger.reserve(b, 10, "console");
+        var third = ledger.reserve(a, 100, "console");
+        var universe = ledger.verifiedUniverseSnapshot();
+        check(universe.history().equals(List.of(first, second, third)));
+        check(universe.forPlayer(a).pending().equals(List.of(first, third)));
+        check(universe.forPlayer(b).pending().equals(List.of(second)));
+        check(universe.forPlayer(unknown).pending().isEmpty());
+        GrantReceiptState.empty().verify(universe.forPlayer(unknown));
+        rejected(() -> new GrantReceiptState(second.sequence(), 0, null, 0).verify(universe.forPlayer(a)));
+        try { universe.history().clear(); throw new AssertionError("mutable history"); }
+        catch (UnsupportedOperationException expected) { }
+        ledger.requireUnchangedVerifiedUniverse(universe);
+        var foreign = new GrantLedger(temp.resolve("foreign-universe"));
+        rejected(() -> foreign.requireUnchangedVerifiedUniverse(universe));
+        ledger.acknowledge(first, first.sequence());
+        rejected(() -> ledger.requireUnchangedVerifiedUniverse(universe));
+        var fresh = ledger.verifiedUniverseSnapshot();
+        check(fresh.forPlayer(a).pending().equals(List.of(third)));
+        rejected(() -> GrantReceiptState.empty().verify(fresh.forPlayer(a)));
+        ledger.requireUnchangedVerifiedUniverse(fresh);
+        Files.delete(root.resolve(second.sequence() + ".grant"));
+        rejected(() -> ledger.requireUnchangedVerifiedUniverse(fresh));
+        rejected(() -> ledger.verifiedUniverseSnapshot());
     }
 }
