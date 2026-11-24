@@ -26,18 +26,20 @@ public final class SavedBlockLockerSettlementOwnerLookup
     // Only authentic fromCaptured handoffs carry an original saved-content
     // receipt. fromIndex remains an intentionally bounded diagnostic seam.
     private final WorldSnapshotTraversal.ContentWitness capturedOwnerWitness;
+    private final Set<String> configuredContainers;
 
     private SavedBlockLockerSettlementOwnerLookup(
             SavedBlockLockerPhysicalOwnerIndex ownerIndex,
             BanSourceCoverage bans,
             Set<UUID> playerData,
             WorldStorageDiscovery.Manifest selectedManifest,
-            WorldSnapshotTraversal.ContentWitness capturedOwnerWitness) {
+            WorldSnapshotTraversal.ContentWitness capturedOwnerWitness, Set<String> configuredContainers) {
         this.ownerIndex = ownerIndex;
         this.bans = bans;
         this.playerData = Set.copyOf(playerData);
         this.selectedManifest = Objects.requireNonNull(selectedManifest);
         this.capturedOwnerWitness = capturedOwnerWitness;
+        this.configuredContainers=Set.copyOf(configuredContainers);
     }
 
     public static SavedBlockLockerSettlementOwnerLookup fromIndex(
@@ -54,7 +56,7 @@ public final class SavedBlockLockerSettlementOwnerLookup
         Set<UUID> playerIds = discovered.playerDataFiles().keySet();
         banEvidence.bannedAmong(playerIds);
         return new SavedBlockLockerSettlementOwnerLookup(
-                index, banEvidence, playerIds, discovered, null);
+                index, banEvidence, playerIds, discovered, null,Set.of("minecraft:chest","minecraft:trapped_chest"));
     }
 
     /**
@@ -83,7 +85,7 @@ public final class SavedBlockLockerSettlementOwnerLookup
         observed.witness().requireUnchanged();
         return new SavedBlockLockerSettlementOwnerLookup(
                 lookup.ownerIndex, lookup.bans, lookup.playerData,
-                lookup.selectedManifest, observed.witness());
+                lookup.selectedManifest, observed.witness(),observed.configuredContainers());
     }
 
     /**
@@ -121,7 +123,7 @@ public final class SavedBlockLockerSettlementOwnerLookup
                     + "." + Math.floorDiv(chunk.z(),32) + ".mca";
             if (!actualRegion.equals(expectedRegion))
                 throw new IOException("Selected Anvil Region is not the Chunk's source");
-            requireSavedChestEntity(chunk,position);
+            requireSavedStorageEntity(chunk,position,configuredContainers);
             return resolve(source.world(),blockPosition);
         };
     }
@@ -145,8 +147,8 @@ public final class SavedBlockLockerSettlementOwnerLookup
         return xyz;
     }
 
-    private static void requireSavedChestEntity(AnvilRegionReader.Chunk chunk,
-                                                 int[] position) throws IOException {
+    private static void requireSavedStorageEntity(AnvilRegionReader.Chunk chunk,
+                                                 int[] position,Set<String> configured) throws IOException {
         if (chunk.nbt() == null
                 || !(chunk.nbt().get("block_entities") instanceof List<?> entities))
             throw new IOException("Selected SAVED chunk has no BlockEntity inventory source");
@@ -161,8 +163,6 @@ public final class SavedBlockLockerSettlementOwnerLookup
                 throw new IOException("Malformed SAVED BlockEntity source");
             if (x!=position[0] || y!=position[1] || z!=position[2])
                 continue;
-            if (!id.equals("minecraft:chest") && !id.equals("minecraft:trapped_chest"))
-                throw new IOException("SAVED BlockEntity is not a supported chest");
             if (++matching>1)
                 throw new IOException("Duplicate SAVED physical chest BlockEntity");
             tileType = id;
@@ -173,8 +173,8 @@ public final class SavedBlockLockerSettlementOwnerLookup
         // the selected Chunk's actual terrain palette at this same location.
         var physical = SavedTerrainBlockPalette.read(chunk.nbt(),
                 position[0], position[1], position[2]);
-        if (!tileType.equals(physical.name()))
-            throw new IOException("Orphan SAVED chest BlockEntity disagrees with terrain palette");
+        if (!configured.contains(physical.name()) || !SavedBlockLockerChestSigns.matchesStorage(tileType,physical.name()))
+            throw new IOException("SAVED BlockEntity is not a configured physical container");
 
     }
 

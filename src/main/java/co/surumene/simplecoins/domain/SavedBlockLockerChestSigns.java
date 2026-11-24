@@ -44,21 +44,33 @@ public final class SavedBlockLockerChestSigns {
                 || privateHeaders == null || moreHeaders == null || everyoneAliases == null)
             throw new IOException("Missing saved chest observation input");
 
-        BlockLockerChestLinkage.Part first = readChest(source, requestedChest);
-        List<BlockLockerChestLinkage.Part> members = new ArrayList<>(2);
-        members.add(first);
-        if (first.half() != BlockLockerChestLinkage.Half.SINGLE) {
-            Position opposite = otherHalf(first);
-            BlockLockerChestLinkage.Part second = readChest(source, opposite);
-            if (!BlockLockerChestLinkage.linked(first, second))
-                throw new IOException("Saved double-chest halves are not reciprocal");
-            members.add(second);
+        return observeConfigured(source,requestedChest,privateHeaders,moreHeaders,everyoneAliases,decoder,
+                Set.of("minecraft:chest","minecraft:trapped_chest"));
+    }
+
+    /** Resolve one configured physical storage; double chests still share all signs. */
+    public static Observation observeConfigured(
+            Map<ChunkPosition,Map<String,Object>> source,Position requested,
+            Set<String> privateHeaders,Set<String> moreHeaders,Set<String> everyoneAliases,
+            BlockLockerSavedProfileResolution.DisplayDecoder decoder,Set<String> configured) throws IOException {
+        var state=readState(source,requested);
+        if(!configured.contains(state.name()))throw new IOException("Storage is not configured for protection: "+state.name());
+        List<Position> physical=new ArrayList<>();
+        physical.add(requested);
+        if(isChest(state.name())) {
+            BlockLockerChestLinkage.Part first = readChest(source, requested);
+            if (first.half() != BlockLockerChestLinkage.Half.SINGLE) {
+                Position opposite = otherHalf(first);
+                BlockLockerChestLinkage.Part second = readChest(source, opposite);
+                if (!state.name().equals(readState(source,opposite).name())
+                        || !BlockLockerChestLinkage.linked(first, second))
+                    throw new IOException("Saved double-chest halves are not reciprocal");
+                physical.add(opposite);
+            }
         }
 
         Map<Position, AttachedSign> signs = new LinkedHashMap<>();
-        for (var member : members) {
-            Position chest = new Position(member.position().x(), member.position().y(),
-                    member.position().z());
+        for (Position chest : physical) {
             for (Position next : neighbors(chest)) {
                 SavedTerrainBlockPalette.BlockState state = readState(source, next);
                 BlockLockerSignAttachment.Mount mount = mount(state);
@@ -77,11 +89,21 @@ public final class SavedBlockLockerChestSigns {
                 }
             }
         }
-        List<Position> physical = members.stream()
-                .map(part -> new Position(part.position().x(),
-                        part.position().y(), part.position().z()))
-                .toList();
         return new Observation(physical, List.copyOf(signs.values()));
+    }
+
+    static boolean isCopperChest(String name) {
+        return name.startsWith("minecraft:") && name.endsWith("copper_chest");
+    }
+    static boolean isChest(String name) {
+        return name.equals("minecraft:chest") || name.equals("minecraft:trapped_chest") || isCopperChest(name);
+    }
+
+    /** Paper may use the same BlockEntity type for different material variants. */
+    public static boolean matchesStorage(String tile,String physical) {
+        if(tile.equals(physical))return true;
+        if(isCopperChest(physical) && (tile.equals("minecraft:chest") || tile.equals("minecraft:copper_chest")))return true;
+        return tile.equals("minecraft:shulker_box") && physical.startsWith("minecraft:") && physical.endsWith("_shulker_box");
     }
 
     private static BlockLockerChestLinkage.Part readChest(
@@ -90,7 +112,10 @@ public final class SavedBlockLockerChestSigns {
         BlockLockerChestLinkage.Kind kind = switch (state.name()) {
             case "minecraft:chest" -> BlockLockerChestLinkage.Kind.CHEST;
             case "minecraft:trapped_chest" -> BlockLockerChestLinkage.Kind.TRAPPED_CHEST;
-            default -> throw new IOException("Unsupported saved storage or missing chest at " + position);
+            default -> {
+                if(!isCopperChest(state.name()))throw new IOException("Unsupported saved storage or missing chest at " + position);
+                yield BlockLockerChestLinkage.Kind.CHEST;
+            }
         };
         String facing = state.properties().get("facing");
         String type = state.properties().get("type");

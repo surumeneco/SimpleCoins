@@ -46,14 +46,18 @@ public final class SavedBlockLockerTerrainObservations {
         private final List<ObservedChest> chests;
         private final WorldSnapshotTraversal.ContentWitness witness;
         private final WorldSnapshotTraversal.Report report;
+        private final Set<String> configuredContainers;
 
         private Snapshot(List<ObservedChest> chests,
                          WorldSnapshotTraversal.ContentWitness witness,
-                         WorldSnapshotTraversal.Report report) {
+                         WorldSnapshotTraversal.Report report,Set<String> configuredContainers) {
             this.chests = List.copyOf(chests);
             this.witness = Objects.requireNonNull(witness);
             this.report = Objects.requireNonNull(report);
+            this.configuredContainers=Set.copyOf(configuredContainers);
         }
+
+        public Set<String> configuredContainers() { return configuredContainers; }
 
         public List<ObservedChest> chests() {
             return chests;
@@ -207,6 +211,16 @@ public final class SavedBlockLockerTerrainObservations {
             Set<String> moreHeaders,
             Set<String> everyoneAliases,
             BlockLockerSavedProfileResolution.DisplayDecoder decoder) throws IOException {
+        return captureConfigured(manifest,scope,maximumCompressedBytes,maximumInflatedBytes,maximumSavedTerrainChunks,
+                privateHeaders,moreHeaders,everyoneAliases,decoder,Set.of("minecraft:chest","minecraft:trapped_chest"));
+    }
+
+    /** Configured storage types; connectContainers=false is required by the caller. */
+    public static Snapshot captureConfigured(WorldStorageDiscovery.Manifest manifest,WorldScope scope,
+            int maximumCompressedBytes,int maximumInflatedBytes,int maximumSavedTerrainChunks,
+            Set<String> privateHeaders,Set<String> moreHeaders,Set<String> everyoneAliases,
+            BlockLockerSavedProfileResolution.DisplayDecoder decoder,Set<String> configuredContainers) throws IOException {
+        Set<String> configured=Set.copyOf(configuredContainers);
         if (manifest == null || manifest.origin() == null || scope == null
                 || !manifest.origin().scope().equals(scope))
             throw new IOException("A genuinely discovered, scope-matched SAVED Manifest is required");
@@ -253,8 +267,9 @@ public final class SavedBlockLockerTerrainObservations {
                             if (!(raw instanceof Map<?, ?> block))
                                 throw new IOException("Invalid saved BlockEntity entry");
                             Object rawId = block.get("id");
-                            if (!"minecraft:chest".equals(rawId)
-                                    && !"minecraft:trapped_chest".equals(rawId)) continue;
+                            if (!(rawId instanceof String tileType))throw new IOException("Missing BlockEntity id");
+                            if(!configured.contains(tileType)&&configured.stream().noneMatch(type ->
+                                    SavedBlockLockerChestSigns.matchesStorage(tileType,type)))continue;
                             if (!(block.get("x") instanceof Integer x)
                                     || !(block.get("y") instanceof Integer y)
                                     || !(block.get("z") instanceof Integer z)
@@ -262,8 +277,9 @@ public final class SavedBlockLockerTerrainObservations {
                                     || Math.floorDiv(z, 16) != chunk.z())
                                 throw new IOException("Saved chest BlockEntity outside selected Chunk");
                             var state = SavedTerrainBlockPalette.read(chunk.nbt(), x, y, z);
-                            if (!rawId.equals(state.name()))
-                                throw new IOException("Saved chest BlockEntity disagrees with terrain state");
+                            if (!SavedBlockLockerChestSigns.matchesStorage(tileType,state.name()))
+                                throw new IOException("Saved configured BlockEntity disagrees with terrain state");
+                            if(!configured.contains(state.name()))continue;
                             var position = new SavedBlockLockerChestSigns.Position(x, y, z);
                             var physical = physicalByWorld.computeIfAbsent(
                                     source.world(), ignored -> new HashMap<>());
@@ -285,7 +301,7 @@ public final class SavedBlockLockerTerrainObservations {
         // is needed; this does not prove that Paper's live state is frozen.
         if (physicalByWorld.isEmpty()) {
             first.witness().requireUnchanged();
-            return new Snapshot(List.of(), first.witness(), first.report());
+            return new Snapshot(List.of(), first.witness(), first.report(),configured);
         }
 
         // A chest's one-block N/E/S/W/up neighborhood and its possible
@@ -406,8 +422,8 @@ public final class SavedBlockLockerTerrainObservations {
             Set<SavedBlockLockerChestSigns.Position> accounted = new HashSet<>();
             for (var position : physical.keySet().stream().sorted(POSITION_ORDER).toList()) {
                 if (accounted.contains(position)) continue;
-                var observation = SavedBlockLockerChestSigns.observe(terrain, position,
-                        privateHeaders, moreHeaders, everyoneAliases, decoder);
+                var observation = SavedBlockLockerChestSigns.observeConfigured(terrain, position,
+                        privateHeaders, moreHeaders, everyoneAliases, decoder,configured);
                 for (var member : observation.storageMembers()) {
                     var located = physical.get(member);
                     if (located == null || !accounted.add(member))
@@ -422,6 +438,6 @@ public final class SavedBlockLockerTerrainObservations {
         }
         // A bounded final stamp cannot substitute for an exclusive writer epoch.
         first.witness().requireUnchanged();
-        return new Snapshot(groups, first.witness(), first.report());
+        return new Snapshot(groups, first.witness(), first.report(),configured);
     }
 }
