@@ -248,7 +248,9 @@ public final class ZeroPlayerWriterProbe extends JavaPlugin {
                             throw new IllegalStateException("Unexpected online players");
                         getLogger().info("PAPER_A01_WORLD_REGISTRY_VETO_PRECONDITION_OBSERVED");
                         World additional = Bukkit.createWorld(
-                                new WorldCreator("a01-actual-dynamic-world"));
+                                new WorldCreator("a01-actual-dynamic-world")
+                                        .type(org.bukkit.WorldType.FLAT)
+                                        .generateStructures(false));
                         if (additional == null)
                             throw new IllegalStateException("Real dynamic Paper World was not loaded");
                         if (discovery.observed().isPresent() || discovery.failure().isEmpty())
