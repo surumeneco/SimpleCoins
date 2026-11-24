@@ -22,12 +22,8 @@ public final class A02GrantDeliveryDecisionDriver {
         if (prepared == null || !prepared.equals(input))
             throw new IllegalStateException("A02 input changed after preparation");
         var evidence = new GrantDeliveryDecision.Evidence(
-                value(input, "入力.予約あり"),
-                value(input, "入力.保存済み現物受領対"),
-                value(input, "入力.予約全額受領済"),
-                value(input, "入力.保存世代証拠有効"),
-                value(input, "入力.他収納保全"),
-                value(input, "入力.未ack"),
+                value(input, "入力.未完了予約あり"),
+                value(input, "入力.全額の保存確認済"),
                 value(input, "入力.矛盾あり"));
         var verdict = switch (trigger) {
             case "配布検査" -> GrantDeliveryDecision.prepare(evidence);

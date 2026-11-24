@@ -22,14 +22,12 @@ public final class A01WriterEpochDecisionDriver {
         if (prepared == null || !prepared.equals(input))
             throw new IllegalStateException("A01 input changed after preparation");
         var evidence = new SettlementWriterEpochDecision.Evidence(
-                value(input, "入力.必要ソース完全確認済"),
-                value(input, "入力.新規writer入場拒否実効"),
-                value(input, "入力.既入場writer排出完了"),
-                value(input, "入力.全候補が同一保護世代"),
-                value(input, "入力.帰属重複仕訳照合済"),
-                value(input, "入力.通常仕訳監視への引継可能"),
-                value(input, "入力.オンラインプレイヤー不在"),
-                value(input, "入力.世代失効あり"));
+                value(input, "入力.全対象読取完了"),
+                value(input, "入力.帰属重複照合済"),
+                value(input, "入力.競合解消済"),
+                value(input, "入力.通常仕訳引継可能"),
+                value(input, "入力.参加禁止かつ無人"),
+                value(input, "入力.重大な不整合あり"));
         var verdict = switch (trigger) {
             case "公開判定" -> SettlementWriterEpochDecision.evaluate(evidence);
             case "失効通知" -> SettlementWriterEpochDecision.revoke(evidence);
