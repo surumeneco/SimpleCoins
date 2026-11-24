@@ -16,11 +16,18 @@ import java.util.function.BooleanSupplier;
  * Does not arm a fence, establish writer coverage, or supply A01 evidence. */
 public final class SettlementRuntime {
     public record Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest,
-                           BanSourceCoverage bans) {
+                           BanSourceCoverage bans, Set<UUID> protectedRegistrations) {
         public Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest) {
-            this(staged, manifest, null);
+            this(staged, manifest, null, Set.of());
         }
-        public Captured { Objects.requireNonNull(staged); Objects.requireNonNull(manifest); }
+        public Captured(SettlementScanRunner.Staged staged, WorldStorageDiscovery.Manifest manifest,
+                        BanSourceCoverage bans) {
+            this(staged, manifest, bans, Set.of());
+        }
+        public Captured {
+            Objects.requireNonNull(staged); Objects.requireNonNull(manifest);
+            protectedRegistrations=Set.copyOf(protectedRegistrations);
+        }
     }
     @FunctionalInterface public interface SourceStage { Captured capture() throws IOException; }
     public static final class Attempt {
@@ -150,6 +157,12 @@ public final class SettlementRuntime {
                     throw new IOException("Missing current BAN evidence for previously registered players");
                 for (UUID id : registrationHistory.eligible(manifest.playerDataFiles().keySet(), captured.bans()))
                     balances.putIfAbsent(id, BigInteger.ZERO);
+            }
+            if (!captured.protectedRegistrations().isEmpty()) {
+                if (captured.bans() == null) throw new IOException("Missing BAN evidence for protected registration");
+                for (UUID id : captured.protectedRegistrations())
+                    if (manifest.playerDataFiles().containsKey(id) && !captured.bans().currentlyBanned(id))
+                        balances.putIfAbsent(id,BigInteger.ZERO);
             }
             var accounting = new MemoryAccounting(balances, baseline.free(), dead);
             requireMemoryScanning(attempt);
