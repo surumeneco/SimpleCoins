@@ -103,6 +103,66 @@ class SavedManifestDiscoveryClosureTest {
         }));
     }
 
+    @Test void unpublishedStartupDiscardsChangedCandidateAndRediscoversAllSources() throws Exception {
+        player(FIRST);
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var waits = new java.util.concurrent.atomic.AtomicInteger();
+        var stable = WorldStorageDiscovery.retryUnpublishedDiscovery(5, () -> {
+            var manifest = discovered();
+            if (attempts.incrementAndGet() == 1) player(NEXT);
+            manifest.requireUnchangedDiscovery();
+            return manifest;
+        }, (attempt, drift) -> {
+            assertEquals(1, attempt);
+            waits.incrementAndGet();
+        });
+        assertEquals(2, attempts.get());
+        assertEquals(1, waits.get());
+        assertEquals(Set.of(FIRST, NEXT), stable.playerDataFiles().keySet());
+    }
+
+    @Test void ongoingDriftExhaustsTheBoundWithoutReturningAnyCandidate() throws Exception {
+        player(FIRST);
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var waits = new java.util.concurrent.atomic.AtomicInteger();
+        assertThrows(IOException.class, () -> WorldStorageDiscovery.retryUnpublishedDiscovery(5, () -> {
+            var manifest = discovered();
+            player(new UUID(0, 100 + attempts.incrementAndGet()));
+            manifest.requireUnchangedDiscovery();
+            return manifest;
+        }, (attempt, drift) -> waits.incrementAndGet()));
+        assertEquals(5, attempts.get());
+        assertEquals(4, waits.get());
+    }
+
+    @Test void ordinaryIoFailureNeverRetries() {
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var fatal = new IOException("receipt corruption");
+        var thrown = assertThrows(IOException.class, () ->
+                WorldStorageDiscovery.retryUnpublishedDiscovery(5, () -> {
+                    attempts.incrementAndGet();
+                    throw fatal;
+                }, (attempt, drift) -> fail("non-drift IO was retried")));
+        assertSame(fatal, thrown);
+        assertEquals(1, attempts.get());
+    }
+
+    @Test void cancelledOrInvalidatedStartupCannotRetry() throws Exception {
+        player(FIRST);
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var invalidated = new IOException("world registry transitioned");
+        var thrown = assertThrows(IOException.class, () ->
+                WorldStorageDiscovery.retryUnpublishedDiscovery(5, () -> {
+                    attempts.incrementAndGet();
+                    var manifest = discovered();
+                    player(NEXT);
+                    manifest.requireUnchangedDiscovery();
+                    return manifest;
+                }, (attempt, drift) -> { throw invalidated; }));
+        assertSame(invalidated, thrown);
+        assertEquals(1, attempts.get());
+    }
+
     @Test void manuallyConstructedFixturesRemainUnprovenButUsableForIsolatedReads()
             throws Exception {
         Path existing = player(FIRST);
