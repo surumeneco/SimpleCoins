@@ -13,6 +13,9 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-saved-batch-product-coordinator.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md'
       - 'Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md'
+      - 'Lifecycle/Works/simplecoins.a02.bounded-saved-commit-worker.md'
+      - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantCommitWorker.java'
+      - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantCommitWorker*.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantSavedBatchCoordinator.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStage.java'
       - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java'
@@ -56,6 +59,11 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           work=Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.bounded-saved-commit-worker.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
@@ -305,7 +313,7 @@ jobs:
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-async-commit.log
           grep -F 'PAPER_A02_PRODUCT_ASYNC_MAIN_SAVED_BUT_PENDING_PASSED' paper-a02-async-commit.log
-          grep -F 'PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED physical=10000 grants=2 pending=0 worker=a02-product-saved-proof-worker' paper-a02-async-commit.log
+          grep -F 'PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED physical=10000 grants=2 pending=0 worker=product-owned' paper-a02-async-commit.log
           grep -F 'PAPER_A02_PRODUCT_ASYNC_REPEATED_FINISH_DENIED_PASSED' paper-a02-async-commit.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-async-commit.log; then exit 1; fi
           echo 'PAPER_A02_PRODUCT_MAIN_WORKER_REAL_SAVED_ACK_PASSED'

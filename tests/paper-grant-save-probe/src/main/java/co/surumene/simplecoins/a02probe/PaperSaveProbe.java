@@ -11,6 +11,7 @@ import co.surumene.simplecoins.domain.WorldScope;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WriterEpochFence;
 import co.surumene.simplecoins.paper.SavedGrantDeliveryReadback;
+import co.surumene.simplecoins.paper.SavedGrantCommitWorker;
 import java.lang.reflect.InvocationTargetException;
 import co.surumene.simplecoins.paper.CoinItemCodec;
 import co.surumene.simplecoins.paper.PaperGrantInventorySlotPlan;
@@ -45,6 +46,9 @@ public final class PaperSaveProbe extends JavaPlugin {
     private static final UUID ID = UUID.fromString("00000000-0000-0000-0000-00000000a002");
     private static final int PAPER_COUNT = 1;
     private static final long ISSUED_VALUE = 5000;
+    private final SavedGrantCommitWorker productCommitWorker = new SavedGrantCommitWorker();
+
+    @Override public void onDisable() { productCommitWorker.close(); }
 
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(getServer().getIp()) || !getServer().getOnlinePlayers().isEmpty()) {
@@ -560,24 +564,17 @@ public final class PaperSaveProbe extends JavaPlugin {
             throw new IllegalStateException("Async handoff improperly ACKed before verification");
         getLogger().info("PAPER_A02_PRODUCT_ASYNC_MAIN_SAVED_BUT_PENDING_PASSED");
 
+        var scheduled = scheduleProductTicket(ticket);
         var finish = ticket.getClass().getDeclaredMethod("finishOffMain");
         finish.setAccessible(true);
         // Resolve all Bukkit-owned paths/handles BEFORE crossing threads.
         final Path durableJournalDirectory = grantDirectory();
         final Path durablePlayerdata = dataFile();
-        Thread worker = Thread.ofPlatform().name("a02-product-saved-proof-worker").start(() -> {
+        Thread worker = Thread.ofPlatform().name("a02-probe-assertions").start(() -> {
             try {
                 if (Bukkit.isPrimaryThread())
                     throw new IllegalStateException("Actual verify worker ran on Paper primary thread");
-                SavedGrantDeliveryReadback.Proof proof;
-                try {
-                    proof = (SavedGrantDeliveryReadback.Proof) finish.invoke(ticket);
-                } catch (InvocationTargetException invocation) {
-                    Throwable cause = invocation.getCause();
-                    if (cause instanceof Exception exception) throw exception;
-                    if (cause instanceof Error error) throw error;
-                    throw new IllegalStateException("Unknown off-main proof failure", cause);
-                }
+                SavedGrantDeliveryReadback.Proof proof = awaitProductProof(scheduled);
                 if (proof.receipt().active()
                         || proof.receipt().completedSequence() != 2
                         || proof.matchedStacks() != 1
@@ -617,7 +614,7 @@ public final class PaperSaveProbe extends JavaPlugin {
                             throw new IllegalStateException("Main-thread return lost unrelated item");
                         getLogger().info("PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED"
                                 + " physical=10000 grants=2 pending=0 worker="
-                                + workerThreadNameForDiagnostic());
+                                + "product-owned");
                         getLogger().info("PAPER_A02_PRODUCT_ASYNC_REPEATED_FINISH_DENIED_PASSED");
                     } catch (Throwable failure) {
                         getLogger().log(Level.SEVERE, "PAPER_A02_PROBE_FAILED", failure);
@@ -635,8 +632,25 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (worker == null) throw new AssertionError("JDK worker was not started");
     }
 
-    private static String workerThreadNameForDiagnostic() {
-        return "a02-product-saved-proof-worker";
+    private SavedGrantCommitWorker.Ticket<?> scheduleProductTicket(Object batch) throws Exception {
+        var schedule = batch.getClass().getDeclaredMethod("scheduleOffMain",
+                SavedGrantCommitWorker.class, long.class);
+        schedule.setAccessible(true);
+        try {
+            return (SavedGrantCommitWorker.Ticket<?>) schedule.invoke(batch, productCommitWorker, 90000L);
+        } catch (InvocationTargetException failure) {
+            throw actualQueuedFailure(failure);
+        }
+    }
+
+    // Test assertions may wait on their independent thread; the product and
+    // the Paper primary thread never join a worker or wait for durable IO.
+    private static SavedGrantDeliveryReadback.Proof awaitProductProof(
+            SavedGrantCommitWorker.Ticket<?> scheduled) throws Exception {
+        while (scheduled.status() == SavedGrantCommitWorker.Status.RUNNING) Thread.sleep(1);
+        if (scheduled.status() != SavedGrantCommitWorker.Status.SUCCEEDED)
+            throw new IllegalStateException("Product saved grant worker: " + scheduled.status(), scheduled.failure());
+        return (SavedGrantDeliveryReadback.Proof) scheduled.result();
     }
 
     /**
@@ -700,19 +714,13 @@ public final class PaperSaveProbe extends JavaPlugin {
                 || PaperGrantReceiptPdc.read(player.getPersistentDataContainer())
                         .completedSequence() != grant.sequence())
             throw new IllegalStateException("Main save ACKed a queued grant prematurely");
-        var finish = ticket.getClass().getDeclaredMethod("finishOffMain");
-        finish.setAccessible(true);
+        var scheduled = scheduleProductTicket(ticket);
         final Path data = dataFile(), journal = grantDirectory();
-        Thread.ofPlatform().name("a02-ordered-grant-worker").start(() -> {
+        Thread.ofPlatform().name("a02-ordered-grant-assertions").start(() -> {
             try {
                 if (Bukkit.isPrimaryThread())
                     throw new IllegalStateException("Queued verification ran on primary thread");
-                final SavedGrantDeliveryReadback.Proof proof;
-                try {
-                    proof = (SavedGrantDeliveryReadback.Proof) finish.invoke(ticket);
-                } catch (InvocationTargetException failure) {
-                    throw actualQueuedFailure(failure);
-                }
+                final SavedGrantDeliveryReadback.Proof proof = awaitProductProof(scheduled);
                 List<GrantLedger.Grant> remaining = grants.subList(index + 1, grants.size());
                 var reopened = new GrantLedger(journal);
                 var saved = readDisk(data);

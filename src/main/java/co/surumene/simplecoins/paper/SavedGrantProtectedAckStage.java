@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 /**
  * Internal, unregistered G3 composition step for a completed saved grant
@@ -50,7 +51,18 @@ final class SavedGrantProtectedAckStage {
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
         return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
-                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false);
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false, () -> true);
+    }
+
+    /** Worker-owned entry; check live custody again immediately before durable ACK. */
+    static synchronized SavedGrantDeliveryReadback.Proof finish(
+            WriterEpochFence fence, WriterEpochFence.Seal seal,
+            WorldStorageDiscovery.Manifest manifest, GrantLedger ledger,
+            UUID player, GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
+            Map<String, Object> savedBefore, int maximumCompressedBytes,
+            int maximumInflatedBytes, BooleanSupplier live) throws IOException {
+        return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, false, live);
     }
 
     /**
@@ -70,7 +82,7 @@ final class SavedGrantProtectedAckStage {
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes) throws IOException {
         return finishVerifiedBatch(fence, seal, manifest, ledger, player, grant,
-                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, true);
+                plan, savedBefore, maximumCompressedBytes, maximumInflatedBytes, true, () -> true);
     }
 
     private static SavedGrantDeliveryReadback.Proof finishVerifiedBatch(
@@ -79,7 +91,7 @@ final class SavedGrantProtectedAckStage {
             UUID player, GrantLedger.Grant grant, PaperGrantInventorySlotPlan plan,
             Map<String, Object> savedBefore,
             int maximumCompressedBytes, int maximumInflatedBytes,
-            boolean finalBatchAfterPartial) throws IOException {
+            boolean finalBatchAfterPartial, BooleanSupplier live) throws IOException {
         Objects.requireNonNull(fence, "shared installed writer fence");
         try {
             Objects.requireNonNull(manifest, "verified playerdata universe");
@@ -167,6 +179,8 @@ final class SavedGrantProtectedAckStage {
             SavedGrantDeliveryReadback.Proof committed =
                     fence.withDrainedSeal(seal, () -> {
                         try {
+                            if (!live.getAsBoolean())
+                                throw new IllegalStateException("Saved grant custody expired before durable ACK");
                             ledger.acknowledge(grant, fresh.receipt().completedSequence());
                             return fresh;
                         } catch (IOException persistenceFailure) {
