@@ -801,7 +801,7 @@ public final class PaperSaveProbe extends JavaPlugin {
         if (amountDelivered) {
             ItemStack remainder = player.getInventory().getItem(expectedReceipt);
             if (remainder == null || remainder.getAmount() != 2
-                    || coins.identify(remainder).orElse(null) != CoinDenomination.ONE_HUNDRED)
+                    || coins.identify(remainder).orElse(null) != CoinDenomination.HUNDRED)
                 throw new IllegalStateException("5200 amount was not decomposed into minimum three coins");
         }
         int afterMoney = expectedReceipt + (amountDelivered ? 1 : 0);
