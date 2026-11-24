@@ -82,8 +82,11 @@ public final class SavedGrantCommitWorker implements AutoCloseable {
 
         /** Monotonic deadline; observation never waits for worker filesystem IO. */
         public synchronized Status status() {
-            if (state == Status.RUNNING && System.nanoTime() - deadline >= 0)
+            if ((state == Status.RUNNING || state == Status.SUCCEEDED)
+                    && System.nanoTime() - deadline >= 0) {
                 state = Status.ABANDONED;
+                value = null;
+            }
             return state;
         }
 

@@ -83,6 +83,9 @@ public final class WriterEpochFence {
     // Exclusive owner can keep the epoch SEALED while slow bounded IO runs
     // without pinning the monitor required by Agent admission/invalidations.
     private Thread durableLeaseOwner;
+    // A single, explicitly scoped synchronous writer may perform the real save
+    // without opening the sealed generation to other roots.
+    private Thread exclusiveWriter;
 
     public State state() { synchronized (lock) { return state; } }
 
@@ -98,10 +101,12 @@ public final class WriterEpochFence {
         }
     }
 
-    /** Root admission always fails once the seal has been acquired. */
+    /** Root admission under a seal is denied except for its scoped exclusive writer. */
     public Entry enterRoot() {
         synchronized (lock) {
-            if (state != State.OPEN || atomicPublicationActive || !ancestry.get().isEmpty())
+            if ((state != State.OPEN && !(state == State.SEALED
+                    && exclusiveWriter == Thread.currentThread()))
+                    || atomicPublicationActive || !ancestry.get().isEmpty())
                 throw new IllegalStateException("New or recursive writer root not admitted");
             return beginEntry();
         }
@@ -183,7 +188,7 @@ public final class WriterEpochFence {
         Objects.requireNonNull(action, "protected saved-file operation");
         synchronized (lock) {
             requireSeal(seal);
-            if (active != 0 || durableLeaseOwner != null || atomicPublicationActive)
+            if (active != 0 || durableLeaseOwner != null || exclusiveWriter != null || atomicPublicationActive)
                 throw new IllegalStateException("Writer epoch cannot begin exclusive IO lease");
             durableLeaseOwner = Thread.currentThread();
         }
@@ -207,6 +212,36 @@ public final class WriterEpochFence {
     }
 
     /**
+     * Allow only this thread to enter tracked root writers for a controlled
+     * physical save inside an already drained seal. The seal never reopens.
+     * No lock is retained across the save, so unrelated writers fail promptly.
+     * Do not dispatch asynchronous writers or arbitrary plugin callbacks here.
+     * This grants no authority over uninstrumented writers.
+     */
+    public <T> T withDrainedWriter(Seal seal, DurableLeaseWork<T> action) throws IOException {
+        Objects.requireNonNull(action, "protected physical save");
+        synchronized (lock) {
+            requireDrained(seal);
+            if (durableLeaseOwner != null || exclusiveWriter != null || atomicPublicationActive)
+                throw new IllegalStateException("Writer epoch already exclusively held");
+            exclusiveWriter = Thread.currentThread();
+        }
+        try {
+            T result = action.run();
+            synchronized (lock) { requireDrained(seal); }
+            return result;
+        } catch (IOException | RuntimeException | Error failure) {
+            invalidate();
+            throw failure;
+        } finally {
+            synchronized (lock) {
+                exclusiveWriter = null;
+                lock.notifyAll();
+            }
+        }
+    }
+
+    /**
      * Run only the short, synchronous FINAL commit of an already staged
      * candidate while the same monitor excludes both root entry and seal
      * resumption. A pair of requireDrained calls outside this lock could
@@ -221,7 +256,7 @@ public final class WriterEpochFence {
         Objects.requireNonNull(finalCommit, "atomic final publication");
         synchronized (lock) {
             requireSeal(seal);
-            if (active != 0 || atomicPublicationActive ||
+            if (active != 0 || atomicPublicationActive || exclusiveWriter != null ||
                     (durableLeaseOwner != null && durableLeaseOwner != Thread.currentThread()))
                 throw new IllegalStateException("Writer epoch not ready for atomic commit");
             atomicPublicationActive = true;
@@ -257,7 +292,7 @@ public final class WriterEpochFence {
         Objects.requireNonNull(publishReady, "normal journal publication");
         synchronized (lock) {
             requireDrained(seal);
-            if (atomicPublicationActive || durableLeaseOwner != null)
+            if (atomicPublicationActive || durableLeaseOwner != null || exclusiveWriter != null)
                 throw new IllegalStateException("Cannot hand off an exclusively held writer epoch");
             atomicPublicationActive = true;
             try {
@@ -295,7 +330,7 @@ public final class WriterEpochFence {
     /** End a protected interval; the old seal becomes permanently stale. */
     public void resume(Seal seal) {
         synchronized (lock) {
-            if (atomicPublicationActive || durableLeaseOwner != null)
+            if (atomicPublicationActive || durableLeaseOwner != null || exclusiveWriter != null)
                 throw new IllegalStateException("Cannot resume an exclusively held writer epoch");
             requireDrained(seal);
             advanceEpoch();

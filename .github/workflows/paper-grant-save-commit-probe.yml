@@ -14,6 +14,10 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md'
       - 'Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md'
       - 'Lifecycle/Works/simplecoins.a02.bounded-saved-commit-worker.md'
+      - 'Lifecycle/Works/simplecoins.a02.protected-off-main-preflight.md'
+      - 'src/main/java/co/surumene/simplecoins/domain/WriterEpochFence.java'
+      - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantReceiptNbt.java'
+      - 'src/test/java/co/surumene/simplecoins/domain/ProtectedGrantPreflight*.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantCommitWorker.java'
       - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantCommitWorker*.java'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantSavedBatchCoordinator.java'
@@ -71,6 +75,22 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.protected-off-main-preflight.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind vectors --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind queue --work "$work"
+          cache=Lifecycle/Works/.cat-flow/cache/a02-protected-preflight
+          out=Lifecycle/Works/.cat-flow/generated/A02ProtectedPreflightDecisionGeneratedTest.java
+          mkdir -p "$(dirname "$out")"
+          python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
+          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
+          generated=$(sed -n 's/^final class \([^ ]*\) .*/\1/p' "$out")
+          test -n "$generated"
+          mkdir -p src/test/java/co/surumene/simplecoins/domain/generated
+          cp "$out" "src/test/java/co/surumene/simplecoins/domain/generated/$generated.java"
           work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
@@ -315,6 +335,7 @@ jobs:
             exit 1
           fi
           grep -F 'Admission guard active (default-deny until verified SimpleCoins service)' paper-a02-async-commit.log
+          grep -F 'PAPER_A02_PRODUCT_PROTECTED_OFF_MAIN_PREFLIGHT_PASSED' paper-a02-async-commit.log
           grep -F 'PAPER_A02_PRODUCT_ASYNC_MAIN_SAVED_BUT_PENDING_PASSED' paper-a02-async-commit.log
           grep -F 'PAPER_A02_PRODUCT_ASYNC_WORKER_FRESH_ACK_PASSED physical=10000 grants=2 pending=0 worker=product-owned' paper-a02-async-commit.log
           grep -F 'PAPER_A02_PRODUCT_ASYNC_REPEATED_FINISH_DENIED_PASSED' paper-a02-async-commit.log

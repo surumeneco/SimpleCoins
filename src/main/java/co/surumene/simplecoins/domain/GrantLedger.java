@@ -25,7 +25,8 @@ public final class GrantLedger {
     }
     private final Path directory;
     private final TreeMap<Long, Grant> grants = new TreeMap<>();
-    private boolean failed;
+    private volatile boolean failed;
+    private volatile long mutationRevision;
 
     public GrantLedger(Path directory) throws IOException {
         this.directory = directory;
@@ -81,6 +82,7 @@ public final class GrantLedger {
         long next = grants.isEmpty() ? 1 : Math.addExact(grants.lastKey(), 1);
         Grant grant = new Grant(next, UUID.randomUUID(), player, amount, issuer,
                 Instant.now().toEpochMilli(), false, denomination, coinCount);
+        advanceMutationRevision();
         persistNew(grant);
         try { writeHead(next); }
         catch (IOException failure) { failed = true; throw failure; }
@@ -111,16 +113,20 @@ public final class GrantLedger {
     public synchronized VerifiedPlayerSnapshot verifiedPlayerSnapshot(UUID player) {
         Objects.requireNonNull(player, "player UUID");
         checkHealthy();
-        return new VerifiedPlayerSnapshot(player, grants.values().stream()
+        return new VerifiedPlayerSnapshot(this, mutationRevision, player, grants.values().stream()
                 .filter(g -> g.player().equals(player)).toList());
     }
 
     public static final class VerifiedPlayerSnapshot {
+        private final GrantLedger owner;
+        private final long revision;
         private final UUID player;
         private final List<Grant> history;
         private final List<Grant> pending;
 
-        private VerifiedPlayerSnapshot(UUID player, List<Grant> history) {
+        private VerifiedPlayerSnapshot(GrantLedger owner, long revision, UUID player, List<Grant> history) {
+            this.owner = owner;
+            this.revision = revision;
             this.player = player;
             this.history = List.copyOf(history);
             this.pending = this.history.stream().filter(g -> !g.delivered()).toList();
@@ -188,9 +194,25 @@ public final class GrantLedger {
             throw new IllegalStateException("Cannot acknowledge an unapplied grant");
         if (current.delivered()) return;
         Grant complete = current.completed();
+        advanceMutationRevision();
         persist(complete);
         grants.put(complete.sequence(), complete);
     }
+    /**
+     * Nonblocking in-process freshness check for a sealed main-thread handoff.
+     * Not a disk proof: the caller MUST exclude all durable writers for the
+     * entire protected interval. Actual ACK still verifies the durable journal.
+     */
+    public void requireCurrentPlanningView(VerifiedPlayerSnapshot view) {
+        if (view == null || view.owner != this || failed || view.revision != mutationRevision)
+            throw new IllegalStateException("Issuance planning view is stale or foreign");
+    }
+
+    private void advanceMutationRevision() {
+        try { mutationRevision = Math.incrementExact(mutationRevision); }
+        catch (ArithmeticException exhausted) { failed = true; throw exhausted; }
+    }
+
     private void checkHealthy() {
         if (failed)
             throw new IllegalStateException("Issuance journal failed; reload from disk before continuing");
