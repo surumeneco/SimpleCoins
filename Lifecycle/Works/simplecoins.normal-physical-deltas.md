@@ -1,0 +1,3 @@
+# Normal accounting: confirmed local player and ground changes
+
+Approved 02B (§通常仕訳), 02A, and existing Confirmed ground-item / memory-accounting Process, PI and TCE are the source. Issue #423. Scope: Ground adapter, local before/after aggregation, shared block inventory observation, product tick batch, and focused tests. Preserve physical value, ignore cancelled moves, account partial pickup by actual observations, account death drops and retained inventory once; distinguish removal from unloading and existing grant issuance. Do not claim coverage for external custom mob storage, owner changes, dynamic ban or unobserved mutation. No admission until complete.

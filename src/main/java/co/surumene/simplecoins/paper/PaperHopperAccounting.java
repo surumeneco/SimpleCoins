@@ -13,6 +13,11 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.HopperInventorySearchEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.block.*;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.block.Sign;
+import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.DoubleChestInventory;
@@ -40,11 +45,12 @@ public final class PaperHopperAccounting implements Listener {
             return "world/" + b.getWorld().getName() + "/" + x + "," + y + "," + z + ":" + slot;
         }
     }
-    private record Image(Position position, ItemStack[] contents) {}
+    private record Image(Position position, ItemStack[] contents, AssetOwner.Result owner) {}
     private final WorldScope scope;
     private final BooleanSupplier ready;
     private final Consumer<List<MemoryAccounting.Movement>> sink;
     private final Consumer<Exception> fatal;
+    private final Consumer<Set<UUID>> register;
     private final Map<Position, Image> before = new HashMap<>();
     private final Set<Position> touched = new HashSet<>();
     private static final int COMPRESSED = 16 * 1024 * 1024;
@@ -52,7 +58,13 @@ public final class PaperHopperAccounting implements Listener {
 
     public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
             Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal) {
+        this(scope,ready,sink,fatal,ignored->{});
+    }
+    public PaperHopperAccounting(WorldScope scope, BooleanSupplier ready,
+            Consumer<List<MemoryAccounting.Movement>> sink, Consumer<Exception> fatal,
+            Consumer<Set<UUID>> register) {
         this.scope = Objects.requireNonNull(scope);
+        this.register = Objects.requireNonNull(register);
         this.ready = Objects.requireNonNull(ready);
         this.sink = Objects.requireNonNull(sink);
         this.fatal = Objects.requireNonNull(fatal);
@@ -62,7 +74,7 @@ public final class PaperHopperAccounting implements Listener {
         BlockState state = b.getState();
         if (state instanceof Chest chest) return chest.getBlockInventory();
         if (state instanceof Container container) return container.getInventory();
-        throw new IOException("Not a physical block inventory: " + b.getLocation());
+        return null;
     }
 
     private static List<Position> positions(Inventory inventory) throws IOException {
@@ -96,9 +108,101 @@ public final class PaperHopperAccounting implements Listener {
         return items;
     }
 
+    private AssetOwner.Result resolve(Block block) throws IOException {
+        UUID owner=null;
+        boolean everyone=false;
+        var settings=PaperBlockLockerSettings.capture();
+        if (settings.containers().contains(block.getType().getKey().toString())) {
+            var protection=BlockLockerLiveEvidence.observe(block);
+            owner=protection.owner();
+            everyone=protection.everyoneProtected();
+        }
+        var bans=PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile","paper-ip"),Map.of());
+        return AssetOwner.resolve(owner,everyone,owner!=null&&bans.currentlyBanned(owner),
+                owner!=null&&PaperPlayerGrantDelivery.playerdata(owner)!=null);
+    }
+
     private void capture(Position p) throws IOException {
-        if (!before.containsKey(p))
-            before.put(p, new Image(p, copyContents(physical(p.block()))));
+        if (!before.containsKey(p)) {
+            var block=p.block();
+            var inventory=physical(block);
+            if(inventory==null) throw new IOException("Expected physical block inventory");
+            before.put(p,new Image(p,copyContents(inventory),resolve(block)));
+        }
+    }
+    private static final BlockFace[] FACES={BlockFace.NORTH,BlockFace.SOUTH,BlockFace.EAST,
+            BlockFace.WEST,BlockFace.UP,BlockFace.DOWN};
+    private void touch(Block block) throws IOException {
+        if (!block.getWorld().isChunkLoaded(block.getX()>>4,block.getZ()>>4)
+                || !scope.includes(block.getWorld().getName())) return;
+        if (!(block.getState() instanceof Container)) return;
+        var position=Position.of(block);
+        capture(position);
+        touched.add(position);
+        if (block.getState() instanceof Chest chest) {
+            for(var member:positions(chest.getInventory())) {
+                capture(member);
+                touched.add(member);
+            }
+        }
+    }
+    private void neighborhood(Block block) throws IOException {
+        touch(block);
+        for(var face:FACES) {
+            int x=block.getX()+face.getModX(), y=block.getY()+face.getModY(), z=block.getZ()+face.getModZ();
+            if(y>=block.getWorld().getMinHeight()&&y<block.getWorld().getMaxHeight()
+                    &&block.getWorld().isChunkLoaded(x>>4,z>>4))
+                touch(block.getWorld().getBlockAt(x,y,z));
+        }
+    }
+    @FunctionalInterface private interface Observation { void read() throws IOException; }
+    private void observe(Observation observation) {
+        if (!ready.getAsBoolean())return;
+        try { observation.read(); }
+        catch(IOException|RuntimeException failure){fail(failure);}
+    }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void sign(SignChangeEvent event) { observe(()->neighborhood(event.getBlock())); }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void interact(PlayerInteractEvent event) {
+        if(event.getClickedBlock()!=null)observe(()->neighborhood(event.getClickedBlock()));
+    }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void breakBlock(BlockBreakEvent event) { observe(()->neighborhood(event.getBlock())); }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void place(BlockPlaceEvent event) {
+        observe(()->{
+            Block block=event.getBlockPlaced();
+            if(block.getState() instanceof Container && scope.includes(block.getWorld().getName())) {
+                var position=Position.of(block);
+                if(!before.containsKey(position)) {
+                    if(event.getBlockReplacedState() instanceof Container)
+                        throw new IOException("Container replacement lacks original observation");
+                    before.put(position,new Image(position,new ItemStack[0],AssetOwner.resolve(null,false,false,false)));
+                }
+                touched.add(position);
+            }
+            neighborhood(block);
+        });
+    }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void explode(BlockExplodeEvent event) {
+        observe(()->{for(Block block:event.blockList())neighborhood(block);});
+    }
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void explode(EntityExplodeEvent event) {
+        observe(()->{for(Block block:event.blockList())neighborhood(block);});
+    }
+
+    /** Shared preimage for inventory GUI and ground-to-block pickup. */
+    public void observeInventory(Inventory inventory) {
+        if (!ready.getAsBoolean()) return;
+        try {
+            for (Position position : positions(inventory)) {
+                capture(position);
+                touched.add(position);
+            }
+        } catch (IOException | RuntimeException failure) { fail(failure); }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -136,26 +240,20 @@ public final class PaperHopperAccounting implements Listener {
     }
 
     private Map<MemoryAccounting.Endpoint, BigInteger> balances(boolean initial,
-            PaperBlockLockerSettings settings, BanSourceCoverage bans) throws IOException {
+            Set<UUID> registrations) throws IOException {
         Map<MemoryAccounting.Endpoint, BigInteger> result = new HashMap<>();
         Set<UUID> wallets = new HashSet<>();
         for (Position p : touched) {
             Block b = p.block();
             if (!scope.includes(b.getWorld().getName())) continue;
-            Inventory inventory = physical(b);
-            ItemStack[] items = initial ? before.get(p).contents() : inventory.getContents();
-            if (items.length != inventory.getSize())
-                throw new IOException("Hopper physical slot count changed");
-            UUID owner = null;
-            boolean everyone = false;
-            if (settings.containers().contains(b.getType().getKey().toString())) {
-                var protection = BlockLockerLiveEvidence.observe(b);
-                owner = protection.owner();
-                everyone = protection.everyoneProtected();
-            }
-            var resolved = AssetOwner.resolve(owner, everyone,
-                    owner != null && bans.currentlyBanned(owner),
-                    owner != null && PaperPlayerGrantDelivery.playerdata(owner) != null);
+            var image=before.get(p);
+            if(image==null)throw new IOException("Block before-image missing");
+            Inventory inventory=initial?null:physical(b);
+            if(!initial&&inventory==null)continue; // destroyed container: ground events own the drops
+            ItemStack[] items=initial?image.contents():inventory.getContents();
+            var resolved=initial?image.owner():resolve(b);
+            if(!initial&&resolved.kind()==AssetOwner.Kind.PERSONAL)
+                registrations.add(resolved.player());
             for (int slot = 0; slot < items.length; slot++) {
                 BigInteger value = PaperLiveItemValue.stack(items[slot], COMPRESSED, INFLATED, wallets);
                 if (value.signum() == 0) continue;
@@ -175,11 +273,11 @@ public final class PaperHopperAccounting implements Listener {
     public void flush() {
         try {
             if (!ready.getAsBoolean() || touched.isEmpty()) return;
-            var settings = PaperBlockLockerSettings.capture();
-            var bans = PaperProfileBanSource.captureCompleteStandard(Set.of("paper-profile", "paper-ip"), Map.of());
-            var changes = InventoryAccountingDelta.between(balances(true, settings, bans),
-                    balances(false, settings, bans));
+            var registrations=new HashSet<UUID>();
+            var changes = InventoryAccountingDelta.between(balances(true, registrations),
+                    balances(false, registrations));
             if (!changes.isEmpty()) sink.accept(changes);
+            if (!registrations.isEmpty()) register.accept(Set.copyOf(registrations));
         } catch (IOException | RuntimeException failure) { fail(failure); }
         finally { before.clear(); touched.clear(); }
     }
