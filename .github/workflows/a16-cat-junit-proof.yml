@@ -5,7 +5,7 @@ on:
     paths:
       - 'src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java'
       - 'src/test/java/co/surumene/simplecoins/domain/A16ImageSelectionDriver.java'
-      - 'src/test/java/co/surumene/simplecoins/domain/generated/**'
+      - 'src/test/java/co/surumene/simplecoins/domain/generated/GeneratedA16ImageSelection*.java'
       - 'Lifecycle/Works/simplecoins.a16.image-fallback.md'
       - '.github/workflows/a16-cat-junit-proof.yml'
 permissions:
@@ -30,10 +30,14 @@ jobs:
         run: |
           set -euo pipefail
           source='src/main/java/co/surumene/simplecoins/domain/JavaCurrencyPack.java'
+          if git diff --quiet '${{ github.event.pull_request.base.sha }}' HEAD -- "$source"; then
+            echo "A16 source unchanged; run existing Green regression only"
+            exit 0
+          fi
           cp "$source" "$RUNNER_TEMP/a16-green.java"
           git show '${{ github.event.pull_request.base.sha }}:'"$source" > "$source"
           set +e
-          gradle --no-daemon test --tests 'co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test' > "$RUNNER_TEMP/a16-red.log" 2>&1
+          gradle --no-daemon :test --tests 'co.surumene.simplecoins.domain.GeneratedA16ImageSelectionCase123a32c34595Test' > "$RUNNER_TEMP/a16-red.log" 2>&1
           result=$?
           set -e
           cp "$RUNNER_TEMP/a16-green.java" "$source"
