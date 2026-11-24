@@ -12,6 +12,7 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.final-partial-protected-ack.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-saved-batch-product-coordinator.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md'
+      - 'Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md'
       - 'src/main/java/co/surumene/simplecoins/paper/PaperGrantSavedBatchCoordinator.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStage.java'
       - 'src/test/java/co/surumene/simplecoins/paper/SavedGrantProtectedAckStageTest.java'
@@ -55,6 +56,11 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
           work=Lifecycle/Works/simplecoins.a02.paper-main-worker-saved-commit.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
@@ -245,6 +251,41 @@ jobs:
           grep -F 'PAPER_A02_THIRD_BOOT_REPEATED_ACK_IDEMPOTENT_PASSED' paper-a02-acked-reload.log
           if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-a02-acked-reload.log; then exit 1; fi
           echo 'PAPER_A02_SAVE_CRASH_ACK_CRASH_THIRD_BOOT_NO_REISSUE_PASSED'
+      - name: Actual Paper amount and ordered reservations through product worker ACK
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=0
+          for case in queued amount; do
+            root="smoke-product-${case}"
+            cp -a smoke "$root" || exit 1
+            (
+              cd "$root" || exit 1
+              timeout --signal=TERM --kill-after=10s 200s \
+                java "-Da02.probe.phase=product-${case}-commit" -Xms256M -Xmx1024M \
+                  -jar paper.jar nogui </dev/null > "paper-a02-${case}-commit.log" 2>&1
+              status=$?
+              if [ "$status" -ne 0 ]; then
+                tail -180 "paper-a02-${case}-commit.log"
+                exit 1
+              fi
+              if [ "$case" = queued ]; then
+                grep -F 'PAPER_A02_PRODUCT_ORDERED_GRANT_ACK_PASSED seq=2 newValue=5000 physical=10000 pending=1' "paper-a02-${case}-commit.log" || exit 1
+                grep -F 'PAPER_A02_PRODUCT_ORDERED_SAME_FENCE_RESUMED_PASSED' "paper-a02-${case}-commit.log" || exit 1
+                expected='total=15200 grants=3 pending=0'
+              else
+                expected='total=10200 grants=2 pending=0'
+              fi
+              grep -F "PAPER_A02_PRODUCT_ORDERED_GRANTS_COMPLETE_PASSED $expected" "paper-a02-${case}-commit.log" || exit 1
+              if grep -Fq 'PAPER_A02_PROBE_FAILED' "paper-a02-${case}-commit.log"; then exit 1; fi
+              timeout --signal=TERM --kill-after=10s 200s \
+                java "-Da02.probe.phase=product-${case}-reload" -Xms256M -Xmx1024M \
+                  -jar paper.jar nogui </dev/null > "paper-a02-${case}-reload.log" 2>&1 || exit 1
+              grep -F "PAPER_A02_PRODUCT_ORDERED_GRANTS_COLD_RESTART_PASSED $expected" "paper-a02-${case}-reload.log" || exit 1
+              if grep -Fq 'PAPER_A02_PROBE_FAILED' "paper-a02-${case}-reload.log"; then exit 1; fi
+            ) || { tail -140 "$root/paper-a02-${case}-commit.log"; failed=1; }
+          done
+          exit "$failed"
       - name: Alternate Paper JVM hands off product saved ACK from main to worker
         shell: bash
         run: |
@@ -634,5 +675,7 @@ jobs:
             smoke-protected-final/*.log
             smoke-product-coordinator/*.log
             smoke-product-async/*.log
+            smoke-product-queued/*.log
+            smoke-product-amount/*.log
           if-no-files-found: ignore
           retention-days: 7

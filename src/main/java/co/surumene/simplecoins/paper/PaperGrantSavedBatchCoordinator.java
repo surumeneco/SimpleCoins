@@ -89,10 +89,12 @@ final class PaperGrantSavedBatchCoordinator {
                 throw new IllegalArgumentException("Nonpositive saved playerdata read budget");
 
             UUID player = detached.getUniqueId();
+            // Both exact-denomination and amount-form reservations are authentic
+            // grant kinds. The latter is the required offline give form and
+            // uses the existing canonical minimum-coin batch planner.
             if (!player.equals(grant.player()) || grant.delivered()
-                    || grant.denomination() == null
                     || !ledger.pending(player).contains(grant))
-                throw new IllegalStateException("Not a genuine pending typed grant");
+                throw new IllegalStateException("Not a genuine pending grant");
             if (beforeManifest.origin() == null)
                 throw new IOException("Saved playerdata discovery is not origin-backed");
             beforeManifest.requireUnchangedDiscovery();
@@ -169,6 +171,10 @@ final class PaperGrantSavedBatchCoordinator {
         private final int inflatedLimit;
         private final java.util.concurrent.atomic.AtomicBoolean attempted =
                 new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.atomic.AtomicBoolean verifiedComplete =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.atomic.AtomicBoolean handedBack =
+                new java.util.concurrent.atomic.AtomicBoolean();
 
         private SealedFirstBatch(WriterEpochFence fence, WriterEpochFence.Seal seal,
                 WorldStorageDiscovery.Manifest original, Path playerdataFile,
@@ -194,11 +200,34 @@ final class PaperGrantSavedBatchCoordinator {
          * inputs, not from off-thread Bukkit access or a caller-supplied path.
          * No source contains a mutable Paper object or Player reference.
          *
-         * On success the caller still owns a SEALED epoch; policy for later
-         * resumption and full writer coverage are not established here.
+         * On success the caller still owns a SEALED epoch. A fully verified
+         * complete grant can return the same fence for the next operation
+         * on main, but partial history and full writer coverage are not
+         * established here.
          */
         SavedGrantDeliveryReadback.Proof finishOffMain() throws IOException {
             return finish(false, null);
+        }
+
+        /**
+         * Return the same fence for subsequent work, once, after a verified
+         * COMPLETE durable ACK. Never reopen before completion, while partial
+         * history is unresolved, or while players have been admitted. Resuming
+         * the writer generation is not an Admission permit: the enclosing
+         * runtime still owns the external writer audit and normal journal.
+         */
+        void resumeAfterVerifiedCompleteOnMain() {
+            try {
+                if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
+                        || !verifiedComplete.get()
+                        || !handedBack.compareAndSet(false, true))
+                    throw new IllegalStateException(
+                            "Only one fully verified complete grant may return its sealed epoch on main");
+                fence.resume(seal);
+            } catch (RuntimeException | Error failure) {
+                fence.invalidate();
+                throw failure;
+            }
         }
 
         /** Unregistered legacy test-only synchronous callback compatibility. */
@@ -252,9 +281,14 @@ final class PaperGrantSavedBatchCoordinator {
                                 fence, seal, fresh, ledger, player, grant, plan, before,
                                 compressedLimit, inflatedLimit);
                 fence.requireDrained(seal);
-                if (plan.nextReceipt().active() == ledger.pending(player).isEmpty())
+                // A receipt describes THIS grant, not every reservation for
+                // its owner. Later authentic pending reservations must remain
+                // pending and must not fault an earlier successful ACK.
+                boolean targetStillPending = ledger.pending(player).contains(grant);
+                if (plan.nextReceipt().active() != targetStillPending)
                     throw new IllegalStateException(
-                            "Partial/complete grant acknowledgement differs from saved receipt");
+                            "Target grant acknowledgement differs from saved receipt");
+                if (!plan.nextReceipt().active()) verifiedComplete.set(true);
                 return proof;
             } catch (IOException | RuntimeException | Error failure) {
                 fence.invalidate();
