@@ -55,6 +55,6 @@ public final class BlockLockerSavedOwnerVerdict {
             return Verdict.FREE_UNPUBLISHED;
         }
         return evidence.primaryOwnerUuidVerified()
-                ? Verdict.OWNER_UNPUBLISHED : Verdict.HOLD;
+                ? Verdict.OWNER_UNPUBLISHED : Verdict.FREE_UNPUBLISHED;
     }
 }

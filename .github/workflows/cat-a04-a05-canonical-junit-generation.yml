@@ -59,7 +59,7 @@ jobs:
           rows = [
               ('A04','a04','simplecoins.a04.saved-terrain-observation-producer',
                'a04-saved-owner','a04-saved-blocklocker-owner','a04-saved-owner-junit-binding.json',
-               'A04SavedOwnerGeneratedTest.java',20),
+               'A04SavedOwnerGeneratedTest.java',22),
               ('A05','a05','simplecoins.a05.live-wcl-hybrid-stage',
                'a05-live-hybrid','a05-wcl-consumer','a05-wcl-consumer-junit-binding.json',
                'A05LiveHybridGeneratedTest.java',29),
