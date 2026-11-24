@@ -165,6 +165,10 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(trader,this);
         var world=Bukkit.getWorlds().getFirst();
         var pos=world.getSpawnLocation().add(0,4,0);
+        // No real player is connected: retain this chunk until the physical
+        // readback, otherwise Paper may unload it immediately after spawning.
+        var chunk=pos.getChunk();
+        chunk.addPluginChunkTicket(this);
         world.spawn(pos,org.bukkit.entity.WanderingTrader.class).setHealth(0.0);
         Bukkit.getScheduler().runTaskLater(this,()->{
             try{
@@ -178,6 +182,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                 if(!observed.equals(BigInteger.valueOf(100))||!accounting.snapshot().free().equals(observed))
                     throw new AssertionError("Real trader spawn mismatch: "+observed+" / "+accounting.snapshot().free());
                 getLogger().info("PAPER_NORMAL_TRADER_SPAWN_PASSED total=100");
+                chunk.removePluginChunkTicket(this);
                 Bukkit.shutdown();
             }catch(Throwable failure){fail(failure);}
         },2L);
