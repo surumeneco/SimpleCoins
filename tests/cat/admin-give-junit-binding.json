@@ -1,0 +1,7 @@
+{
+  "schema": "cat-junit-driver-binding/v1",
+  "process": "simplecoins.give.admin-request",
+  "test_package": "co.surumene.simplecoins.domain.generated",
+  "test_class": "GeneratedAdminGiveTest",
+  "driver_class": "co.surumene.simplecoins.domain.AdminGiveDriver"
+}

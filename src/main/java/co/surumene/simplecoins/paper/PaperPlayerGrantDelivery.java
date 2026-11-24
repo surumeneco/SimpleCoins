@@ -34,6 +34,8 @@ public final class PaperPlayerGrantDelivery {
         this.issued = Objects.requireNonNull(issued);
     }
 
+    public boolean isBlocked(UUID id) { return blocked.contains(id); }
+
     public Result deliver(Player player) throws IOException {
         if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Paper main thread required");
         UUID id = player.getUniqueId();

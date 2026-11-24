@@ -18,10 +18,12 @@ softdepend:
 commands:
   simplecoins:
     aliases: [sc]
-    description: SimpleCoins administrative asset queries
-    usage: /<command> <stats|balance <player>|dead [page]>
-    permission: simplecoins.admin
+    description: SimpleCoins administration
+    usage: /<command> <stats|balance <player>|dead [page]|give <target> <amount>|give <target> <item> <count>>
 permissions:
   simplecoins.admin:
     description: View SimpleCoins accounting and dead assets
+    default: op
+  simplecoins.give:
+    description: Issue SimpleCoins currency and empty wallets
     default: op

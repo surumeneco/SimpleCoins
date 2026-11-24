@@ -24,7 +24,9 @@ import co.surumene.simplecoins.paper.PaperWonderfulReaderRegistry;
 import co.surumene.simplecoins.paper.PaperNormalJournalWatchdog;
 import co.surumene.simplecoins.paper.CoinExchangeRecipes;
 import co.surumene.simplecoins.paper.CoinItemCodec;
-import co.surumene.simplecoins.paper.AdminAssetCommand;
+import co.surumene.simplecoins.paper.PaperAdminCommand;
+import co.surumene.simplecoins.paper.PaperPlayerGrantDelivery;
+import co.surumene.simplecoins.domain.MemoryAccounting;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.ServicePriority;
@@ -230,9 +232,17 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                         getLogger().log(Level.SEVERE, "Protected saved grant delivery failed", failure);
                         Bukkit.shutdown();
                     });
-            java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command")
-                    .setExecutor(new AdminAssetCommand(publication, sourceScope.scope(), unit));
             WalletItemCodec walletCodec = new WalletItemCodec(UUID::randomUUID, unit);
+            var liveDelivery = new PaperPlayerGrantDelivery(issuanceGrants, coinCodec, (id, value) ->
+                    publication.recordConfirmedMemory(java.util.List.of(new MemoryAccounting.Movement(
+                            MemoryAccounting.Endpoint.external(), MemoryAccounting.Endpoint.personal(id),
+                            java.math.BigInteger.valueOf(value))), java.util.Set.of()));
+            var admin = new PaperAdminCommand(this, publication, issuanceGrants, liveDelivery,
+                    walletCodec, sourceScope.scope(), names, unit);
+            var command = java.util.Objects.requireNonNull(getCommand("simplecoins"), "Missing simplecoins command");
+            command.setExecutor(admin);
+            command.setTabCompleter(admin);
+            getServer().getPluginManager().registerEvents(admin, this);
             exchangeRecipes = new CoinExchangeRecipes(this, coinCodec);
             exchangeRecipes.register();
             if (exchangeRecipes.registeredCount() != 20)
