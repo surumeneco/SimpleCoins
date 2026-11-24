@@ -22,8 +22,15 @@ public final class PlayerDataReader {
 
     public static Map<String, Object> read(Path file, int maxCompressedBytes,
                                             int maxInflatedBytes) throws IOException {
-        Objects.requireNonNull(file);
         if (maxCompressedBytes < 1 || maxInflatedBytes < 1)
+            throw new IllegalArgumentException("Playerdata budgets must be positive");
+        return decodeCompressed(readCompressed(file, maxCompressedBytes), maxCompressedBytes, maxInflatedBytes);
+    }
+
+    /** Read exact bounded bytes for durable before-image evidence. */
+    public static byte[] readCompressed(Path file, int maxCompressedBytes) throws IOException {
+        Objects.requireNonNull(file);
+        if (maxCompressedBytes < 1)
             throw new IllegalArgumentException("Playerdata budgets must be positive");
 
         String name = file.getFileName().toString();
@@ -63,7 +70,16 @@ public final class PlayerDataReader {
                 bytes.write(buffer, 0, n);
             }
         }
-        try (var gzip = new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+        return bytes.toByteArray();
+    }
+
+    /** Decode immutable captured bytes; no assertion of source authority. */
+    public static Map<String, Object> decodeCompressed(byte[] bytes, int maxCompressedBytes,
+            int maxInflatedBytes) throws IOException {
+        if (bytes == null || bytes.length == 0 || maxCompressedBytes < 1
+                || bytes.length > maxCompressedBytes || maxInflatedBytes < 1)
+            throw new IOException("Invalid compressed playerdata budget or bytes");
+        try (var gzip = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
             return NbtReader.read(gzip, maxInflatedBytes);
         }
     }
