@@ -17,11 +17,11 @@ import org.bukkit.scheduler.BukkitTask;
  * Primary-thread lifecycle owner of the existing protected grant protocol.
  * It never arms the writer fence, grants player admission, registers a command
  * or starts automatically. Only the enclosing audited runtime may start it.
- * A successful partial proof still requires separate multi-session custody.
+ * Partial handback requires a durable verified progress floor and does not permit admission.
  */
 public final class PaperSavedGrantDeliveryService implements AutoCloseable {
     public record Completion(Optional<SavedGrantDeliveryReadback.Proof> proof) {
-        public Completion { Objects.requireNonNull(proof, "verified complete proof or no space"); }
+        public Completion { Objects.requireNonNull(proof, "verified complete/partial proof or no space"); }
     }
 
     private final JavaPlugin owner;
@@ -77,7 +77,7 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
             if (flight.commit == null) {
                 var status = flight.preflight.status();
                 if (status == SavedGrantCommitWorker.Status.RUNNING) return;
-                requireSuccess(status);
+                requireSuccess(status, flight.preflight.failure());
                 var saved = flight.preflight.saveOnMain(flight.detached, coins);
                 if (saved.isEmpty()) {
                     finish(flight, new Completion(Optional.empty()));
@@ -89,11 +89,9 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
             }
             var status = flight.commit.status();
             if (status == SavedGrantCommitWorker.Status.RUNNING) return;
-            requireSuccess(status);
+            requireSuccess(status, flight.commit.failure());
             var proof = flight.commit.result();
-            if (proof.receipt().active())
-                throw new IllegalStateException("Verified partial grant still requires protected custody");
-            flight.saved.resumeAfterVerifiedCompleteOnMain();
+            flight.saved.resumeAfterVerifiedBatchOnMain();
             finish(flight, new Completion(Optional.of(proof)));
         } catch (IOException | RuntimeException | Error failure) {
             fail(failure);
@@ -118,9 +116,9 @@ public final class PaperSavedGrantDeliveryService implements AutoCloseable {
         if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Paper primary thread required");
     }
 
-    private static void requireSuccess(SavedGrantCommitWorker.Status status) {
+    private static void requireSuccess(SavedGrantCommitWorker.Status status, Throwable cause) {
         if (status != SavedGrantCommitWorker.Status.SUCCEEDED)
-            throw new IllegalStateException("Saved grant worker did not succeed: " + status);
+            throw new IllegalStateException("Saved grant worker did not succeed: " + status, cause);
     }
 
     private void stopTask() {

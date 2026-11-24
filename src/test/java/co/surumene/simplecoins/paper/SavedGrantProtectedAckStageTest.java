@@ -210,6 +210,49 @@ final class SavedGrantProtectedAckStageTest {
                 PlayerDataReader.read(playerFile(player), 65536, 65536), ledger, player));
     }
 
+    @Test void workerFinalPartialRequiresDurableFloorCurrentIntentAndLiveCustody() throws Exception {
+        for (String scenario : java.util.List.of("confirmed", "missing-intent", "expired", "unconfirmed")) {
+            UUID player = UUID.randomUUID();
+            Path journal = temp.resolve("worker-final-" + scenario);
+            var ledger = new GrantLedger(journal);
+            var pair = resumedPlan(ledger, player);
+            var grant = pair.grant();
+            write(player, GrantReceiptState.empty(), false, "minecraft:stone");
+            if (!scenario.equals("unconfirmed")) {
+                ledger.writeBatchIntent(ledger.verifiedPlayerSnapshot(player), grant,
+                        playerFile(player), Files.readAllBytes(playerFile(player)), 65536);
+                ledger.confirmPartial(grant, pair.first().previousReceipt(), pair.first().nextReceipt());
+                ledger.removeConfirmedBatchIntent(grant, playerFile(player), 0);
+                ledger = new GrantLedger(journal);
+                grant = ledger.pending(player).getFirst();
+            }
+            write(player, pair.first().nextReceipt(), 64, 0, "minecraft:stone");
+            var before = PlayerDataReader.read(playerFile(player), 65536, 65536);
+            var slots = new ArrayList<>(Collections.nCopies(36, "stone"));
+            slots.set(1, null);
+            var plan = PaperGrantInventorySlotPlan.stage(ledger, player, grant,
+                    pair.first().nextReceipt(), new PaperGrantInventorySlotPlan.StorageSnapshot(slots)).orElseThrow();
+            if (!scenario.equals("missing-intent") && !scenario.equals("unconfirmed"))
+                ledger.writeBatchIntent(ledger.verifiedPlayerSnapshot(player), grant,
+                        playerFile(player), Files.readAllBytes(playerFile(player)), 65536);
+            write(player, plan.nextReceipt(), 64, 1, "minecraft:stone");
+            var fence = new WriterEpochFence(); fence.arm(); var seal = fence.seal();
+            var activeLedger = ledger; var activeGrant = grant;
+            if (scenario.equals("confirmed")) {
+                var proof = SavedGrantProtectedAckStage.finish(fence, seal, discovery(), ledger,
+                        player, grant, plan, before, 65536, 65536, () -> true);
+                assertEquals(BigInteger.valueOf(5000), proof.matchedMonetaryValue());
+                assertTrue(new GrantLedger(journal).pending(player).isEmpty());
+            } else {
+                assertThrows(Exception.class, () -> SavedGrantProtectedAckStage.finish(fence, seal,
+                        discovery(), activeLedger, player, activeGrant, plan, before,
+                        65536, 65536, () -> !scenario.equals("expired")));
+                assertEquals(WriterEpochFence.State.FAULTED, fence.state());
+                assertEquals(1, new GrantLedger(journal).pending(player).size());
+            }
+        }
+    }
+
     @Test void finalPartialBatchFreshSaveAcksWithoutReissuingEarlierCoins() throws Throwable {
         UUID player = UUID.randomUUID();
         Path journal = temp.resolve("grants-final-partial-success");

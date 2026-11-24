@@ -43,8 +43,14 @@ public record GrantReceiptState(long completedSequence, long activeSequence,
     public void verify(GrantLedger.VerifiedPlayerSnapshot view) {
         Objects.requireNonNull(view, "verified planning view");
         view.validateReceipt(completedSequence);
-        if (!active()) return;
         List<GrantLedger.Grant> pending = view.pending();
+        for (var grant : pending) {
+            if (grant.confirmedPartial() > 0 && completedSequence < grant.sequence()
+                    && (!active() || activeSequence != grant.sequence()
+                        || !grant.id().equals(activeId) || partialValue < grant.confirmedPartial()))
+                throw new IllegalStateException("Receipt rolled back behind durable partial progress");
+        }
+        if (!active()) return;
         GrantLedger.Grant matching = null;
         for (var grant : pending) {
             if (grant.sequence() < activeSequence)

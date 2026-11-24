@@ -28,11 +28,9 @@ import org.bukkit.inventory.ItemStack;
  * authorize live use. The current PASSIVE startup Agent does NOT meet that
  * prerequisite. A test-only armed fence is not sufficient for deployment.</p>
  *
- * <p>For now this entrypoint covers a fresh, not-yet-active grant's first
- * batch, including full single-batch ACK and incomplete first-batch progress.
- * Resumed multi-batch delivery requires independently durable verification
- * of earlier physical custody; the final-batch proof helper exists separately
- * but is not invoked from this first-batch coordinator.</p>
+ * <p>The asynchronous path uses durable per-batch intent and a confirmed partial
+ * floor; previous legitimate movement does not justify reissuing delivered
+ * currency. The enclosing normal journal and writer universe remain required.</p>
  */
 final class PaperGrantSavedBatchCoordinator {
     private PaperGrantSavedBatchCoordinator() {}
@@ -82,14 +80,29 @@ final class PaperGrantSavedBatchCoordinator {
                     var saved = SavedGrantReceiptNbt.readAndVerify(current, view);
                     if (!saved.equals(receipt))
                         throw new IllegalStateException("Saved/memory receipt drift");
-                    var intent = ledger.readFirstBatchIntent(view, grant, file, compressedLimit);
+                    long confirmed = grant.confirmedPartial();
+                    var intent = ledger.readBatchIntent(view, grant, file, compressedLimit);
+                    if (intent.isPresent() && intent.orElseThrow().priorValue() < confirmed) {
+                        // A crash after durable partial confirmation but before intent cleanup.
+                        // Require the exact confirmed cursor; a later unproved save is not safe.
+                        if (!saved.active() || saved.activeSequence() != grant.sequence()
+                                || !grant.id().equals(saved.activeId()) || saved.partialValue() != confirmed)
+                            throw new IOException("Saved cursor differs from confirmed partial custody");
+                        witness.requireUnchanged();
+                        requireLivePreflight(live);
+                        ledger.removeConfirmedBatchIntent(grant, file, intent.orElseThrow().priorValue());
+                        intent = Optional.empty();
+                    }
                     Map<String, Object> before;
                     Optional<PaperGrantInventorySlotPlan> plan;
                     boolean recoveryOnly = false;
                     if (intent.isPresent()) {
-                        before = PlayerDataReader.decodeCompressed(intent.orElseThrow(), compressedLimit, inflatedLimit);
+                        before = PlayerDataReader.decodeCompressed(intent.orElseThrow().compressedBefore(), compressedLimit, inflatedLimit);
                         var prior = SavedGrantReceiptNbt.readAndVerify(before, view);
-                        if (prior.active()) throw new IOException("First-batch intent already has a partial prior receipt");
+                        if (prior.partialValue() != confirmed || (confirmed > 0 && !prior.active())
+                                || (prior.active() && (prior.activeSequence() != grant.sequence()
+                                    || !grant.id().equals(prior.activeId()))))
+                            throw new IOException("Batch intent differs from durable prior progress");
                         var intended = PaperGrantInventorySlotPlan.stage(view, grant, prior,
                                 SavedGrantDeliveryReadback.savedStorageForIntent(before)).orElseThrow(
                                         () -> new IOException("Durable intent has no physical placement"));
@@ -104,8 +117,11 @@ final class PaperGrantSavedBatchCoordinator {
                             requireSameIntentPlan(intended, plan);
                         } else throw new IOException("Saved receipt is not either durable intent boundary");
                     } else {
-                        if (saved.active() || saved.completedSequence() >= grant.sequence())
-                            throw new IOException("Saved progress has no durable first-batch intent");
+                        if (saved.completedSequence() >= grant.sequence()
+                                || (confirmed == 0 && saved.active())
+                                || (confirmed > 0 && (!saved.active() || saved.activeSequence() != grant.sequence()
+                                    || !grant.id().equals(saved.activeId()) || saved.partialValue() != confirmed)))
+                            throw new IOException("Saved progress has no durable current-batch intent");
                         before = current;
                         plan = PaperGrantInventorySlotPlan.stage(view, grant, saved, storage);
                         var diskPlan = PaperGrantInventorySlotPlan.stage(view, grant, saved,
@@ -115,7 +131,7 @@ final class PaperGrantSavedBatchCoordinator {
                         if (diskPlan.isPresent()) requireSameIntentPlan(diskPlan.orElseThrow(), plan);
                         witness.requireUnchanged();
                         requireLivePreflight(live);
-                        if (plan.isPresent()) ledger.writeFirstBatchIntent(view, grant, file, captured, compressedLimit);
+                        if (plan.isPresent()) ledger.writeBatchIntent(view, grant, file, captured, compressedLimit);
                     }
                     witness.requireUnchanged();
                     ledger.requireCurrentPlanningView(view);
@@ -175,6 +191,7 @@ final class PaperGrantSavedBatchCoordinator {
         }
 
         SavedGrantCommitWorker.Status status() { return ticket.status(); }
+        Throwable failure() { return ticket.failure(); }
 
         /** No discovery, NBT parse, journal scan, wait or ACK on main. */
         Optional<SealedFirstBatch> saveOnMain(Player detached, CoinItemCodec coins) throws IOException {
@@ -195,7 +212,7 @@ final class PaperGrantSavedBatchCoordinator {
                     var plan = prepared.plan().orElseThrow();
                     if (prepared.recoveryOnly())
                         return Optional.of(new SealedFirstBatch(fence, seal, prepared.manifest(), prepared.file(),
-                                ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit));
+                                ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit, true));
                     var candidate = PaperGrantInventoryMaterializer.buildCopy(plan, currentReceipt, original, coins);
                     plan.requireUnchanged(PaperGrantReceiptPdc.read(detached.getPersistentDataContainer()),
                             detached.getInventory().getStorageContents());
@@ -205,7 +222,7 @@ final class PaperGrantSavedBatchCoordinator {
                     detached.saveData(); // no success claim until the post-save worker proves durable state
                     ledger.requireCurrentPlanningView(prepared.view());
                     return Optional.of(new SealedFirstBatch(fence, seal, prepared.manifest(), prepared.file(),
-                            ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit));
+                            ledger, player, grant, plan, prepared.before(), compressedLimit, inflatedLimit, true));
                 });
                 if (result.isEmpty()) fence.resume(seal); // no physical progress or ACK
                 return result;
@@ -323,7 +340,7 @@ final class PaperGrantSavedBatchCoordinator {
             fence.requireDrained(seal); // never await other writers on main
             return Optional.of(new SealedFirstBatch(fence, seal, beforeManifest,
                     file, ledger, player, grant, plan, savedBefore,
-                    maximumCompressedBytes, maximumInflatedBytes));
+                    maximumCompressedBytes, maximumInflatedBytes, false));
         } catch (IOException | RuntimeException | Error failure) {
             // A physical/PDC save may have partially persisted. No in-memory
             // rewind or blind reissue is allowed after an exception.
@@ -350,6 +367,9 @@ final class PaperGrantSavedBatchCoordinator {
         private final Map<String, Object> before;
         private final int compressedLimit;
         private final int inflatedLimit;
+        private final boolean durableIntent;
+        private final java.util.concurrent.atomic.AtomicBoolean verifiedPartial =
+                new java.util.concurrent.atomic.AtomicBoolean();
         private boolean attempted; // short custody monitor only; never held across IO
         private volatile SavedGrantCommitWorker.Ticket<SavedGrantDeliveryReadback.Proof> scheduled;
         private final java.util.concurrent.atomic.AtomicBoolean verifiedComplete =
@@ -361,7 +381,7 @@ final class PaperGrantSavedBatchCoordinator {
                 WorldStorageDiscovery.Manifest original, Path playerdataFile,
                 GrantLedger ledger, UUID player, GrantLedger.Grant grant,
                 PaperGrantInventorySlotPlan plan, Map<String, Object> before,
-                int compressedLimit, int inflatedLimit) {
+                int compressedLimit, int inflatedLimit, boolean durableIntent) {
             this.fence = fence;
             this.seal = seal;
             this.original = original;
@@ -373,6 +393,7 @@ final class PaperGrantSavedBatchCoordinator {
             this.before = before;
             this.compressedLimit = compressedLimit;
             this.inflatedLimit = inflatedLimit;
+            this.durableIntent = durableIntent;
         }
 
         /**
@@ -411,11 +432,20 @@ final class PaperGrantSavedBatchCoordinator {
          * runtime still owns the external writer audit and normal journal.
          */
         void resumeAfterVerifiedCompleteOnMain() {
+            resumeOnMain(false);
+        }
+
+        /** A durable partial floor permits another protected batch, not admission. */
+        void resumeAfterVerifiedBatchOnMain() {
+            resumeOnMain(true);
+        }
+
+        private void resumeOnMain(boolean allowPartial) {
             var owned = scheduled;
             boolean claimed = false;
             try {
                 if (!Bukkit.isPrimaryThread() || !Bukkit.getOnlinePlayers().isEmpty()
-                        || !verifiedComplete.get()
+                        || (!verifiedComplete.get() && !(allowPartial && durableIntent && verifiedPartial.get()))
                         || !handedBack.compareAndSet(false, true))
                     throw new IllegalStateException(
                             "Only one fully verified complete grant may return its sealed epoch on main");
@@ -501,7 +531,20 @@ final class PaperGrantSavedBatchCoordinator {
                 if (plan.nextReceipt().active() != targetStillPending)
                     throw new IllegalStateException(
                             "Target grant acknowledgement differs from saved receipt");
-                if (!plan.nextReceipt().active()) {
+                if (plan.nextReceipt().active() && durableIntent) {
+                    // Only after exact persisted physical delta proof, under the same seal.
+                    // Keep the grant pending; durable cumulative progress is the rollback floor.
+                    fence.withDrainedLease(seal, () -> {
+                        requireLive(live);
+                        ledger.confirmPartial(grant, plan.previousReceipt(), plan.nextReceipt());
+                        requireLive(live);
+                        ledger.removeConfirmedBatchIntent(grant, playerdataFile, grant.confirmedPartial());
+                        requireLive(live);
+                        return null;
+                    });
+                    fence.requireDrained(seal);
+                    verifiedPartial.set(true);
+                } else if (!plan.nextReceipt().active()) {
                     // The actual durable ACK was independently checked above.
                     ledger.removeAcknowledgedFirstBatchIntent(grant);
                     requireLive(live);

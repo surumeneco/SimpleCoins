@@ -17,6 +17,8 @@ on:
       - 'Lifecycle/Works/simplecoins.a02.protected-off-main-preflight.md'
       - 'Lifecycle/Works/simplecoins.a02.paper-scheduled-delivery-lifecycle.md'
       - 'Lifecycle/Works/simplecoins.a02.first-batch-durable-intent-recovery.md'
+      - 'Lifecycle/Works/simplecoins.a02.durable-partial-batch-custody.md'
+      - 'src/test/java/co/surumene/simplecoins/domain/GrantPartialCustody*.java'
       - 'src/main/java/co/surumene/simplecoins/domain/PlayerDataReader.java'
       - 'src/main/java/co/surumene/simplecoins/paper/SavedGrantDeliveryReadback.java'
       - 'src/test/java/co/surumene/simplecoins/domain/GrantFirstBatchIntent*.java'
@@ -111,6 +113,17 @@ jobs:
           python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind queue --work "$work"
           cache=Lifecycle/Works/.cat-flow/cache/a02-durable-intent
           out=Lifecycle/Works/.cat-flow/generated/A02DurableIntentDecisionGeneratedTest.java
+          python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
+          grep -F 'CAPABILITIES NOT VERIFIED' "$out"
+          work=Lifecycle/Works/simplecoins.a02.durable-partial-batch-custody.md
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py validate --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind process-closure --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind model --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py conformance --kind model-conformance --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind vectors --work "$work"
+          python cat-tdd-fixed/.cat-system/scripts/cat_flow.py compile --kind queue --work "$work"
+          cache=Lifecycle/Works/.cat-flow/cache/a02-partial-custody
+          out=Lifecycle/Works/.cat-flow/generated/A02PartialCustodyDecisionGeneratedTest.java
           python cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py tests "$cache-model.json" "$cache-vectors.json" tests/cat/a02-grant-delivery-junit-binding.json --queue "$cache-queue.json" --framework junit --process docs/cat/confirmed/a02-grant-delivery-process.md --pi docs/cat/confirmed/a02-grant-delivery-pi.md --tce docs/cat/confirmed/a02-grant-delivery-tce.md -o "$out"
           grep -F 'CAPABILITIES NOT VERIFIED' "$out"
           work=Lifecycle/Works/simplecoins.a02.queued-amount-delivery.md
@@ -347,6 +360,23 @@ jobs:
               grep -F 'PAPER_A02_PRODUCT_COORDINATOR_REBOOT_NO_REISSUE_PASSED total=10000 grants=2 pending=0' paper-intent-reload.log
               if grep -Fq 'PAPER_A02_PROBE_FAILED' paper-intent-reload.log; then exit 1; fi
             )
+          done
+      - name: Durable partial custody across independent Paper boots and legitimate fixture movement
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a smoke smoke-product-custody
+          cd smoke-product-custody
+          for phase in first resume reload; do
+            timeout --signal=TERM --kill-after=10s 200s \
+              java "-Da02.probe.phase=product-custody-$phase" -Xms256M -Xmx1024M \
+              -jar paper.jar nogui </dev/null > "custody-$phase.log" 2>&1 || { tail -180 "custody-$phase.log"; exit 1; }
+            if grep -Fq 'PAPER_A02_PROBE_FAILED' "custody-$phase.log"; then tail -180 "custody-$phase.log"; exit 1; fi
+            case "$phase" in
+              first) grep -F 'PAPER_A02_CUSTODY_PARTIAL_PASSED total=5064 confirmed=64 pending=1' "custody-$phase.log" ;;
+              resume) grep -F 'PAPER_A02_CUSTODY_FINAL_PASSED total=5065 pending=0' "custody-$phase.log" ;;
+              reload) grep -F 'PAPER_A02_CUSTODY_RELOAD_PASSED total=5065 pending=0' "custody-$phase.log" ;;
+            esac
           done
       - name: Actual Paper amount and ordered reservations through product worker ACK
         shell: bash
@@ -778,5 +808,6 @@ jobs:
             smoke-product-queued/*.log
             smoke-product-amount/*.log
             smoke-intent-*/*.log
+            smoke-product-custody/*.log
           if-no-files-found: ignore
           retention-days: 7
