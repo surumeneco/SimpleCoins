@@ -246,14 +246,39 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
                             try{
                                 runtime.completeMemory(prepared,ready());
                                 if(!runtime.mayAdmit()||retainedInvsee==null)throw new AssertionError("Fixture admission or retained view unavailable");
-                                getLogger().info("PAPER_NETWORK_GRANT_FIXTURE_READY");
-                                waitForNetworkGrant(product,runtime,detached,grants,codec);
+                                checkInvseeMoney(runtime,codec,()->{
+                                    getLogger().info("PAPER_NETWORK_GRANT_FIXTURE_READY");
+                                    waitForNetworkGrant(product,runtime,detached,grants,codec);
+                                });
                             }catch(Throwable failure){fail(failure);}
                         });
                     }catch(Throwable failure){Bukkit.getScheduler().runTask(this,()->fail(failure));}
                 });
             }catch(Throwable failure){fail(failure);}
         });
+    }
+
+    /** Normal actual offline save of a monetary item, with no GUI or fabricated journal leg. */
+    private void checkInvseeMoney(SettlementRuntime runtime,CoinItemCodec codec,Runnable next){
+        var installed=(com.janboerman.invsee.spigot.api.InvseePlusPlus)Bukkit.getPluginManager().getPlugin("InvSeePlusPlus");
+        var api=installed.getApi();var contents=retainedInvsee.getStorageContents();var previous=contents[35];
+        contents[35]=codec.create(CoinDenomination.HUNDRED,1);retainedInvsee.setStorageContents(contents);
+        if(!api.saveInventory(retainedInvsee).join().isSaved())throw new AssertionError("InvSee monetary save failed");
+        Bukkit.getScheduler().runTaskLater(this,()->{
+            try{
+                if(!runtime.current().orElseThrow().personalBalances().get(ID).equals(BigInteger.valueOf(5100)))
+                    throw new AssertionError("InvSee monetary increase not journaled");
+                var restored=retainedInvsee.getStorageContents();restored[35]=previous;retainedInvsee.setStorageContents(restored);
+                if(!api.saveInventory(retainedInvsee).join().isSaved())throw new AssertionError("InvSee monetary restore failed");
+                Bukkit.getScheduler().runTaskLater(this,()->{
+                    try{
+                        if(!runtime.current().orElseThrow().personalBalances().get(ID).equals(BigInteger.valueOf(5000)))
+                            throw new AssertionError("InvSee monetary decrease not journaled");
+                        getLogger().info("PAPER_INVSEE_OFFLINE_MONEY_JOURNAL_PASSED 5000->5100->5000");next.run();
+                    }catch(Throwable failure){fail(failure);}
+                },3L);
+            }catch(Throwable failure){fail(failure);}
+        },3L);
     }
 
     private void waitForNetworkGrant(org.bukkit.plugin.Plugin product,SettlementRuntime runtime,

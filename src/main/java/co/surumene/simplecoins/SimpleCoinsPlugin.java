@@ -296,6 +296,8 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
             try { ipAssociations=new co.surumene.simplecoins.paper.PaperIpBanAssociations(getDataFolder().toPath()); }
             catch(IOException invalid){throw new IllegalStateException("Cannot load IP BAN associations",invalid);}
             var ownerReconciliation=new co.surumene.simplecoins.paper.PaperOwnerStateReconciliation(this,publication,entities,flushAccounting,groundFailure,ipAssociations);
+            try { ground.connectInvsee(this,ownerReconciliation); }
+            catch(ReflectiveOperationException invalidInvsee){throw new IllegalStateException("Installed InvSee++ observation API unavailable",invalidInvsee);}
             entities.setOwnerResolver(ownerReconciliation::accountedOwner);
             hopper.setOwnerResolver(ownerReconciliation::accountedOwner);
             getServer().getScheduler().runTaskTimer(this,ownerReconciliation::fresh,100L,100L);
