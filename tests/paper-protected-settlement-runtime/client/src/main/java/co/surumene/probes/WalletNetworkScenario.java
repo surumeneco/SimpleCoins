@@ -39,7 +39,7 @@ final class WalletNetworkScenario extends SessionAdapter {
             Thread.ofVirtual().start(()->run(session));
         } else if(packet instanceof ClientboundPlayerPositionPacket pos) {
             var xyz=pos.getPosition();
-            session.send(new ServerboundAcceptTeleportationPacket(pos.getId(),xyz.getX(),xyz.getY(),xyz.getZ(),pos.getYRot(),pos.getXRot()));
+            session.send(new ServerboundAcceptTeleportationPacket(pos.getId()));
             if(!loaded){loaded=true;session.send(ServerboundPlayerLoadedPacket.INSTANCE);}
         } else if(packet instanceof ClientboundOpenScreenPacket screen) {
             if(screen.getType()==ContainerType.GENERIC_9X1
