@@ -83,7 +83,7 @@ jobs:
             'eae36a78ae7ead3e7e3033851099c55a997a5f26  src/main/java/co/surumene/simplecoins/domain/WalletTransferTransaction.java' \
             '2954fbd17ad8924b232cb1f522534cdd01b621f3  src/main/java/co/surumene/simplecoins/paper/WalletCrafting.java' \
             'c68772ca844f451011184c46d929524e53d26045  src/main/java/co/surumene/simplecoins/paper/WalletItemCodec.java' \
-            '72edb02241d0c068f313fc96c380d041d6a56bf0  src/main/java/co/surumene/simplecoins/paper/WalletMenu.java' \
+            '2e38cc5772379bd4c7db26d3e2f2c784e99054f4  src/main/java/co/surumene/simplecoins/paper/WalletMenu.java' \
             '519d90375403e13cc2724451415af867ffb3b181  src/test/java/co/surumene/simplecoins/domain/WalletTransferTransactionTest.java' \
             | while read -r expected file; do
                 actual=$(git hash-object "$file")
