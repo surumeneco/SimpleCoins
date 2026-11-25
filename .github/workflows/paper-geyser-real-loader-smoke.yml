@@ -216,11 +216,11 @@ jobs:
           exec 3>bedrock-console.in
           trap 'kill "$server" 2>/dev/null || true' EXIT
           for i in $(seq 1 90); do
-            grep -Fq 'Started Geyser on UDP port 19132' paper-bedrock-client.log && break
+            grep -Fq 'Started Geyser on 127.0.0.1:19132' paper-bedrock-client.log && break
             kill -0 "$server" || { tail -180 paper-bedrock-client.log; exit 1; }
             sleep 1
           done
-          grep -F 'Started Geyser on UDP port 19132' paper-bedrock-client.log
+          grep -F 'Started Geyser on 127.0.0.1:19132' paper-bedrock-client.log
           # Refuse to run a self-signed test against any non-loopback listener.
           ss -H -lun 'sport = :19132' | tee bedrock-socket.log
           grep -F '127.0.0.1:19132' bedrock-socket.log
