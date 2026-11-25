@@ -34,7 +34,7 @@ start_server() {
   rm -f console.fifo
   mkfifo console.fifo
   exec 3<>console.fifo
-  timeout --signal=TERM --kill-after=10s 300s java -Xms256M -Xmx1024M -jar paper.jar nogui <console.fifo >"$log" 2>&1 &
+  timeout --signal=TERM --kill-after=10s 390s java -Xms256M -Xmx1024M -jar paper.jar nogui <console.fifo >"$log" 2>&1 &
   server=$!
   wait_for "$log" 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED'
 }
@@ -51,7 +51,7 @@ wait_for product-startup.log 'SIMPLECOINS_PRODUCT_SETTLEMENT_PREPARED_UNPUBLISHE
 command_to_server 'sc stats'
 wait_for product-startup.log 'Personal P: 25000 C; free F: 1000 C; world T=P+F: 26000 C'
 wait_for product-startup.log 'Dead D (excluded from T): 30000 C'
-timeout 190 "$client" --wallet-scenario >product-client.log 2>&1 &
+timeout 255 "$client" --wallet-scenario >product-client.log 2>&1 &
 client_pid=$!
 wait_for product-startup.log 'ProbeSettlement joined the game'
 wait_for product-client.log 'NETWORK_CLIENT_PLAY_LOGIN'
@@ -174,6 +174,41 @@ expect_stats 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
 command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_DEATH_WALLET_RECOVERED'
 wait_for product-startup.log 'PRODUCT_DEATH_WALLET_RECOVERED' 10
 echo 'SIMPLECOINS_PRODUCT_DROP_PICKUP_DEATH_RECOVERY_PASSED'
+# Ordinary unprotected chest: actual network clicks, not injected inventory mutations.
+command_to_server 'setblock 0 180 1 minecraft:chest'
+command_to_server 'tp ProbeSettlement 0.5 180 -1.5 0 0'
+sleep 2
+touch product-storage-ready
+wait_for product-client.log 'NETWORK_STORAGE_DEPOSIT_OBSERVED' 20
+command_to_server 'execute if items block 0 180 1 container.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_STORAGE_WALLET_PRESENT'
+wait_for product-startup.log 'PRODUCT_STORAGE_WALLET_PRESENT' 10
+sleep 1
+expect_stats 'Personal P: 25000 C; free F: 1200 C; world T=P+F: 26200 C'
+touch product-storage-withdraw
+wait_for product-client.log 'NETWORK_STORAGE_WITHDRAW_OBSERVED' 20
+command_to_server 'execute if items entity ProbeSettlement hotbar.* minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_STORAGE_WALLET_RETURNED'
+command_to_server 'execute if items entity ProbeSettlement inventory.* minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_STORAGE_WALLET_RETURNED'
+wait_for product-startup.log 'PRODUCT_STORAGE_WALLET_RETURNED' 10
+sleep 1
+expect_stats 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
+# Two 10C inputs, one-slot exchange, real shift-click consumes both.
+command_to_server 'sc give ProbeSettlement coin_10 2'
+wait_for product-startup.log 'Delivered now (including earlier reservations): 20C; pending reservations: 0' 15
+expect_stats 'Personal P: 25220 C; free F: 1000 C; world T=P+F: 26220 C'
+command_to_server 'setblock 2 180 1 minecraft:crafting_table'
+command_to_server 'tp ProbeSettlement 2.5 180 -1.5 0 0'
+sleep 2
+touch product-exchange-ready
+wait_for product-client.log 'NETWORK_EXCHANGE_SHIFT_OBSERVED' 25
+command_to_server 'execute if items entity ProbeSettlement hotbar.* minecraft:paper[minecraft:item_model="simplecoins:coin_1"] run say PRODUCT_EXCHANGE_ONE_COIN'
+command_to_server 'execute if items entity ProbeSettlement inventory.* minecraft:paper[minecraft:item_model="simplecoins:coin_1"] run say PRODUCT_EXCHANGE_ONE_COIN'
+wait_for product-startup.log 'PRODUCT_EXCHANGE_ONE_COIN' 10
+sleep 1
+expect_stats 'Personal P: 25220 C; free F: 1000 C; world T=P+F: 26220 C'
+command_to_server 'minecraft:clear ProbeSettlement minecraft:paper'
+sleep 2
+expect_stats 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
+echo 'SIMPLECOINS_PRODUCT_STORAGE_AND_EXCHANGE_NETWORK_PASSED'
 command_to_server 'kick ProbeSettlement product acceptance complete'
 wait "$client_pid" || { cat product-client.log; exit 1; }
 client_pid=

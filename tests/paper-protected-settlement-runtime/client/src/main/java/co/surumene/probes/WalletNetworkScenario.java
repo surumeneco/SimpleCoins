@@ -18,6 +18,8 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.Serverbound
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerCombatKillPacket;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerActionType;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerType;
+import org.geysermc.mcprotocollib.protocol.data.game.inventory.ClickItemAction;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ShiftClickItemAction;
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
@@ -35,6 +37,7 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.Serv
 /** Actual protocol-level wallet use; only in the disposable product fixture. */
 final class WalletNetworkScenario extends SessionAdapter {
     private volatile int container=-1;
+    private volatile ContainerType expectedScreen=ContainerType.GENERIC_9X1;
     private volatile int stateId;
     private volatile ItemStack[] items;
     private volatile boolean completed;
@@ -53,9 +56,10 @@ final class WalletNetworkScenario extends SessionAdapter {
             System.out.println("NETWORK_PLAYER_DEATH_OBSERVED");
         } else if(packet instanceof ClientboundOpenScreenPacket screen) {
             System.out.println("NETWORK_SCREEN "+screen.getType()+" "+screen.getTitle());
-            if(screen.getType()==ContainerType.GENERIC_9X1
-                    &&screen.getTitle() instanceof net.kyori.adventure.text.TextComponent title
-                    &&title.content().equals("Wallet")){
+            if(screen.getType()==expectedScreen
+                    &&(expectedScreen!=ContainerType.GENERIC_9X1
+                    ||(screen.getTitle() instanceof net.kyori.adventure.text.TextComponent title
+                    &&title.content().equals("Wallet")))){
                 container=screen.getContainerId();
                 System.out.println("NETWORK_WALLET_SCREEN_OPENED "+container);
             }
@@ -84,7 +88,7 @@ final class WalletNetworkScenario extends SessionAdapter {
     }
     private int count(int slot){
         ItemStack[] snapshot=items;
-        if(snapshot==null||snapshot.length!=45)return -1;
+        if(snapshot==null||slot<0||slot>=snapshot.length)return -1;
         ItemStack item=snapshot[slot];
         return item==null?0:item.getAmount();
     }
@@ -93,6 +97,24 @@ final class WalletNetworkScenario extends SessionAdapter {
         // a fabricated changed-slot hash or a client-side balance.
         session.send(new ServerboundContainerClickPacket(container,stateId,slot,
                 ContainerActionType.SHIFT_CLICK_ITEM,ShiftClickItemAction.LEFT_CLICK,null,Map.of()));
+    }
+    private void openBlock(Session session,ContainerType type,int x,int size,int sequence)throws Exception{
+        expectedScreen=type;
+        items=null;container=-1;
+        session.send(new ServerboundSetCarriedItemPacket(1));
+        Thread.sleep(150);
+        session.send(new ServerboundUseItemOnPacket(Vector3i.from(x,180,1),
+                Direction.NORTH,Hand.MAIN_HAND,0.5f,0.5f,0f,false,false,sequence));
+        await(()->container>0&&items!=null&&items.length==size,"real "+type+" screen",12);
+    }
+    private void click(Session session,int slot){
+        session.send(new ServerboundContainerClickPacket(container,stateId,slot,
+                ContainerActionType.CLICK_ITEM,ClickItemAction.LEFT_CLICK,null,Map.of()));
+    }
+    private int total(int from,int end){
+        int sum=0;
+        for(int i=from;i<end;i++){int n=count(i);if(n<0)return -1;sum+=n;}
+        return sum;
     }
     private void run(Session session){
         try{
@@ -129,6 +151,32 @@ final class WalletNetworkScenario extends SessionAdapter {
             signal("product-ground-respawn",20);
             session.send(new ServerboundClientCommandPacket(ClientCommand.PERFORM_RESPAWN));
             System.out.println("NETWORK_RESPAWN_SENT");
+            signal("product-storage-ready",30);
+            openBlock(session,ContainerType.GENERIC_9X3,0,63,2);
+            if(count(54)!=1||total(0,27)!=0||total(27,63)!=1)
+                throw new IllegalStateException("Unexpected empty chest or wallet input");
+            shift(session,54);
+            await(()->count(54)==0&&count(0)==1&&total(27,63)==0,"wallet stored in chest",12);
+            System.out.println("NETWORK_STORAGE_DEPOSIT_OBSERVED");
+            signal("product-storage-withdraw",25);
+            shift(session,0);
+            await(()->total(0,27)==0&&total(27,63)==1,"wallet withdrawn from chest",12);
+            session.send(new ServerboundContainerClosePacket(container));
+            System.out.println("NETWORK_STORAGE_WITHDRAW_OBSERVED");
+            signal("product-exchange-ready",25);
+            openBlock(session,ContainerType.CRAFTING,2,46,3);
+            int source=-1;
+            for(int slot=10;slot<46;slot++)if(count(slot)==2){source=slot;break;}
+            if(source<0||total(10,46)!=3)throw new IllegalStateException("Missing two input coins and wallet");
+            final int input=source;
+            click(session,input);
+            await(()->count(input)==0,"craft input on cursor",12);
+            click(session,1);
+            await(()->count(1)==2&&count(0)==10,"real exchange output preview",12);
+            shift(session,0);
+            await(()->count(1)==0&&count(0)==0&&total(10,46)==21,"two consecutive ten-to-one exchanges",12);
+            session.send(new ServerboundContainerClosePacket(container));
+            System.out.println("NETWORK_EXCHANGE_SHIFT_OBSERVED");
             completed=true;
         }catch(Exception failure){
             failure.printStackTrace();
