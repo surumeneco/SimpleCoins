@@ -60,7 +60,7 @@ p.write_text(s)
 PY
 mkfifo product-bedrock-console.in
 exec 3<>product-bedrock-console.in
-timeout --signal=TERM --kill-after=10s 250s java -Xms256M -Xmx1024M -jar paper.jar nogui <product-bedrock-console.in >product-bedrock.log 2>&1 &
+timeout --signal=TERM --kill-after=10s 330s java -Xms256M -Xmx1024M -jar paper.jar nogui <product-bedrock-console.in >product-bedrock.log 2>&1 &
 server=$!
 wait_for product-bedrock.log 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED' 150
 wait_for product-bedrock.log 'Started Geyser on 127.0.0.1:19132' 30
@@ -68,17 +68,47 @@ wait_for product-bedrock.log 'Registered 10 custom items' 30
 ss -H -lun 'sport = :19132' | tee product-bedrock-socket.log
 awk 'NF < 5 || ($4 != "127.0.0.1:19132" && $4 != "[::ffff:127.0.0.1]:19132") { bad=1 } END { exit (NR==0 || bad) }' product-bedrock-socket.log
 expected=$(python3 -c 'import json,zipfile; print(json.loads(zipfile.ZipFile("plugins/SimpleCoins/geyser/SimpleCoins.mcpack").read("manifest.json"))["header"]["uuid"])')
-timeout 100 node "$client" "$expected" >product-bedrock-client.log 2>&1 &
+timeout 160 node "$client" "$expected" >product-bedrock-client.log 2>&1 &
 client_pid=$!
 wait_for product-bedrock.log 'ProbeBedrock joined the game' 60
 wait_for product-bedrock-client.log 'NETWORK_BEDROCK_PRODUCT_SPAWN' 30
 printf 'sc give ProbeBedrock 16666\n' >&3
 wait_for product-bedrock.log 'Delivered now (including earlier reservations): 16666C; pending reservations: 0' 20
 wait_for product-bedrock-client.log 'NETWORK_BEDROCK_NINE_REAL_INVENTORY_COINS_PASSED' 30
-wait "$client_pid"; client_pid=
-cmp bedrock-received.mcpack plugins/SimpleCoins/geyser/SimpleCoins.mcpack
 printf 'sc balance %s\n' "$uuid" >&3
 wait_for product-bedrock.log "Personal balance $uuid: 16666 C" 15
+printf 'minecraft:clear ProbeBedrock minecraft:paper\n' >&3
+sleep 2
+printf 'sc balance %s\n' "$uuid" >&3
+wait_for product-bedrock.log "Personal balance $uuid: 0 C" 15
+printf 'sc give ProbeBedrock wallet 1\n' >&3
+wait_for product-bedrock.log 'Gave 1 empty wallet(s) to ProbeBedrock' 15
+printf 'sc give ProbeBedrock coin_100 1\n' >&3
+wait_for product-bedrock.log 'Delivered now (including earlier reservations): 100C; pending reservations: 0' 15
+printf 'execute if items entity ProbeBedrock hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":0L}}] run say PRODUCT_BE_EMPTY_WALLET_VERIFIED\n' >&3
+wait_for product-bedrock.log 'PRODUCT_BE_EMPTY_WALLET_VERIFIED' 15
+touch product-be-wallet-ready
+wait_for product-bedrock-client.log 'NETWORK_BE_WALLET_DEPOSIT_SENT' 40
+printf 'execute if items entity ProbeBedrock hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":100L}}] run say PRODUCT_BE_WALLET_DEPOSIT_VERIFIED\n' >&3
+wait_for product-bedrock.log 'PRODUCT_BE_WALLET_DEPOSIT_VERIFIED' 15
+printf 'sc balance %s\n' "$uuid" >&3
+wait_for product-bedrock.log "Personal balance $uuid: 100 C" 15
+touch product-be-wallet-withdraw
+wait_for product-bedrock-client.log 'NETWORK_BE_WALLET_WITHDRAW_OBSERVED' 30
+printf 'execute if items entity ProbeBedrock hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":0L}}] run say PRODUCT_BE_WALLET_WITHDRAW_VERIFIED\n' >&3
+wait_for product-bedrock.log 'PRODUCT_BE_WALLET_WITHDRAW_VERIFIED' 15
+printf 'execute if items entity ProbeBedrock hotbar.1 minecraft:paper[minecraft:item_model="simplecoins:coin_100"] run say PRODUCT_BE_WITHDRAWN_COIN_VERIFIED\n' >&3
+wait_for product-bedrock.log 'PRODUCT_BE_WITHDRAWN_COIN_VERIFIED' 15
+printf 'sc balance %s\n' "$uuid" >&3
+for ((i=0;i<15;i++)); do
+  [[ $(grep -Fc "Personal balance $uuid: 100 C" product-bedrock.log || true) -ge 2 ]] && break
+  sleep 1
+done
+[[ $(grep -Fc "Personal balance $uuid: 100 C" product-bedrock.log || true) -ge 2 ]]
+touch product-be-wallet-done
+wait "$client_pid"; client_pid=
+cmp bedrock-received.mcpack plugins/SimpleCoins/geyser/SimpleCoins.mcpack
+echo 'SIMPLECOINS_PRODUCT_BE_WALLET_NETWORK_PASSED'
 wait_for product-bedrock.log 'ProbeBedrock left the game' 20
 printf 'stop\n' >&3
 wait "$server"; server=; exec 3>&-
