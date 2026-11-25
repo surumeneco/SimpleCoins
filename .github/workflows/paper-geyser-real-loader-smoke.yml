@@ -189,59 +189,25 @@ jobs:
           print('REAL_GEYSER_RESTART_SMOKE_PASSED: provider booted, staged files persisted, no attributed load errors')
           print('LIMIT: registration counts alone do not prove item-by-item client mapping, Bedrock client delivery, or rendering')
           PY
-          # Independent loopback-only packet transfer. No authenticated account,
-          # production settings, or simulated Geyser resource provider.
+          # Independent loopback-only packet transfer. No production settings.
           python3 - <<'PY'
           from pathlib import Path
           import re
           config = Path('plugins/Geyser-Spigot/config.yml')
           text = config.read_text(encoding='utf-8')
-          # Restrict the listener BEFORE disabling authentication in this disposable test.
-          text,n = re.subn(r'(?m)^(bedrock:\\s*\\n)([\\s\\S]*?)(?=^\\S|\\Z)', lambda m: m[1]+re.sub(r'(?m)^  #?address:.*
-          # guarded JE-only startup. Keep managed content untouched for the
-          # separate Geyser/Nexo acceptance checks.
-          mv plugins/Geyser-Spigot.jar geyser-disabled.jar
-          run_paper 'without-geyser'
-          grep -F 'Geyser-Spigot not present; Bedrock pack not installed.' paper-without-geyser.log
-          grep -F 'SIMPLECOINS_CURRENCY_PACKS_GENERATED' paper-without-geyser.log
-          grep -F 'Settlement engine not connected; player admission remains disabled.' paper-without-geyser.log
-          echo 'REAL_PAPER_GEYSER_OPTIONAL_BOOT_PASSED'
-      - name: Preserve all Paper logs for verification
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: paper-real-geyser-restart-logs
-          path: |
-            smoke/paper-*.log
-            smoke/geyser-build.json
-            smoke/bedrock-client.log
-            smoke/bedrock-socket.log
-          if-no-files-found: ignore
-          retention-days: 7
-, '', m[2])+'  address: 127.0.0.1\n', text, count=1)
-          assert n==1,'Bedrock config section missing'
-          text,n = re.subn(r'(?m)^([ \\t]*)#?validate-bedrock-login:\\s*true[ \\t]*
-          # guarded JE-only startup. Keep managed content untouched for the
-          # separate Geyser/Nexo acceptance checks.
-          mv plugins/Geyser-Spigot.jar geyser-disabled.jar
-          run_paper 'without-geyser'
-          grep -F 'Geyser-Spigot not present; Bedrock pack not installed.' paper-without-geyser.log
-          grep -F 'SIMPLECOINS_CURRENCY_PACKS_GENERATED' paper-without-geyser.log
-          grep -F 'Settlement engine not connected; player admission remains disabled.' paper-without-geyser.log
-          echo 'REAL_PAPER_GEYSER_OPTIONAL_BOOT_PASSED'
-      - name: Preserve all Paper logs for verification
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: paper-real-geyser-restart-logs
-          path: |
-            smoke/paper-*.log
-            smoke/geyser-build.json
-          if-no-files-found: ignore
-          retention-days: 7
-,r'\\g<1>validate-bedrock-login: false',text,count=1)
-          assert n==1,'Expected isolated validation config missing'
-          config.write_text(text,encoding='utf-8')
+          lines = text.splitlines()
+          start = lines.index('bedrock:')
+          end = next((i for i in range(start+1,len(lines))
+                      if re.match(r'^[A-Za-z][\w-]*:',lines[i])),len(lines))
+          lines = lines[:start+1]+['  address: 127.0.0.1']+[
+              l for l in lines[start+1:end] if not l.strip().lstrip('#').strip().startswith('address:')
+          ]+lines[end:]
+          indices = [i for i,l in enumerate(lines)
+                     if l.strip().lstrip('#').strip() == 'validate-bedrock-login: true']
+          assert len(indices)==1,'Expected isolated validation config missing'
+          i=indices[0]
+          lines[i]=lines[i][:len(lines[i])-len(lines[i].lstrip())]+'validate-bedrock-login: false'
+          config.write_text('\n'.join(lines)+'\n',encoding='utf-8')
           PY
           # The client receives the real Geyser UDP chunk packets before backend admission.
           mkfifo bedrock-console.in
@@ -258,7 +224,7 @@ jobs:
           # Refuse to run a self-signed test against any non-loopback listener.
           ss -H -lun 'sport = :19132' | tee bedrock-socket.log
           grep -F '127.0.0.1:19132' bedrock-socket.log
-          if grep -Eq '(^|[[:space:]])(0\\.0\\.0\\.0|\\*|\\[::\\]):19132' bedrock-socket.log; then exit 1; fi
+          if grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):19132' bedrock-socket.log; then exit 1; fi
           expected=$(python3 -c 'import json,zipfile; print(json.loads(zipfile.ZipFile("plugins/SimpleCoins/geyser/SimpleCoins.mcpack").read("manifest.json"))["header"]["uuid"])')
           timeout 55 node ../tests/paper-geyser-real-client/download.cjs "$expected" bedrock-received.mcpack >bedrock-client.log 2>&1 || { cat bedrock-client.log; tail -180 paper-bedrock-client.log; exit 1; }
           grep -F 'NETWORK_BEDROCK_PACK_CHUNKS_VERIFIED' bedrock-client.log
@@ -274,7 +240,7 @@ jobs:
               key=f'simplecoins:coin_{amount}'
               assert data[key]['textures']==[f'textures/items/coin_{amount}']
               image=z.read(f'textures/items/coin_{amount}.png')
-              assert image.startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+              assert image.startswith(b'\x89PNG\r\n\x1a\n')
               hashes.add(hashlib.sha256(image).digest())
           assert len(hashes)==9
           print('REAL_GEYSER_CLIENT_BYTE_EXACT_NINE_TEXTURES_PASSED')
@@ -300,5 +266,7 @@ jobs:
           path: |
             smoke/paper-*.log
             smoke/geyser-build.json
+            smoke/bedrock-client.log
+            smoke/bedrock-socket.log
           if-no-files-found: ignore
           retention-days: 7
