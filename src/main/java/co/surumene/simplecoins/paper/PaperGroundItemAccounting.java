@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,6 +16,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -224,6 +226,49 @@ public final class PaperGroundItemAccounting implements Listener {
     @EventHandler(priority=EventPriority.LOWEST)
     public void beforeJoin(PlayerJoinEvent event){
         if(invsee!=null&&invsee.has(event.getPlayer().getUniqueId()))observe(()->player(event.getPlayer(),BigInteger.ZERO));
+    }
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void playerCommand(PlayerCommandPreprocessEvent event){
+        observeClear(event.getPlayer(),event.getMessage());
+    }
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
+    public void serverCommand(ServerCommandEvent event){
+        observeClear(event.getSender(),event.getCommand());
+    }
+    private static boolean clearCommand(String token){
+        return token.equalsIgnoreCase("clear")||token.equalsIgnoreCase("minecraft:clear");
+    }
+    private void observeClear(CommandSender sender,String command){
+        String[] tokens=command.strip().replaceFirst("^/","").split("\\s+");
+        if(clearCommand(tokens[0])){
+            observe(()->{
+                if(tokens.length==1){
+                    if(sender instanceof Player self)player(self,BigInteger.ZERO);
+                    return;
+                }
+                String target=tokens[1];
+                if(target.startsWith("@")){
+                    try {
+                        for(var entity:Bukkit.selectEntities(sender,target))
+                            if(entity instanceof Player selected)player(selected,BigInteger.ZERO);
+                    } catch(IllegalArgumentException unresolved){
+                        // A selector can contain spaces or use a command-specific context.
+                        for(Player online:Bukkit.getOnlinePlayers())player(online,BigInteger.ZERO);
+                    }
+                } else {
+                    Player selected=Bukkit.getPlayerExact(target);
+                    if(selected==null)try{selected=Bukkit.getPlayer(UUID.fromString(target));}
+                    catch(IllegalArgumentException notUuid){/* Invalid or absent target changes nothing. */}
+                    if(selected!=null)player(selected,BigInteger.ZERO);
+                }
+            });
+        } else if(tokens[0].equalsIgnoreCase("execute")||tokens[0].equalsIgnoreCase("minecraft:execute")){
+            for(int i=1;i+1<tokens.length;i++)if(tokens[i].equalsIgnoreCase("run")&&clearCommand(tokens[i+1])){
+                // Execute can change sender, world and position: do not resolve @s/@p against the wrong context.
+                observe(()->{for(Player online:Bukkit.getOnlinePlayers())player(online,BigInteger.ZERO);});
+                break;
+            }
+        }
     }
     @EventHandler(priority=EventPriority.LOWEST)
     public void swapHands(PlayerSwapHandItemsEvent event){observe(()->player(event.getPlayer(),BigInteger.ZERO));}

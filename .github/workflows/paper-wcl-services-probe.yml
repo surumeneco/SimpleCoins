@@ -83,7 +83,7 @@ permissions:
 jobs:
   real-paper-storage-services:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -787,34 +787,19 @@ jobs:
             fi
           done
           echo 'PAPER_A04_A05_REAL_DISTRIBUTED_BLOCKLOCKER_WCL_SAVED_GENERATION_PASSED'
-      - name: Actual SimpleCoins product startup with complete real providers
+      - name: Build pinned Java protocol client for product admission
+        run: gradle --no-daemon -p tests/paper-protected-settlement-runtime/client installDist
+      - name: Actual SimpleCoins product startup, network issuance and restart
         shell: bash
         run: |
           set -euo pipefail
-          # Reuse the saved world, not the diagnostic probe plugin or its
-          # deliberately unmapped IP ban. Product startup itself owns scanning.
           cp -a smoke-blocklocker smoke-product-startup
-          cd smoke-product-startup
-          rm -f plugins/StorageProbe.jar
-          printf '[]\n' > banned-ips.json
-          sed -i 's/diagnostic-only: true/diagnostic-only: false/' plugins/SimpleCoins/config.yml
-          set +e
-          timeout --signal=TERM --kill-after=10s 300s \
-            java -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > product-startup.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            tail -180 product-startup.log
-            exit 1
-          fi
-          grep -F 'SIMPLECOINS_STARTUP_STATIC_WINDOW_BEGIN' product-startup.log
-          grep -F 'SIMPLECOINS_PRODUCT_SETTLEMENT_WORKER_BEGIN' product-startup.log
-          grep -F 'SIMPLECOINS_PRODUCT_SETTLEMENT_PREPARED_UNPUBLISHED personal=25000 free=1000 dead=30000' product-startup.log
-          grep -F 'SIMPLECOINS_STARTUP_NORMAL_TRACKING_INCOMPLETE' product-startup.log
-          if grep -Fq 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED' product-startup.log; then
-            echo 'Incomplete tracking must not permit publication' >&2
-            exit 1
-          fi
+          (cd smoke-product-startup && timeout --signal=TERM --kill-after=5s 240s java -Da05.probe.phase=prepare-product -Da05.probe.blocklocker=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null >product-prepare.log 2>&1) || { tail -180 smoke-product-startup/product-prepare.log; exit 1; }
+          grep -F 'PAPER_PRODUCT_REAL_WWW_FIXTURES_READY' smoke-product-startup/product-prepare.log
+          if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' smoke-product-startup/product-prepare.log; then cat smoke-product-startup/product-prepare.log; exit 1; fi
+          bash tests/paper-wcl-services-probe/product-startup-acceptance.sh \
+            smoke-product-startup \
+            tests/paper-protected-settlement-runtime/client/build/install/simplecoins-network-fixture/bin/simplecoins-network-fixture
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -823,7 +808,7 @@ jobs:
           path: |
             smoke/*.log
             smoke-blocklocker/*.log
-            smoke-product-startup/product-startup.log
+            smoke-product-startup/product-*.log
             smoke-pdc-negative/*.log
             smoke-equipment-negative/*.log
             smoke-inventory-negative/*.log

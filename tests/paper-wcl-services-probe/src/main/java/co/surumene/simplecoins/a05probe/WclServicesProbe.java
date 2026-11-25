@@ -225,6 +225,12 @@ public final class WclServicesProbe extends JavaPlugin {
 
                 World world = Bukkit.getWorld("world");
                 if (world == null) throw new IllegalStateException("Missing test overworld");
+                if ("prepare-product".equals(System.getProperty("a05.probe.phase"))) {
+                    // The old serialized-reader fixtures deliberately have no genome.
+                    // Only the separate product fixture is upgraded to real initialized wolves.
+                    prepareProductWolves(world, selected);
+                    return;
+                }
                 PersistentDataContainer blank = new ItemStack(Material.PAPER)
                         .getItemMeta().getPersistentDataContainer();
                 UUID unknown = UUID.fromString("00000000-0000-0000-0000-00000000a005");
@@ -428,6 +434,107 @@ public final class WclServicesProbe extends JavaPlugin {
      * WCL cargo. The source is physically captured before the provider read.
      * It is an UNPUBLISHED staged candidate, not an all-writer G0 guarantee.
      */
+    /** Replace the fixture-only runtime with an actual initialized WWW individual,
+     * preserving both existing entity UUIDs and exactly the monetary slots. */
+    private void prepareProductWolves(World world, Map<String, WonderfulStorageReader> providers)
+            throws Exception {
+        prepareProductChunk(world,providers,0);
+    }
+
+    /** One legacy migration and one founder synthesis at a time, with no main-thread
+     * chunk IO or synchronous multi-founder calculation. The normal product run
+     * must not trigger a fixture-only genome migration. */
+    private void prepareProductChunk(World world,Map<String,WonderfulStorageReader> providers,int index) {
+        if(index==2){
+            Bukkit.getScheduler().runTaskLater(this,()->{
+                try {
+                    world.save();
+                    getLogger().info("PAPER_PRODUCT_REAL_WWW_FIXTURES_READY");
+                } catch(Throwable failure) {
+                    getLogger().log(Level.SEVERE,"PAPER_A05_SERVICES_PROBE_FAILED",failure);
+                } finally { Bukkit.shutdown(); }
+            },20L);
+            return;
+        }
+        int coord=index==0?4:FAR_CHUNK;
+        world.getChunkAtAsync(coord,coord,true).whenComplete((chunk,error)->
+            Bukkit.getScheduler().runTask(this,()->{
+                try {
+                    if(error!=null||chunk==null||!chunk.isLoaded())
+                        throw new IOException("Product fixture chunk unavailable",error);
+                    chunk.addPluginChunkTicket(this);
+                    UUID chickenId=UUID.fromString(Files.readString(index==0
+                            ?persistedIdFile():farWitness("wwc-uuid.txt")).strip());
+                    UUID wolfId=UUID.fromString(Files.readString(index==0
+                            ?persistedWolfIdFile():farWitness("www-uuid.txt")).strip());
+                    Chicken chicken=null; Wolf wolf=null;
+                    for(Entity entity:chunk.getEntities()){
+                        if(entity.getUniqueId().equals(chickenId)&&entity instanceof Chicken found)chicken=found;
+                        if(entity.getUniqueId().equals(wolfId)&&entity instanceof Wolf found)wolf=found;
+                    }
+                    if(chicken==null||wolf==null)throw new IOException("Product fixture entity absent");
+                    chicken.setPersistent(true); chicken.setAI(false);
+                    wolf.setPersistent(true); wolf.setAI(false);
+                    final Chicken targetChicken=chicken; final Wolf targetWolf=wolf;
+                    final long deadline=System.nanoTime()+java.time.Duration.ofSeconds(70).toNanos();
+                    Bukkit.getScheduler().runTaskTimer(this,task->{
+                        try {
+                            if(System.nanoTime()>deadline)throw new IOException("Legacy WWC fixture migration did not complete");
+                            Integer version=targetChicken.getPersistentDataContainer().get(
+                                new NamespacedKey("whatawonderfulchicken","data_version"),PersistentDataType.INTEGER);
+                            if(version==null||version<4)return;
+                            task.cancel();
+                            getLogger().info("PAPER_PRODUCT_WWC_MIGRATION_READY index="+index);
+                            prepareProductWolf(world,providers,index,targetWolf,chunk);
+                        } catch(Throwable failure){
+                            task.cancel();getLogger().log(Level.SEVERE,"PAPER_A05_SERVICES_PROBE_FAILED",failure);Bukkit.shutdown();
+                        }
+                    },1L,2L);
+                } catch(Throwable failure){
+                    getLogger().log(Level.SEVERE,"PAPER_A05_SERVICES_PROBE_FAILED",failure);Bukkit.shutdown();
+                }
+            }));
+    }
+
+    private void prepareProductWolf(World world,Map<String,WonderfulStorageReader> providers,
+                                    int index,Wolf wolf,Chunk chunk) {
+        var www=(WhatAWonderfulWolfPlugin) Bukkit.getPluginManager().getPlugin("WhatAWonderfulWolf");
+        var factory=new WonderfulWolfFactory(www.genomeLib().engine(),
+                ()->new WonderfulWolfGenomeProfile(www.currentConfig(),
+                        www.genomeLib().engine().geneSequenceCodec()));
+        java.util.concurrent.CompletableFuture.supplyAsync(()->factory.createFounder(
+                FounderOrigin.NATURAL,Optional.of(WOLF_OWNER),0L,0xA05A05L+index))
+            .whenComplete((creation,error)->Bukkit.getScheduler().runTask(this,()->{
+                try {
+                    if(error!=null)throw new IOException("WWW founder failed",error);
+                    if(!(creation instanceof WonderfulWolfCreationResult.Success made))
+                        throw new IOException("Real product fixture founder synthesis failed: "+creation);
+                    var coins=new CoinItemCodec(CoinItemCodec.defaultNames());
+                    var weapon=coins.create(CoinDenomination.TEN_THOUSAND,1);
+                    var meta=weapon.getItemMeta();meta.setUnbreakable(true);weapon.setItemMeta(meta);
+                    var cargo=coins.create(CoinDenomination.THOUSAND,5);
+                    wolf.setOwner(Bukkit.getOfflinePlayer(WOLF_OWNER));
+                    wolf.getEquipment().setItemInMainHand(weapon);
+                    var individual=made.individual().withTamedOwner(WOLF_OWNER)
+                        .withCommandState(Mode.FOLLOW,Optional.of(WOLF_COMMANDER),ActionDistance.NORMAL,Optional.empty())
+                        .withStorage(Optional.of(new ItemStackSnapshot(weapon.serializeAsBytes())),
+                            Map.of(7,new ItemStackSnapshot(cargo.serializeAsBytes())));
+                    www.loadedIndividuals().saveAndRegister(wolf,individual);
+                    var live=PaperWonderfulLiveCandidates.collect(this,wolf,"www",
+                            new java.util.HashSet<>(),2*1024*1024,16*1024*1024);
+                    if(!WOLF_COMMANDER.equals(live.ownerEvidence().owner())||
+                            !BigInteger.valueOf(15000).equals(live.total()))
+                        throw new IOException("Product founder LIVE value/owner mismatch: "+wolf.getUniqueId());
+                    assertPersistedWolf(providers.get("www"),wolf.getUniqueId(),world.getUID(),
+                            wolf.getPersistentDataContainer(),coins);
+                    chunk.removePluginChunkTicket(this);
+                    Bukkit.getScheduler().runTaskLater(this,()->prepareProductChunk(world,providers,index+1),20L);
+                } catch(Throwable failure){
+                    getLogger().log(Level.SEVERE,"PAPER_A05_SERVICES_PROBE_FAILED",failure);Bukkit.shutdown();
+                }
+            }));
+    }
+
     private void verifyRealLiveWolfEquipmentMirror(World world) throws Exception {
         var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000a052");
