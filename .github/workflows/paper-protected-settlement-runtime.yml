@@ -125,18 +125,27 @@ jobs:
           PYTHON
           client="$PWD/tests/paper-protected-settlement-runtime/client/build/install/simplecoins-network-fixture/bin/simplecoins-network-fixture"
           cd smoke-network
-          timeout 160 java -Da02.liveClientProbe=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-network.log 2>&1 &
+          mkdir -p plugins/SimpleCoins
+          unzip -p plugins/SimpleCoins.jar config.yml > plugins/SimpleCoins/config.yml
+          sed -i "s@public-url: ''@public-url: 'http://127.0.0.1:25599/SimpleCoins-java.zip'@" plugins/SimpleCoins/config.yml
+          python3 -m http.server 25599 --bind 127.0.0.1 --directory plugins/SimpleCoins > pack-http.log 2>&1 &
+          http=$!
+          timeout 160 java -Da02.livePackProbe=true -Da02.liveClientProbe=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null > paper-network.log 2>&1 &
           server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
+          trap 'kill "$server" "$http" 2>/dev/null || true' EXIT
           for i in $(seq 1 70); do
             grep -Fq 'PAPER_NETWORK_GRANT_FIXTURE_READY' paper-network.log && break
             kill -0 "$server" 2>/dev/null || { tail -150 paper-network.log; exit 1; }
             sleep 1
           done
           grep -F 'PAPER_NETWORK_GRANT_FIXTURE_READY' paper-network.log || { tail -150 paper-network.log; exit 1; }
-          timeout 75 "$client" > client.log 2>&1 || { cat client.log; tail -150 paper-network.log; exit 1; }
+          timeout 75 "$client" --require-pack > client.log 2>&1 || { cat client.log; tail -150 paper-network.log; exit 1; }
           wait "$server" || { tail -150 paper-network.log; exit 1; }
           grep -F 'NETWORK_CLIENT_PLAY_LOGIN' client.log
+          grep -Fx 'NETWORK_JAVA_PACK_HTTP_HASH_AND_NINE_MODELS_PASSED' client.log
+          grep -F 'GET /SimpleCoins-java.zip HTTP/1.1" 200' pack-http.log
+          test "$(grep -Fc 'SIMPLECOINS_JAVA_PACK_REQUESTED player=' paper-network.log)" = 1
+          grep -F 'SIMPLECOINS_JAVA_PACK_STATUS player=' paper-network.log | grep -F 'status=DOWNLOADED'
           grep -F 'PAPER_INVSEE_OFFLINE_MONEY_JOURNAL_PASSED 5000->5100->5000' paper-network.log
           grep -F 'PAPER_NETWORK_GRANT_JOIN_AND_IP_PASSED total=5064 pending=1' paper-network.log
           grep -F 'PAPER_NETWORK_RETAINED_INVSEE_SAVE_PASSED total=5064' paper-network.log
@@ -150,3 +159,4 @@ jobs:
             smoke-crash/paper*.log
             smoke-network/paper*.log
             smoke-network/client.log
+            smoke-network/pack-http.log
