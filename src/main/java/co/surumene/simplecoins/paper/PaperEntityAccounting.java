@@ -74,6 +74,7 @@ public final class PaperEntityAccounting implements Listener {
 
     private static final NamespacedKey WWC=new NamespacedKey("whatawonderfulchicken","type");
     private static final NamespacedKey WWW=new NamespacedKey("whatawonderfulwolf","type");
+    private static final NamespacedKey WWC_PENDING=new NamespacedKey("whatawonderfulchicken","pending_natural_founder_seed");
     private static Optional<String> provider(Entity entity) throws IOException {
         // Only the actual marked chicken/wolf is a WCL monetary holder.
         // WWC armor stand projections are handled as aliases below.
@@ -82,7 +83,8 @@ public final class PaperEntityAccounting implements Listener {
         Set<String> keys=new HashSet<>();
         for(var key:pdc.getKeys())keys.add(key.toString());
         return WclLiveMarker.provider(entity.getType().getKey().toString(),keys,
-                pdc.get(WWC,PersistentDataType.STRING),pdc.get(WWW,PersistentDataType.STRING));
+                pdc.get(WWC,PersistentDataType.STRING),pdc.get(WWW,PersistentDataType.STRING),
+                pdc.has(WWC_PENDING,PersistentDataType.LONG));
     }
     private static boolean eligible(Entity entity) {
         return !(entity instanceof Player)&&!(entity instanceof Item)
