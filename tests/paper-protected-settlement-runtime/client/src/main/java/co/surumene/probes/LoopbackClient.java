@@ -32,6 +32,7 @@ public final class LoopbackClient {
     public static void main(String[] args)throws Exception {
         var joined=new AtomicBoolean();var disconnected=new CountDownLatch(1);
         boolean requirePack=Arrays.asList(args).contains("--require-pack");
+        var wallet=Arrays.asList(args).contains("--wallet-scenario")?new WalletNetworkScenario():null;
         var packCount=new AtomicInteger();
         var downloaded=new AtomicBoolean();
         var packFailed=new AtomicBoolean();
@@ -61,10 +62,11 @@ public final class LoopbackClient {
                 System.out.println("NETWORK_CLIENT_DISCONNECTED "+event.getReason());disconnected.countDown();
             }
         });
+        if(wallet!=null)client.addListener(wallet);
         client.connect();
-        boolean finished=disconnected.await(65,TimeUnit.SECONDS);
+        boolean finished=disconnected.await(wallet==null?65:110,TimeUnit.SECONDS);
         System.exit(finished&&joined.get()&&(!requirePack||
-                downloaded.get()&&packCount.get()==1&&!packFailed.get())?0:1);
+                downloaded.get()&&packCount.get()==1&&!packFailed.get())&&(wallet==null||wallet.completed())?0:1);
     }
     /** Real download and model/texture verification, not a claim of graphical reload. */
     private static void verifyDownload(ClientboundResourcePackPushPacket pack) throws Exception {
