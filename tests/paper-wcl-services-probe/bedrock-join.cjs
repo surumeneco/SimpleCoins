@@ -12,8 +12,9 @@ const client=new Client({host:'127.0.0.1',port:19132,version:'1.26.30',
   transport:'raknet',raknetBackend:'raknet-native',offline:true,username:'ProbeBedrock',
   deviceOS:1,autoInitPlayer:true,delayedInit:true,connectTimeout:15000})
 const pending=new Map(), verified=new Set(), ids=new Map(), inventory=new Map()
-let info, chunks=[], finished=false, spawned=false
-const deadline=setTimeout(()=>fail(new Error('Product Bedrock acceptance timeout')),90000)
+let info, chunks=[], finished=false, spawned=false, coinsVerified=false, startGame, opened, top=[], cursorId=0
+const responses=new Map()
+const deadline=setTimeout(()=>fail(new Error('Product Bedrock acceptance timeout')),150000)
 function fail(e){if(finished)return;finished=true;clearTimeout(deadline);console.error(e);try{client.close()}finally{process.exit(1)}}
 function guard(fn){return p=>{try{fn(p)}catch(e){fail(e)}}}
 function sha(b){return createHash('sha256').update(b).digest()}
@@ -73,7 +74,7 @@ client.once('resource_pack_stack',guard(p=>{
   client.write('resource_pack_client_response',{response_status:'completed',resourcepackids:[]})
   client.queue('client_cache_status',{enabled:false})
 }))
-client.once('start_game',()=>client.queue('request_chunk_radius',{chunk_radius:4,max_radius:4}))
+client.once('start_game',p=>{startGame=p;client.queue('request_chunk_radius',{chunk_radius:4,max_radius:4})})
 client.on('item_registry',guard(p=>{
   for(const amount of amounts){
     const name='simplecoins:coin_'+amount
@@ -91,18 +92,76 @@ client.once('spawn',guard(()=>{
   checkCoins()
 }))
 function checkCoins(){
-  if(!spawned||ids.size!==9)return
+  if(coinsVerified||!spawned||ids.size!==9)return
   for(const id of ids.values()){
     if([...inventory.values()].filter(x=>x.network_id===id).reduce((n,x)=>n+x.count,0)!==1)return
   }
   console.log('NETWORK_BEDROCK_NINE_REAL_INVENTORY_COINS_PASSED')
+  coinsVerified=true
+  runWallet().catch(fail)
+}
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))
+async function awaitCondition(condition,description,ms=15000){
+  const until=Date.now()+ms
+  while(!condition()){if(Date.now()>until)throw new Error('Missing '+description);await sleep(50)}
+}
+function stackId(item){
+  if(!item||!item.network_id)return 0
+  const id=typeof item.stack_id==='object'?item.stack_id.id:item.stack_id
+  assert(Number.isInteger(id)&&id>0,'No actual item stack net ID')
+  return id
+}
+function slot(container_id,slot,stack_id){return {slot_type:{container_id},slot,stack_id}}
+async function transfer(request_id,type_id,source,destination){
+  client.queue('item_stack_request',{requests:[{request_id,actions:[{type_id,count:1,source,destination}],custom_names:[],cause:'chat_public'}]})
+  await awaitCondition(()=>responses.has(request_id),'stack response '+request_id)
+  const result=responses.get(request_id)
+  assert.equal(result.status,'ok',JSON.stringify(result))
+  for(const container of result.containers||[]){
+    if(container.slot_type.container_id==='cursor'){
+      const observation=container.slots.find(x=>x.slot===0)
+      if(observation)cursorId=observation.count===0?0:observation.item_stack_id
+    }
+  }
+  console.log('NETWORK_BE_STACK_RESPONSE '+request_id)
+  await sleep(600)
+}
+client.on('container_open',guard(p=>{opened=p;top=[]}))
+client.on('item_stack_response',guard(p=>{for(const response of p.responses)responses.set(response.request_id,response)}))
+async function runWallet(){
+  await awaitCondition(()=>fs.existsSync('product-be-wallet-ready'),'server wallet preparation',30000)
+  await awaitCondition(()=>inventory.get(0)?.network_id&&inventory.get(1)?.network_id===ids.get(100)&&inventory.get(1)?.count===1,'actual wallet and 100C hotbar')
+  const held=inventory.get(0)
+  assert(![...ids.values()].includes(held.network_id)&&held.count===1)
+  client.queue('mob_equipment',{runtime_entity_id:startGame.runtime_entity_id,item:held,slot:0,selected_slot:0,window_id:'inventory'})
+  await sleep(250)
+  const zero={x:0,y:0,z:0}
+  client.queue('inventory_transaction',{transaction:{legacy:{legacy_request_id:0},transaction_type:'item_use',actions:[],transaction_data:{action_type:'click_air',trigger_type:'player_input',block_position:zero,face:0,hotbar_slot:0,held_item:held,player_pos:startGame.player_position,click_pos:zero,block_runtime_id:0,client_prediction:'success',client_cooldown_state:'off'}}})
+  await awaitCondition(()=>opened&&amounts.every((a,i)=>top[i]?.network_id===ids.get(a)&&top[i]?.count===1),'actual nine wallet icons')
+  console.log('NETWORK_BE_WALLET_SCREEN_OBSERVED')
+  // Use actual server-issued item IDs and an ordinary cursor transfer.
+  await transfer(101,'take',slot('hotbar_and_inventory',1,stackId(inventory.get(1))),slot('cursor',0,0))
+  assert(cursorId>0,'cursor stack ID absent')
+  await transfer(102,'place',slot('cursor',0,cursorId),slot('container',4,stackId(top[4])))
+  console.log('NETWORK_BE_WALLET_DEPOSIT_SENT')
+  await awaitCondition(()=>fs.existsSync('product-be-wallet-withdraw'),'server deposit verification',25000)
+  await transfer(103,'take',slot('container',4,stackId(top[4])),slot('cursor',0,0))
+  assert(cursorId>0,'withdraw cursor stack ID absent')
+  await transfer(104,'place',slot('cursor',0,cursorId),slot('hotbar_and_inventory',1,0))
+  await awaitCondition(()=>inventory.get(1)?.network_id===ids.get(100)&&inventory.get(1)?.count===1,'withdrawn actual coin')
+  client.queue('container_close',{window_id:opened.window_id,window_type:opened.window_type,server:false})
+  console.log('NETWORK_BE_WALLET_WITHDRAW_OBSERVED')
+  await awaitCondition(()=>fs.existsSync('product-be-wallet-done'),'server withdrawal verification',25000)
   finished=true;clearTimeout(deadline);client.close();process.exit(0)
 }
 client.on('inventory_content',guard(p=>{
+  if(opened&&p.window_id===opened.window_id){top=p.input.slice();return}
   if(p.window_id!=='inventory'&&p.window_id!==0)return
   inventory.clear();p.input.forEach((item,slot)=>inventory.set(slot,item));checkCoins()
 }))
 client.on('inventory_slot',guard(p=>{
+  if(opened&&p.window_id===opened.window_id){top[p.slot]=p.item;return}
+  if((p.window_id==='ui'||p.window_id===124)&&p.slot===0){cursorId=stackId(p.item);return}
   if(p.window_id!=='inventory'&&p.window_id!==0)return
   inventory.set(p.slot,p.item);checkCoins()
 }))
