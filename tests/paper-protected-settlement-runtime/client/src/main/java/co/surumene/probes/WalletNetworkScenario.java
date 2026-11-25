@@ -38,10 +38,10 @@ final class WalletNetworkScenario extends SessionAdapter {
         if(packet instanceof ClientboundLoginPacket) {
             Thread.ofVirtual().start(()->run(session));
         } else if(packet instanceof ClientboundPlayerPositionPacket pos) {
-            var xyz=pos.getPosition();
             session.send(new ServerboundAcceptTeleportationPacket(pos.getId()));
             if(!loaded){loaded=true;session.send(ServerboundPlayerLoadedPacket.INSTANCE);}
         } else if(packet instanceof ClientboundOpenScreenPacket screen) {
+            System.out.println("NETWORK_SCREEN "+screen.getType()+" "+screen.getTitle());
             if(screen.getType()==ContainerType.GENERIC_9X1
                     &&screen.getTitle() instanceof net.kyori.adventure.text.TextComponent title
                     &&title.content().equals("Wallet")){
@@ -51,6 +51,7 @@ final class WalletNetworkScenario extends SessionAdapter {
         } else if(packet instanceof ClientboundContainerSetContentPacket full&&full.getContainerId()==container) {
             stateId=full.getStateId();
             items=full.getItems().clone();
+            System.out.println("NETWORK_WALLET_CONTENT size="+items.length);
         } else if(packet instanceof ClientboundContainerSetSlotPacket slot&&slot.getContainerId()==container) {
             stateId=slot.getStateId();
             ItemStack[] old=items;
@@ -87,7 +88,7 @@ final class WalletNetworkScenario extends SessionAdapter {
             signal("product-wallet-ready",50);
             session.send(new ServerboundSetCarriedItemPacket(0));
             Thread.sleep(150);
-            session.send(new ServerboundUseItemPacket(Hand.MAIN_HAND,1,0,0));
+            session.send(new ServerboundUseItemPacket(Hand.MAIN_HAND,1,0,-90));
             await(()->container>0&&items!=null&&items.length==45,"real 9x1 wallet screen",12);
             ItemStack[] initial=items;
             for(int slot=0;slot<9;slot++)

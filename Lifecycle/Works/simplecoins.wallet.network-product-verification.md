@@ -13,12 +13,12 @@ refs: []
 entry: issue
 mode: shadow
 flow: issue-work
-work_kind: verification
+work_kind: implementation
 parent: ''
 depends_on: []
 issue_ref: https://github.com/surumeneco/SimpleCoins/issues/6
 project_entry_ref: https://drive.google.com/file/d/1RVbNpheNNWTaN0WYxZsO__fm5H-0_nZh/view
-spec_status: unknown
+spec_status: draft
 ---
 
 # Work: product wallet network acceptance
@@ -48,7 +48,7 @@ spec_status: unknown
 
 | Name | Path | Base ref | Branch pattern | Allowed paths | Production paths | Test paths |
 | --- | --- | --- | --- | --- | --- | --- |
-| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.wallet.network-product-verification.md;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/LoopbackClient.java;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/WalletNetworkScenario.java;tests/paper-wcl-services-probe/product-startup-acceptance.sh;.github/workflows/paper-wcl-services-probe.yml | — | tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/LoopbackClient.java;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/WalletNetworkScenario.java;tests/paper-wcl-services-probe/product-startup-acceptance.sh;.github/workflows/paper-wcl-services-probe.yml |
+| simplecoins | ../.. | develop | feature/* | Lifecycle/Works/simplecoins.wallet.network-product-verification.md;docs/cat/drafts/wallet-paper-gui-domain.md;src/main/java/co/surumene/simplecoins/paper/WalletMenu.java;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/LoopbackClient.java;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/WalletNetworkScenario.java;tests/paper-wcl-services-probe/product-startup-acceptance.sh;.github/workflows/paper-wcl-services-probe.yml | src/main/java/co/surumene/simplecoins/paper/WalletMenu.java | tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/LoopbackClient.java;tests/paper-protected-settlement-runtime/client/src/main/java/co/surumene/probes/WalletNetworkScenario.java;tests/paper-wcl-services-probe/product-startup-acceptance.sh;.github/workflows/paper-wcl-services-probe.yml |
 
 ## Checks
 

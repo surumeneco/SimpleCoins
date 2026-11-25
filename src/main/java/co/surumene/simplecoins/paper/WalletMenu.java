@@ -92,8 +92,13 @@ public final class WalletMenu implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onUse(PlayerInteractEvent event) {
+        // Paper sets useInteractedBlock to DENY for right-click-air, even
+        // when useItemInHand is DEFAULT. Do not filter by isCancelled().
+        if (event.useItemInHand() == org.bukkit.event.Event.Result.DENY
+                || (event.getAction() == Action.RIGHT_CLICK_BLOCK
+                && event.useInteractedBlock() == org.bukkit.event.Event.Result.DENY)) return;
         Player player = event.getPlayer();
         if (halted) {
             if (wallets.hasWalletMarker(event.getItem())) event.setCancelled(true);
