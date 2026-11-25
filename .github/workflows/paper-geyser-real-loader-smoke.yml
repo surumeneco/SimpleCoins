@@ -4,6 +4,7 @@ on:
     branches: [develop]
     paths:
       - '.github/workflows/paper-geyser-real-loader-smoke.yml'
+      - 'tests/paper-geyser-real-client/**'
       - 'Lifecycle/Works/simplecoins.v2.geyser-real-loader-verification.md'
       - 'src/main/java/co/surumene/simplecoins/domain/GeyserResourceInstaller.java'
       - 'src/main/java/co/surumene/simplecoins/SimpleCoinsPlugin.java'
@@ -62,6 +63,15 @@ jobs:
             -o smoke/plugins/Geyser-Spigot.jar
           printf '%s  %s\n' "$geyser_sha" smoke/plugins/Geyser-Spigot.jar | sha256sum -c -
           echo "GEYSER_OFFICIAL_ARTIFACT_PINNED: version=${geyser_version} build=${geyser_build} sha256=${geyser_sha}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned headless Bedrock protocol client
+        run: |
+          npm install --prefix tests/paper-geyser-real-client --no-audit --no-fund --ignore-scripts --omit=optional --save-exact bedrock-protocol@3.61.0
+          npm ls --prefix tests/paper-geyser-real-client raknet-native
+          npm rebuild --prefix tests/paper-geyser-real-client raknet-native
+          node -e "require('./tests/paper-geyser-real-client/node_modules/raknet-native')"
       - name: Generate real Geyser config and run guarded staging / restart cycles
         shell: bash
         run: |
@@ -183,6 +193,66 @@ jobs:
           print('REAL_GEYSER_RESTART_SMOKE_PASSED: provider booted, staged files persisted, no attributed load errors')
           print('LIMIT: registration counts alone do not prove item-by-item client mapping, Bedrock client delivery, or rendering')
           PY
+          # Independent loopback-only packet transfer. No production settings.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          config = Path('plugins/Geyser-Spigot/config.yml')
+          text = config.read_text(encoding='utf-8')
+          lines = text.splitlines()
+          start = lines.index('bedrock:')
+          end = next((i for i in range(start+1,len(lines))
+                      if re.match(r'^[A-Za-z][\w-]*:',lines[i])),len(lines))
+          lines = lines[:start+1]+['  address: 127.0.0.1']+[
+              l for l in lines[start+1:end] if not l.strip().lstrip('#').strip().startswith('address:')
+          ]+lines[end:]
+          indices = [i for i,l in enumerate(lines)
+                     if l.strip().lstrip('#').strip() == 'validate-bedrock-login: true']
+          assert len(indices)==1,'Expected isolated validation config missing'
+          i=indices[0]
+          lines[i]=lines[i][:len(lines[i])-len(lines[i].lstrip())]+'validate-bedrock-login: false'
+          config.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
+          # The client receives the real Geyser UDP chunk packets before backend admission.
+          mkfifo bedrock-console.in
+          timeout 150 java -Xms256M -Xmx1024M -jar paper.jar nogui <bedrock-console.in >paper-bedrock-client.log 2>&1 &
+          server=$!
+          exec 3>bedrock-console.in
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in $(seq 1 90); do
+            grep -Fq 'Started Geyser on 127.0.0.1:19132' paper-bedrock-client.log && break
+            kill -0 "$server" || { tail -180 paper-bedrock-client.log; exit 1; }
+            sleep 1
+          done
+          grep -F 'Started Geyser on 127.0.0.1:19132' paper-bedrock-client.log
+          # Refuse to run a self-signed test against any non-loopback listener.
+          ss -H -lun 'sport = :19132' | tee bedrock-socket.log
+          # Inspect every local socket (column 4), including Linux IPv4-mapped IPv6.
+          awk 'NF < 5 || ($4 != "127.0.0.1:19132" && $4 != "[::ffff:127.0.0.1]:19132") { bad=1 } END { exit (NR==0 || bad) }' bedrock-socket.log
+          expected=$(python3 -c 'import json,zipfile; print(json.loads(zipfile.ZipFile("plugins/SimpleCoins/geyser/SimpleCoins.mcpack").read("manifest.json"))["header"]["uuid"])')
+          timeout 55 node ../tests/paper-geyser-real-client/download.cjs "$expected" bedrock-received.mcpack >bedrock-client.log 2>&1 || { cat bedrock-client.log; tail -180 paper-bedrock-client.log; exit 1; }
+          grep -F 'NETWORK_BEDROCK_PACK_CHUNKS_VERIFIED' bedrock-client.log
+          cmp bedrock-received.mcpack plugins/SimpleCoins/geyser/SimpleCoins.mcpack
+          python3 - <<'PY'
+          import zipfile,json,hashlib
+          z=zipfile.ZipFile('bedrock-received.mcpack')
+          data=json.loads(z.read('textures/item_texture.json'))['texture_data']
+          values=[1,5,10,50,100,500,1000,5000,10000]
+          assert len(data)==9
+          hashes=set()
+          for amount in values:
+              key=f'simplecoins:coin_{amount}'
+              assert data[key]['textures']==[f'textures/items/coin_{amount}']
+              image=z.read(f'textures/items/coin_{amount}.png')
+              assert image.startswith(b'\x89PNG\r\n\x1a\n')
+              hashes.add(hashlib.sha256(image).digest())
+          assert len(hashes)==9
+          print('REAL_GEYSER_CLIENT_BYTE_EXACT_NINE_TEXTURES_PASSED')
+          PY
+          printf 'stop\n' >&3
+          exec 3>&-
+          wait "$server"
+          trap - EXIT
           # The dependency is optional: removing Geyser must not prevent
           # guarded JE-only startup. Keep managed content untouched for the
           # separate Geyser/Nexo acceptance checks.
@@ -200,5 +270,7 @@ jobs:
           path: |
             smoke/paper-*.log
             smoke/geyser-build.json
+            smoke/bedrock-client.log
+            smoke/bedrock-socket.log
           if-no-files-found: ignore
           retention-days: 7
