@@ -4,6 +4,8 @@ import co.surumene.simplecoins.domain.AnvilRegionReader;
 import co.surumene.simplecoins.domain.WorldStorageDiscovery;
 import co.surumene.simplecoins.domain.WclPhysicalSlotIdentity;
 import co.surumene.simplecoins.domain.WclOwnerEvidence;
+import co.surumene.simplecoins.domain.WclLiveMarker;
+import java.util.HashSet;
 import co.surumene.simplecoins.domain.SavedEntityOwner;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -154,15 +156,23 @@ public final class PaperWonderfulSavedChunkCandidates {
             if (!(maybePdc instanceof Map<?, ?> pdc))
                 throw new IOException("Saved Entity has malformed BukkitValues");
             boolean wwc = false, www = false;
+            Set<String> keys = new HashSet<>();
             for (Object key : pdc.keySet()) {
                 if (!(key instanceof String name))
                     throw new IOException("Saved Entity BukkitValues has non-string key");
+                keys.add(name);
                 wwc |= name.startsWith(WWC_NAMESPACE);
                 www |= name.startsWith(WWW_NAMESPACE);
             }
             if (!wwc && !www) continue;
             if (wwc && www)
                 throw new IOException("Saved Entity contains contradictory WWC/WWW identities");
+            // A typed seed alone identifies a verified vanilla pending founder,
+            // not a partially written WCL storage holder.
+            if (wwc && pdc.get(WWC_NAMESPACE + "pending_natural_founder_seed") instanceof Long
+                    && !pdc.containsKey(WWC_NAMESPACE + "type")
+                    && WclLiveMarker.provider(entityType, keys, null, null, true).isEmpty())
+                continue;
             String provider = wwc ? "wwc" : "www";
             String expectedSpecies = wwc ? "minecraft:chicken" : "minecraft:wolf";
             String expectedMarker = wwc ? "wonderful_chicken" : "wonderful_wolf";
