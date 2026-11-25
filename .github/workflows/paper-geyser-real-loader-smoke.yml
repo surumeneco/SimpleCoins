@@ -68,7 +68,8 @@ jobs:
           node-version: '24'
       - name: Install pinned headless Bedrock protocol client
         run: |
-          npm install --prefix tests/paper-geyser-real-client --no-audit --no-fund --ignore-scripts --omit=optional --save-exact bedrock-protocol@3.61.0 raknet-native@1.0.3
+          npm install --prefix tests/paper-geyser-real-client --no-audit --no-fund --ignore-scripts --omit=optional --save-exact bedrock-protocol@3.61.0
+          npm ls --prefix tests/paper-geyser-real-client raknet-native
           npm rebuild --prefix tests/paper-geyser-real-client raknet-native
           node -e "require('./tests/paper-geyser-real-client/node_modules/raknet-native')"
       - name: Generate real Geyser config and run guarded staging / restart cycles
