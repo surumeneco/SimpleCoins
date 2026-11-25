@@ -33,7 +33,17 @@ client.on('network_stack_latency', p => {
   if (p.needs_response) client.queue('network_stack_latency', {timestamp:p.timestamp,needs_response:false})
 })
 client.once('resource_packs_info', guarded(packet => {
-  const matches = packet.texture_packs.filter(p => p.uuid === expected)
+  // Cloudburst writes UUID as two little-endian longs; ProtoDef's uuid
+  // decoder stringifies the 16 wire bytes without swapping them.
+  const canonical = Buffer.from(expected.replace(/-/g, ''), 'hex')
+  const wire = Buffer.concat([Buffer.from(canonical.subarray(0,8)).reverse(),
+    Buffer.from(canonical.subarray(8,16)).reverse()]).toString('hex')
+  console.log('BEDROCK_PACK_ADVERTISEMENTS', JSON.stringify(packet.texture_packs.map(p => ({
+    uuid:p.uuid, identity:p.content_identity, version:p.version, size:String(p.size)
+  }))))
+  const matches = packet.texture_packs.filter(p =>
+    p.content_identity === expected &&
+    p.uuid.replace(/-/g,'').toLowerCase() === wire)
   assert.equal(matches.length, 1, 'SimpleCoins pack advertised exactly once')
   announced = matches[0]
   assert.equal(announced.version,'1.0.0')
