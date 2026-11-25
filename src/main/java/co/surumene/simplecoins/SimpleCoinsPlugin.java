@@ -38,11 +38,9 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Restricted bootstrap feasibility fixture for Paper 26.2.
- *
- * No authoritative settlement scanner, atomic cache publisher, or complete
- * journal reconciliation is connected yet. Admission stays blocked for all players.
- * This MUST NOT be deployed as the finished SimpleCoins 1.0.0 plugin.
+ * Paper 26.2 product lifecycle. Admission is closed until the actual saved/live
+ * settlement has completed and the registered ordinary-accounting task is live.
+ * Diagnostic mode and incomplete provider configurations never open admission.
  */
 public final class SimpleCoinsPlugin extends JavaPlugin {
     private AdmissionBarrier admission;
@@ -291,7 +289,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                 } catch (RuntimeException failure) { groundFailure.accept(failure); }
                 finally { tickMovements.clear(); tickRegistrations.clear(); tickOwnerLocations.clear(); }
             };
-            getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
+            var accountingFlushTask = getServer().getScheduler().runTaskTimer(this,flushAccounting,1L,1L);
             final co.surumene.simplecoins.paper.PaperIpBanAssociations ipAssociations;
             try { ipAssociations=new co.surumene.simplecoins.paper.PaperIpBanAssociations(getDataFolder().toPath()); }
             catch(IOException invalid){throw new IllegalStateException("Cannot load IP BAN associations",invalid);}
@@ -370,7 +368,7 @@ public final class SimpleCoinsPlugin extends JavaPlugin {
                     && Bukkit.getPluginManager().isPluginEnabled("BlockLocker")) {
                 startupSettlement=new co.surumene.simplecoins.paper.PaperStartupSettlementCoordinator(
                         this,admission,publication,protectedSettlement,sourceScope.scope(),
-                        () -> false, entities, ipAssociations); // ordinary accounting coverage is not complete yet
+                        () -> isEnabled() && !accountingFlushTask.isCancelled(), entities, ipAssociations);
             }
             sourceDiscovery = new PaperSavedSourceDiscovery(this, sourceScope.scope(),
                     sourceScope.maxSourceEntries(), () -> {
