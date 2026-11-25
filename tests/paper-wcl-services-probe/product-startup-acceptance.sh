@@ -51,7 +51,7 @@ wait_for product-startup.log 'SIMPLECOINS_PRODUCT_SETTLEMENT_PREPARED_UNPUBLISHE
 command_to_server 'sc stats'
 wait_for product-startup.log 'Personal P: 25000 C; free F: 1000 C; world T=P+F: 26000 C'
 wait_for product-startup.log 'Dead D (excluded from T): 30000 C'
-timeout 75 "$client" >product-client.log 2>&1 &
+timeout 125 "$client" --wallet-scenario >product-client.log 2>&1 &
 client_pid=$!
 wait_for product-startup.log 'ProbeSettlement joined the game'
 wait_for product-client.log 'NETWORK_CLIENT_PLAY_LOGIN'
@@ -90,6 +90,43 @@ for ((i=0;i<15;i++)); do
   sleep 1
 done
 [[ $(grep -Fc "Personal balance $uuid: 0 C" product-startup.log || true) -ge 2 ]]
+# Real client GUI transfer, not direct Bukkit event invocation.
+command_to_server 'sc give ProbeSettlement wallet 1'
+wait_for product-startup.log 'Gave 1 empty wallet(s) to ProbeSettlement' 15
+command_to_server 'sc give ProbeSettlement coin_100 2'
+wait_for product-startup.log 'Delivered now (including earlier reservations): 200C; pending reservations: 0' 15
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":0L}}] run say PRODUCT_WALLET_EMPTY_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_EMPTY_VERIFIED' 15
+command_to_server 'execute if items entity ProbeSettlement hotbar.1 minecraft:paper[minecraft:item_model="simplecoins:coin_100"] run say PRODUCT_WALLET_INPUT_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_INPUT_VERIFIED' 15
+touch product-wallet-ready
+wait_for product-client.log 'NETWORK_WALLET_DEPOSIT_PACKET_OBSERVED' 25
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_WALLET_DEPOSIT_200_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_DEPOSIT_200_VERIFIED' 15
+command_to_server "sc balance $uuid"
+wait_for product-startup.log "Personal balance $uuid: 200 C" 15
+touch product-wallet-withdraw
+wait_for product-client.log 'NETWORK_WALLET_WITHDRAW_PACKET_OBSERVED' 20
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":0L}}] run say PRODUCT_WALLET_WITHDRAW_200_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_WITHDRAW_200_VERIFIED' 15
+command_to_server 'execute if items entity ProbeSettlement hotbar.1 minecraft:paper[minecraft:item_model="simplecoins:coin_50"] run say PRODUCT_WALLET_FIFTY_COINS_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_FIFTY_COINS_VERIFIED' 15
+command_to_server "sc balance $uuid"
+for ((i=0;i<15;i++)); do
+  [[ $(grep -Fc "Personal balance $uuid: 200 C" product-startup.log || true) -ge 2 ]] && break
+  sleep 1
+done
+[[ $(grep -Fc "Personal balance $uuid: 200 C" product-startup.log || true) -ge 2 ]]
+touch product-wallet-redeposit
+wait_for product-client.log 'NETWORK_WALLET_REDEPOSIT_AND_CLOSE_PASSED' 20
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_WALLET_REDEPOSIT_VERIFIED'
+wait_for product-startup.log 'PRODUCT_WALLET_REDEPOSIT_VERIFIED' 15
+command_to_server "sc balance $uuid"
+for ((i=0;i<15;i++)); do
+  [[ $(grep -Fc "Personal balance $uuid: 200 C" product-startup.log || true) -ge 3 ]] && break
+  sleep 1
+done
+[[ $(grep -Fc "Personal balance $uuid: 200 C" product-startup.log || true) -ge 3 ]]
 command_to_server 'kick ProbeSettlement product acceptance complete'
 wait "$client_pid" || { cat product-client.log; exit 1; }
 client_pid=
@@ -97,9 +134,9 @@ wait_for product-startup.log 'ProbeSettlement left the game'
 stop_server product-startup.log
 start_server product-restart.log
 command_to_server 'sc stats'
-wait_for product-restart.log 'Personal P: 25000 C; free F: 1000 C; world T=P+F: 26000 C'
+wait_for product-restart.log 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
 wait_for product-restart.log 'Dead D (excluded from T): 30000 C'
 command_to_server "sc balance $uuid"
-wait_for product-restart.log "Personal balance $uuid: 0 C"
+wait_for product-restart.log "Personal balance $uuid: 200 C"
 stop_server product-restart.log
-printf 'SIMPLECOINS_PRODUCT_STARTUP_CLIENT_ISSUE_CLEAR_RESTART_PASSED\n'
+printf 'SIMPLECOINS_PRODUCT_STARTUP_CLIENT_ISSUE_CLEAR_RESTART_PASSED\nSIMPLECOINS_PRODUCT_WALLET_NETWORK_RESTART_PASSED\n'
