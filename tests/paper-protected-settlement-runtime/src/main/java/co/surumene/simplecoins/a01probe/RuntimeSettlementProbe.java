@@ -23,6 +23,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class RuntimeSettlementProbe extends JavaPlugin {
     private static final String NAME="ProbeSettlement";
     private static final boolean NETWORK=Boolean.getBoolean("a02.liveClientProbe");
+    private static final boolean PACK=Boolean.getBoolean("a02.livePackProbe");
+    private boolean packDownloaded;
     private static final UUID ID=NETWORK?UUID.nameUUIDFromBytes(("OfflinePlayer:"+NAME).getBytes(java.nio.charset.StandardCharsets.UTF_8)):
             UUID.fromString("00000000-0000-0000-0000-000000000660");
     private com.janboerman.invsee.spigot.api.MainSpectatorInventory retainedInvsee;
@@ -31,6 +33,12 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
     @Override public void onEnable() {
         if (!"127.0.0.1".equals(getServer().getIp()) || !Bukkit.getOnlinePlayers().isEmpty())
             throw new IllegalStateException("Isolated loopback fixture required");
+        if(PACK) Bukkit.getPluginManager().registerEvents(new org.bukkit.event.Listener(){
+            @org.bukkit.event.EventHandler public void pack(org.bukkit.event.player.PlayerResourcePackStatusEvent event){
+                if(event.getPlayer().getUniqueId().equals(ID)&&event.getID().equals(JavaPackDelivery.PACK_ID)&&
+                        event.getStatus().name().equals("DOWNLOADED"))packDownloaded=true;
+            }
+        },this);
         Bukkit.getScheduler().runTaskLater(this,()->{
             try { runProbe(); } catch(Throwable failure) { fail(failure); }
         },120L);
@@ -288,7 +296,7 @@ public final class RuntimeSettlementProbe extends JavaPlugin {
             try{
                 if(System.nanoTime()>deadline)throw new AssertionError("Actual client join/grant timed out");
                 var player=Bukkit.getPlayer(ID);
-                if(player==null||grants.pending(ID).size()!=1||grants.pending(ID).getFirst().confirmedPartial()!=64)return;
+                if(player==null||grants.pending(ID).size()!=1||grants.pending(ID).getFirst().confirmedPartial()!=64||PACK&&!packDownloaded)return;
                 var data=PlayerDataReader.read(PaperPlayerGrantDelivery.playerdata(ID),16*1024*1024,64*1024*1024);
                 var total=SavedPlayerAssets.extract(data).values().stream().reduce(BigInteger.ZERO,BigInteger::add);
                 if(!total.equals(BigInteger.valueOf(5064))||!runtime.current().orElseThrow().personalBalances().get(ID).equals(total))
