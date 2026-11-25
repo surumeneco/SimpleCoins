@@ -10,7 +10,7 @@ assert.match(expected, /^[0-9a-f-]{36}$/)
 assert.equal(output, 'bedrock-received.mcpack')
 const client = new Client({
   host: '127.0.0.1', port: 19132, version: '1.26.30',
-  transport: 'raknet', raknetBackend: 'jsp-raknet', useRaknetWorkers: false,
+  transport: 'raknet', raknetBackend: 'raknet-native',
   offline: true, username: 'SimpleCoinsBedrock', deviceOS: 1,
   autoInitPlayer: false, delayedInit: true, connectTimeout: 15000
 })
@@ -77,5 +77,19 @@ client.on('resource_pack_chunk_data', guarded(packet => {
   client.close()
   process.exit(0)
 }))
-client.once('connect_allowed', () => client.connect())
+client.once('connect_allowed', () => {
+  // Establish actual unconnected ping/pong first, then use the modern
+  // version-aware RakNet 11 backend. No Microsoft authentication is used.
+  client.connection.ping(5000).then(pong => {
+    assert.match(String(pong), /^MCPE;/)
+    console.log('NETWORK_BEDROCK_RAKNET_PONG')
+    const send = client.write.bind(client)
+    client.write = (name, packet) => {
+      console.log('BEDROCK_SEND', name)
+      return send(name, packet)
+    }
+    client.on('packet', p => console.log('BEDROCK_RECEIVE', p.data?.name ?? p.name ?? 'unknown'))
+    client.connect()
+  }).catch(fail)
+})
 try { client.init() } catch (error) { fail(error) }
