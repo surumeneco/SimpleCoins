@@ -17,6 +17,7 @@ cleanup() {
   if [[ -n "$server" ]]; then kill "$server" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
+trap 'echo "Product acceptance failed at line $LINENO" >&2; tail -100 product-startup.log product-client.log product-restart.log 2>/dev/null || true' ERR
 wait_for() {
   local log=$1 marker=$2 limit=${3:-150}
   for ((i=0;i<limit;i++)); do

@@ -225,6 +225,13 @@ public final class WclServicesProbe extends JavaPlugin {
 
                 World world = Bukkit.getWorld("world");
                 if (world == null) throw new IllegalStateException("Missing test overworld");
+                if ("prepare-product".equals(System.getProperty("a05.probe.phase"))) {
+                    // The old serialized-reader fixtures deliberately have no genome.
+                    // Only the separate product fixture is upgraded to real initialized wolves.
+                    prepareProductWolves(world, selected);
+                    Bukkit.shutdown();
+                    return;
+                }
                 PersistentDataContainer blank = new ItemStack(Material.PAPER)
                         .getItemMeta().getPersistentDataContainer();
                 UUID unknown = UUID.fromString("00000000-0000-0000-0000-00000000a005");
@@ -428,6 +435,55 @@ public final class WclServicesProbe extends JavaPlugin {
      * WCL cargo. The source is physically captured before the provider read.
      * It is an UNPUBLISHED staged candidate, not an all-writer G0 guarantee.
      */
+    /** Replace the fixture-only runtime with an actual initialized WWW individual,
+     * preserving both existing entity UUIDs and exactly the monetary slots. */
+    private void prepareProductWolves(World world, Map<String, WonderfulStorageReader> providers)
+            throws Exception {
+        var www = (WhatAWonderfulWolfPlugin) Bukkit.getPluginManager().getPlugin("WhatAWonderfulWolf");
+        var factory = new WonderfulWolfFactory(www.genomeLib().engine(),
+                () -> new WonderfulWolfGenomeProfile(www.currentConfig(),
+                        www.genomeLib().engine().geneSequenceCodec()));
+        var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
+        for (int index = 0; index < 2; index++) {
+            int coord = index == 0 ? 4 : FAR_CHUNK;
+            UUID id = UUID.fromString(Files.readString(index == 0
+                    ? persistedWolfIdFile() : farWitness("www-uuid.txt")).strip());
+            var chunk = world.getChunkAt(coord, coord);
+            Wolf wolf = null;
+            for (Entity entity : chunk.getEntities())
+                if (entity.getUniqueId().equals(id) && entity instanceof Wolf found) wolf = found;
+            if (wolf == null) throw new IOException("Product fixture wolf absent: " + id);
+            var creation = factory.createFounder(FounderOrigin.NATURAL, Optional.of(WOLF_OWNER),
+                    0L, 0xA05A05L + index);
+            if (!(creation instanceof WonderfulWolfCreationResult.Success made))
+                throw new IOException("Real product fixture founder synthesis failed: " + creation);
+            var weapon = coins.create(CoinDenomination.TEN_THOUSAND, 1);
+            var meta = weapon.getItemMeta();
+            meta.setUnbreakable(true);
+            weapon.setItemMeta(meta);
+            var cargo = coins.create(CoinDenomination.THOUSAND, 5);
+            wolf.setOwner(Bukkit.getOfflinePlayer(WOLF_OWNER));
+            wolf.setPersistent(true);
+            wolf.setAI(false);
+            wolf.getEquipment().setItemInMainHand(weapon);
+            var individual = made.individual().withTamedOwner(WOLF_OWNER)
+                    .withCommandState(Mode.FOLLOW, Optional.of(WOLF_COMMANDER),
+                            ActionDistance.NORMAL, Optional.empty())
+                    .withStorage(Optional.of(new ItemStackSnapshot(weapon.serializeAsBytes())),
+                            Map.of(7, new ItemStackSnapshot(cargo.serializeAsBytes())));
+            www.loadedIndividuals().saveAndRegister(wolf, individual);
+            var live = PaperWonderfulLiveCandidates.collect(this, wolf, "www",
+                    new java.util.HashSet<>(), 2 * 1024 * 1024, 16 * 1024 * 1024);
+            if (!WOLF_COMMANDER.equals(live.ownerEvidence().owner())
+                    || !BigInteger.valueOf(15000).equals(live.total()))
+                throw new IOException("Product founder LIVE value/owner mismatch: " + id);
+            assertPersistedWolf(providers.get("www"), id, world.getUID(),
+                    wolf.getPersistentDataContainer(), coins);
+        }
+        world.save();
+        getLogger().info("PAPER_PRODUCT_REAL_WWW_FIXTURES_READY");
+    }
+
     private void verifyRealLiveWolfEquipmentMirror(World world) throws Exception {
         var coins = new CoinItemCodec(CoinItemCodec.defaultNames());
         UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000a052");
