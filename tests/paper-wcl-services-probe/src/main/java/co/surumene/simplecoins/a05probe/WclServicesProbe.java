@@ -3491,6 +3491,22 @@ public final class WclServicesProbe extends JavaPlugin {
                 2 * 1024 * 1024, 16 * 1024 * 1024).isEmpty())
             throw new IOException("Ordinary non-WCL chicken was counted as WCL storage");
 
+        String pendingSeed = "whatawonderfulchicken:pending_natural_founder_seed";
+        var pendingChunk = new AnvilRegionReader.Chunk(61, 61, Map.of("Entities", List.of(
+                Map.of("id", "minecraft:chicken", "BukkitValues", Map.of(pendingSeed, 123L)))));
+        if (!PaperWonderfulSavedChunkCandidates.collect(this, source, world.getUID(),
+                pendingChunk, new java.util.HashSet<>(), new java.util.HashSet<>(),
+                2 * 1024 * 1024, 16 * 1024 * 1024).isEmpty())
+            throw new IOException("Pending natural founder was counted as WCL storage");
+        expectSavedCandidateFailure(source, world, Map.of("id", "minecraft:chicken",
+                "BukkitValues", Map.of(pendingSeed, 123)),
+                "Saved WCL marker/species is incomplete or contradictory");
+        expectSavedCandidateFailure(source, world, Map.of("id", "minecraft:chicken",
+                "BukkitValues", Map.of(pendingSeed, 123L,
+                        "whatawonderfulchicken:equipment_shulker_box", new byte[]{1})),
+                "Saved WCL marker/species is incomplete or contradictory");
+        getLogger().info("PAPER_A05_PENDING_WWC_FOUNDER_SAVED_DISCRIMINATOR_PASSED");
+
         Map<String, Object> orphan = Map.of(
                 "id", "minecraft:chicken",
                 "BukkitValues", Map.of("whatawonderfulchicken:equipment_shulker_box",

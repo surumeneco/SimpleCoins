@@ -34,6 +34,9 @@ public final class PaperWonderfulLiveEntityDiscovery {
     private static final NamespacedKey WWW_TYPE =
             new NamespacedKey("whatawonderfulwolf", "type");
 
+    private static final NamespacedKey WWC_PENDING =
+            new NamespacedKey("whatawonderfulchicken", "pending_natural_founder_seed");
+
     private PaperWonderfulLiveEntityDiscovery() {}
 
     public record Identity(UUID entityId, String providerId,
@@ -153,7 +156,8 @@ public final class PaperWonderfulLiveEntityDiscovery {
                 var provider = WclLiveMarker.provider(
                         entity.getType().getKey().toString(), keys,
                         pdc.get(WWC_TYPE, PersistentDataType.STRING),
-                        pdc.get(WWW_TYPE, PersistentDataType.STRING));
+                        pdc.get(WWW_TYPE, PersistentDataType.STRING),
+                        pdc.has(WWC_PENDING, PersistentDataType.LONG));
                 if (provider.isPresent()) {
                     if (Bukkit.getEntity(uuid) != entity)
                         throw new IOException("Selected WCL Entity is not Bukkit-authoritative");

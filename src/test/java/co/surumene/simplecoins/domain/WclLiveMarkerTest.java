@@ -34,6 +34,32 @@ class WclLiveMarkerTest {
                 "minecraft:wolf", Set.of("whatawonderfulwolfother:type"), null, null));
     }
 
+    @Test void typedPendingNaturalFounderAloneIsNotAStorageHolder() throws Exception {
+        assertEquals(Optional.empty(), WclLiveMarker.provider("minecraft:chicken",
+                Set.of("whatawonderfulchicken:pending_natural_founder_seed", "other:tag"),
+                null, null, true));
+    }
+
+    @Test void pendingFounderDoesNotExemptUnknownOrContradictoryStorageEvidence() {
+        String seed = "whatawonderfulchicken:pending_natural_founder_seed";
+        assertThrows(IOException.class, () -> WclLiveMarker.provider(
+                "minecraft:chicken", Set.of(seed), null, null, false));
+        assertThrows(IOException.class, () -> WclLiveMarker.provider(
+                "minecraft:chicken", Set.of(seed, "whatawonderfulchicken:genome_id"), null, null, true));
+        assertThrows(IOException.class, () -> WclLiveMarker.provider(
+                "minecraft:chicken", Set.of(seed, "whatawonderfulchicken:type"), null, null, true));
+        assertThrows(IOException.class, () -> WclLiveMarker.provider(
+                "minecraft:wolf", Set.of(seed), null, null, true));
+        assertThrows(IOException.class, () -> WclLiveMarker.provider(
+                "minecraft:chicken", Set.of(seed, "whatawonderfulwolf:type"), null, null, true));
+    }
+
+    @Test void initializedChickenIsStillAStorageHolderWithPendingSeed() throws Exception {
+        assertEquals(Optional.of("wwc"), WclLiveMarker.provider("minecraft:chicken",
+                Set.of("whatawonderfulchicken:pending_natural_founder_seed", "whatawonderfulchicken:type"),
+                "wonderful_chicken", null, true));
+    }
+
     @Test void partialOrInvalidMarkerFailsClosed() {
         assertThrows(IOException.class, () -> WclLiveMarker.provider(
                 "minecraft:chicken", Set.of("whatawonderfulchicken:genome_id"), null, null));

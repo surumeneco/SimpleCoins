@@ -24,6 +24,13 @@ public final class WclLiveMarker {
     public static Optional<String> provider(
             String species, Set<String> pdcKeys,
             String chickenType, String wolfType) throws IOException {
+        return provider(species, pdcKeys, chickenType, wolfType, false);
+    }
+
+    /** A pending natural founder is still a vanilla chicken in WWC 2.1.1. */
+    public static Optional<String> provider(
+            String species, Set<String> pdcKeys,
+            String chickenType, String wolfType, boolean pendingNaturalSeedVerified) throws IOException {
         Objects.requireNonNull(species, "loaded Bukkit Entity species");
         Objects.requireNonNull(pdcKeys, "loaded Bukkit PDC key set");
 
@@ -34,6 +41,14 @@ public final class WclLiveMarker {
                 throw new IOException("Null loaded Entity PDC identity key");
             chicken |= key.startsWith(CHICKEN_NAMESPACE);
             wolf |= key.startsWith(WOLF_NAMESPACE);
+        }
+        if (chicken && !wolf && pendingNaturalSeedVerified
+                && "minecraft:chicken".equals(species)
+                && chickenType == null && wolfType == null
+                && pdcKeys.contains(CHICKEN_NAMESPACE + "pending_natural_founder_seed")
+                && pdcKeys.stream().filter(key -> key.startsWith(CHICKEN_NAMESPACE))
+                        .allMatch(key -> key.equals(CHICKEN_NAMESPACE + "pending_natural_founder_seed"))) {
+            return Optional.empty();
         }
         if (chicken && wolf)
             throw new IOException("Contradictory WWC/WWW loaded Entity PDC identities");
