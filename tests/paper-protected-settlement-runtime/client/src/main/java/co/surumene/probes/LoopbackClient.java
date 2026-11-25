@@ -64,7 +64,7 @@ public final class LoopbackClient {
         });
         if(wallet!=null)client.addListener(wallet);
         client.connect();
-        boolean finished=disconnected.await(wallet==null?65:110,TimeUnit.SECONDS);
+        boolean finished=disconnected.await(wallet==null?65:175,TimeUnit.SECONDS);
         System.exit(finished&&joined.get()&&(!requirePack||
                 downloaded.get()&&packCount.get()==1&&!packFailed.get())&&(wallet==null||wallet.completed())?0:1);
     }

@@ -9,6 +9,13 @@ import org.geysermc.mcprotocollib.network.Session;
 import org.geysermc.mcprotocollib.network.event.session.SessionAdapter;
 import org.geysermc.mcprotocollib.network.packet.Packet;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
+import org.cloudburstmc.math.vector.Vector3i;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
+import org.geysermc.mcprotocollib.protocol.data.game.ClientCommand;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundClientCommandPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerCombatKillPacket;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerActionType;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerType;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ShiftClickItemAction;
@@ -32,6 +39,7 @@ final class WalletNetworkScenario extends SessionAdapter {
     private volatile ItemStack[] items;
     private volatile boolean completed;
     private boolean loaded;
+    private volatile boolean dead;
     boolean completed(){return completed;}
 
     @Override public void packetReceived(Session session,Packet packet) {
@@ -40,6 +48,9 @@ final class WalletNetworkScenario extends SessionAdapter {
         } else if(packet instanceof ClientboundPlayerPositionPacket pos) {
             session.send(new ServerboundAcceptTeleportationPacket(pos.getId()));
             if(!loaded){loaded=true;session.send(ServerboundPlayerLoadedPacket.INSTANCE);}
+        } else if(packet instanceof ClientboundPlayerCombatKillPacket) {
+            dead=true;
+            System.out.println("NETWORK_PLAYER_DEATH_OBSERVED");
         } else if(packet instanceof ClientboundOpenScreenPacket screen) {
             System.out.println("NETWORK_SCREEN "+screen.getType()+" "+screen.getTitle());
             if(screen.getType()==ContainerType.GENERIC_9X1
@@ -107,8 +118,18 @@ final class WalletNetworkScenario extends SessionAdapter {
             shift(session,37);
             await(()->count(37)==0&&count(3)==4,"200C redeposit screen update",12);
             session.send(new ServerboundContainerClosePacket(container));
-            completed=true;
             System.out.println("NETWORK_WALLET_REDEPOSIT_AND_CLOSE_PASSED");
+            signal("product-ground-drop",25);
+            session.send(new ServerboundSetCarriedItemPacket(0));
+            Thread.sleep(150);
+            session.send(new ServerboundPlayerActionPacket(PlayerAction.DROP_ITEM_STACK,
+                    Vector3i.ZERO, Direction.DOWN, 0));
+            System.out.println("NETWORK_WALLET_DROP_SENT");
+            await(()->dead,"real death packet",35);
+            signal("product-ground-respawn",20);
+            session.send(new ServerboundClientCommandPacket(ClientCommand.PERFORM_RESPAWN));
+            System.out.println("NETWORK_RESPAWN_SENT");
+            completed=true;
         }catch(Exception failure){
             failure.printStackTrace();
         }

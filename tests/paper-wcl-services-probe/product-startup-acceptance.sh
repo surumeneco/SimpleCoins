@@ -34,7 +34,7 @@ start_server() {
   rm -f console.fifo
   mkfifo console.fifo
   exec 3<>console.fifo
-  timeout --signal=TERM --kill-after=10s 230s java -Xms256M -Xmx1024M -jar paper.jar nogui <console.fifo >"$log" 2>&1 &
+  timeout --signal=TERM --kill-after=10s 300s java -Xms256M -Xmx1024M -jar paper.jar nogui <console.fifo >"$log" 2>&1 &
   server=$!
   wait_for "$log" 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED'
 }
@@ -51,7 +51,7 @@ wait_for product-startup.log 'SIMPLECOINS_PRODUCT_SETTLEMENT_PREPARED_UNPUBLISHE
 command_to_server 'sc stats'
 wait_for product-startup.log 'Personal P: 25000 C; free F: 1000 C; world T=P+F: 26000 C'
 wait_for product-startup.log 'Dead D (excluded from T): 30000 C'
-timeout 125 "$client" --wallet-scenario >product-client.log 2>&1 &
+timeout 190 "$client" --wallet-scenario >product-client.log 2>&1 &
 client_pid=$!
 wait_for product-startup.log 'ProbeSettlement joined the game'
 wait_for product-client.log 'NETWORK_CLIENT_PLAY_LOGIN'
@@ -127,6 +127,53 @@ for ((i=0;i<15;i++)); do
   sleep 1
 done
 [[ $(grep -Fc "Personal balance $uuid: 200 C" product-startup.log || true) -ge 3 ]]
+# Exercise actual item entity/ownership transitions after closing the wallet GUI.
+# A high, isolated platform keeps the fixture away from pre-existing items.
+command_to_server 'fill -6 179 -6 6 179 6 minecraft:stone'
+command_to_server 'tp ProbeSettlement 0.5 180 0.5 0 70'
+sleep 2
+touch product-ground-drop
+wait_for product-client.log 'NETWORK_WALLET_DROP_SENT' 15
+# Count new stats responses; earlier wallet/restart log lines cannot satisfy this.
+expect_stats() {
+  local marker=$1 old
+  old=$(grep -Fc "$marker" product-startup.log || true)
+  command_to_server 'sc stats'
+  for ((i=0;i<15;i++)); do
+    [[ $(grep -Fc "$marker" product-startup.log || true) -gt $old ]] && return 0
+    sleep 1
+  done
+  echo "Missing new stats response: $marker" >&2
+  return 1
+}
+# Dropped items have a thrower pickup delay. Move the player out of reach,
+# then make the ordinary collision/pickup path occur after the delay.
+sleep 1
+command_to_server 'tp ProbeSettlement 5.5 180 5.5'
+sleep 2
+expect_stats 'Personal P: 25000 C; free F: 1200 C; world T=P+F: 26200 C'
+command_to_server 'execute positioned 0.5 180 0.5 if entity @e[type=minecraft:item,distance=..6] run say PRODUCT_GROUND_ITEM_PRESENT'
+wait_for product-startup.log 'PRODUCT_GROUND_ITEM_PRESENT' 10
+command_to_server 'execute positioned 0.5 180 0.5 run tp ProbeSettlement @e[type=minecraft:item,distance=..6,sort=nearest,limit=1]'
+sleep 3
+expect_stats 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_GROUND_WALLET_RECOVERED'
+wait_for product-startup.log 'PRODUCT_GROUND_WALLET_RECOVERED' 10
+# Death is real vanilla kill, not a synthetic PlayerDeathEvent.
+command_to_server 'tp ProbeSettlement 0.5 180 0.5'
+command_to_server 'minecraft:kill ProbeSettlement'
+wait_for product-client.log 'NETWORK_PLAYER_DEATH_OBSERVED' 15
+sleep 2
+expect_stats 'Personal P: 25000 C; free F: 1200 C; world T=P+F: 26200 C'
+touch product-ground-respawn
+wait_for product-client.log 'NETWORK_RESPAWN_SENT' 15
+sleep 3
+command_to_server 'execute positioned 0.5 180 0.5 run tp ProbeSettlement @e[type=minecraft:item,distance=..6,sort=nearest,limit=1]'
+sleep 3
+expect_stats 'Personal P: 25200 C; free F: 1000 C; world T=P+F: 26200 C'
+command_to_server 'execute if items entity ProbeSettlement hotbar.0 minecraft:bundle[minecraft:custom_data~{PublicBukkitValues:{"simplecoins:wallet_balance":200L}}] run say PRODUCT_DEATH_WALLET_RECOVERED'
+wait_for product-startup.log 'PRODUCT_DEATH_WALLET_RECOVERED' 10
+echo 'SIMPLECOINS_PRODUCT_DROP_PICKUP_DEATH_RECOVERY_PASSED'
 command_to_server 'kick ProbeSettlement product acceptance complete'
 wait "$client_pid" || { cat product-client.log; exit 1; }
 client_pid=
