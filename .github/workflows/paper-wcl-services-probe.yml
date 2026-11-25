@@ -789,6 +789,9 @@ jobs:
           echo 'PAPER_A04_A05_REAL_DISTRIBUTED_BLOCKLOCKER_WCL_SAVED_GENERATION_PASSED'
       - name: Build pinned Java protocol client for product admission
         run: gradle --no-daemon -p tests/paper-protected-settlement-runtime/client installDist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Actual SimpleCoins product startup, network issuance and restart
         shell: bash
         run: |
@@ -797,9 +800,17 @@ jobs:
           (cd smoke-product-startup && timeout --signal=TERM --kill-after=5s 240s java -Da05.probe.phase=prepare-product -Da05.probe.blocklocker=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null >product-prepare.log 2>&1) || { tail -180 smoke-product-startup/product-prepare.log; exit 1; }
           grep -F 'PAPER_PRODUCT_REAL_WWW_FIXTURES_READY' smoke-product-startup/product-prepare.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' smoke-product-startup/product-prepare.log; then cat smoke-product-startup/product-prepare.log; exit 1; fi
+          cp -a smoke-product-startup smoke-product-bedrock
           bash tests/paper-wcl-services-probe/product-startup-acceptance.sh \
             smoke-product-startup \
             tests/paper-protected-settlement-runtime/client/build/install/simplecoins-network-fixture/bin/simplecoins-network-fixture
+      - name: Real Bedrock product admission, pack receipt and nine inventory mappings
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tests/paper-wcl-services-probe --no-audit --no-fund --ignore-scripts --omit=optional --save-exact bedrock-protocol@3.61.0
+          npm rebuild --prefix tests/paper-wcl-services-probe raknet-native
+          bash tests/paper-wcl-services-probe/product-bedrock-acceptance.sh smoke-product-bedrock
       - name: Upload integration diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -809,6 +820,7 @@ jobs:
             smoke/*.log
             smoke-blocklocker/*.log
             smoke-product-startup/product-*.log
+            smoke-product-bedrock/product-*.log
             smoke-pdc-negative/*.log
             smoke-equipment-negative/*.log
             smoke-inventory-negative/*.log
