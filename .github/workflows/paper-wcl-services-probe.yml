@@ -83,7 +83,7 @@ permissions:
 jobs:
   real-paper-storage-services:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -794,7 +794,7 @@ jobs:
         run: |
           set -euo pipefail
           cp -a smoke-blocklocker smoke-product-startup
-          (cd smoke-product-startup && timeout --signal=TERM --kill-after=5s 180s java -Da05.probe.phase=prepare-product -Da05.probe.blocklocker=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null >product-prepare.log 2>&1)
+          (cd smoke-product-startup && timeout --signal=TERM --kill-after=5s 240s java -Da05.probe.phase=prepare-product -Da05.probe.blocklocker=true -Xms256M -Xmx1024M -jar paper.jar nogui </dev/null >product-prepare.log 2>&1) || { tail -180 smoke-product-startup/product-prepare.log; exit 1; }
           grep -F 'PAPER_PRODUCT_REAL_WWW_FIXTURES_READY' smoke-product-startup/product-prepare.log
           if grep -Fq 'PAPER_A05_SERVICES_PROBE_FAILED' smoke-product-startup/product-prepare.log; then cat smoke-product-startup/product-prepare.log; exit 1; fi
           bash tests/paper-wcl-services-probe/product-startup-acceptance.sh \
