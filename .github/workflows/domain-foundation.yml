@@ -22,3 +22,18 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_simplecoins_preflight.py'
           python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guard-1.0.0.jar build/libs/SimpleCoins-1.0.0.jar
+      - name: Package exact tested development JARs for isolated acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p acceptance-artifacts
+          cp build/libs/SimpleCoins-1.0.0.jar acceptance-artifacts/
+          cp admission-guard/build/libs/admission-guard-1.0.0.jar acceptance-artifacts/
+          git rev-parse HEAD > acceptance-artifacts/SOURCE_COMMIT
+          (cd acceptance-artifacts && sha256sum *.jar > SHA256SUMS && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecoins-development-acceptance-jars
+          path: acceptance-artifacts/
+          if-no-files-found: error
+          retention-days: 14

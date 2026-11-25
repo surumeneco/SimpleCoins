@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
-          ref: 381af68c91a1cb4c3a0b908d7edd660d87bbb49b
+          ref: 8022e381bbb14f77db6fc81d8715a7814a8dc0a3
           path: cat-tdd-fixed
           persist-credentials: false
       - name: Validate Confirmed A05 Process Closure and Model Conformance
@@ -52,17 +52,9 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=Lifecycle/Works/.cat-flow
-          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_compile_v2.py
-          python "$FLOW" tests \
-            "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
-            "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
-            tests/cat/a05-wcl-consumer-junit-binding.json \
-            --framework junit \
-            --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
-            --process docs/cat/confirmed/a05-wcl-consumer-process.md \
-            --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
-            --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
-            -o "$ROOT/generated/A05WclEvidenceGeneratedTest.java"
+          FLOW=cat-tdd-fixed/.cat-system/scripts/cat_flow.py
+          WORK=Lifecycle/Works/simplecoins.a05.wcl-consumer-verdict.md
+          python "$FLOW" compile --work "$WORK" --kind tests
           python - <<'PY'
           from pathlib import Path
           source=Path('Lifecycle/Works/.cat-flow/generated/A05WclEvidenceGeneratedTest.java').read_text()
@@ -101,16 +93,7 @@ jobs:
           TARGET=src/test/java/co/surumene/simplecoins/domain/generated
           mkdir -p "$TARGET"
           for i in 0 1 2 3 4 5 6 7; do
-            python "$CAT/cat_compile_v2.py" tests \
-              "$ROOT/cache/a05-wcl-consumer-verdict-model.json" \
-              "$ROOT/cache/a05-wcl-consumer-verdict-vectors.json" \
-              tests/cat/a05-wcl-consumer-junit-binding.json \
-              --framework junit \
-              --queue "$ROOT/cache/a05-wcl-consumer-verdict-queue.json" \
-              --process docs/cat/confirmed/a05-wcl-consumer-process.md \
-              --pi docs/cat/confirmed/a05-wcl-consumer-pi.md \
-              --tce docs/cat/confirmed/a05-wcl-consumer-tce.md \
-              -o "$SOURCE"
+            python "$CAT/cat_flow.py" compile --work "$WORK" --kind tests
             grep -F 'CAPABILITIES NOT VERIFIED' "$SOURCE" >/dev/null
             grep -F "@DisplayName(\"case.s$i\")" "$SOURCE" >/dev/null
             cp "$SOURCE" "$TARGET/A05WclEvidenceGeneratedTest.java"

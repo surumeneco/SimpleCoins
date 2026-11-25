@@ -1,6 +1,6 @@
 # SimpleCoins 1.0.0 — JE/BE resource-pack delivery acceptance handoff
 
-Status: **verification protocol, not evidence of successful real Paper 26.2 or JE/BE client tests**. Current run ownership and remaining acceptance are [Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A17/H01 and [Issue #6](https://github.com/surumeneco/SimpleCoins/issues/6); retired TaskQueue identifiers are historical only. Individual test run results must be recorded against the exact deployed HEAD/JAR/client.
+Status: **verification protocol, not an execution receipt or release approval**. Current run ownership and remaining acceptance are [Issue #423](https://github.com/surumeneco/SimpleCoins/issues/423) A17/H01 and [Issue #6](https://github.com/surumeneco/SimpleCoins/issues/6); retired TaskQueue identifiers are historical only. Individual test run results must be recorded against the exact deployed HEAD/JAR/client.
 
 ## Environment and immutable evidence
 
@@ -28,25 +28,23 @@ Record the deployed SimpleCoins JAR SHA-256, Paper/Geyser/Floodgate/Nexo/Scaffol
 
 ## Nexo present — delegated Java pack
 
-1. On a disposable server with an **implemented and verified Nexo integration**, restart with Nexo installed. Verify SimpleCoins does not generate/serve a duplicate pack and that the actual Nexo Java pack generation/hosting is connected. The current bootstrap merely suppresses SimpleCoins-owned pack generation when Nexo is detected; **it does not yet register SimpleCoins currency assets with Nexo**. If that integration is absent, record the acceptance case as `blocked`, not `pass`. Check duplicate resource-pack prompts only when a real pack request can occur.
-2. Verify Geyser's Bedrock mapping/pack comes from an explicitly configured conversion/delegation path (e.g. Scaffolding). **Do not infer that Nexo's Java pack is automatically converted by Geyser.** If no verified conversion exists, mark BE as blocked/not-run rather than passed.
-3. Repeat JE and BE denomination/model checks, preserving the same currency PDC identities and amounts as the Nexo-absent case.
+The 05 G2 contract excludes real Nexo/Scaffolding environment assurance from 1.0.0. The optional SimpleCoins-side delegation and duplicate delivery suppression remain required. The current implementation stages the generated Java ZIP at `Nexo/pack/external_packs/simplecoins-generated.zip`, requests `nexo reload pack` after changed staging, and removes only owned Geyser files. Real Nexo pack merge/hosting, Scaffolding conversion and rendered clients are unverified, not release blockers under that contract. If voluntarily testing the delegated path, record actual Nexo versions, pack ownership and Geyser conversion configuration; do not infer success from staging alone.
 
 ## Admin command and offline grant acceptance (disposable server only)
 
-**Current-implementation preflight:** at `develop@7dc4ffdc2f08900ad87aa8a440fb39805c931ace`, `src/main/resources/plugin.yml` registers **no commands or permission nodes**, there is **no `CoinCommand` source file**, and `SimpleCoinsPlugin` registers **no give/administration command executor or player-delivery coordinator**. It keeps admission default-deny. Therefore `/sc give` and the `simplecoins.admin` node in the historical steps below are **not executable product interfaces** on this HEAD; do not attempt to test them as implemented or count missing-command errors as monetary function tests. Names, aliases and nodes require verification against the eventual implemented descriptor and the [Drive 03 command specification](https://drive.google.com/file/d/1llx5bKVdrmqeSgRo3KdsB2jD5mDwXofE/view). The numbered cases are **future acceptance conditions only**, currently `blocked` pending product implementation and G0/G3 assurance.
+**Current interface preflight:** verify the tested JAR descriptor and the README against the target commit. The implemented aliases are `/simplecoins` and `/sc`; the declared nodes are `simplecoins.give` for issuance and `simplecoins.admin` for queries (OP defaults). Confirm settlement has published and the guard is active before admitting the disposable test player. The prior missing-command state is historical. Test actual physical inventory, reservation state and query output; do not rely on command success text alone.
 
-1. **Only after the real command is registered**, record its effective alias and permission node from the tested JAR, then verify that an unauthorized sender cannot reserve/issue and an authorized test operator can. Do not assume `simplecoins.admin` is the implemented node. Do not use production playerdata or journal files.
+1. Record the effective alias and permission nodes from the tested JAR. Verify an unauthorized sender cannot reserve/issue and an authorized test operator can. Do not use production playerdata or journal files.
 2. Once the approved alias/command is implemented, use a previously joined test player who is currently offline; execute the **implemented amount-based** `give` form with that player's verified identity and amount 100. Record reservation ID and journal entry; before login, no physical coins should be delivered. On login, verify the exact total and persisted receipt; disconnect/reconnect and restart the disposable server, then verify no duplicate delivery.
 3. Once implemented, use an online test player and the **item-name plus count** `give` form to give three coins of denomination 50, using the actual accepted item name. Verify exactly three such coins are issued (not amount-based minimum-coin decomposition of 150), then repeat reconnect/restart checks. Do not assume `50` is a valid item-name token.
 4. Fill all 36 player storage slots before a reserved grant is delivered. Verify no coin is dropped or falsely acknowledged and the reservation remains pending; free space, trigger delivery again, and verify the total is neither lost nor duplicated. Record the saved playerdata receipt and journal state.
 5. In a disposable copy only, inject a corrupt/missing journal record or an unconfirmed saved receipt, restart, and verify issuance fails closed rather than replaying an uncertain grant. Keep this separate from a successful delivery case; do not induce failure on production.
 
-Record each case as pass/fail/not-run with the tested commit, Paper version, journal/receipt evidence and observed inventory totals. The command-source inspection is **not** a Paper execution result. The missing read-only admin query, real Paper failure injection, and JE/BE client acceptance remain open.
+Record each case as pass/fail/not-run with the tested commit, Paper version, journal/receipt evidence and observed inventory totals. The command-source inspection is **not** a Paper execution result. Refer to #423 for current run evidence and remaining acceptance; this protocol does not assert missing implementation or completion.
 
-## 管理照会の受入マトリクス（CAT Draft・未実行）
+## 管理照会の受入マトリクス
 
-現行の`CoinCommand`には照会コマンドがないため、以下は実機試験済みの結果ではなく、`docs/cat/phase7-admin-asset-query.md`の既存ベクトルをPaperで検証するための条件である。コマンド名・ページング・未確定時の表示形式は規範未決定のまま維持する。
+以下は実機試験結果ではなく、管理照会をPaperで検証する条件である。`/sc stats`、`/sc balance <player>`、`/sc dead [page]` と `simplecoins.admin` の現行実装・対象JARを確認して実施する。
 
 | Vector | 隔離Paperでの入力・操作 | 必須の観測結果 |
 | --- | --- | --- |
@@ -57,7 +55,7 @@ Record each case as pass/fail/not-run with the tested commit, Paper version, jou
 | ADMIN-QUERY-05 | 必須BAN sourceまたは保存sourceの読取を失敗させ、所在索引を未確定にする | 空一覧や0額を正常完了として公開せず、未確定状態を識別可能にする |
 | ADMIN-QUERY-06 | worldを統計OFFにし、world非依存playerdata/エンダーチェストへ貨幣を配置 | world固有資産は除外し、world非依存資産は照会対象に維持する |
 
-各行の結果は`not-run / pass / fail / blocked`とし、検証時のcommit、権限設定、snapshot世代、BAN/owner根拠、WorldScope、コマンド出力を対応付ける。未実装の段階でpassにしない。
+各行の結果は`not-run / pass / fail / blocked`とし、検証時のcommit、権限設定、snapshot世代、BAN/owner根拠、WorldScope、コマンド出力を対応付ける。未実行のケースをpassにしない。
 
 ## Negative cases and release gate
 
@@ -66,4 +64,4 @@ Record each case as pass/fail/not-run with the tested commit, Paper version, jou
 - Public URL points to an old ZIP: compare SHA-1 to the generated ZIP; mismatch is a failed deployment gate even if the client displays cached textures.
 - Interrupted/modified managed Geyser resources: startup must not silently overwrite unowned or modified files.
 
-Record pass/fail/not-run **per JE and BE client**, Nexo state, tested commit and actual artifacts. Do not mark the leaf complete until relevant live checks and the independent offline give/admin command acceptance are satisfied.
+Record pass/fail/not-run **per JE and BE client**, Nexo state, tested commit and actual artifacts. Apply the G2 exclusion above; actual non-Nexo rendering, external hosting and authenticated Floodgate/real environment acceptance remain separate from headless protocol CI.
