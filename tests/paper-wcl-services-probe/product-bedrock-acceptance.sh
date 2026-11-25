@@ -5,7 +5,8 @@ root=$(pwd)
 fixture=$(realpath "$1")
 client="$root/tests/paper-wcl-services-probe/bedrock-join.cjs"
 cd "$fixture"
-rm -f plugins/StorageProbe.jar
+# Keep the existing test-only probe in observer mode to identify the actual failed marker.
+test -f plugins/StorageProbe.jar
 printf '[]\n' > banned-ips.json
 sed -i 's/diagnostic-only: true/diagnostic-only: false/' plugins/SimpleCoins/config.yml
 sed -i '/^server-port=/d; /^enforce-secure-profile=/d' server.properties
@@ -59,7 +60,7 @@ p.write_text(s)
 PY
 mkfifo product-bedrock-console.in
 exec 3<>product-bedrock-console.in
-timeout --signal=TERM --kill-after=10s 250s java -Xms256M -Xmx1024M -jar paper.jar nogui <product-bedrock-console.in >product-bedrock.log 2>&1 &
+timeout --signal=TERM --kill-after=10s 250s java -Da05.probe.markerDiagnostics=true -Xms256M -Xmx1024M -jar paper.jar nogui <product-bedrock-console.in >product-bedrock.log 2>&1 &
 server=$!
 wait_for product-bedrock.log 'SIMPLECOINS_PRODUCT_SETTLEMENT_PUBLISHED' 150
 wait_for product-bedrock.log 'Started Geyser on 127.0.0.1:19132' 30

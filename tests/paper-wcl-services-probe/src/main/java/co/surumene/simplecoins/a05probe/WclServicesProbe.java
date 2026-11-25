@@ -93,6 +93,24 @@ public final class WclServicesProbe extends JavaPlugin {
             Bukkit.shutdown();
             return;
         }
+        if (Boolean.getBoolean("a05.probe.markerDiagnostics")) {
+            // Read-only observer in the disposable real Bedrock fixture.
+            Bukkit.getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+                @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+                public void onLoad(org.bukkit.event.world.EntitiesLoadEvent event) {
+                    for (Entity entity : event.getEntities()) {
+                        if (!(entity instanceof Chicken) && !(entity instanceof Wolf)) continue;
+                        var pdc = entity.getPersistentDataContainer();
+                        var keys = pdc.getKeys().stream().map(Object::toString).sorted().toList();
+                        if (keys.stream().noneMatch(k -> k.startsWith("whatawonderfulchicken:") || k.startsWith("whatawonderfulwolf:"))) continue;
+                        getLogger().info("BEDROCK_MARKER_OBSERVED entity=" + entity.getUniqueId()
+                                + " species=" + entity.getType() + " keys=" + keys);
+                    }
+                }
+            }, this);
+            getLogger().info("BEDROCK_MARKER_OBSERVER_READY");
+            return;
+        }
         // A01 bounded investigation: a separate disposable process exercises
         // the product's existing seven-family fence. Never part of normal A05
         // reader proofs, distribution, or production startup.
