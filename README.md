@@ -2,8 +2,8 @@
 
 Minecraft **Paper 26.2** 向けの独自貨幣プラグイン。物理貨幣、財布、資産の所有者・統計、オフライン配布、Java/Bedrock用表示経路を扱います。レジ機能は **1.1.0** の対象です。
 
-> **開発中・未リリース（1.0.0-dev）**  
-> このリポジトリの `develop` に個別の機能・テストが存在しても、製品全体の動作・全件決算・配布の一回性・入室解放が成立したとは限りません。必要な提供者を確認し、起動時決算の完了と通常会計タスクの稼働を条件に受付ガードを解放する構成です。依存不足・診断モード・決算失敗時は解放しません。**完成品としてサーバーへ導入しないでください。** 現状態は必ず対象HEADのコード・ログ・CIから確認してください。
+> **実機受入段階・未リリース（1.0.0-dev）**  
+> 1.0.0の製品機能と隔離Paper/JE・BEプロトコル結合試験は [#701](https://github.com/surumeneco/SimpleCoins/pull/701) で統合済みです。現在の残作業・成果物・CAT適合性の証拠は [#423](https://github.com/surumeneco/SimpleCoins/issues/423) を参照してください。実VPSのデータ・負荷・端末表示・認証済み接続は別途受入が必要です。本番配備・正式リリースは承認前には行いません。必要な提供者、起動時決算の完了と通常会計タスクの稼働を条件に受付ガードを解放し、依存不足・診断モード・決算失敗時は解放しません。
 
 ## 文書の入口と正本
 
@@ -40,7 +40,7 @@ python3 tools/simplecoins_preflight.py admission-guard/build/libs/admission-guar
 
 ## 導入・運用手順（受入用、正式リリース前）
 
-まずバックアップを取得した隔離コピーで確認してください。以下は現行実装の設定手順であり、本番配備の承認ではありません。
+まずバックアップを取得した隔離コピーで確認してください。以下は現行実装の設定手順であり、本番配備の承認ではありません。受入用の本体・Guardの2 JAR、`SOURCE_COMMIT`、`SHA256SUMS` は Domain foundation の `simplecoins-development-acceptance-jars` artifact（現行参照は #423）から取得できます。試験用マージコミットから生成された場合は受入対象のdevelopとのGit tree一致を照合し、SHA-256を確認してください。履歴の異なるビルドを同一バイナリとみなしません。詳細は [JE/BE受入手順](docs/verification/phase7-je-be-pack-handoff.md) と [実機ケース一覧](docs/verification/phase7-je-be-nexo-acceptance.md)。
 
 1. Java 25 / Paper 26.2を使用し、上記のビルド・preflightを通過した本体とGuardの2つのJARを同時に配置します。現行の全件決算経路には、有効なBlockLockerとWonderfulCoreLibrary、WWC/WWWそれぞれの互換ストレージReader登録が必要です。Geyser・Floodgate・Nexo・InvSee++は連携先です。必要な提供者が欠けると受付は閉じたままになります。
 2. 初回起動で `plugins/SimpleCoins/config.yml` を生成し、停止して設定します。統計対象や資産データに影響する設定変更は停止中に行い、再起動で全件決算してください。診断専用の `settlement.diagnostic-only: true` は受付を開きません。通常は既定の `false` を使用します。
@@ -78,7 +78,7 @@ Nexo導入時は、SimpleCoinsが生成したJavaパックをNexoの `pack/exter
 | `/sc give <target> <amount>` | simplecoins.give：最小枚数で発行、既知オフライン対象は予約 |
 | `/sc give <target> <item> <count>` | simplecoins.give：オンライン対象へ額面指定の貨幣またはwalletを配布 |
 
-### IP BANの資産分類（開発中）
+### IP BANの資産分類
 
 `plugins/SimpleCoins/last-player-addresses.yml` は参加成功時のUUID別最終IPを自動記録します。手動補正は別の `plugins/SimpleCoins/ip-ban-overrides.yml` に記述します。例（架空UUID・文書用IP）:
 
