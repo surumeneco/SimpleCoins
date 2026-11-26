@@ -6,7 +6,7 @@ status: **verification-plan（本文は実機の実行結果ではない）**
 
 ## 実施条件と安全境界
 
-1. 本番と分離したPaper 26.2互換の検証サーバーを用意し、Java 25、SimpleCoinsの**実際のJAR SHA-256**、Paper/Geyser/Nexoの正確な版を記録する。対象の未リリースPRを検証する場合はビルド元コミットを固定する。依存プラグインが未実装・未導入なら、そのケースを`blocked`とし代替結果を合格としない。
+1. 本番と分離したPaper 26.2互換の検証サーバーを用意し、Java 25、SimpleCoins本体とGuardの**両JAR SHA-256**、Paper/Geyser/Floodgate/Nexoの正確な版を記録する。両JARはREADMEのpreflightを通し、受入対象のGit treeとCIのSOURCE_COMMITを照合する。対象の未リリースPRを検証する場合はビルド元コミットを固定する。依存プラグインが未実装・未導入なら、そのケースを`blocked`とし代替結果を合格としない。
 2. テスト前にworld、playerdata、plugins/SimpleCoins、Geyser関連データを一組としてバックアップする。異常停止・復旧試験は検証サーバーのみで行い、実データを使用しない。
 3. クライアントはJEとBEを別々に用意する。BEはGeyser-Spigot同居構成と外部Geyser構成を混同しない。キャッシュの影響を識別するため、初回接続・再接続・パック変更後を分けて記録する。
 4. 各ケースの結果は`pass / fail / blocked / not-run`のいずれかとし、`pass`にはログ・実機画面・実ファイル・コマンド結果等の再確認可能な証拠を添える。JUnit/CI成功を実機合格へ転記しない。
@@ -40,8 +40,8 @@ Geyser管理下の配置済みコピーも確認する場合は、第3・第4引
 | JE-01 | Nexoなし、Java用ZIP生成、HTTP(S)公開URLを設定してJE初回接続 | 配布要求・受諾・モデル/9額面画像の表示。ZIP生成のみで配布済みとしない | ZIP hash、URL到達結果、JEクライアント画面、Paperログ |
 | JE-02 | JEでパック画像を変更し再起動・再接続 | 変更後のモデルが表示され、旧キャッシュとの混同がない | 変更前後のZIP hash、クライアント表示 |
 | JE-03 | Java用公開URL未設定 | ZIP生成とクライアント配布を区別でき、未配布を成功としない | 設定抜粋、クライアント結果 |
-| NX-01 | Nexo導入状態で起動・再起動 | SimpleCoins独自ZIPの二重配布がない。Nexo画像/モデル統合は別途実装・検証対象 | Nexo/Paperログ、実際の配布一覧 |
-| NX-02 | Nexoの有無を切り替える | SimpleCoinsが管理した未変更ファイルのみ扱い、第三者ファイルを破壊しない | 変更前後のファイルhashと配置一覧 |
+| NX-01 | Nexo導入状態で起動・再起動（任意） | SimpleCoins独自ZIPの二重配布がない。実Nexo画像/モデル統合の動作保証は05 G2対象外 | Nexo/Paperログ、実際の配布一覧 |
+| NX-02 | Nexoの有無を切り替える（実Nexo環境は任意） | SimpleCoinsが管理した未変更ファイルのみ扱い、第三者ファイルを破壊しない | 変更前後のファイルhashと配置一覧 |
 | BE-01 | Nexoなし、同居Geyserを起動前に設定 | `geyser/SimpleCoins.mcpack`と`geyser/simplecoins.json`の生成、`packs/`・`custom_mappings/`配置、Geyser v2 mapping読込 | ファイルhash、Geyser設定とログ、BE画面 |
 | BE-02 | `enable-custom-content`無効/有効を切替 | 無効時の表示と有効時の表示を区別し、表示されない状態を配布成功としない | 設定差分、BE画面、Geyserログ |
 | BE-03 | Geyserを外部プロキシに分離 | 生成物の手動配置が必要な構成として扱い、同居時の自動配置と混同しない | 配置先・hash、外部Geyserログ、BE画面 |
@@ -58,4 +58,4 @@ Geyser管理下の配置済みコピーも確認する場合は、第3・第4引
 
 ## 現在の未検証境界
 
-本書作成時点で上記実機ケースは**すべて not-run**。特に統計公開、管理照会、Nexo統合、Geyserの実配布、クラッシュ後の永続予約とplayerdata同期は、部分実装やDraft PRの存在だけでは受入済みにならない。実機で再現不能なケースは`blocked`とし、必要な実装・テスト環境・仕様判断を別途記録する。 `develop`への文書統合は、プラグイン実装の受入・リリース承認を意味しない。
+この表は試験手順であり、ケースの現在値は [#423](https://github.com/surumeneco/SimpleCoins/issues/423) の実行証跡で確認する。隔離Paper・headless JE/BE通信、実give/join・保存/異常終了・統計・財布・収納・両替の結合試験は実施済み。実VPS、描画端末、外部URLと認証済Floodgateは別の受入であり未確認。05 G2の利用者決定により実Nexo/Scaffolding環境の動作保証は1.0.0の必須受入から除外する。SimpleCoins側の任意委任実装は対象に残す。実機で再現不能な必須ケースは`blocked`とし、利用者確認・正式リリース承認をCIや文書統合で代替しない。

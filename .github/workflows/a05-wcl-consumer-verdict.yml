@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surumeneco/CAT-TDD
-          ref: 8022e381bbb14f77db6fc81d8715a7814a8dc0a3
+          ref: 9ea80ed9878bcd05fc9fe6a65a1b72582801cd2d
           path: cat-tdd-fixed
           persist-credentials: false
       - name: Validate Confirmed A05 Process Closure and Model Conformance
